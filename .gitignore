@@ -1,0 +1,12 @@
+.build/
+build/
+DerivedData/
+Engine/target/
+Generated/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+xcuserdata/
+Config/LocalSigning.xcconfig
+Tests/PrivateFixtures/
+.DS_Store

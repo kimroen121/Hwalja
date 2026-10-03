@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/hwp-engine-abi"]
+resolver = "2"
