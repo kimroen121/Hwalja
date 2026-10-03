@@ -15,7 +15,4 @@ lipo "$repo_root/build/libhwp_engine_abi.a" -verify_arch arm64
 lipo "$repo_root/build/libhwp_engine_abi.a" -verify_arch x86_64
 cbindgen --config "$repo_root/Engine/crates/hwp-engine-abi/cbindgen.toml" \
   --crate hwp-engine-abi "$repo_root/Engine" --output "$repo_root/Generated/HwpEngineABI.h"
-if LC_ALL=C grep -Eq '(/Users/|/home/|/private/|/tmp/|[A-Za-z]:\\)' "$repo_root/Generated/HwpEngineABI.h"; then
-  echo 'Generated ABI header contains an absolute path' >&2
-  exit 1
-fi
+bash "$repo_root/scripts/check-header-paths.sh" < "$repo_root/Generated/HwpEngineABI.h"
