@@ -5,3 +5,6 @@ edition = "2021"
 
 [lib]
 crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+rhwp = { git = "https://github.com/edwardkim/rhwp.git", rev = "f1f9c6ae58344ee9368996d3543f76b9345cf227", default-features = false }

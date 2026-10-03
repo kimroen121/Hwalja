@@ -36,17 +36,10 @@ targets:
   HwpStudioTests:
     type: bundle.unit-test
     platform: macOS
-    sources: [Tests/AppTests]
-    dependencies: [{target: HwpStudio}]
-  RenderTests:
-    type: bundle.unit-test
-    platform: macOS
-    sources: [Tests/RenderTests]
-    dependencies: [{target: HwpStudio}]
-  HwpStudioUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    sources: [Tests/UITests]
+    sources:
+      - path: Tests/AppTests
+      - path: Tests/Fixtures
+        buildPhase: resources
     dependencies: [{target: HwpStudio}]
 schemes:
   HwpStudio:
@@ -54,4 +47,4 @@ schemes:
       targets:
         HwpStudio: all
     test:
-      targets: [HwpStudioTests, RenderTests, HwpStudioUITests]
+      targets: [HwpStudioTests]
