@@ -55,7 +55,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Number of works ever queued; identifies the latest one.
     private var queued = 0
     /// Re-rendered pages waiting for the next presentation.
-    private var staged: [EditSession.Output] = []
+    private var staged: [(reply: EditReply, patch: Patch)] = []
+    /// Device pixels per page point the canvas last drew at; new pages are pre-drawn at it.
+    var drawScale: CGFloat = 2
     /// Column that consecutive up/down moves keep.
     private var goalX: Double?
     /// The latest queued work while it is unstarted typing, with the text it will insert.
@@ -256,12 +258,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     private func run(_ command: EditCommand, amend: Bool = false) async throws {
         var output = try await session.apply(command, at: revision, amend: amend)
-        if PDFDocument(data: output.pdf)?.pageCount ?? 0 != output.reply.changedPages.count {
+        var patch = await Patch.prepare(output.pdf, scale: drawScale)
+        if patch.document?.pageCount ?? 0 != output.reply.changedPages.count {
             // The engine skipped a page it could not convert; show the whole document instead.
-            output.pdf = try await session.pdf()
+            patch = await Patch.prepare(try await session.pdf(), scale: drawScale)
             output.reply.changedPages = Array(0..<output.reply.pageCount)
         }
-        staged.append(output)
+        staged.append((output.reply, patch))
         reply = output.reply
         if let selection = output.reply.selection { self.selection = selection }
     }
@@ -280,7 +283,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight)
         for output in staged {
             let count = pages.pageCount
-            pages.replace(output.reply.changedPages, with: output.pdf, pageCount: output.reply.pageCount)
+            pages.replace(output.reply.changedPages, with: output.patch.document, pageCount: output.reply.pageCount)
             next.changedPages.formUnion(IndexSet(output.reply.changedPages.map(Int.init)))
             next.reflowed = next.reflowed || pages.pageCount != count
         }
@@ -302,10 +305,33 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
 }
 
+/// Re-rendered pages, parsed and pre-drawn off the main actor so that drawing them there
+/// finds their fonts loaded and glyphs rasterized.
+private struct Patch: @unchecked Sendable {
+    let document: PDFDocument?
+
+    static func prepare(_ pdf: Data, scale: CGFloat) async -> Patch {
+        await Task.detached(priority: .userInitiated) {
+            let document = PDFDocument(data: pdf)
+            // ponytail: pre-draws the first two pages only; a long reflow draws the rest cold.
+            for index in 0..<min(2, document?.pageCount ?? 0) {
+                guard let page = document?.page(at: index) else { continue }
+                let box = page.bounds(for: .mediaBox)
+                guard let context = CGContext(data: nil, width: Int(box.width * scale), height: Int(box.height * scale),
+                                              bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+                context.scaleBy(x: scale, y: scale)
+                page.draw(with: .mediaBox, to: context)
+            }
+            return Patch(document: document)
+        }.value
+    }
+}
+
 private extension PDFDocument {
     /// Swaps in re-rendered pages and drops pages past `pageCount`.
-    func replace(_ indices: [UInt32], with pdf: Data, pageCount count: UInt32) {
-        guard let patch = PDFDocument(data: pdf) ?? (indices.isEmpty ? PDFDocument() : nil) else { return }
+    func replace(_ indices: [UInt32], with patch: PDFDocument?, pageCount count: UInt32) {
+        guard let patch = patch ?? (indices.isEmpty ? PDFDocument() : nil) else { return }
         for (offset, index) in indices.map(Int.init).enumerated() {
             guard let page = patch.page(at: offset), index <= pageCount else { return }
             if index < pageCount { removePage(at: index) }

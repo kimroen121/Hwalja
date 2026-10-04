@@ -18,6 +18,23 @@ fn normalize(paragraphs: &mut [Paragraph]) {
         }
     }
 }
+/// Takes the raw byte payloads out of `doc`. They are compared with `==`: formatting
+/// them for the `Debug` comparison would cost more than the edit itself.
+fn take_bytes(doc: &mut Document) -> Vec<Option<Vec<u8>>> {
+    let mut bytes = vec![doc.doc_info.raw_stream.take()];
+    if let Some(image) = doc.preview.as_mut().and_then(|p| p.image.as_mut()) {
+        bytes.push(Some(std::mem::take(&mut image.data)));
+    }
+    bytes.extend(doc.sections.iter_mut().map(|s| s.raw_stream.take()));
+    for (_, data) in doc.extra_streams.iter_mut().chain(&mut doc.hwpx_aux_entries) {
+        bytes.push(Some(std::mem::take(data)));
+    }
+    bytes
+}
+/// Whether two documents are the same, byte payloads included.
+fn same(a: &mut Document, b: &mut Document) -> bool {
+    take_bytes(a) == take_bytes(b) && format!("{a:?}") == format!("{b:?}")
+}
 /// Controls and their parallel CTRL_DATA records.
 type HeldControls = (Vec<Control>, Vec<Option<Vec<u8>>>);
 
@@ -127,9 +144,7 @@ pub(super) fn check(
     for s in &mut b.sections {
         normalize(&mut s.paragraphs);
     }
-    let left = format!("{a:?}");
-    let right = format!("{b:?}");
-    if left == right {
+    if same(&mut a, &mut b) {
         Ok(())
     } else {
         Err(EditError::PreservationFailed)
@@ -184,7 +199,7 @@ fn check_format(
             normalize(&mut s.paragraphs);
         }
     }
-    if format!("{a:?}") == format!("{b:?}") {
+    if same(&mut a, &mut b) {
         Ok(())
     } else {
         Err(EditError::PreservationFailed)

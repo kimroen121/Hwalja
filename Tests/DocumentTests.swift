@@ -176,4 +176,51 @@ struct DocumentTests {
         #expect(!document.presentation.highlight.isEmpty)
         #expect(canvas.zoom < 1)
     }
+
+    /// Layout no longer depends on the viewport, so zooming and pasting across pages cannot
+    /// feed back into scrolling (this recursed until the stack overflowed).
+    @Test func zoomingAndReflowingSettle() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        canvas.tile()
+        for zoom in [4.0, 0.25, 1.7, 3.3] { canvas.setZoom(zoom) }
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        let undo = UndoManager()
+        for _ in 0..<4 { document.edit(undo) { $0.map { .replace($0, text: String(repeating: "붙여넣기 문단\n", count: 40)) } } }
+        await document.settle()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(document.reply.pageCount > 1)
+        #expect(canvas.editor.frame(ofPage: Int(document.reply.pageCount) - 1) != nil)
+        window.setContentSize(NSSize(width: 400, height: 300))
+        canvas.zoomToFit(nil)
+        #expect(canvas.zoom < 1)
+    }
+
+    /// Opt-in: `HWP_BENCH=<file> swift test -c release --filter benchKeystroke`.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_BENCH"] != nil))
+    func benchKeystroke() async throws {
+        let url = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_BENCH"]!)
+        let document = try HwpDocument(data: Data(contentsOf: url))
+        let undo = UndoManager()
+        let target = try await document.hitTest(page: 0, x: 300, y: 300)
+        document.selection = .caret(target)
+        for _ in 0..<5 {
+            let start = ContinuousClock.now
+            document.type("가", undo)
+            await document.settle()
+            print("BENCH keystroke", ContinuousClock.now - start)
+        }
+        let page = try #require(document.pages.page(at: 0))
+        let box = page.bounds(for: .mediaBox)
+        let context = try #require(CGContext(data: nil, width: Int(box.width * 2), height: Int(box.height * 2), bitsPerComponent: 8,
+                                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.scaleBy(x: 2, y: 2)
+        let start = ContinuousClock.now
+        page.draw(with: .mediaBox, to: context)
+        print("BENCH draw of the new page", ContinuousClock.now - start)
+    }
 }

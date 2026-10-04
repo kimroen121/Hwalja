@@ -338,20 +338,27 @@ index 9d37742..216735e 100644
      }
      if let Some(base) = base_family_without_weight_suffix(primary) {
 diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
-index 3989968..ff69646 100644
+index 3989968..5c42669 100644
 --- a/src/renderer/pdf.rs
 +++ b/src/renderer/pdf.rs
-@@ -509,6 +509,38 @@ fn default_mono_family() -> &'static str {
+@@ -509,6 +509,46 @@ fn default_mono_family() -> &'static str {
      "Noto Sans Mono CJK KR"
  }
  
-+/// Font database built once per option set and shared by every export, with each font
-+/// file mapped once.
++/// Font picks per font specification, valid for one database.
 +#[cfg(not(target_arch = "wasm32"))]
-+fn cached_fontdb(options: &PdfExportOptions) -> std::sync::Arc<usvg::fontdb::Database> {
++type FontPicks = std::sync::Arc<
++    std::sync::Mutex<std::collections::HashMap<usvg::Font, Option<usvg::fontdb::ID>>>,
++>;
++
++/// Font database built once per option set and shared by every export, with each font
++/// file mapped once, plus the fonts already picked from it: picking scans every face,
++/// and a page asks for the same few fonts once per character.
++#[cfg(not(target_arch = "wasm32"))]
++fn cached_fontdb(options: &PdfExportOptions) -> (std::sync::Arc<usvg::fontdb::Database>, FontPicks) {
 +    use std::sync::{Arc, Mutex};
 +    type Key = (String, String, String, Option<String>, Vec<std::path::PathBuf>);
-+    static CACHE: Mutex<Option<(Key, Arc<usvg::fontdb::Database>)>> = Mutex::new(None);
++    static CACHE: Mutex<Option<(Key, Arc<usvg::fontdb::Database>, FontPicks)>> = Mutex::new(None);
 +    let key: Key = (
 +        options.fallback_serif.clone(),
 +        options.fallback_sans.clone(),
@@ -361,7 +368,7 @@ index 3989968..ff69646 100644
 +    );
 +    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
 +    match &*cache {
-+        Some((cached, db)) if *cached == key => db.clone(),
++        Some((cached, db, picks)) if *cached == key => (db.clone(), picks.clone()),
 +        _ => {
 +            let mut db = create_fontdb(options);
 +            // Map each font file once instead of reopening it for every glyph lookup.
@@ -371,8 +378,9 @@ index 3989968..ff69646 100644
 +                unsafe { db.make_shared_face_data(id) };
 +            }
 +            let db = Arc::new(db);
-+            *cache = Some((key, db.clone()));
-+            db
++            let picks = FontPicks::default();
++            *cache = Some((key, db.clone(), picks.clone()));
++            (db, picks)
 +        }
 +    }
 +}
@@ -380,14 +388,22 @@ index 3989968..ff69646 100644
  /// 폰트 데이터베이스를 초기화 (시스템 폰트 + 프로젝트 폰트 로드)
  #[cfg(not(target_arch = "wasm32"))]
  fn create_fontdb(options: &PdfExportOptions) -> usvg::fontdb::Database {
-@@ -993,9 +1025,8 @@ where
+@@ -993,9 +1033,16 @@ where
      use pdf_writer::{Finish, Pdf, Ref};
      use std::collections::HashMap;
  
 -    let fontdb = create_fontdb(export_options);
      let mut options = usvg::Options::default();
 -    options.fontdb = std::sync::Arc::new(fontdb);
-+    options.fontdb = cached_fontdb(export_options);
++    let (fontdb, picks) = cached_fontdb(export_options);
++    options.fontdb = fontdb;
++    let select = usvg::FontResolver::default_font_selector();
++    options.font_resolver.select_font = Box::new(move |font, db| {
++        let mut picks = picks.lock().unwrap_or_else(|e| e.into_inner());
++        *picks
++            .entry(font.clone())
++            .or_insert_with(|| select(font, db))
++    });
  
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();

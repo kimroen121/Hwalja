@@ -111,11 +111,28 @@ private struct PageThumbnails: View {
     }
 }
 
+/// Draws off the main actor once a page has stopped changing, keeping the previous image
+/// meanwhile, so typing never waits for a thumbnail.
 private struct Thumbnail: View {
     let page: PDFPage
+    @State private var image: NSImage?
+
     var body: some View {
-        Image(nsImage: page.thumbnail(of: NSSize(width: 110, height: 150), for: .mediaBox))
-            .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
-            .id(ObjectIdentifier(page))
+        Group {
+            if let image { Image(nsImage: image) } else { Color.white.frame(width: 106, height: 150) }
+        }
+        .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
+        .task(id: ObjectIdentifier(page)) {
+            if image != nil { try? await Task.sleep(for: .milliseconds(400)) }
+            guard !Task.isCancelled else { return }
+            nonisolated(unsafe) let page = page
+            let drawn = await Task.detached(priority: .utility) { Drawn(page.thumbnail(of: NSSize(width: 110, height: 150), for: .mediaBox)) }.value
+            if !Task.isCancelled { image = drawn.image }
+        }
     }
+}
+
+private struct Drawn: @unchecked Sendable {
+    let image: NSImage
+    init(_ image: NSImage) { self.image = image }
 }
