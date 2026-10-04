@@ -47,6 +47,16 @@ pub enum EditCommand {
     MergePrevious {
         position: EditPosition,
     },
+    /// Character format over the selected text (one container, any number of paragraphs).
+    FormatText {
+        selection: EditSelection,
+        style: CharStyle,
+    },
+    /// Paragraph format for every paragraph the selection touches.
+    FormatParagraphs {
+        selection: EditSelection,
+        style: ParaStyle,
+    },
     Undo,
     Redo,
 }
@@ -56,6 +66,9 @@ pub struct EditRequest {
     pub version: u32,
     pub revision: u64,
     pub command: EditCommand,
+    /// Folds this edit into the latest undo step instead of adding one (IME composition).
+    #[serde(default)]
+    pub amend: bool,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,9 +85,50 @@ pub struct EditReply {
     pub dirty: bool,
     pub locked: bool,
 }
+/// Character format: as a query result every field is set; as a change, unset fields stay.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CharStyle {
+    pub font: Option<String>,
+    /// Points.
+    pub size: Option<f64>,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    pub underline: Option<bool>,
+    pub strikethrough: Option<bool>,
+    /// `#rrggbb`.
+    pub color: Option<String>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Alignment {
+    Justify,
+    Left,
+    Center,
+    Right,
+    Distribute,
+    Split,
+}
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ParaStyle {
+    pub alignment: Option<Alignment>,
+    /// Percent of the font height; unset when the paragraph uses another spacing kind.
+    pub line_spacing: Option<f64>,
+}
+/// Format at a caret, with the font names the renderer tries in order.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Format {
+    pub text: CharStyle,
+    pub paragraph: ParaStyle,
+    pub fonts: Vec<String>,
+}
 #[derive(Debug, Clone, Serialize)]
 pub struct ParagraphInfo {
     pub target: EditTarget,
+    /// Paragraphs in the same container (body or cell).
+    pub count: u32,
     pub text: String,
     pub editable: bool,
     pub reason: String,

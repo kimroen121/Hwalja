@@ -34,6 +34,10 @@ enum Request {
         revision: u64,
         selection: EditSelection,
     },
+    Format {
+        revision: u64,
+        position: EditPosition,
+    },
     /// Verified HWP/HWPX bytes, or the whole-document PDF, in `data`.
     Export {
         format: SaveFormat,
@@ -87,6 +91,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             revision,
             selection,
         } => HwpEditResult::ok(session.selection_rects(revision, &selection)?, Vec::new()),
+        Request::Format { revision, position } => {
+            HwpEditResult::ok(session.format(revision, &position)?, Vec::new())
+        }
         Request::Export { format } => HwpEditResult::ok(session.reply(), session.export(format)?),
     })
 }

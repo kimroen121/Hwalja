@@ -1,5 +1,6 @@
 mod commands;
 pub mod ffi;
+mod format;
 mod geometry;
 mod preservation;
 mod protocol;
@@ -197,13 +198,10 @@ impl EditSession {
         self.validate_command(&request.command)?;
         let before = self.core.document().clone();
         let start = match &request.command {
-            EditCommand::Replace { selection, .. } => {
-                let key = |p: &EditPosition| (commands::index(&p.target), p.scalar);
-                Some(std::cmp::min_by_key(
-                    &selection.anchor,
-                    &selection.focus,
-                    |p| key(p),
-                ))
+            EditCommand::Replace { selection, .. }
+            | EditCommand::FormatText { selection, .. }
+            | EditCommand::FormatParagraphs { selection, .. } => {
+                Some(commands::ordered(selection).0)
             }
             EditCommand::Split { position } | EditCommand::MergePrevious { position } => {
                 Some(position)
@@ -216,19 +214,24 @@ impl EditSession {
             .map_or(0, |p| p.saturating_sub(1));
         let snapshot = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {
-            let position = self.execute(&request.command)?;
+            let selection = self.execute(&request.command)?;
             preservation::check(&before, self.core.document(), &request.command)?;
-            let settle = self.page_of(&position).unwrap_or(u32::MAX);
-            Ok((position, self.render(from, settle)?))
+            let (_, end) = commands::ordered(&selection);
+            let settle = self.page_of(end).unwrap_or(u32::MAX);
+            Ok((selection, self.render(from, settle)?))
         }))
         .unwrap_or(Err(EditError::RenderFailed));
         match result {
-            Ok((position, output)) => {
-                self.undo.push(State {
-                    snapshot,
-                    selection: self.selection.take(),
-                    id: self.state,
-                });
+            Ok((selection, output)) => {
+                if request.amend && !self.undo.is_empty() {
+                    self.core.discard_snapshot_native(snapshot);
+                } else {
+                    self.undo.push(State {
+                        snapshot,
+                        selection: self.selection.take(),
+                        id: self.state,
+                    });
+                }
                 for state in std::mem::take(&mut self.redo) {
                     self.core.discard_snapshot_native(state.snapshot);
                 }
@@ -238,7 +241,7 @@ impl EditSession {
                 }
                 self.state = self.next_state;
                 self.next_state += 1;
-                self.publish(output, Some(EditSelection::caret(position)));
+                self.publish(output, Some(selection));
                 Ok(self.reply())
             }
             Err(error) => Err(self.roll_back(snapshot, error)),

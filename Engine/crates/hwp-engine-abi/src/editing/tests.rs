@@ -42,6 +42,7 @@ fn replace(
 ) -> Result<EditReply, EditError> {
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: s.revision,
         command: EditCommand::Replace {
             selection: EditSelection {
@@ -99,6 +100,7 @@ fn rejects_unsupported_target() {
     };
     let request = EditRequest {
         version: 1,
+        amend: false,
         revision: 0,
         command: EditCommand::Replace {
             selection: EditSelection {
@@ -129,6 +131,7 @@ fn split_merge_preserves_following_control() {
     let table = format!("{:?}", s.core.document().sections[0].paragraphs[2].controls);
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: 0,
         command: EditCommand::Split {
             position: point(body(), 1),
@@ -141,6 +144,7 @@ fn split_merge_preserves_following_control() {
     };
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: 1,
         command: EditCommand::MergePrevious {
             position: point(second, 0),
@@ -210,6 +214,7 @@ fn preservation_rejects_changes_to_unedited_content() {
 fn command(s: &mut EditSession, command: EditCommand) -> Result<EditReply, EditError> {
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: s.revision,
         command,
     })
@@ -335,6 +340,7 @@ fn first_paragraph_with_section_definition_is_editable() {
     replace(&mut s, first.clone(), 0, 0, "첫 줄").unwrap();
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: s.revision,
         command: EditCommand::Split {
             position: point(first.clone(), 1),
@@ -347,6 +353,7 @@ fn first_paragraph_with_section_definition_is_editable() {
     };
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: s.revision,
         command: EditCommand::MergePrevious {
             position: point(second, 0),
@@ -459,6 +466,157 @@ fn blank_document_is_editable() {
     assert_eq!(s.paragraph(&first).unwrap().text, "새 문서");
 }
 
+#[test]
+fn replace_spans_paragraphs() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let last = EditTarget {
+            paragraph: 2,
+            ..body()
+        };
+        let selection = EditSelection {
+            anchor: point(last.clone(), 2),
+            focus: point(body(), 1),
+        };
+        let reply = s
+            .apply(EditRequest {
+                version: 1,
+                amend: false,
+                revision: 0,
+                command: EditCommand::Replace {
+                    selection,
+                    text: "X".into(),
+                },
+            })
+            .unwrap();
+        assert_eq!(s.paragraph(&body()).unwrap().text, "가X 문단");
+        assert_eq!(s.paragraph(&body()).unwrap().count, 2);
+        assert_eq!(
+            reply.selection,
+            Some(EditSelection::caret(point(body(), 2)))
+        );
+        let undo = EditRequest {
+            version: 1,
+            amend: false,
+            revision: 1,
+            command: EditCommand::Undo,
+        };
+        s.apply(undo).unwrap();
+        assert_eq!(s.paragraph(&last).unwrap().text, "보존 문단");
+    }
+}
+#[test]
+fn replace_refuses_joining_a_table_paragraph() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let last = EditTarget {
+        paragraph: 2,
+        ..body()
+    };
+    let selection = EditSelection {
+        anchor: point(body(), 1),
+        focus: point(last, 0),
+    };
+    let result = s.apply(EditRequest {
+        version: 1,
+        amend: false,
+        revision: 0,
+        command: EditCommand::Replace {
+            selection,
+            text: String::new(),
+        },
+    });
+    assert!(matches!(result, Err(EditError::UnsupportedTarget)));
+}
+#[test]
+fn formats_text_and_paragraphs_and_saves() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let selection = EditSelection {
+            anchor: point(body(), 0),
+            focus: point(body(), 1),
+        };
+        let style = CharStyle {
+            font: Some("Apple SD Gothic Neo".into()),
+            size: Some(20.0),
+            bold: Some(true),
+            color: Some("#FF0000".into()),
+            ..Default::default()
+        };
+        let reply = s
+            .apply(EditRequest {
+                version: 1,
+                amend: false,
+                revision: 0,
+                command: EditCommand::FormatText {
+                    selection: selection.clone(),
+                    style,
+                },
+            })
+            .unwrap();
+        assert_eq!(reply.selection, Some(selection.clone()));
+        let at = s.format(1, &point(body(), 1)).unwrap();
+        assert_eq!(at.text.font.as_deref(), Some("Apple SD Gothic Neo"));
+        assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
+        assert_eq!(at.text.color.as_deref(), Some("#ff0000"));
+        assert!(!at.fonts.is_empty());
+        let after = s.format(1, &point(body(), 3)).unwrap();
+        assert_eq!(after.text.bold, Some(false));
+
+        let style = ParaStyle {
+            alignment: Some(Alignment::Center),
+            line_spacing: Some(200.0),
+        };
+        s.apply(EditRequest {
+            version: 1,
+            amend: false,
+            revision: 1,
+            command: EditCommand::FormatParagraphs { selection, style },
+        })
+        .unwrap();
+        let at = s.format(2, &point(body(), 0)).unwrap();
+        assert_eq!(at.paragraph.alignment, Some(Alignment::Center));
+        assert_eq!(at.paragraph.line_spacing, Some(200.0));
+
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        let reopened = EditSession::open(&saved).unwrap();
+        let at = reopened.format(0, &point(body(), 1)).unwrap();
+        assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
+        assert_eq!(at.paragraph.alignment, Some(Alignment::Center));
+    }
+}
+#[test]
+fn format_rejects_empty_changes() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let selection = EditSelection {
+        anchor: point(body(), 0),
+        focus: point(body(), 1),
+    };
+    for style in [
+        CharStyle::default(),
+        CharStyle {
+            color: Some("red".into()),
+            ..Default::default()
+        },
+    ] {
+        let result = s.apply(EditRequest {
+            version: 1,
+            amend: false,
+            revision: 0,
+            command: EditCommand::FormatText {
+                selection: selection.clone(),
+                style,
+            },
+        });
+        assert!(matches!(result, Err(EditError::InvalidInput)));
+    }
+}
+
 /// Opt-in typing latency on a private document; prints durations only:
 /// `HWP_BENCH=<file> cargo test --release bench_typing -- --ignored --nocapture`
 #[test]
@@ -485,9 +643,70 @@ fn bench_typing() {
     let t = Instant::now();
     s.apply(EditRequest {
         version: 1,
+        amend: false,
         revision: s.revision,
         command: EditCommand::Undo,
     })
     .unwrap();
     eprintln!("undo {:?}, pages {:?}", t.elapsed(), s.changed);
+}
+#[cfg(feature = "skia")]
+#[test]
+#[ignore]
+fn bench_skia_pdf() {
+    use std::time::Instant;
+    let bytes = std::fs::read(std::env::var("HWP_BENCH").unwrap()).unwrap();
+    let s = EditSession::open(&bytes).unwrap();
+    for p in 0..s.core.page_count().min(4) {
+        let t = Instant::now();
+        let pdf = s.core.render_page_pdf_direct_native(p).unwrap();
+        eprintln!(
+            "page {p} direct pdf {:?} {} KB",
+            t.elapsed(),
+            pdf.len() / 1024
+        );
+        let t = Instant::now();
+        let svgpdf = s.core.render_page_pdf_native(p).unwrap();
+        eprintln!(
+            "page {p} svg pdf {:?} {} KB",
+            t.elapsed(),
+            svgpdf.len() / 1024
+        );
+        if let Ok(dir) = std::env::var("HWP_PDF_OUT") {
+            std::fs::write(format!("{dir}/direct{p}.pdf"), pdf).unwrap();
+            std::fs::write(format!("{dir}/svg{p}.pdf"), svgpdf).unwrap();
+        }
+    }
+}
+#[test]
+fn amended_edits_share_one_undo_step() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let original = s.paragraph(&body()).unwrap().text;
+    for (revision, text, amend) in [(0, "ㅎ", false), (1, "하", true), (2, "한", true)] {
+        let start = point(body(), 0);
+        let end = point(body(), if revision == 0 { 0 } else { 1 });
+        s.apply(EditRequest {
+            version: 1,
+            amend,
+            revision,
+            command: EditCommand::Replace {
+                selection: EditSelection {
+                    anchor: start,
+                    focus: end,
+                },
+                text: text.into(),
+            },
+        })
+        .unwrap();
+    }
+    assert_eq!(s.paragraph(&body()).unwrap().text, format!("한{original}"));
+    let undo = EditRequest {
+        version: 1,
+        amend: false,
+        revision: 3,
+        command: EditCommand::Undo,
+    };
+    let reply = s.apply(undo).unwrap();
+    assert_eq!(s.paragraph(&body()).unwrap().text, original);
+    assert!(!reply.can_undo && !reply.dirty);
 }
