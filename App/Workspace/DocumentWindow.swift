@@ -1,4 +1,3 @@
-import Combine
 import PDFKit
 import SwiftUI
 
@@ -9,7 +8,7 @@ struct DocumentWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            PageThumbnails(canvas: viewer.canvas)
+            PageThumbnails(document: document, viewer: viewer)
                 .navigationSplitViewColumnWidth(min: 120, ideal: 150, max: 220)
         } detail: {
             Canvas(canvas: viewer.canvas, document: document)
@@ -17,7 +16,7 @@ struct DocumentWindow: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     HStack {
                         Spacer()
-                        Text("\(viewer.page) / \(document.reply.pageCount)쪽")
+                        Text("\(viewer.page + 1) / \(document.reply.pageCount)쪽")
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -30,7 +29,7 @@ struct DocumentWindow: View {
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
         .toolbar {
-            FormatBar(document: document, canvas: viewer.canvas)
+            FormatBar(document: document, editor: viewer.canvas.editor)
             if let first = document.reply.suspectPages.first {
                 ToolbarItem {
                     Button { viewer.canvas.go(to: Int(first)) } label: {
@@ -42,11 +41,11 @@ struct DocumentWindow: View {
             ToolbarItem {
                 Menu("\(viewer.zoomPercent)%") {
                     ForEach([50, 75, 100, 125, 150, 200, 300], id: \.self) { percent in
-                        Button("\(percent)%") { viewer.zoom(to: percent) }
+                        Button("\(percent)%") { viewer.canvas.setZoom(CGFloat(percent) / 100) }
                     }
                     Divider()
-                    Button("쪽 맞춤") { viewer.canvas.zoomToFitPage() }
-                    Button("폭 맞춤") { viewer.canvas.autoScales = true }
+                    Button("쪽 맞춤") { viewer.canvas.fit(.page) }
+                    Button("폭 맞춤") { viewer.canvas.fit(.width) }
                 }
                 .help("확대/축소")
             }
@@ -54,37 +53,21 @@ struct DocumentWindow: View {
     }
 }
 
-/// Owns the window's canvas and publishes what the toolbar shows.
+/// Owns the window's canvas and publishes what the toolbar and sidebar show.
 @MainActor
 final class Viewer: ObservableObject {
     let canvas = DocumentCanvas(frame: .zero)
     @Published private(set) var zoomPercent = 100
-    /// One-based page in view.
-    @Published private(set) var page = 1
-    private var observer: AnyCancellable?
+    /// Zero-based page in view.
+    @Published private(set) var page = 0
 
     init() {
-        let center = NotificationCenter.default
-        observer = center.publisher(for: .PDFViewScaleChanged, object: canvas)
-            .merge(with: center.publisher(for: .PDFViewDocumentChanged, object: canvas),
-                   center.publisher(for: .PDFViewPageChanged, object: canvas))
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                zoomPercent = Int((canvas.scaleFactor * 100).rounded())
-                page = canvas.currentPage.flatMap { canvas.document?.index(for: $0) }.map { $0 + 1 } ?? 1
-            }
-    }
-    func zoom(to percent: Int) {
-        canvas.autoScales = false
-        canvas.scaleFactor = CGFloat(percent) / 100
-    }
-}
-
-extension PDFView {
-    func go(to index: Int) {
-        guard let page = document?.page(at: index) else { return }
-        go(to: page)
+        canvas.onViewChange = { [weak self] in
+            guard let self else { return }
+            let zoom = Int((canvas.zoom * 100).rounded()), page = canvas.currentPage
+            if zoom != zoomPercent { zoomPercent = zoom }
+            if page != self.page { self.page = page }
+        }
     }
 }
 
@@ -95,14 +78,44 @@ private struct Canvas: NSViewRepresentable {
     func updateNSView(_ view: DocumentCanvas, context: Context) { view.bind(document) }
 }
 
-private struct PageThumbnails: NSViewRepresentable {
-    let canvas: DocumentCanvas
-    func makeNSView(context: Context) -> PDFThumbnailView {
-        let view = PDFThumbnailView()
-        view.pdfView = canvas
-        view.thumbnailSize = NSSize(width: 110, height: 150)
-        view.backgroundColor = .clear
-        return view
+/// Page thumbnails; a page's image is redrawn only when the engine replaced that page.
+private struct PageThumbnails: View {
+    @ObservedObject var document: HwpDocument
+    @ObservedObject var viewer: Viewer
+
+    var body: some View {
+        let pages = document.pages
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(0..<pages.pageCount, id: \.self) { index in
+                        if let page = pages.page(at: index) {
+                            Button { viewer.canvas.go(to: index) } label: {
+                                VStack(spacing: 4) {
+                                    Thumbnail(page: page)
+                                        .padding(3)
+                                        .background(RoundedRectangle(cornerRadius: 4)
+                                            .fill(index == viewer.page ? Color.accentColor.opacity(0.35) : .clear))
+                                    Text("\(index + 1)").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .id(index)
+                        }
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+            .onChange(of: viewer.page) { proxy.scrollTo(viewer.page) }
+        }
     }
-    func updateNSView(_ view: PDFThumbnailView, context: Context) {}
+}
+
+private struct Thumbnail: View {
+    let page: PDFPage
+    var body: some View {
+        Image(nsImage: page.thumbnail(of: NSSize(width: 110, height: 150), for: .mediaBox))
+            .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
+            .id(ObjectIdentifier(page))
+    }
 }

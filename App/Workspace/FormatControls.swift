@@ -43,7 +43,7 @@ enum FormatChoices {
 /// The window's format bar: font, size, character styles, color, alignment and line spacing.
 struct FormatBar: ToolbarContent {
     @ObservedObject var document: HwpDocument
-    let canvas: DocumentCanvas
+    let editor: PageEditor
 
     private var text: CharStyle? { document.format?.text }
     private var paragraph: ParaStyle? { document.format?.paragraph }
@@ -55,27 +55,27 @@ struct FormatBar: ToolbarContent {
             Group {
                 Menu(text?.font ?? "글꼴") {
                     ForEach(FormatChoices.families, id: \.family) { font in
-                        Button(font.name) { canvas.setFont(font.family) }
+                        Button(font.name) { editor.setFont(font.family) }
                     }
                 }
                 .frame(width: 140)
                 .help("글꼴")
                 Menu(text?.size.map(FormatChoices.points) ?? "크기") {
                     ForEach(FormatChoices.sizes, id: \.self) { size in
-                        Button(FormatChoices.points(size)) { canvas.setFontSize(size) }
+                        Button(FormatChoices.points(size)) { editor.setFontSize(size) }
                     }
                 }
                 .frame(width: 72)
                 .help("글자 크기")
                 ControlGroup {
-                    style("굵게", "bold", text?.bold, canvas.toggleBold)
-                    style("기울임꼴", "italic", text?.italic, canvas.toggleItalic)
-                    style("밑줄", "underline", text?.underline, canvas.toggleUnderline)
-                    style("취소선", "strikethrough", text?.strikethrough, canvas.toggleStrikethrough)
+                    style("굵게", "bold", text?.bold, editor.toggleBold)
+                    style("기울임꼴", "italic", text?.italic, editor.toggleItalic)
+                    style("밑줄", "underline", text?.underline, editor.toggleUnderline)
+                    style("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough)
                 }
                 Menu {
                     ForEach(FormatChoices.colors, id: \.hex) { color in
-                        Button { canvas.setTextColor(color.hex) } label: {
+                        Button { editor.setTextColor(color.hex) } label: {
                             Label { Text(color.name) } icon: { Image(nsImage: FormatChoices.swatch(color.hex)) }
                         }
                     }
@@ -86,7 +86,7 @@ struct FormatBar: ToolbarContent {
             }
             .disabled(!hasRange)
             Group {
-                Picker("정렬", selection: Binding(get: { paragraph?.alignment }, set: { $0.map(canvas.setAlignment) })) {
+                Picker("정렬", selection: Binding(get: { paragraph?.alignment }, set: { $0.map(editor.setAlignment) })) {
                     ForEach([Alignment.justify, .left, .center, .right], id: \.self) { alignment in
                         let label = FormatChoices.label(alignment)
                         Label(label.title, systemImage: label.symbol).tag(Optional(alignment))
@@ -96,7 +96,7 @@ struct FormatBar: ToolbarContent {
                 .help("정렬")
                 Menu {
                     ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
-                        Button("\(Int(percent))%") { canvas.setLineSpacing(percent) }
+                        Button("\(Int(percent))%") { editor.setLineSpacing(percent) }
                     }
                 } label: {
                     Label("줄 간격", systemImage: "arrow.up.and.down.text.horizontal")
@@ -123,17 +123,17 @@ struct FormatCommands: Commands {
     var body: some Commands {
         CommandMenu("서식") {
             let text = document?.format?.text
-            let canvas = viewer?.canvas
+            let editor = viewer?.canvas.editor
             let hasRange = document?.selection.map { $0.anchor != $0.focus } ?? false
             Group {
-                toggle("굵게", text?.bold) { canvas?.toggleBold() }.keyboardShortcut("b")
-                toggle("기울임꼴", text?.italic) { canvas?.toggleItalic() }.keyboardShortcut("i")
-                toggle("밑줄", text?.underline) { canvas?.toggleUnderline() }.keyboardShortcut("u")
-                toggle("취소선", text?.strikethrough) { canvas?.toggleStrikethrough() }
+                toggle("굵게", text?.bold) { editor?.toggleBold() }.keyboardShortcut("b")
+                toggle("기울임꼴", text?.italic) { editor?.toggleItalic() }.keyboardShortcut("i")
+                toggle("밑줄", text?.underline) { editor?.toggleUnderline() }.keyboardShortcut("u")
+                toggle("취소선", text?.strikethrough) { editor?.toggleStrikethrough() }
                     .keyboardShortcut("x", modifiers: [.command, .shift])
                 Divider()
-                Button("글자 크게") { canvas?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
-                Button("글자 작게") { canvas?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
+                Button("글자 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
+                Button("글자 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
             }
             .disabled(!hasRange)
             Divider()
@@ -147,14 +147,14 @@ struct FormatCommands: Commands {
                     default: nil
                     }
                     toggle(FormatChoices.label(alignment).title, document?.format?.paragraph.alignment == alignment) {
-                        canvas?.setAlignment(alignment)
+                        editor?.setAlignment(alignment)
                     }
                     .keyboardShortcut(shortcut)
                 }
                 Menu("줄 간격") {
                     ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
                         toggle("\(Int(percent))%", document?.format?.paragraph.lineSpacing == percent) {
-                            canvas?.setLineSpacing(percent)
+                            editor?.setLineSpacing(percent)
                         }
                     }
                 }

@@ -55,6 +55,9 @@ final class EditSession: @unchecked Sendable {
     func selectionRects(revision: UInt64, for selection: EditSelection) async throws -> [PageRect] {
         try await decode(send(.selectionRects(revision: revision, selection)))
     }
+    func navigate(revision: UInt64, from position: EditPosition, _ motion: Motion, goalX: Double?) async throws -> Navigation {
+        try await decode(send(.navigate(revision: revision, position, motion, goalX: goalX)))
+    }
     func format(revision: UInt64, at position: EditPosition) async throws -> Format {
         try await decode(send(.format(revision: revision, position)))
     }

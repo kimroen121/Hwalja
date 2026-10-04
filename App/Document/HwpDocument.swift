@@ -13,9 +13,22 @@ extension UTType {
     }))
 }
 
+/// What the canvas shows, published once per finished edit or move so the pages, the caret
+/// and the highlight always change in the same frame.
+struct Presentation: Equatable {
+    /// Increments with every presentation.
+    var serial = 0
+    /// Pages replaced in `HwpDocument.pages` since the previous presentation.
+    var changedPages = IndexSet()
+    /// Whether the number of pages changed.
+    var reflowed = false
+    var caret: PageRect?
+    var highlight: [PageRect] = []
+}
+
 /// One open HWP/HWPX document: the engine session plus the state views render.
-/// Edits run one at a time in submission order; each sees the result of the previous one.
-/// `pages` is patched in place with the pages each edit re-rendered.
+/// Edits and moves run one at a time in submission order; each sees the result of the
+/// previous one, and each ends by publishing a `Presentation`.
 @MainActor
 final class HwpDocument: @preconcurrency ReferenceFileDocument {
     static let readableContentTypes = UTType.hwpFamily
@@ -25,7 +38,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     static let undoLimit = 20
 
     private let session: EditSession
-    /// Rendered pages, shown and printed as is. Built on the main actor from the opening PDF.
+    /// Rendered pages, shown and printed as is. Built on the main actor from the opening PDF
+    /// and patched only when a presentation is published.
     private(set) lazy var pages = PDFDocument(data: openingPDF) ?? PDFDocument()
     private let openingPDF: Data
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
@@ -35,18 +49,20 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     private(set) var marked: EditSelection? { willSet { objectWillChange.send() } }
     /// Format at the caret (or at the end of the selection).
     private(set) var format: Format? { willSet { objectWillChange.send() } }
+    private(set) var presentation = Presentation() { willSet { objectWillChange.send() } }
+
     private var queue: Task<Void, Never>?
     /// Number of works ever queued; identifies the latest one.
     private var queued = 0
+    /// Re-rendered pages waiting for the next presentation.
+    private var staged: [EditSession.Output] = []
+    /// Column that consecutive up/down moves keep.
+    private var goalX: Double?
     /// The latest queued work while it is unstarted typing, with the text it will insert.
     private var typing: (work: Int, text: Typed)?
     private final class Typed { var text: String; init(_ text: String) { self.text = text } }
-    /// The latest queued work while it is an unstarted composition update.
-    private var composing: (work: Int, step: Composition)?
-    private final class Composition {
-        var text: String, commit: Bool
-        init(_ text: String, _ commit: Bool) { (self.text, self.commit) = (text, commit) }
-    }
+    /// The latest queued work while it is an unstarted, uncommitted composition update.
+    private var composing: (work: Int, text: Typed)?
 
     nonisolated init() {
         // ponytail: blank-document failure is unrecoverable (engine bug), so it traps.
@@ -75,14 +91,12 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     var revision: UInt64 { reply.revision }
 
+    // MARK: Edits
+
     /// Queues an edit built from the selection current when it runs. Successful edits
     /// become one undo step on `undoManager`; refused edits beep.
     func edit(_ undoManager: UndoManager?, _ make: @escaping @MainActor (EditSelection?) -> EditCommand?) {
-        enqueue { document in
-            guard let command = make(document.selection) else { return }
-            try await document.run(command)
-            document.registerHistory(.undo, undoManager)
-        }
+        perform(undoManager) { make($0.selection) }
     }
 
     /// Replaces the selection with typed text. Keystrokes that arrive while earlier work is
@@ -100,26 +114,38 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         typing = (queued, typed)
     }
 
+    /// Deletes the selection, or the text between the caret and where `motion` takes it.
+    func delete(_ motion: Motion, _ undoManager: UndoManager?) {
+        perform(undoManager) { document in
+            guard let selection = document.selection else { return nil }
+            if selection.anchor != selection.focus { return .replace(selection, text: "") }
+            let end = try await document.navigate(from: selection.focus, motion).position
+            return end == selection.focus ? nil : .replace(EditSelection(anchor: selection.focus, focus: end), text: "")
+        }
+    }
+
     /// Puts input-method composition into the document, replacing the previous composing
     /// text, so it is laid out in the document's own font. A composition is one undo step:
     /// its first update registers it and later updates fold into it. `commit` ends it.
     func compose(_ text: String, commit: Bool, _ undoManager: UndoManager?) {
-        if let composing, composing.work == queued {
-            (composing.step.text, composing.step.commit) = (text, commit)
+        // Only an uncommitted update may be overtaken; a commit always runs.
+        if !commit, let composing, composing.work == queued {
+            composing.text.text = text
             return
         }
-        let step = Composition(text, commit)
+        let typed = Typed(text)
         enqueue { document in
-            if document.composing?.step === step { document.composing = nil }
+            if document.composing?.text === typed { document.composing = nil }
             let continuing = document.marked != nil
-            guard let range = document.marked ?? document.selection, continuing || !step.text.isEmpty else { return }
+            guard let range = document.marked ?? document.selection, continuing || !typed.text.isEmpty else { return }
             let start = range.ordered.start
-            try await document.run(.replace(range, text: step.text), amend: continuing)
+            document.goalX = nil
+            try await document.run(.replace(range, text: typed.text), amend: continuing)
             if !continuing { document.registerHistory(.undo, undoManager) }
-            let end = EditPosition(target: start.target, scalar: start.scalar + UInt32(step.text.unicodeScalars.count))
-            document.marked = step.commit || step.text.isEmpty ? nil : EditSelection(anchor: start, focus: end)
+            let end = EditPosition(target: start.target, scalar: start.scalar + UInt32(typed.text.unicodeScalars.count))
+            document.marked = commit || typed.text.isEmpty ? nil : EditSelection(anchor: start, focus: end)
         }
-        composing = (queued, step)
+        if !commit { composing = (queued, typed) }
     }
     /// Keeps the composing text as typed and ends the composition.
     func endComposition() {
@@ -138,23 +164,53 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         edit(undoManager) { $0.map { .formatParagraphs($0, style) } }
     }
 
+    // MARK: Moves
+
+    /// Moves the caret, or extends the selection, the way `motion` says. Without `extend`,
+    /// a selection collapses toward the motion's side first.
+    func move(_ motion: Motion, extend: Bool) {
+        enqueue { document in
+            guard let selection = document.selection else { return }
+            let backward: Set<Motion> = [.left, .wordLeft, .lineStart, .up, .paragraphStart, .documentStart]
+            let ranged = selection.anchor != selection.focus
+            if !extend, ranged, motion == .left || motion == .right {
+                document.goalX = nil
+                document.selection = .caret(backward.contains(motion) ? selection.ordered.start : selection.ordered.end)
+                return
+            }
+            let from = extend || !ranged ? selection.focus
+                : backward.contains(motion) ? selection.ordered.start : selection.ordered.end
+            let moved = try await document.navigate(from: from, motion)
+            document.selection = extend ? EditSelection(anchor: selection.anchor, focus: moved.position) : .caret(moved.position)
+        }
+    }
+
     /// Queues a selection change computed after earlier edits and moves have finished.
     func select(_ make: @escaping @MainActor (HwpDocument) async throws -> EditSelection?) {
         enqueue { document in
-            if let selection = try await make(document) { document.selection = selection }
+            if let selection = try await make(document) {
+                document.goalX = nil
+                document.selection = selection
+            }
         }
     }
     /// Waits for queued edits and moves.
     func settle() async { await queue?.value }
 
+    // MARK: Queries
+
+    /// Where `motion` takes a caret, keeping the column across consecutive vertical moves.
+    func navigate(from position: EditPosition, _ motion: Motion) async throws -> Navigation {
+        let moved = try await session.navigate(revision: revision, from: position, motion,
+                                               goalX: motion.isVertical ? goalX : nil)
+        goalX = motion.isVertical ? moved.goalX : nil
+        return moved
+    }
     func hitTest(page: Int, x: Double, y: Double) async throws -> EditPosition {
         try await session.hitTest(revision: revision, page: UInt32(page), x: x, y: y)
     }
     func caret(at position: EditPosition) async throws -> PageRect {
         try await session.caret(revision: revision, at: position)
-    }
-    func selectionRects(_ selection: EditSelection) async throws -> [PageRect] {
-        try await session.selectionRects(revision: revision, for: selection)
     }
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await session.paragraph(target)
@@ -178,6 +234,16 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: Running
+
+    private func perform(_ undoManager: UndoManager?, _ make: @escaping @MainActor (HwpDocument) async throws -> EditCommand?) {
+        enqueue { document in
+            guard let command = try await make(document) else { return }
+            document.goalX = nil
+            try await document.run(command)
+            document.registerHistory(.undo, undoManager)
+        }
+    }
     private func enqueue(_ work: @escaping @MainActor (HwpDocument) async throws -> Void) {
         queued += 1
         let previous = queue
@@ -185,22 +251,42 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             await previous?.value
             guard let self else { return }
             do { try await work(self) } catch { NSSound.beep() }
-            await refreshFormat()
+            await present()
         }
-    }
-    private func refreshFormat() async {
-        guard let selection else { return format = nil }
-        let current = try? await session.format(revision: revision, at: selection.ordered.end)
-        if current != format { format = current }
     }
     private func run(_ command: EditCommand, amend: Bool = false) async throws {
-        let output = try await session.apply(command, at: revision, amend: amend)
-        if !pages.replace(output.reply.changedPages, with: output.pdf, pageCount: output.reply.pageCount),
-           let whole = PDFDocument(data: try await session.pdf()) {
-            pages.replace(Array(0..<output.reply.pageCount), with: whole, pageCount: output.reply.pageCount)
+        var output = try await session.apply(command, at: revision, amend: amend)
+        if PDFDocument(data: output.pdf)?.pageCount ?? 0 != output.reply.changedPages.count {
+            // The engine skipped a page it could not convert; show the whole document instead.
+            output.pdf = try await session.pdf()
+            output.reply.changedPages = Array(0..<output.reply.pageCount)
         }
+        staged.append(output)
         reply = output.reply
         if let selection = output.reply.selection { self.selection = selection }
+    }
+    /// Gathers the caret, highlight and format for the current selection, then swaps in the
+    /// staged pages and publishes everything at once.
+    private func present() async {
+        var caret: PageRect?, highlight: [PageRect] = [], format: Format?
+        if let selection {
+            caret = reply.selection == selection ? reply.caret : nil
+            if caret == nil { caret = try? await session.caret(revision: revision, at: selection.focus) }
+            if selection.anchor != selection.focus {
+                highlight = (try? await session.selectionRects(revision: revision, for: selection)) ?? []
+            }
+            format = try? await session.format(revision: revision, at: selection.ordered.end)
+        }
+        var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight)
+        for output in staged {
+            let count = pages.pageCount
+            pages.replace(output.reply.changedPages, with: output.pdf, pageCount: output.reply.pageCount)
+            next.changedPages.formUnion(IndexSet(output.reply.changedPages.map(Int.init)))
+            next.reflowed = next.reflowed || pages.pageCount != count
+        }
+        staged = []
+        if format != self.format { self.format = format }
+        presentation = next
     }
 
     private enum Step { case undo, redo }
@@ -217,22 +303,14 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 }
 
 private extension PDFDocument {
-    /// Swaps in re-rendered pages and drops pages past `pageCount`. False if `pdf` does not
-    /// hold exactly the listed pages.
-    @discardableResult
-    func replace(_ indices: [UInt32], with pdf: Data, pageCount: UInt32) -> Bool {
-        guard let patch = indices.isEmpty ? PDFDocument() : PDFDocument(data: pdf) else { return false }
-        return replace(indices, with: patch, pageCount: pageCount)
-    }
-    @discardableResult
-    func replace(_ indices: [UInt32], with patch: PDFDocument, pageCount count: UInt32) -> Bool {
-        guard patch.pageCount == indices.count else { return false }
+    /// Swaps in re-rendered pages and drops pages past `pageCount`.
+    func replace(_ indices: [UInt32], with pdf: Data, pageCount count: UInt32) {
+        guard let patch = PDFDocument(data: pdf) ?? (indices.isEmpty ? PDFDocument() : nil) else { return }
         for (offset, index) in indices.map(Int.init).enumerated() {
-            guard let page = patch.page(at: offset), index <= pageCount else { return false }
+            guard let page = patch.page(at: offset), index <= pageCount else { return }
             if index < pageCount { removePage(at: index) }
             insert(page, at: index)
         }
         while pageCount > Int(count) { removePage(at: pageCount - 1) }
-        return true
     }
 }

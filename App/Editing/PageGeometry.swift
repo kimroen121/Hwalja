@@ -1,32 +1,20 @@
 import CoreGraphics
 
-/// Converts between PDF page space (points, bottom-left origin within `box`) and engine
-/// page space (96 dpi pixels, top-left origin). Rotated pages are not editable.
+/// Converts between a page's frame in the flipped page view (points, top-left origin) and
+/// engine page space (96 dpi pixels, top-left origin).
 enum PageGeometry {
     static let pointsPerPixel = 72.0 / 96.0
 
-    static func enginePoint(_ point: CGPoint, in box: CGRect) -> CGPoint {
-        CGPoint(x: (point.x - box.minX) / pointsPerPixel, y: (box.maxY - point.y) / pointsPerPixel)
+    static func enginePoint(_ point: CGPoint, in frame: CGRect) -> CGPoint {
+        CGPoint(x: (point.x - frame.minX) / pointsPerPixel, y: (point.y - frame.minY) / pointsPerPixel)
     }
-    static func pageRect(_ rect: PageRect, in box: CGRect) -> CGRect {
-        CGRect(x: box.minX + rect.x * pointsPerPixel,
-               y: box.maxY - (rect.y + rect.height) * pointsPerPixel,
-               width: rect.width * pointsPerPixel,
-               height: rect.height * pointsPerPixel)
+    static func viewRect(_ rect: PageRect, in frame: CGRect) -> CGRect {
+        CGRect(x: frame.minX + rect.x * pointsPerPixel, y: frame.minY + rect.y * pointsPerPixel,
+               width: rect.width * pointsPerPixel, height: rect.height * pointsPerPixel)
     }
 }
 
 extension String {
-    /// Unicode scalar offsets of every grapheme boundary, including 0 and the end.
-    var graphemeBoundaries: [UInt32] {
-        var offsets: [UInt32] = [0]
-        var offset: UInt32 = 0
-        for character in self {
-            offset += UInt32(character.unicodeScalars.count)
-            offsets.append(offset)
-        }
-        return offsets
-    }
     /// The text between two Unicode scalar offsets.
     func scalars(_ range: Range<UInt32>) -> String {
         let scalars = Array(unicodeScalars)

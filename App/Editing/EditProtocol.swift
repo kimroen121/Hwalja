@@ -66,6 +66,8 @@ enum EditCommand: Encodable, Sendable {
 struct EditReply: Decodable, Sendable {
     var revision: UInt64
     var selection: EditSelection?
+    /// Caret rectangle of the selection focus, laid out with this revision.
+    var caret: PageRect?
     var pageCount: UInt32
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     var changedPages: [UInt32]
@@ -100,6 +102,27 @@ struct ParaStyle: Codable, Hashable, Sendable {
     var lineSpacing: Double?
 }
 
+/// A caret motion, resolved against the engine's line layout.
+enum Motion: String, Encodable, Sendable {
+    case left, right
+    /// To the start of the previous word / the end of the next word.
+    case wordLeft, wordRight
+    /// Edges of the word under the caret.
+    case wordStart, wordEnd
+    case lineStart, lineEnd, up, down, paragraphStart, paragraphEnd
+    /// Edges of the body or of the cell holding the caret.
+    case documentStart, documentEnd
+
+    var isVertical: Bool { self == .up || self == .down }
+}
+
+struct Navigation: Decodable, Sendable {
+    var position: EditPosition
+    var caret: PageRect
+    /// Column to keep for the next vertical motion.
+    var goalX: Double
+}
+
 /// Format at the caret, with the font names the renderer tries in order.
 struct Format: Decodable, Hashable, Sendable {
     var text: CharStyle
@@ -117,7 +140,7 @@ struct ParagraphInfo: Decodable, Sendable {
 }
 
 /// 96 dpi, top-left origin within `page`.
-struct PageRect: Decodable, Sendable {
+struct PageRect: Decodable, Hashable, Sendable {
     var page: UInt32
     var x: Double
     var y: Double
@@ -153,9 +176,10 @@ enum EngineRequest: Encodable, Sendable {
     case caret(revision: UInt64, EditPosition)
     case selectionRects(revision: UInt64, EditSelection)
     case format(revision: UInt64, EditPosition)
+    case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case export(SaveFormat)
 
-    private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position, selection, format }
+    private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position, selection, format, motion, goalX }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -184,6 +208,12 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("format", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(position, forKey: .position)
+        case let .navigate(revision, position, motion, goalX):
+            try c.encode("navigate", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(position, forKey: .position)
+            try c.encode(motion, forKey: .motion)
+            try c.encodeIfPresent(goalX, forKey: .goalX)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)

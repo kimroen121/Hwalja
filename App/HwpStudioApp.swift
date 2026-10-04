@@ -1,4 +1,3 @@
-import PDFKit
 import SwiftUI
 
 @main
@@ -20,9 +19,9 @@ struct HwpStudioApp: App {
             CommandGroup(after: .toolbar) {
                 Button("실제 크기") { send(#selector(DocumentCanvas.zoomToActualSize(_:))) }
                     .keyboardShortcut("0")
-                Button("확대") { send(#selector(PDFView.zoomIn(_:))) }
+                Button("확대") { send(#selector(DocumentCanvas.zoomIn(_:))) }
                     .keyboardShortcut("+")
-                Button("축소") { send(#selector(PDFView.zoomOut(_:))) }
+                Button("축소") { send(#selector(DocumentCanvas.zoomOut(_:))) }
                     .keyboardShortcut("-")
                 Button("쪽 맞춤") { send(#selector(DocumentCanvas.zoomToFit(_:))) }
                     .keyboardShortcut("9")
