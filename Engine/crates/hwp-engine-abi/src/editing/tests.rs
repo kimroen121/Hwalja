@@ -710,3 +710,167 @@ fn amended_edits_share_one_undo_step() {
     assert_eq!(s.paragraph(&body()).unwrap().text, original);
     assert!(!reply.can_undo && !reply.dirty);
 }
+#[test]
+fn later_formats_keep_earlier_ones() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let selection = EditSelection {
+        anchor: point(body(), 0),
+        focus: point(body(), 1),
+    };
+    for (revision, style) in [
+        (
+            0,
+            CharStyle {
+                color: Some("#ff0000".into()),
+                ..Default::default()
+            },
+        ),
+        (
+            1,
+            CharStyle {
+                size: Some(20.0),
+                ..Default::default()
+            },
+        ),
+        (
+            2,
+            CharStyle {
+                bold: Some(true),
+                ..Default::default()
+            },
+        ),
+    ] {
+        s.apply(EditRequest {
+            version: 1,
+            amend: false,
+            revision,
+            command: EditCommand::FormatText {
+                selection: selection.clone(),
+                style,
+            },
+        })
+        .unwrap();
+    }
+    let at = s.format(3, &point(body(), 1)).unwrap();
+    assert_eq!(at.text.color.as_deref(), Some("#ff0000"));
+    assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
+}
+#[test]
+fn formatting_a_span_keeps_each_runs_other_attributes() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let request = |revision, focus, style| EditRequest {
+        version: 1,
+        amend: false,
+        revision,
+        command: EditCommand::FormatText {
+            selection: EditSelection {
+                anchor: point(body(), 0),
+                focus: point(body(), focus),
+            },
+            style,
+        },
+    };
+    let red = CharStyle {
+        color: Some("#ff0000".into()),
+        ..Default::default()
+    };
+    s.apply(request(0, 1, red)).unwrap();
+    let big = CharStyle {
+        size: Some(20.0),
+        ..Default::default()
+    };
+    s.apply(request(1, 12, big)).unwrap();
+    let first = s.format(2, &point(body(), 1)).unwrap();
+    let later = s.format(2, &point(body(), 12)).unwrap();
+    assert_eq!(
+        (first.text.color.as_deref(), first.text.size),
+        (Some("#ff0000"), Some(20.0))
+    );
+    assert_eq!(
+        (later.text.color.as_deref(), later.text.size),
+        (Some("#000000"), Some(20.0))
+    );
+}
+fn wrapped_document() -> EditSession {
+    let mut core = DocumentCore::new_empty();
+    core.create_blank_document_native().unwrap();
+    let long = "가나다 라마바 사아자 차카타 파하 ".repeat(12);
+    core.insert_text_native(0, 0, 0, &long).unwrap();
+    core.split_paragraph_native(0, 0, long.chars().count(), None)
+        .unwrap();
+    core.insert_text_native(0, 1, 0, "둘째 문단").unwrap();
+    EditSession::open(&core.export_hwpx_native().unwrap()).unwrap()
+}
+fn go(s: &EditSession, from: EditPosition, motion: Motion, goal: Option<f64>) -> Navigation {
+    s.navigate(0, &from, motion, goal).unwrap()
+}
+#[test]
+fn horizontal_and_word_motions() {
+    let s = wrapped_document();
+    let first = EditTarget {
+        section: 0,
+        paragraph: 0,
+        cell: None,
+    };
+    let second = EditTarget {
+        paragraph: 1,
+        ..first.clone()
+    };
+    assert_eq!(
+        go(&s, point(first.clone(), 0), Motion::Right, None).position,
+        point(first.clone(), 1)
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 0), Motion::Left, None)
+            .position
+            .target,
+        first
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 5), Motion::WordLeft, None).position,
+        point(second.clone(), 3)
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 0), Motion::WordRight, None).position,
+        point(second.clone(), 2)
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 1), Motion::WordStart, None).position,
+        point(second.clone(), 0)
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 1), Motion::WordEnd, None).position,
+        point(second.clone(), 2)
+    );
+    assert_eq!(
+        go(&s, point(second.clone(), 3), Motion::DocumentStart, None).position,
+        point(first, 0)
+    );
+}
+#[test]
+fn vertical_motion_keeps_its_column_and_lines_have_edges() {
+    let s = wrapped_document();
+    let first = EditTarget {
+        section: 0,
+        paragraph: 0,
+        cell: None,
+    };
+    let start = point(first.clone(), 5);
+    let down = go(&s, start.clone(), Motion::Down, None);
+    assert_eq!(down.position.target, first);
+    assert!(down.position.scalar > 5 && down.caret.y > s.caret(0, &start).unwrap().y);
+    let up = go(&s, down.position.clone(), Motion::Up, Some(down.goal_x));
+    assert_eq!(up.position, start);
+
+    let end = go(&s, start.clone(), Motion::LineEnd, None);
+    let line_start = go(&s, down.position.clone(), Motion::LineStart, None);
+    assert!(end.position.scalar < line_start.position.scalar);
+    assert_eq!(end.caret.y, s.caret(0, &start).unwrap().y);
+    assert_eq!(go(&s, start, Motion::LineStart, None).position.scalar, 0);
+}
+#[test]
+fn replies_carry_the_caret() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let reply = replace(&mut s, body(), 0, 0, "가").unwrap();
+    assert_eq!(reply.caret, Some(s.caret(1, &point(body(), 1)).unwrap()));
+}

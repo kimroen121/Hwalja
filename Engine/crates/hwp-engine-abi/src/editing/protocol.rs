@@ -76,6 +76,8 @@ pub struct EditReply {
     pub version: u32,
     pub revision: u64,
     pub selection: Option<EditSelection>,
+    /// Caret rectangle of the selection focus, laid out with this revision.
+    pub caret: Option<PageRect>,
     pub page_count: u32,
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     pub changed_pages: Vec<u32>,
@@ -115,6 +117,37 @@ pub struct ParaStyle {
     pub alignment: Option<Alignment>,
     /// Percent of the font height; unset when the paragraph uses another spacing kind.
     pub line_spacing: Option<f64>,
+}
+/// A caret motion, resolved against the engine's line layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Motion {
+    Left,
+    Right,
+    /// To the start of the previous word.
+    WordLeft,
+    /// To the end of the next word.
+    WordRight,
+    /// Edges of the word segment under the caret (double-click).
+    WordStart,
+    WordEnd,
+    LineStart,
+    LineEnd,
+    Up,
+    Down,
+    ParagraphStart,
+    ParagraphEnd,
+    /// Edges of the body or of the cell holding the caret.
+    DocumentStart,
+    DocumentEnd,
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Navigation {
+    pub position: EditPosition,
+    pub caret: PageRect,
+    /// Column to keep for the next vertical motion.
+    pub goal_x: f64,
 }
 /// Format at a caret, with the font names the renderer tries in order.
 #[derive(Debug, Clone, Serialize)]

@@ -12,9 +12,36 @@ index 1d6474f..3317b8d 100644
  resolver = "2"
  
 diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries/cursor_nav.rs
-index 9352fff..2bfb535 100644
+index 9352fff..0df9b4d 100644
 --- a/src/document_core/queries/cursor_nav.rs
 +++ b/src/document_core/queries/cursor_nav.rs
+@@ -127,7 +127,7 @@ pub(crate) fn plan_selection_pages(
+ }
+ 
+ impl DocumentCore {
+-    pub(crate) fn get_line_info_native(
++    pub fn get_line_info_native(
+         &self,
+         section_idx: usize,
+         para_idx: usize,
+@@ -177,7 +177,7 @@ impl DocumentCore {
+     }
+ 
+     /// 셀 내 문단의 줄 정보를 반환한다 (네이티브).
+-    pub(crate) fn get_line_info_in_cell_native(
++    pub fn get_line_info_in_cell_native(
+         &self,
+         section_idx: usize,
+         parent_para_idx: usize,
+@@ -367,7 +367,7 @@ impl DocumentCore {
+     }
+ 
+     /// 표의 행/열/셀 수를 반환한다 (네이티브).
+-    pub(crate) fn move_vertical_native(
++    pub fn move_vertical_native(
+         &self,
+         sec: usize,
+         para: usize,
 @@ -1753,7 +1753,7 @@ impl DocumentCore {
      ///
      /// cell_ctx: Some((ppi, ci, cei)) 면 셀 내부, None 이면 본문.

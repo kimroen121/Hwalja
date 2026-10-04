@@ -2,6 +2,7 @@ mod commands;
 pub mod ffi;
 mod format;
 mod geometry;
+mod navigation;
 mod preservation;
 mod protocol;
 mod save;
@@ -106,6 +107,10 @@ impl EditSession {
             version: 1,
             revision: self.revision,
             selection: self.selection.clone(),
+            caret: self
+                .selection
+                .as_ref()
+                .and_then(|s| self.caret(self.revision, &s.focus).ok()),
             page_count: self.core.page_count(),
             changed_pages: self.changed.clone(),
             suspect_pages: (0..self.pages.len() as u32)

@@ -74,7 +74,33 @@ impl EditSession {
         }
         Value::Object(props).to_string()
     }
+    /// Applies `props` to `from..to`, one existing run at a time: rhwp derives the new
+    /// shape from the run at the range start, which would copy that run's other
+    /// attributes (color, font, …) over the rest of the range.
     pub(super) fn format_text(
+        &mut self,
+        t: &EditTarget,
+        from: u32,
+        to: u32,
+        props: &str,
+    ) -> Result<(), EditError> {
+        let para = get(self.core.document(), t)?;
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        for offset in from..to {
+            let id = para.char_shape_id_at(offset as usize);
+            match runs.last_mut() {
+                Some((_, end)) if para.char_shape_id_at(*end as usize - 1) == id => {
+                    *end = offset + 1
+                }
+                _ => runs.push((offset, offset + 1)),
+            }
+        }
+        for (start, end) in runs {
+            self.format_run(t, start, end, props)?;
+        }
+        Ok(())
+    }
+    fn format_run(
         &mut self,
         t: &EditTarget,
         from: u32,
