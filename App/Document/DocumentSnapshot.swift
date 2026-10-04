@@ -1,4 +1,5 @@
 import Foundation
+import CHwpEngine
 import PDFKit
 
 struct DocumentSnapshot: Sendable {
@@ -11,16 +12,11 @@ struct DocumentSnapshot: Sendable {
     static func open(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 64 * 1024 * 1024 else { throw SnapshotError.message("64 MiB보다 큰 파일은 지원하지 않습니다.") }
+        let limit = 64 * 1024 * 1024
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
-        var original = Data()
-        let limit = 64 * 1024 * 1024
-        while let chunk = try file.read(upToCount: min(1024 * 1024, limit + 1 - original.count)), !chunk.isEmpty {
-            original.append(chunk)
-            guard original.count <= limit else { throw SnapshotError.message("64 MiB보다 큰 파일은 지원하지 않습니다.") }
-        }
+        let original = try file.read(upToCount: limit + 1) ?? Data()
+        guard original.count <= limit else { throw SnapshotError.message("64 MiB보다 큰 파일은 지원하지 않습니다.") }
         let result = original.withUnsafeBytes { hwp_engine_open($0.bindMemory(to: UInt8.self).baseAddress, $0.count) }
         defer { hwp_engine_string_free(result.message); hwp_engine_snapshot_free(result.snapshot) }
         guard result.status == 0, let handle = result.snapshot else {

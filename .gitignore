@@ -1,13 +1,7 @@
 .build/
 build/
-DerivedData/
-FoundationDerivedData/
 Engine/target/
-Generated/
-*.xcodeproj/
-*.xcworkspace/
-*.xcuserstate
-xcuserdata/
-Config/LocalSigning.xcconfig
+Engine/include/HwpEngineABI.h
+.swiftpm/
 Tests/PrivateFixtures/
 .DS_Store

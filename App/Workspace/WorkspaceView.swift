@@ -8,6 +8,7 @@ struct WorkspaceView: View {
     @State private var error: String?
     @State private var inspector = false
     @StateObject private var reader = PDFWorkspaceState()
+    @EnvironmentObject private var app: AppDelegate
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 12) {
@@ -87,11 +88,14 @@ struct WorkspaceView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button("열기", systemImage: "folder", action: open).disabled(busy).keyboardShortcut("o")
+                    Button("인쇄", systemImage: "printer") { reader.view.print(with: .shared, autoRotate: true) }
+                        .disabled(snapshot == nil || busy).keyboardShortcut("p")
                     Button("PDF 내보내기", systemImage: "square.and.arrow.up", action: export)
                         .disabled(snapshot == nil || busy).keyboardShortcut("e", modifiers: [.command, .shift])
                     Button("문서 정보", systemImage: "sidebar.right") { inspector.toggle() }
                 }
             }
+            .onReceive(app.$openedURL.compactMap { $0 }, perform: load)
             .alert("문서 작업 실패", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("확인") { error = nil }
             } message: { Text(error ?? "") }
@@ -101,6 +105,10 @@ struct WorkspaceView: View {
         panel.allowedContentTypes = [UTType(filenameExtension: "hwp"), UTType(filenameExtension: "hwpx")].compactMap { $0 }
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        load(url)
+    }
+    private func load(_ url: URL) {
+        guard !busy else { return }
         busy = true
         Task {
             do {
