@@ -14,8 +14,6 @@ const REQUEST_LIMIT: usize = 8 * 1024 * 1024;
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
 enum Request {
-    /// Current reply and PDF.
-    State,
     Apply {
         request: EditRequest,
     },
@@ -36,7 +34,7 @@ enum Request {
         revision: u64,
         selection: EditSelection,
     },
-    /// Verified HWP/HWPX bytes of the current document in `data`.
+    /// Verified HWP/HWPX bytes, or the whole-document PDF, in `data`.
     Export {
         format: SaveFormat,
     },
@@ -71,7 +69,6 @@ fn state(session: &EditSession) -> *mut HwpEditResult {
 }
 fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditResult, EditError> {
     Ok(match request {
-        Request::State => state(session),
         Request::Apply { request } => {
             session.apply(request)?;
             state(session)
@@ -183,7 +180,8 @@ pub unsafe extern "C" fn hwp_edit_result_status(result: *const HwpEditResult) ->
 pub unsafe extern "C" fn hwp_edit_result_json(result: *const HwpEditResult) -> *const c_char {
     unsafe { result.as_ref() }.map_or(std::ptr::null(), |r| r.json.as_ptr())
 }
-/// Borrowed bytes: the PDF for `state`/`apply`, the document for `export`, otherwise empty.
+/// Borrowed bytes: the PDF of `changedPages` for `open`/`apply`, the document for `export`,
+/// otherwise empty.
 /// Valid until `hwp_edit_result_free`.
 ///
 /// # Safety

@@ -4,7 +4,7 @@ import CHwpEngine
 /// Owns one engine edit session. Every call to the raw handle runs on `queue`,
 /// so the handle is never touched concurrently; callers only see owned values.
 final class EditSession: @unchecked Sendable {
-    /// Engine state with the PDF of the same revision.
+    /// Engine state with the PDF of the pages it re-rendered (`reply.changedPages`).
     struct Output: Sendable {
         var reply: EditReply
         var pdf: Data
@@ -33,6 +33,10 @@ final class EditSession: @unchecked Sendable {
     /// Verified document bytes for saving. Blocks until queued edits finish.
     func export(_ format: SaveFormat) throws -> Data {
         try queue.sync { try request(.export(format)).data }
+    }
+    /// The whole document as PDF.
+    func pdf() async throws -> Data {
+        try await send(.export(.pdf)).data
     }
 
     func apply(_ command: EditCommand, at revision: UInt64) async throws -> Output {

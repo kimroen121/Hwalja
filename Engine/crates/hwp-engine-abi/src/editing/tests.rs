@@ -458,3 +458,36 @@ fn blank_document_is_editable() {
     replace(&mut s, first.clone(), 0, 0, "새 문서").unwrap();
     assert_eq!(s.paragraph(&first).unwrap().text, "새 문서");
 }
+
+/// Opt-in typing latency on a private document; prints durations only:
+/// `HWP_BENCH=<file> cargo test --release bench_typing -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn bench_typing() {
+    use std::time::Instant;
+    let bytes = std::fs::read(std::env::var("HWP_BENCH").unwrap()).unwrap();
+    let t = Instant::now();
+    let mut s = EditSession::open(&bytes).unwrap();
+    eprintln!("open {:?}, {} pages", t.elapsed(), s.core.page_count());
+    let target = (0..s.core.document().sections[0].paragraphs.len() as u32)
+        .map(|paragraph| EditTarget {
+            section: 0,
+            paragraph,
+            cell: None,
+        })
+        .find(|t| commands::get(s.core.document(), t).is_ok_and(commands::editable))
+        .unwrap();
+    for i in 0..5 {
+        let t = Instant::now();
+        replace(&mut s, target.clone(), i, i, "가").unwrap();
+        eprintln!("keystroke {:?}, pages {:?}", t.elapsed(), s.changed);
+    }
+    let t = Instant::now();
+    s.apply(EditRequest {
+        version: 1,
+        revision: s.revision,
+        command: EditCommand::Undo,
+    })
+    .unwrap();
+    eprintln!("undo {:?}, pages {:?}", t.elapsed(), s.changed);
+}

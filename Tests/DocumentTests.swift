@@ -30,6 +30,33 @@ struct DocumentTests {
         #expect(try await HwpDocument(data: saved).paragraph(body).text == "가나" + original)
     }
 
+    @Test func typingWhileBusyIsOneEdit() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let original = try await document.paragraph(body).text
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        for text in ["가", "나", "다"] { document.type(text, undo) }
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "가나다" + original)
+        undo.undo()
+        await document.settle()
+        #expect(try await document.paragraph(body).text == original)
+    }
+
+    @Test func pagesArePatchedInPlace() async throws {
+        let document = HwpDocument()
+        let pages = document.pages
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(undo) { $0.map { .replace($0, text: String(repeating: "줄\n", count: 120)) } }
+        await document.settle()
+        #expect(document.pages === pages && document.reply.pageCount > 1)
+        #expect(pages.pageCount == Int(document.reply.pageCount))
+        undo.undo()
+        await document.settle()
+        #expect(pages.pageCount == 1 && document.reply.pageCount == 1)
+    }
+
     @Test func selectedTextSpansParagraphs() async throws {
         let document = HwpDocument()
         document.selection = .caret(EditPosition(target: body, scalar: 0))

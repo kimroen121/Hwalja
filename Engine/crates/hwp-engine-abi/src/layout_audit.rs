@@ -72,17 +72,14 @@ fn overlaps(text: &BoundingBox, image: &BoundingBox, wrap: Option<TextWrap>) -> 
     width > 1.0 && height > 1.0
 }
 
-/// Zero-based pages with suspected text/image overlap or text outside the page.
-/// An empty result does not prove fidelity.
-pub fn suspect_pages(core: &rhwp::DocumentCore) -> Result<Vec<u32>, rhwp::error::HwpError> {
-    let mut pages = Vec::new();
-    for page in 0..core.page_count() {
-        let tree = core.build_page_render_tree(page)?;
-        if has_unexpected_image_overlap(&tree.root) || has_out_of_page_content(&tree.root) {
-            pages.push(page);
-        }
-    }
-    Ok(pages)
+/// Whether a zero-based page shows suspected text/image overlap or text outside the page.
+/// `false` does not prove fidelity.
+pub fn is_suspect_page(
+    core: &rhwp::DocumentCore,
+    page: u32,
+) -> Result<bool, rhwp::error::HwpError> {
+    let tree = core.build_page_render_tree(page)?;
+    Ok(has_unexpected_image_overlap(&tree.root) || has_out_of_page_content(&tree.root))
 }
 
 #[cfg(test)]

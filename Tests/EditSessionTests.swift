@@ -11,12 +11,12 @@ struct EditSessionTests {
     func editGeometryAndUndoRoundTrip(ext: String) async throws {
         let (session, opened) = try EditSession.open(fixture(ext))
         #expect(opened.reply.revision == 0 && !opened.reply.dirty)
-        #expect(opened.pdf.starts(with: Data("%PDF-".utf8)))
+        #expect(opened.pdf.starts(with: Data("%PDF-".utf8)) && opened.reply.changedPages == [0])
 
         let body = EditTarget(section: 0, paragraph: 0, cell: nil)
         let original = try await session.paragraph(body).text
         let edited = try await session.apply(.replace(.caret(EditPosition(target: body, scalar: 0)), text: "편집 "), at: 0)
-        #expect(edited.reply.dirty && edited.reply.canUndo)
+        #expect(edited.reply.dirty && edited.reply.canUndo && edited.reply.changedPages == [0])
         #expect(try await session.paragraph(body).text == "편집 " + original)
 
         let caret = try await session.caret(revision: 1, at: EditPosition(target: body, scalar: 1))

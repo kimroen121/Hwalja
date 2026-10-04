@@ -14,8 +14,10 @@ staging="$(mktemp -d "$repo_root/build/rhwp-prepare.XXXXXX")"
 tar -xzf "$archive" -C "$staging"
 patch --batch -d "$staging" -p1 < "$patch_file"
 touch "$staging/.hwpstudio-$stamp"
+previous=""
 if [[ -e "$destination" ]]; then
-  backup="$(mktemp -d "$repo_root/build/rhwp-previous.XXXXXX")"
-  mv "$destination" "$backup/source"
+  previous="$(mktemp -d "$repo_root/build/rhwp-previous.XXXXXX")"
+  mv "$destination" "$previous/source"
 fi
 mv "$staging" "$destination"
+[[ -z "$previous" ]] || rm -rf "$previous"

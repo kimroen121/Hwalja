@@ -2,9 +2,9 @@ import AppKit
 import Combine
 import PDFKit
 
-/// Shows the rendered pages and edits the underlying document in place: clicks place the
-/// caret, typing and IME composition go to the engine, and the page image is replaced with
-/// the engine's PDF for each revision.
+/// Shows the document's rendered pages and edits the underlying document in place: clicks
+/// place the caret, and typing and IME composition go to the engine, which re-renders only
+/// the pages an edit changed.
 @MainActor
 final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuItemValidation {
     private(set) var model: HwpDocument?
@@ -34,6 +34,7 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
     func bind(_ model: HwpDocument) {
         guard model !== self.model else { return }
         self.model = model
+        document = model.pages
         observers.removeAll()
         NotificationCenter.default.publisher(for: .PDFViewScaleChanged, object: self)
             .sink { [weak self] _ in self?.placeOverlay() }
@@ -46,32 +47,10 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
 
     private var shownRevision: UInt64?
     private var shownSelection: EditSelection?
-    /// Applies whatever changed in the model since the last call.
+    /// Re-places the caret and highlight when an edit or move changed them.
     private func sync() {
-        guard let model else { return }
-        if model.revision != shownRevision || document == nil {
-            shownRevision = model.revision
-            show(model.pdf)
-        } else if model.selection != shownSelection {
-            refreshSelection()
-        }
-    }
-
-    // MARK: Pages
-
-    /// Replaces the pages, keeping the reader's place and zoom.
-    private func show(_ pdf: Data) {
-        guard let replacement = PDFDocument(data: pdf) else { return }
-        let place = currentDestination.flatMap { destination in
-            destination.page.flatMap { document?.index(for: $0) }.map { ($0, destination.point) }
-        }
-        let (scale, automatic) = (scaleFactor, autoScales)
-        document = replacement
-        if let (index, point) = place, let page = replacement.page(at: min(index, replacement.pageCount - 1)) {
-            autoScales = automatic
-            if !automatic { scaleFactor = scale }
-            go(to: PDFDestination(page: page, at: point))
-        }
+        guard let model, model.revision != shownRevision || model.selection != shownSelection else { return }
+        shownRevision = model.revision
         refreshSelection()
     }
 
@@ -350,13 +329,15 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
     }
 
     @objc func exportAsPDF(_ sender: Any?) {
-        guard let window, let pdf = model?.pdf else { return }
+        guard let window, let model else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = (window.representedURL?.deletingPathExtension().lastPathComponent ?? window.title) + ".pdf"
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
-            do { try pdf.write(to: url, options: .atomic) } catch { NSApp.presentError(error) }
+            Task {
+                do { try await model.pdf().write(to: url, options: .atomic) } catch { NSApp.presentError(error) }
+            }
         }
     }
 
@@ -366,7 +347,7 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
         markedText = ""
         placeComposition()
         let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
-        if !text.isEmpty { replaceSelection(with: text) }
+        if !text.isEmpty { model?.type(text, undoManager) }
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         markedText = (string as? NSAttributedString)?.string ?? string as? String ?? ""

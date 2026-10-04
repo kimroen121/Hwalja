@@ -57,6 +57,8 @@ struct EditReply: Decodable, Sendable {
     var revision: UInt64
     var selection: EditSelection?
     var pageCount: UInt32
+    /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
+    var changedPages: [UInt32]
     /// Zero-based pages with suspected overlap or text outside the page.
     var suspectPages: [UInt32]
     var canUndo: Bool
@@ -97,11 +99,12 @@ enum EditError: String, Error, Decodable, Sendable {
 
 enum SaveFormat: String, Encodable, Sendable {
     case hwp, hwpx
+    /// The whole document as rendered.
+    case pdf
 }
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.
 enum EngineRequest: Encodable, Sendable {
-    case state
     case apply(revision: UInt64, EditCommand)
     case paragraph(EditTarget)
     case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double)
@@ -114,8 +117,6 @@ enum EngineRequest: Encodable, Sendable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case .state:
-            try c.encode("state", forKey: .op)
         case let .apply(revision, command):
             try c.encode("apply", forKey: .op)
             try c.encode(Apply(revision: revision, command: command), forKey: .request)

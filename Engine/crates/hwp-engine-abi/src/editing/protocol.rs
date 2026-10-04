@@ -64,6 +64,8 @@ pub struct EditReply {
     pub revision: u64,
     pub selection: Option<EditSelection>,
     pub page_count: u32,
+    /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
+    pub changed_pages: Vec<u32>,
     pub suspect_pages: Vec<u32>,
     pub can_undo: bool,
     pub can_redo: bool,
@@ -110,4 +112,6 @@ pub struct PageRect {
 pub enum SaveFormat {
     Hwp,
     Hwpx,
+    /// The whole document as rendered, for printing and sharing.
+    Pdf,
 }

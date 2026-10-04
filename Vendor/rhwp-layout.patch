@@ -310,3 +310,57 @@ index 9d37742..216735e 100644
          push_unique_family(&mut family_names, *alias);
      }
      if let Some(base) = base_family_without_weight_suffix(primary) {
+diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
+index 3989968..ff69646 100644
+--- a/src/renderer/pdf.rs
++++ b/src/renderer/pdf.rs
+@@ -509,6 +509,38 @@ fn default_mono_family() -> &'static str {
+     "Noto Sans Mono CJK KR"
+ }
+ 
++/// Font database built once per option set and shared by every export, with each font
++/// file mapped once.
++#[cfg(not(target_arch = "wasm32"))]
++fn cached_fontdb(options: &PdfExportOptions) -> std::sync::Arc<usvg::fontdb::Database> {
++    use std::sync::{Arc, Mutex};
++    type Key = (String, String, String, Option<String>, Vec<std::path::PathBuf>);
++    static CACHE: Mutex<Option<(Key, Arc<usvg::fontdb::Database>)>> = Mutex::new(None);
++    let key: Key = (
++        options.fallback_serif.clone(),
++        options.fallback_sans.clone(),
++        options.fallback_mono.clone(),
++        options.equation_font.clone(),
++        options.font_paths.clone(),
++    );
++    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
++    match &*cache {
++        Some((cached, db)) if *cached == key => db.clone(),
++        _ => {
++            let mut db = create_fontdb(options);
++            // Map each font file once instead of reopening it for every glyph lookup.
++            let ids: Vec<_> = db.faces().map(|face| face.id).collect();
++            for id in ids {
++                // SAFETY: system and bundled font files are not modified while mapped.
++                unsafe { db.make_shared_face_data(id) };
++            }
++            let db = Arc::new(db);
++            *cache = Some((key, db.clone()));
++            db
++        }
++    }
++}
++
+ /// 폰트 데이터베이스를 초기화 (시스템 폰트 + 프로젝트 폰트 로드)
+ #[cfg(not(target_arch = "wasm32"))]
+ fn create_fontdb(options: &PdfExportOptions) -> usvg::fontdb::Database {
+@@ -993,9 +1025,8 @@ where
+     use pdf_writer::{Finish, Pdf, Ref};
+     use std::collections::HashMap;
+ 
+-    let fontdb = create_fontdb(export_options);
+     let mut options = usvg::Options::default();
+-    options.fontdb = std::sync::Arc::new(fontdb);
++    options.fontdb = cached_fontdb(export_options);
+ 
+     let mut alloc = Ref::new(1);
+     let catalog_ref = alloc.bump();

@@ -18,12 +18,27 @@ struct State {
     id: u64,
 }
 
+/// What the session remembers about one rendered page.
+#[derive(Clone, Copy, PartialEq)]
+struct Page {
+    hash: u64,
+    suspect: bool,
+}
+/// Pages after a render, and the PDF of the ones that changed.
+struct Rendered {
+    pages: Vec<Page>,
+    changed: Vec<u32>,
+    pdf: Vec<u8>,
+}
+
 pub struct EditSession {
     core: DocumentCore,
     original: Vec<u8>,
     revision: u64,
+    pages: Vec<Page>,
+    /// Pages re-rendered by the latest revision, in order, and their PDF.
+    changed: Vec<u32>,
     pdf: Vec<u8>,
-    suspect_pages: Vec<u32>,
     selection: Option<EditSelection>,
     locked: bool,
     undo: Vec<State>,
@@ -59,8 +74,9 @@ impl EditSession {
             core,
             original: bytes.to_vec(),
             revision: 0,
+            pages: Vec::new(),
+            changed: Vec::new(),
             pdf: Vec::new(),
-            suspect_pages: Vec::new(),
             selection: None,
             locked: false,
             undo: Vec::new(),
@@ -70,7 +86,12 @@ impl EditSession {
             #[cfg(test)]
             fail_render: false,
         };
-        (session.pdf, session.suspect_pages) = session.render()?;
+        let Rendered {
+            pages,
+            changed,
+            pdf,
+        } = session.render(0, u32::MAX)?;
+        (session.pages, session.changed, session.pdf) = (pages, changed, pdf);
         Ok(session)
     }
     pub fn pdf(&self) -> &[u8] {
@@ -85,28 +106,78 @@ impl EditSession {
             revision: self.revision,
             selection: self.selection.clone(),
             page_count: self.core.page_count(),
-            suspect_pages: self.suspect_pages.clone(),
+            changed_pages: self.changed.clone(),
+            suspect_pages: (0..self.pages.len() as u32)
+                .filter(|&p| self.pages[p as usize].suspect)
+                .collect(),
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
             dirty: self.state != 0,
             locked: self.locked,
         }
     }
-    fn render(&self) -> Result<(Vec<u8>, Vec<u32>), EditError> {
+    /// Renders pages from `from` on and keeps the PDF of those that changed. With an unchanged
+    /// page count, the first unchanged page after `settle` ends the scan: layout only flows
+    /// forward, so the pages after it are unchanged too. A new page count rescans every page
+    /// (page totals may appear anywhere).
+    fn render(&self, from: u32, settle: u32) -> Result<Rendered, EditError> {
+        use std::hash::{Hash, Hasher};
         #[cfg(test)]
         if self.fail_render {
             return Err(EditError::RenderFailed);
         }
-        if self.core.page_count() > 1000 {
+        let count = self.core.page_count();
+        if count > 1000 {
             return Err(EditError::ResourceLimit);
         }
-        let suspect_pages =
-            crate::layout_audit::suspect_pages(&self.core).map_err(|_| EditError::RenderFailed)?;
-        let pdf = self
-            .core
-            .render_document_pdf_native()
-            .map_err(|_| EditError::RenderFailed)?;
-        Ok((pdf, suspect_pages))
+        let same_count = count as usize == self.pages.len();
+        let mut pages = self.pages.clone();
+        pages.resize(
+            count as usize,
+            Page {
+                hash: 0,
+                suspect: false,
+            },
+        );
+        let (mut changed, mut svgs) = (Vec::new(), Vec::new());
+        for page in if same_count { from } else { 0 }..count {
+            let failed = |_| EditError::RenderFailed;
+            let svg = self.core.render_page_svg_native(page).map_err(failed)?;
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            svg.hash(&mut hasher);
+            let hash = hasher.finish();
+            if self
+                .pages
+                .get(page as usize)
+                .is_some_and(|p| p.hash == hash)
+            {
+                if same_count && page > settle {
+                    break;
+                }
+                continue;
+            }
+            let suspect = crate::layout_audit::is_suspect_page(&self.core, page).map_err(failed)?;
+            pages[page as usize] = Page { hash, suspect };
+            changed.push(page);
+            svgs.push(svg);
+        }
+        let pdf = if svgs.is_empty() {
+            Vec::new()
+        } else {
+            rhwp::renderer::pdf::svgs_to_pdf_with_options(&svgs, &Default::default())
+                .map_err(|_| EditError::RenderFailed)?
+        };
+        Ok(Rendered {
+            pages,
+            changed,
+            pdf,
+        })
+    }
+    /// Page showing `position`, if the engine can place it.
+    fn page_of(&self, position: &EditPosition) -> Option<u32> {
+        self.caret(self.revision, position)
+            .ok()
+            .map(|rect| rect.page)
     }
     pub fn apply(&mut self, request: EditRequest) -> Result<EditReply, EditError> {
         if self.locked {
@@ -125,11 +196,30 @@ impl EditSession {
         }
         self.validate_command(&request.command)?;
         let before = self.core.document().clone();
+        let start = match &request.command {
+            EditCommand::Replace { selection, .. } => {
+                let key = |p: &EditPosition| (commands::index(&p.target), p.scalar);
+                Some(std::cmp::min_by_key(
+                    &selection.anchor,
+                    &selection.focus,
+                    |p| key(p),
+                ))
+            }
+            EditCommand::Split { position } | EditCommand::MergePrevious { position } => {
+                Some(position)
+            }
+            EditCommand::Undo | EditCommand::Redo => None,
+        };
+        // A page earlier: joined or shortened text can move back onto the previous page.
+        let from = start
+            .and_then(|p| self.page_of(p))
+            .map_or(0, |p| p.saturating_sub(1));
         let snapshot = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {
             let position = self.execute(&request.command)?;
             preservation::check(&before, self.core.document(), &request.command)?;
-            Ok((position, self.render()?))
+            let settle = self.page_of(&position).unwrap_or(u32::MAX);
+            Ok((position, self.render(from, settle)?))
         }))
         .unwrap_or(Err(EditError::RenderFailed));
         match result {
@@ -167,7 +257,7 @@ impl EditSession {
             self.core
                 .restore_snapshot_native(target.snapshot)
                 .map_err(|_| EditError::RenderFailed)?;
-            self.render()
+            self.render(0, u32::MAX)
         }))
         .unwrap_or(Err(EditError::RenderFailed));
         match result {
@@ -197,13 +287,10 @@ impl EditSession {
             }
         }
     }
-    fn publish(
-        &mut self,
-        (pdf, suspect_pages): (Vec<u8>, Vec<u32>),
-        selection: Option<EditSelection>,
-    ) {
-        self.pdf = pdf;
-        self.suspect_pages = suspect_pages;
+    fn publish(&mut self, rendered: Rendered, selection: Option<EditSelection>) {
+        self.pages = rendered.pages;
+        self.changed = rendered.changed;
+        self.pdf = rendered.pdf;
         self.selection = selection;
         self.revision += 1;
     }

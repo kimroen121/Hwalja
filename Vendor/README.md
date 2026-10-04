@@ -8,5 +8,6 @@
 - fixes missing line geometry around flow/inline pictures in table cells (anchoring, text exclusion, row height, duplicated prefix text);
 - tries the installed `Pretendard Variable` before unrelated fallbacks for regular weight;
 - makes `get_selection_rects_native` public for the editor's selection highlight.
+- builds the PDF font database once and maps each font file once (page PDF ~0.5 s → ~50 ms).
 
 Private regression: `HWP_LAYOUT_FIXTURE=<report.hwp> cargo test -- --ignored` (never commit the input).

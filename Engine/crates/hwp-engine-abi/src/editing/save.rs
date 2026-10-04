@@ -24,13 +24,19 @@ fn outline(doc: &Document) -> Vec<String> {
 }
 
 impl EditSession {
-    /// Serializes the current document and verifies that the bytes parse back to the same
-    /// text and control structure. Nothing is written to disk.
+    /// Serializes the current document and verifies that HWP/HWPX bytes parse back to the
+    /// same text and control structure. Nothing is written to disk.
     pub fn export(&self, format: SaveFormat) -> Result<Vec<u8>, EditError> {
         if self.locked {
             return Err(EditError::Locked);
         }
         let bytes = match format {
+            SaveFormat::Pdf => {
+                return self
+                    .core
+                    .render_document_pdf_native()
+                    .map_err(|_| EditError::RenderFailed)
+            }
             SaveFormat::Hwp => self.core.export_hwp_native(),
             SaveFormat::Hwpx => self.core.export_hwpx_native(),
         }
