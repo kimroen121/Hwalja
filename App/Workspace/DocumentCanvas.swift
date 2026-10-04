@@ -16,6 +16,7 @@ final class DocumentCanvas: NSScrollView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        contentView = CenteringClipView()
         documentView = editor
         hasVerticalScroller = true
         hasHorizontalScroller = true
@@ -36,14 +37,39 @@ final class DocumentCanvas: NSScrollView {
 
     override func tile() {
         super.tile()
-        editor.layoutPages()
         applyFit()
+        if !sizedWindow, window != nil, frame.height > 0, editor.frame(ofPage: 0) != nil {
+            sizedWindow = true
+            DispatchQueue.main.async { [weak self] in self?.fitWindowToPage() }
+        }
     }
-    @objc private func viewChanged() {
-        editor.layoutPages()
-        onViewChange?()
-    }
+    @objc private func viewChanged() { onViewChange?() }
     @objc private func userMagnified() { fit = nil }
+
+    /// ⌘ or ⌃ with the scroll wheel zooms around the pointer.
+    override func scrollWheel(with event: NSEvent) {
+        guard !event.modifierFlags.intersection([.command, .control]).isEmpty else { return super.scrollWheel(with: event) }
+        let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 100 : event.scrollingDeltaY / 10
+        guard delta != 0 else { return }
+        fit = nil
+        let value = min(maxMagnification, max(minMagnification, magnification * exp(delta)))
+        setMagnification(value, centeredAt: editor.convert(event.locationInWindow, from: nil))
+    }
+
+    /// Sizes a new window once so the first page fills it at the fit-page zoom.
+    private var sizedWindow = false
+    private func fitWindowToPage() {
+        guard let window, let screen = window.screen ?? NSScreen.main, let page = editor.frame(ofPage: 0) else { return }
+        let visible = screen.visibleFrame
+        let chrome = NSSize(width: window.frame.width - frame.width, height: window.frame.height - frame.height)
+        let height = (visible.height * 0.9).rounded()
+        let scale = (height - chrome.height) / (page.height + PageEditor.margin * 2)
+        let width = min(visible.width, ((page.width + PageEditor.margin * 2) * scale + chrome.width).rounded())
+        var rect = NSRect(x: window.frame.minX, y: window.frame.maxY - height, width: width, height: height)
+        rect.origin.x = min(max(rect.minX, visible.minX), visible.maxX - width)
+        rect.origin.y = max(rect.minY, visible.minY)
+        window.setFrame(rect, display: true)
+    }
 
     // MARK: Zoom
 
@@ -107,6 +133,17 @@ final class DocumentCanvas: NSScrollView {
     }
 }
 
+/// Centers a document view smaller than the viewport instead of pinning it to the corner.
+private final class CenteringClipView: NSClipView {
+    override func constrainBoundsRect(_ proposed: NSRect) -> NSRect {
+        var rect = super.constrainBoundsRect(proposed)
+        guard let document = documentView?.frame else { return rect }
+        if rect.width > document.width { rect.origin.x = document.midX - rect.width / 2 }
+        if rect.height > document.height { rect.origin.y = document.midY - rect.height / 2 }
+        return rect
+    }
+}
+
 /// Draws the document's pages and edits them in place: clicks place the caret, keys move
 /// it through the engine's layout, and typing and IME composition go to the engine, which
 /// re-renders only the pages an edit changed. Pages are drawn synchronously, so a changed
@@ -165,12 +202,12 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         point.y < frame.minY ? frame.minY - point.y : max(0, point.y - frame.maxY)
     }
 
-    /// Stacks the pages vertically, centered in the visible width.
+    /// Stacks the pages vertically, centered on the widest. The clip view centers the
+    /// whole stack, so the layout never depends on the viewport.
     func layoutPages(force: Bool = false) {
         guard let pages = model?.pages else { return }
         let sizes = (0..<pages.pageCount).map { pages.page(at: $0)?.bounds(for: .mediaBox).size ?? .zero }
-        let visibleWidth = enclosingScrollView?.contentView.bounds.width ?? 0
-        let width = max((sizes.map(\.width).max() ?? 0) + Self.margin * 2, visibleWidth)
+        let width = (sizes.map(\.width).max() ?? 0) + Self.margin * 2
         var y = Self.margin
         let frames = sizes.map { size in
             defer { y += size.height + Self.gap }
@@ -186,7 +223,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let pages = model?.pages, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard let model, let context = NSGraphicsContext.current?.cgContext else { return }
+        let pages = model.pages
+        model.drawScale = min(8, max(1, abs(context.userSpaceToDeviceSpaceTransform.a)))
         let shadow = NSShadow()
         shadow.shadowColor = .black.withAlphaComponent(0.25)
         shadow.shadowBlurRadius = 3
