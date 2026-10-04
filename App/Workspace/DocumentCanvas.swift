@@ -11,12 +11,14 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
     private var observers: Set<AnyCancellable> = []
     private let caret = NSTextInsertionIndicator(frame: .zero)
     private let highlight = SelectionHighlight()
-    private let composition = NSTextField(labelWithString: "")
+    /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// Engine geometry of the current selection, re-placed on zoom and layout changes.
     private var caretRect: PageRect?
     private var selectionRects: [PageRect] = []
+    private var markedRects: [PageRect] = []
     private var dragging = false
+    private var fitted = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -26,8 +28,6 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
         backgroundColor = .underPageBackgroundColor
         minScaleFactor = 0.25
         maxScaleFactor = 4
-        composition.drawsBackground = true
-        composition.backgroundColor = .textBackgroundColor
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -47,15 +47,21 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
 
     private var shownRevision: UInt64?
     private var shownSelection: EditSelection?
-    /// Re-places the caret and highlight when an edit or move changed them.
+    private var shownMarked: EditSelection?
+    /// Re-places the caret and highlight when an edit, move or composition changed them.
     private func sync() {
-        guard let model, model.revision != shownRevision || model.selection != shownSelection else { return }
-        shownRevision = model.revision
+        guard let model, (model.revision, model.selection, model.marked) != (shownRevision, shownSelection, shownMarked) else { return }
+        (shownRevision, shownMarked) = (model.revision, model.marked)
         refreshSelection()
     }
 
     override func layout() {
         super.layout()
+        // Open documents a whole page at a time.
+        if !fitted, bounds.width > 0, document?.pageCount ?? 0 > 0 {
+            fitted = true
+            zoomToFitPage()
+        }
         placeOverlay()
     }
 
@@ -64,15 +70,17 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
     private func refreshSelection() {
         shownSelection = model?.selection
         guard let model, let selection = model.selection else {
-            (caretRect, selectionRects) = (nil, [])
+            (caretRect, selectionRects, markedRects) = (nil, [], [])
             return placeOverlay()
         }
-        let revision = model.revision
+        let (revision, marked) = (model.revision, model.marked)
         Task {
             let caret = try? await model.caret(at: selection.focus)
             let rects = selection.anchor == selection.focus ? [] : ((try? await model.selectionRects(selection)) ?? [])
+            var markedRects: [PageRect] = []
+            if let marked { markedRects = (try? await model.selectionRects(marked)) ?? [] }
             guard model.revision == revision, model.selection == selection else { return }
-            (caretRect, selectionRects) = (caret, rects)
+            (caretRect, selectionRects, self.markedRects) = (caret, rects, markedRects)
             placeOverlay()
         }
     }
@@ -85,32 +93,18 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
 
     private func placeOverlay() {
         guard let documentView else { return }
-        for view in [highlight, caret, composition] where view.superview !== documentView {
+        for view in [highlight, caret] where view.superview !== documentView {
             documentView.addSubview(view)
         }
         highlight.frame = documentView.bounds
         highlight.rects = selectionRects.compactMap(viewRect)
+        highlight.underlines = markedRects.compactMap(viewRect)
         if selectionRects.isEmpty, let rect = caretRect.flatMap(viewRect) {
             caret.frame = NSRect(x: rect.minX - 1, y: rect.minY, width: 2, height: rect.height)
             caret.displayMode = window?.firstResponder === self ? .automatic : .hidden
         } else {
             caret.displayMode = .hidden
         }
-        placeComposition()
-    }
-
-    private func placeComposition() {
-        guard !markedText.isEmpty, let rect = caretRect.flatMap(viewRect) else {
-            composition.isHidden = true
-            return
-        }
-        composition.attributedStringValue = NSAttributedString(string: markedText, attributes: [
-            .font: NSFont.systemFont(ofSize: rect.height * 0.8),
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-        ])
-        composition.sizeToFit()
-        composition.setFrameOrigin(NSPoint(x: rect.minX, y: rect.minY + (rect.height - composition.frame.height) / 2))
-        composition.isHidden = false
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -280,12 +274,16 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
         replaceSelection(with: text)
     }
     @objc func delete(_ sender: Any?) { replaceSelection(with: "") }
+    /// Selects all text of the body or of the cell holding the caret.
     override func selectAll(_ sender: Any?) {
         guard model?.selection != nil else { return super.selectAll(sender) }
         model?.select { model in
             guard let target = model.selection?.focus.target else { return nil }
-            let end = try await model.paragraph(target).text.graphemeBoundaries.last ?? 0
-            return EditSelection(anchor: EditPosition(target: target, scalar: 0), focus: EditPosition(target: target, scalar: end))
+            let count = try await model.paragraph(target).count
+            let last = target.offset(by: Int(count) - 1 - Int(target.index))
+            let end = try await model.paragraph(last).text.graphemeBoundaries.last ?? 0
+            return EditSelection(anchor: EditPosition(target: target.offset(by: -Int(target.index)), scalar: 0),
+                                 focus: EditPosition(target: last, scalar: end))
         }
     }
 
@@ -308,12 +306,32 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
         }
     }
 
+    // MARK: Format
+
+    private func toggle(_ flag: KeyPath<CharStyle, Bool?>, _ make: (Bool) -> CharStyle) {
+        model?.formatText(make(!(model?.format?.text[keyPath: flag] ?? false)), undoManager)
+    }
+    func toggleBold() { toggle(\.bold) { CharStyle(bold: $0) } }
+    func toggleItalic() { toggle(\.italic) { CharStyle(italic: $0) } }
+    func toggleUnderline() { toggle(\.underline) { CharStyle(underline: $0) } }
+    func toggleStrikethrough() { toggle(\.strikethrough) { CharStyle(strikethrough: $0) } }
+    func stepFontSize(by step: Double) {
+        guard let size = model?.format?.text.size else { return }
+        setFontSize(max(1, size + step))
+    }
+    func setFont(_ name: String) { model?.formatText(CharStyle(font: name), undoManager) }
+    func setFontSize(_ size: Double) { model?.formatText(CharStyle(size: size), undoManager) }
+    func setTextColor(_ hex: String) { model?.formatText(CharStyle(color: hex), undoManager) }
+    func setAlignment(_ alignment: Alignment) { model?.formatParagraphs(ParaStyle(alignment: alignment), undoManager) }
+    func setLineSpacing(_ percent: Double) { model?.formatParagraphs(ParaStyle(lineSpacing: percent), undoManager) }
+
     // MARK: View menu
 
     @objc func zoomToActualSize(_ sender: Any?) {
         autoScales = false
         scaleFactor = 1
     }
+    @objc func zoomToFit(_ sender: Any?) { zoomToFitPage() }
     /// Scales so a whole page is visible.
     func zoomToFitPage() {
         guard let page = currentPage else { return }
@@ -344,14 +362,19 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
     // MARK: NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {
-        markedText = ""
-        placeComposition()
         let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
-        if !text.isEmpty { model?.type(text, undoManager) }
+        if !markedText.isEmpty {
+            markedText = ""
+            model?.compose(text, commit: true, undoManager)
+        } else if !text.isEmpty {
+            model?.type(text, undoManager)
+        }
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        markedText = (string as? NSAttributedString)?.string ?? string as? String ?? ""
-        placeComposition()
+        let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
+        guard text != markedText else { return }
+        markedText = text
+        model?.compose(text, commit: text.isEmpty, undoManager)
     }
     func unmarkText() { commitComposition() }
     func hasMarkedText() -> Bool { !markedText.isEmpty }
@@ -367,28 +390,36 @@ final class DocumentCanvas: PDFView, @preconcurrency NSTextInputClient, NSMenuIt
         return window.convertToScreen(documentView.convert(rect, to: nil))
     }
 
-    /// Sends composed-but-unconfirmed text as typed text, so it is never silently lost.
+    /// Keeps composed-but-unconfirmed text as typed, so it is never silently lost.
     private func commitComposition() {
         guard !markedText.isEmpty else { return }
-        let text = markedText
+        markedText = ""
         inputContext?.discardMarkedText()
-        insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        model?.endComposition()
     }
     private func discardComposition() {
-        inputContext?.discardMarkedText()
+        guard !markedText.isEmpty else { return }
         markedText = ""
-        placeComposition()
+        inputContext?.discardMarkedText()
+        model?.compose("", commit: true, undoManager)
     }
 }
 
-/// Draws selection highlight rectangles without intercepting mouse events.
+/// Draws the selection highlight and the composing-text underline without intercepting
+/// mouse events.
 private final class SelectionHighlight: NSView {
-    var rects: [NSRect] = [] { didSet { needsDisplay = true } }
+    var rects: [NSRect] = [] { didSet { if rects != oldValue { needsDisplay = true } } }
+    var underlines: [NSRect] = [] { didSet { if underlines != oldValue { needsDisplay = true } } }
+    override var isFlipped: Bool { superview?.isFlipped ?? false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
         let active = window?.isKeyWindow == true
         (active ? NSColor.selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor).withAlphaComponent(0.6).setFill()
         rects.forEach { $0.fill(using: .sourceOver) }
+        NSColor.textColor.setFill()
+        for rect in underlines {
+            NSRect(x: rect.minX, y: isFlipped ? rect.maxY - 1 : rect.minY, width: rect.width, height: 1).fill()
+        }
     }
 }
 
@@ -406,5 +437,12 @@ extension EditTarget {
 extension EditPosition {
     func precedes(_ other: EditPosition) -> Bool {
         (target.index, scalar) < (other.target.index, other.scalar)
+    }
+}
+
+extension EditSelection {
+    /// The ends in document order.
+    var ordered: (start: EditPosition, end: EditPosition) {
+        anchor.precedes(focus) ? (anchor, focus) : (focus, anchor)
     }
 }

@@ -43,6 +43,42 @@ struct DocumentTests {
         #expect(try await document.paragraph(body).text == original)
     }
 
+    @Test func compositionIsInlineAndOneUndoStep() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let original = try await document.paragraph(body).text
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.compose("ㅎ", commit: false, undo)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "ㅎ" + original)
+        #expect(document.marked == EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: EditPosition(target: body, scalar: 1)))
+        document.compose("하", commit: false, undo)
+        await document.settle()
+        document.compose("한", commit: true, undo)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "한" + original)
+        #expect(document.marked == nil && document.selection == .caret(EditPosition(target: body, scalar: 1)))
+        undo.undo()
+        await document.settle()
+        #expect(try await document.paragraph(body).text == original)
+        #expect(!undo.canUndo)
+    }
+
+    @Test func formattingUpdatesTheCaretFormat() async throws {
+        let document = try HwpDocument(data: fixture("hwp"))
+        let undo = UndoManager()
+        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: EditPosition(target: body, scalar: 2))
+        document.formatText(CharStyle(size: 18, bold: true), undo)
+        document.formatParagraphs(ParaStyle(alignment: .center), undo)
+        await document.settle()
+        #expect(document.format?.text.bold == true && document.format?.text.size == 18)
+        #expect(document.format?.paragraph.alignment == .center)
+        undo.undo()
+        undo.undo()
+        await document.settle()
+        #expect(document.format?.text.bold == false)
+    }
+
     @Test func pagesArePatchedInPlace() async throws {
         let document = HwpDocument()
         let pages = document.pages

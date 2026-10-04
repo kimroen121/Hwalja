@@ -39,8 +39,9 @@ final class EditSession: @unchecked Sendable {
         try await send(.export(.pdf)).data
     }
 
-    func apply(_ command: EditCommand, at revision: UInt64) async throws -> Output {
-        try await Output(send(.apply(revision: revision, command)))
+    /// `amend` folds the edit into the latest undo step (IME composition).
+    func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false) async throws -> Output {
+        try await Output(send(.apply(revision: revision, command, amend: amend)))
     }
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await decode(send(.paragraph(target)))
@@ -53,6 +54,9 @@ final class EditSession: @unchecked Sendable {
     }
     func selectionRects(revision: UInt64, for selection: EditSelection) async throws -> [PageRect] {
         try await decode(send(.selectionRects(revision: revision, selection)))
+    }
+    func format(revision: UInt64, at position: EditPosition) async throws -> Format {
+        try await decode(send(.format(revision: revision, position)))
     }
 
     private func send(_ request: EngineRequest) async throws -> Payload {

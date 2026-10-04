@@ -24,8 +24,11 @@ struct HwpStudioApp: App {
                     .keyboardShortcut("+")
                 Button("축소") { send(#selector(PDFView.zoomOut(_:))) }
                     .keyboardShortcut("-")
+                Button("쪽 맞춤") { send(#selector(DocumentCanvas.zoomToFit(_:))) }
+                    .keyboardShortcut("9")
                 Divider()
             }
+            FormatCommands()
         }
     }
 

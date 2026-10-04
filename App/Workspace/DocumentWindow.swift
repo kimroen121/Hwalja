@@ -14,8 +14,23 @@ struct DocumentWindow: View {
         } detail: {
             Canvas(canvas: viewer.canvas, document: document)
                 .frame(minWidth: 480, minHeight: 400)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Text("\(viewer.page) / \(document.reply.pageCount)쪽")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(.bar)
+                }
         }
+        .focusedSceneObject(document)
+        .focusedSceneObject(viewer)
         .toolbar {
+            FormatBar(document: document, canvas: viewer.canvas)
             if let first = document.reply.suspectPages.first {
                 ToolbarItem {
                     Button { viewer.canvas.go(to: Int(first)) } label: {
@@ -44,15 +59,20 @@ struct DocumentWindow: View {
 final class Viewer: ObservableObject {
     let canvas = DocumentCanvas(frame: .zero)
     @Published private(set) var zoomPercent = 100
+    /// One-based page in view.
+    @Published private(set) var page = 1
     private var observer: AnyCancellable?
 
     init() {
-        observer = NotificationCenter.default.publisher(for: .PDFViewScaleChanged, object: canvas)
-            .merge(with: NotificationCenter.default.publisher(for: .PDFViewDocumentChanged, object: canvas))
+        let center = NotificationCenter.default
+        observer = center.publisher(for: .PDFViewScaleChanged, object: canvas)
+            .merge(with: center.publisher(for: .PDFViewDocumentChanged, object: canvas),
+                   center.publisher(for: .PDFViewPageChanged, object: canvas))
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 zoomPercent = Int((canvas.scaleFactor * 100).rounded())
+                page = canvas.currentPage.flatMap { canvas.document?.index(for: $0) }.map { $0 + 1 } ?? 1
             }
     }
     func zoom(to percent: Int) {

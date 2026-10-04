@@ -30,10 +30,12 @@ enum EditCommand: Encodable, Sendable {
     case replace(EditSelection, text: String)
     case split(EditPosition)
     case mergePrevious(EditPosition)
+    case formatText(EditSelection, CharStyle)
+    case formatParagraphs(EditSelection, ParaStyle)
     case undo
     case redo
 
-    private enum Key: String, CodingKey { case kind, selection, text, position }
+    private enum Key: String, CodingKey { case kind, selection, text, position, style }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
@@ -47,6 +49,14 @@ enum EditCommand: Encodable, Sendable {
         case let .mergePrevious(position):
             try c.encode("mergePrevious", forKey: .kind)
             try c.encode(position, forKey: .position)
+        case let .formatText(selection, style):
+            try c.encode("formatText", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(style, forKey: .style)
+        case let .formatParagraphs(selection, style):
+            try c.encode("formatParagraphs", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(style, forKey: .style)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
@@ -67,8 +77,40 @@ struct EditReply: Decodable, Sendable {
     var locked: Bool
 }
 
+/// Character format: as a query result every field is set; as a change, nil fields stay.
+struct CharStyle: Codable, Hashable, Sendable {
+    var font: String?
+    /// Points.
+    var size: Double?
+    var bold: Bool?
+    var italic: Bool?
+    var underline: Bool?
+    var strikethrough: Bool?
+    /// `#rrggbb`.
+    var color: String?
+}
+
+enum Alignment: String, Codable, CaseIterable, Sendable {
+    case justify, left, center, right, distribute, split
+}
+
+struct ParaStyle: Codable, Hashable, Sendable {
+    var alignment: Alignment?
+    /// Percent; nil when the paragraph uses another spacing kind.
+    var lineSpacing: Double?
+}
+
+/// Format at the caret, with the font names the renderer tries in order.
+struct Format: Decodable, Hashable, Sendable {
+    var text: CharStyle
+    var paragraph: ParaStyle
+    var fonts: [String]
+}
+
 struct ParagraphInfo: Decodable, Sendable {
     var target: EditTarget
+    /// Paragraphs in the same container (body or cell).
+    var count: UInt32
     var text: String
     var editable: Bool
     var reason: String
@@ -105,21 +147,22 @@ enum SaveFormat: String, Encodable, Sendable {
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.
 enum EngineRequest: Encodable, Sendable {
-    case apply(revision: UInt64, EditCommand)
+    case apply(revision: UInt64, EditCommand, amend: Bool)
     case paragraph(EditTarget)
     case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double)
     case caret(revision: UInt64, EditPosition)
     case selectionRects(revision: UInt64, EditSelection)
+    case format(revision: UInt64, EditPosition)
     case export(SaveFormat)
 
     private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position, selection, format }
-    private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand }
+    private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case let .apply(revision, command):
+        case let .apply(revision, command, amend):
             try c.encode("apply", forKey: .op)
-            try c.encode(Apply(revision: revision, command: command), forKey: .request)
+            try c.encode(Apply(revision: revision, command: command, amend: amend), forKey: .request)
         case let .paragraph(target):
             try c.encode("paragraph", forKey: .op)
             try c.encode(target, forKey: .target)
@@ -137,6 +180,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("selectionRects", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(selection, forKey: .selection)
+        case let .format(revision, position):
+            try c.encode("format", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(position, forKey: .position)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)
