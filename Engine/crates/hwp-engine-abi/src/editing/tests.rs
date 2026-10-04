@@ -300,8 +300,8 @@ fn ffi_round_trip_owns_results() {
         let opened = hwp_edit_open(bytes.as_ptr(), bytes.len(), &mut session);
         assert_eq!(hwp_edit_result_status(opened), 0, "{}", json(opened));
         assert!(std::slice::from_raw_parts(
-            hwp_edit_result_pdf_data(opened),
-            hwp_edit_result_pdf_length(opened)
+            hwp_edit_result_data(opened),
+            hwp_edit_result_length(opened)
         )
         .starts_with(b"%PDF-"));
         hwp_edit_result_free(opened);
@@ -358,4 +358,103 @@ fn first_paragraph_with_section_definition_is_editable() {
         format!("{:?}", s.core.document().sections[0].paragraphs[0].controls),
         controls
     );
+}
+#[test]
+fn open_rejects_empty_oversized_and_classifies_failures() {
+    assert_eq!(EditSession::open(&[]).err(), Some(EditError::InvalidInput));
+    let oversized = vec![0u8; 64 * 1024 * 1024 + 1];
+    assert_eq!(
+        EditSession::open(&oversized).err(),
+        Some(EditError::ResourceLimit)
+    );
+    let mut source = DocumentCore::new_empty();
+    source.create_blank_document_native().unwrap();
+    let encrypted = source
+        .export_hwpx_native_with_password(b"fixture-password")
+        .unwrap();
+    for (bytes, expected) in [
+        (encrypted.as_slice(), EditError::PasswordRequired),
+        (
+            b"\x9b DRMONE protected".as_slice(),
+            EditError::UnsupportedFormat,
+        ),
+        (b"PK\x03\x04broken".as_slice(), EditError::UnsupportedFormat),
+        (
+            b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1".as_slice(),
+            EditError::InvalidInput,
+        ),
+    ] {
+        assert_eq!(EditSession::open(bytes).err(), Some(expected));
+    }
+}
+/// `HWP_WRITE_FIXTURES=1` regenerates Tests/Fixtures/generated.{hwp,hwpx}.
+#[test]
+fn generated_fixtures_open_as_pdf() {
+    let mut source = DocumentCore::new_empty();
+    source.create_blank_document_native().unwrap();
+    source
+        .insert_text_native(0, 0, 0, "HwpStudio generated fixture — 한글 읽기 전용")
+        .unwrap();
+    for (extension, bytes) in [
+        ("hwp", source.export_hwp_native().unwrap()),
+        ("hwpx", source.export_hwpx_native().unwrap()),
+    ] {
+        let session = EditSession::open(&bytes).unwrap();
+        assert!(session.pdf().starts_with(b"%PDF-"));
+        assert!(session.reply().suspect_pages.is_empty() && session.reply().page_count > 0);
+        if std::env::var_os("HWP_WRITE_FIXTURES").is_some() {
+            let folder =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../Tests/Fixtures");
+            std::fs::write(folder.join(format!("generated.{extension}")), bytes).unwrap();
+        }
+    }
+}
+#[test]
+fn selection_rects_cover_the_selected_text() {
+    let s = EditSession::open(&plain_document("hwp", false)).unwrap();
+    let selection = EditSelection {
+        anchor: point(body(), 5),
+        focus: point(body(), 0),
+    };
+    let rects = s.selection_rects(0, &selection).unwrap();
+    assert_eq!(rects.len(), 1);
+    let (start, end) = (
+        s.caret(0, &point(body(), 0)).unwrap(),
+        s.caret(0, &point(body(), 5)).unwrap(),
+    );
+    assert!(
+        (rects[0].x - start.x).abs() < 1.0 && (rects[0].x + rects[0].width - end.x).abs() < 1.0
+    );
+    let other = EditTarget {
+        paragraph: 2,
+        ..body()
+    };
+    let across = EditSelection {
+        anchor: point(body(), 0),
+        focus: point(other, 2),
+    };
+    assert_eq!(s.selection_rects(0, &across).unwrap().len(), 2);
+}
+#[test]
+fn export_round_trips_edits() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        replace(&mut s, body(), 0, 1, "저장").unwrap();
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(
+            reopened.paragraph(&body()).unwrap().text,
+            s.paragraph(&body()).unwrap().text
+        );
+    }
+}
+#[test]
+fn blank_document_is_editable() {
+    let mut s = EditSession::blank().unwrap();
+    let first = EditTarget {
+        section: 0,
+        paragraph: 0,
+        cell: None,
+    };
+    replace(&mut s, first.clone(), 0, 0, "새 문서").unwrap();
+    assert_eq!(s.paragraph(&first).unwrap().text, "새 문서");
 }

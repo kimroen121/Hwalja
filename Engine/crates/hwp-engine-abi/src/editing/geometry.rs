@@ -100,4 +100,50 @@ impl EditSession {
         })?;
         rect(&json)
     }
+    /// Highlight rectangles for a selection inside one paragraph container.
+    pub fn selection_rects(
+        &self,
+        revision: u64,
+        selection: &EditSelection,
+    ) -> Result<Vec<PageRect>, EditError> {
+        self.check_revision(revision)?;
+        let (a, b) = (&selection.anchor, &selection.focus);
+        if a.target.section != b.target.section
+            || a.target.cell.as_ref().map(|c| (c.control, c.cell))
+                != b.target.cell.as_ref().map(|c| (c.control, c.cell))
+            || (a.target.cell.is_some() && a.target.paragraph != b.target.paragraph)
+        {
+            return Err(EditError::UnsupportedTarget);
+        }
+        let key = |p: &EditPosition| (commands::index(&p.target), p.scalar);
+        let (start, end) = if key(a) <= key(b) { (a, b) } else { (b, a) };
+        commands::get(self.core.document(), &start.target)?;
+        commands::get(self.core.document(), &end.target)?;
+        let t = &start.target;
+        let json = parse(
+            self.core.get_selection_rects_native(
+                t.section as usize,
+                commands::index(&start.target),
+                start.scalar as usize,
+                commands::index(&end.target),
+                end.scalar as usize,
+                t.cell
+                    .as_ref()
+                    .map(|c| (t.paragraph as usize, c.control as usize, c.cell as usize)),
+                None,
+            ),
+        )?;
+        let rects = json.as_array().ok_or(EditError::RenderFailed)?;
+        rects
+            .iter()
+            .map(|r| {
+                let mut rect = rect(r)?;
+                rect.width = r
+                    .get("width")
+                    .and_then(Value::as_f64)
+                    .ok_or(EditError::RenderFailed)?;
+                Ok(rect)
+            })
+            .collect()
+    }
 }

@@ -3,6 +3,7 @@ pub mod ffi;
 mod geometry;
 mod preservation;
 mod protocol;
+mod save;
 pub use protocol::*;
 use rhwp::DocumentCore;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -22,7 +23,7 @@ pub struct EditSession {
     original: Vec<u8>,
     revision: u64,
     pdf: Vec<u8>,
-    warnings: String,
+    suspect_pages: Vec<u32>,
     selection: Option<EditSelection>,
     locked: bool,
     undo: Vec<State>,
@@ -33,6 +34,12 @@ pub struct EditSession {
     fail_render: bool,
 }
 impl EditSession {
+    /// A new blank document, opened through the same path as a file saved as HWPX.
+    pub fn blank() -> Result<Self, EditError> {
+        let mut core = DocumentCore::new_empty();
+        core.create_blank_document_native()?;
+        Self::open(&core.export_hwpx_native()?)
+    }
     pub fn open(bytes: &[u8]) -> Result<Self, EditError> {
         if bytes.is_empty() {
             return Err(EditError::InvalidInput);
@@ -40,13 +47,20 @@ impl EditSession {
         if bytes.len() > 64 * 1024 * 1024 {
             return Err(EditError::ResourceLimit);
         }
+        if let Err(error) = rhwp::parser::parse_document(bytes) {
+            return Err(match error {
+                rhwp::parser::ParseError::EncryptedDocument => EditError::PasswordRequired,
+                rhwp::parser::ParseError::UnsupportedFormat { .. } => EditError::UnsupportedFormat,
+                _ => EditError::InvalidInput,
+            });
+        }
         let core = DocumentCore::from_bytes(bytes)?;
         let mut session = Self {
             core,
             original: bytes.to_vec(),
             revision: 0,
             pdf: Vec::new(),
-            warnings: String::new(),
+            suspect_pages: Vec::new(),
             selection: None,
             locked: false,
             undo: Vec::new(),
@@ -56,7 +70,7 @@ impl EditSession {
             #[cfg(test)]
             fail_render: false,
         };
-        (session.pdf, session.warnings) = session.render()?;
+        (session.pdf, session.suspect_pages) = session.render()?;
         Ok(session)
     }
     pub fn pdf(&self) -> &[u8] {
@@ -71,14 +85,14 @@ impl EditSession {
             revision: self.revision,
             selection: self.selection.clone(),
             page_count: self.core.page_count(),
-            warnings: self.warnings.clone(),
+            suspect_pages: self.suspect_pages.clone(),
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
             dirty: self.state != 0,
             locked: self.locked,
         }
     }
-    fn render(&self) -> Result<(Vec<u8>, String), EditError> {
+    fn render(&self) -> Result<(Vec<u8>, Vec<u32>), EditError> {
         #[cfg(test)]
         if self.fail_render {
             return Err(EditError::RenderFailed);
@@ -86,13 +100,13 @@ impl EditSession {
         if self.core.page_count() > 1000 {
             return Err(EditError::ResourceLimit);
         }
-        let warnings =
-            crate::layout_audit::warnings(&self.core).map_err(|_| EditError::RenderFailed)?;
+        let suspect_pages =
+            crate::layout_audit::suspect_pages(&self.core).map_err(|_| EditError::RenderFailed)?;
         let pdf = self
             .core
             .render_document_pdf_native()
             .map_err(|_| EditError::RenderFailed)?;
-        Ok((pdf, warnings))
+        Ok((pdf, suspect_pages))
     }
     pub fn apply(&mut self, request: EditRequest) -> Result<EditReply, EditError> {
         if self.locked {
@@ -183,9 +197,13 @@ impl EditSession {
             }
         }
     }
-    fn publish(&mut self, (pdf, warnings): (Vec<u8>, String), selection: Option<EditSelection>) {
+    fn publish(
+        &mut self,
+        (pdf, suspect_pages): (Vec<u8>, Vec<u32>),
+        selection: Option<EditSelection>,
+    ) {
         self.pdf = pdf;
-        self.warnings = warnings;
+        self.suspect_pages = suspect_pages;
         self.selection = selection;
         self.revision += 1;
     }

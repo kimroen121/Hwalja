@@ -17,15 +17,15 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key><string>HWP 문서</string>
-			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
 			<key>LSHandlerRank</key><string>Alternate</string>
-			<key>LSItemContentTypes</key><array><string>app.hwpstudio.hwp</string></array>
+			<key>LSItemContentTypes</key><array><string>app.hwpstudio.hwp</string><string>com.haansoft.HancomOfficeViewer.mac.hwp</string></array>
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key><string>HWPX 문서</string>
-			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
 			<key>LSHandlerRank</key><string>Alternate</string>
-			<key>LSItemContentTypes</key><array><string>app.hwpstudio.hwpx</string></array>
+			<key>LSItemContentTypes</key><array><string>app.hwpstudio.hwpx</string><string>com.haansoft.HancomOfficeViewer.mac.hwpx</string></array>
 		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>

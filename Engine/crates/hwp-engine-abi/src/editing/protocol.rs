@@ -64,7 +64,7 @@ pub struct EditReply {
     pub revision: u64,
     pub selection: Option<EditSelection>,
     pub page_count: u32,
-    pub warnings: String,
+    pub suspect_pages: Vec<u32>,
     pub can_undo: bool,
     pub can_redo: bool,
     pub dirty: bool,
@@ -80,12 +80,15 @@ pub struct ParagraphInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum EditError {
     InvalidInput,
+    PasswordRequired,
+    UnsupportedFormat,
     StaleRevision,
     UnsupportedTarget,
     InvalidBoundary,
     ResourceLimit,
     RenderFailed,
     PreservationFailed,
+    SaveFailed,
     Locked,
 }
 impl From<rhwp::error::HwpError> for EditError {
@@ -101,4 +104,10 @@ pub struct PageRect {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SaveFormat {
+    Hwp,
+    Hwpx,
 }

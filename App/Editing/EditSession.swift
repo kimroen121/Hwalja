@@ -10,57 +10,62 @@ final class EditSession: @unchecked Sendable {
         var pdf: Data
     }
 
-    let id = UUID()
     private let queue = DispatchQueue(label: "app.hwpstudio.edit-session")
-    private var handle: OpaquePointer?
+    private let handle: OpaquePointer
 
     private init(handle: OpaquePointer) { self.handle = handle }
     deinit { hwp_edit_close(handle) }
 
-    /// Opens a session over `original`; the bytes are copied by the engine.
-    static func open(_ original: Data) async throws -> (EditSession, Output) {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var raw: OpaquePointer?
-                let result = original.withUnsafeBytes {
-                    hwp_edit_open($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &raw)
-                }
-                continuation.resume(with: Result {
-                    let output = try Output(take(result))
-                    guard let raw else { throw EditError.invalidInput }
-                    return (EditSession(handle: raw), output)
-                })
-            }
+    /// Opens `original` (copied by the engine), or a blank document when `nil`. Blocks.
+    static func open(_ original: Data?) throws -> (EditSession, Output) {
+        if original?.isEmpty == true { throw EditError.invalidInput }
+        var raw: OpaquePointer?
+        let result = if let original {
+            original.withUnsafeBytes { hwp_edit_open($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &raw) }
+        } else {
+            hwp_edit_open(nil, 0, &raw)
         }
+        let output = try Output(take(result))
+        guard let raw else { throw EditError.invalidInput }
+        return (EditSession(handle: raw), output)
     }
 
-    func state() async throws -> Output { try await Output(send(.state)) }
+    /// Verified document bytes for saving. Blocks until queued edits finish.
+    func export(_ format: SaveFormat) throws -> Data {
+        try queue.sync { try request(.export(format)).data }
+    }
+
     func apply(_ command: EditCommand, at revision: UInt64) async throws -> Output {
         try await Output(send(.apply(revision: revision, command)))
     }
-    func paragraph(_ target: EditTarget) async throws -> ParagraphInfo { try await decode(send(.paragraph(target))) }
+    func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
+        try await decode(send(.paragraph(target)))
+    }
     func hitTest(revision: UInt64, page: UInt32, x: Double, y: Double) async throws -> EditPosition {
         try await decode(send(.hitTest(revision: revision, page: page, x: x, y: y)))
     }
     func caret(revision: UInt64, at position: EditPosition) async throws -> PageRect {
         try await decode(send(.caret(revision: revision, position)))
     }
+    func selectionRects(revision: UInt64, for selection: EditSelection) async throws -> [PageRect] {
+        try await decode(send(.selectionRects(revision: revision, selection)))
+    }
 
     private func send(_ request: EngineRequest) async throws -> Payload {
-        let body = try JSONEncoder().encode(request)
-        return try await withCheckedThrowingContinuation { continuation in
-            queue.async { [self] in
-                continuation.resume(with: Result {
-                    guard let handle else { throw EditError.locked }
-                    return try Self.take(body.withUnsafeBytes {
-                        hwp_edit_request(handle, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
-                    })
-                })
-            }
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { continuation.resume(with: Result { try self.request(request) }) }
         }
     }
-    /// Owned copies of a successful result's JSON and PDF.
-    fileprivate typealias Payload = (json: Data, pdf: Data)
+    /// Must run on `queue`.
+    private func request(_ request: EngineRequest) throws -> Payload {
+        let body = try JSONEncoder().encode(request)
+        return try Self.take(body.withUnsafeBytes {
+            hwp_edit_request(handle, $0.bindMemory(to: UInt8.self).baseAddress, $0.count)
+        })
+    }
+
+    /// Owned copies of a successful result's JSON and bytes.
+    fileprivate typealias Payload = (json: Data, data: Data)
 
     /// Copies out and frees an engine result, turning failures into `EditError`.
     private static func take(_ result: OpaquePointer?) throws -> Payload {
@@ -71,8 +76,8 @@ final class EditSession: @unchecked Sendable {
             struct Failure: Decodable { var error: EditError }
             throw (try? JSONDecoder().decode(Failure.self, from: json))?.error ?? EditError.invalidInput
         }
-        let pdf = hwp_edit_result_pdf_data(result).map { Data(bytes: $0, count: hwp_edit_result_pdf_length(result)) }
-        return (json, pdf ?? Data())
+        let data = hwp_edit_result_data(result).map { Data(bytes: $0, count: hwp_edit_result_length(result)) }
+        return (json, data ?? Data())
     }
 }
 
@@ -81,6 +86,6 @@ private func decode<T: Decodable>(_ payload: EditSession.Payload) throws -> T {
 }
 private extension EditSession.Output {
     init(_ payload: EditSession.Payload) throws {
-        self.init(reply: try decode(payload), pdf: payload.pdf)
+        self.init(reply: try decode(payload), pdf: payload.data)
     }
 }

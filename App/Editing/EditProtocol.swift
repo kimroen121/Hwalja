@@ -57,7 +57,8 @@ struct EditReply: Decodable, Sendable {
     var revision: UInt64
     var selection: EditSelection?
     var pageCount: UInt32
-    var warnings: String
+    /// Zero-based pages with suspected overlap or text outside the page.
+    var suspectPages: [UInt32]
     var canUndo: Bool
     var canRedo: Bool
     var dirty: Bool
@@ -82,13 +83,20 @@ struct PageRect: Decodable, Sendable {
 
 enum EditError: String, Error, Decodable, Sendable {
     case invalidInput = "InvalidInput"
+    case passwordRequired = "PasswordRequired"
+    case unsupportedFormat = "UnsupportedFormat"
     case staleRevision = "StaleRevision"
     case unsupportedTarget = "UnsupportedTarget"
     case invalidBoundary = "InvalidBoundary"
     case resourceLimit = "ResourceLimit"
     case renderFailed = "RenderFailed"
     case preservationFailed = "PreservationFailed"
+    case saveFailed = "SaveFailed"
     case locked = "Locked"
+}
+
+enum SaveFormat: String, Encodable, Sendable {
+    case hwp, hwpx
 }
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.
@@ -98,8 +106,10 @@ enum EngineRequest: Encodable, Sendable {
     case paragraph(EditTarget)
     case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double)
     case caret(revision: UInt64, EditPosition)
+    case selectionRects(revision: UInt64, EditSelection)
+    case export(SaveFormat)
 
-    private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position }
+    private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position, selection, format }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -122,6 +132,13 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("caret", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(position, forKey: .position)
+        case let .selectionRects(revision, selection):
+            try c.encode("selectionRects", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(selection, forKey: .selection)
+        case let .export(format):
+            try c.encode("export", forKey: .op)
+            try c.encode(format, forKey: .format)
         }
     }
 }

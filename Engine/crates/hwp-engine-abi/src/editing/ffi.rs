@@ -1,6 +1,6 @@
 //! C ABI for long-lived edit sessions.
 //!
-//! Every call returns an owned `HwpEditResult` (status + UTF-8 JSON + optional PDF) that the
+//! Every call returns an owned `HwpEditResult` (status + UTF-8 JSON + optional bytes) that the
 //! caller frees with `hwp_edit_result_free`. Requests are JSON envelopes tagged by `op`, so new
 //! operations extend `Request` instead of adding C functions. A session handle must be used
 //! from one thread at a time.
@@ -32,20 +32,28 @@ enum Request {
         revision: u64,
         position: EditPosition,
     },
+    SelectionRects {
+        revision: u64,
+        selection: EditSelection,
+    },
+    /// Verified HWP/HWPX bytes of the current document in `data`.
+    Export {
+        format: SaveFormat,
+    },
 }
 
 pub struct HwpEditResult {
     status: u32,
     json: CString,
-    pdf: Vec<u8>,
+    data: Vec<u8>,
 }
 impl HwpEditResult {
-    fn ok(payload: impl serde::Serialize, pdf: Vec<u8>) -> *mut Self {
+    fn ok(payload: impl serde::Serialize, data: Vec<u8>) -> *mut Self {
         let json = serde_json::to_string(&payload).expect("protocol types serialize");
         Box::into_raw(Box::new(Self {
             status: 0,
             json: CString::new(json).expect("JSON escapes NUL"),
-            pdf,
+            data,
         }))
     }
     fn error(error: EditError) -> *mut Self {
@@ -53,7 +61,7 @@ impl HwpEditResult {
         Box::into_raw(Box::new(Self {
             status: 1,
             json: CString::new(json).unwrap(),
-            pdf: Vec::new(),
+            data: Vec::new(),
         }))
     }
 }
@@ -78,14 +86,20 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Caret { revision, position } => {
             HwpEditResult::ok(session.caret(revision, &position)?, Vec::new())
         }
+        Request::SelectionRects {
+            revision,
+            selection,
+        } => HwpEditResult::ok(session.selection_rects(revision, &selection)?, Vec::new()),
+        Request::Export { format } => HwpEditResult::ok(session.reply(), session.export(format)?),
     })
 }
 
-/// Opens a session over a copy of `data`. On success `*session` receives the handle and the
-/// result carries the initial state; on failure `*session` is null.
+/// Opens a session over a copy of `data`, or a blank document when `data` is null.
+/// On success `*session` receives the handle and the result carries the initial state;
+/// on failure `*session` is null.
 ///
 /// # Safety
-/// `data` must be readable for `length` bytes and `session` must be writable.
+/// `data` must be null or readable for `length` bytes, and `session` must be writable.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_edit_open(
     data: *const u8,
@@ -96,11 +110,15 @@ pub unsafe extern "C" fn hwp_edit_open(
         return HwpEditResult::error(EditError::InvalidInput);
     }
     unsafe { *session = std::ptr::null_mut() };
-    if data.is_null() {
-        return HwpEditResult::error(EditError::InvalidInput);
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(data, length) };
-    match catch_unwind(|| EditSession::open(bytes)).unwrap_or(Err(EditError::RenderFailed)) {
+    let opened = catch_unwind(|| {
+        if data.is_null() {
+            EditSession::blank()
+        } else {
+            EditSession::open(unsafe { std::slice::from_raw_parts(data, length) })
+        }
+    })
+    .unwrap_or(Err(EditError::RenderFailed));
+    match opened {
         Ok(opened) => {
             let result = state(&opened);
             unsafe { *session = Box::into_raw(Box::new(opened)) };
@@ -165,19 +183,20 @@ pub unsafe extern "C" fn hwp_edit_result_status(result: *const HwpEditResult) ->
 pub unsafe extern "C" fn hwp_edit_result_json(result: *const HwpEditResult) -> *const c_char {
     unsafe { result.as_ref() }.map_or(std::ptr::null(), |r| r.json.as_ptr())
 }
-/// Borrowed PDF bytes (empty for queries), valid until `hwp_edit_result_free`.
+/// Borrowed bytes: the PDF for `state`/`apply`, the document for `export`, otherwise empty.
+/// Valid until `hwp_edit_result_free`.
 ///
 /// # Safety
 /// `result` must be a live result.
 #[no_mangle]
-pub unsafe extern "C" fn hwp_edit_result_pdf_data(result: *const HwpEditResult) -> *const u8 {
-    unsafe { result.as_ref() }.map_or(std::ptr::null(), |r| r.pdf.as_ptr())
+pub unsafe extern "C" fn hwp_edit_result_data(result: *const HwpEditResult) -> *const u8 {
+    unsafe { result.as_ref() }.map_or(std::ptr::null(), |r| r.data.as_ptr())
 }
 /// # Safety
 /// `result` must be a live result.
 #[no_mangle]
-pub unsafe extern "C" fn hwp_edit_result_pdf_length(result: *const HwpEditResult) -> usize {
-    unsafe { result.as_ref() }.map_or(0, |r| r.pdf.len())
+pub unsafe extern "C" fn hwp_edit_result_length(result: *const HwpEditResult) -> usize {
+    unsafe { result.as_ref() }.map_or(0, |r| r.data.len())
 }
 /// # Safety
 /// Free once; null allowed.
