@@ -1,10 +1,11 @@
 # HwpStudio
 
-HWP·HWPX 문서를 위한 macOS 네이티브 앱(macOS 14 이상). 현재는 읽기 전용 뷰어와 PDF 내보내기를 제공하며, 목표는 편집기입니다.
+HWP·HWPX 문서를 위한 macOS 네이티브 편집기(macOS 14 이상). 문서 기반 앱으로 동작하며, 본문과 표 셀의 텍스트를 편집해 HWP/HWPX로 저장하고 PDF로 내보냅니다.
 
 - 조판 엔진: [rhwp](https://github.com/edwardkim/rhwp) 0.8.6 (MIT). `Vendor/`에 고정 버전과 로컬 패치가 들어 있습니다.
-- 화면과 PDF 내보내기는 같은 PDF 바이트를 씁니다. 원본 파일에는 절대 쓰지 않습니다.
-- 한컴오피스와 글꼴·쪽 나눔이 다를 수 있습니다. 배치가 의심되면 경고를 띄우고, 내보내기 전에 확인을 받습니다.
+- 화면과 PDF 내보내기는 엔진이 만든 같은 PDF를 씁니다.
+- 저장할 때마다 엔진이 결과를 다시 파싱해 텍스트와 컨트롤 구조가 같은지 검증합니다. 이전 판은 macOS 「버전 탐색」으로 되돌릴 수 있습니다.
+- 한컴오피스와 글꼴·쪽 나눔이 다를 수 있습니다. 배치가 의심되는 쪽이 있으면 툴바에 표시합니다.
 
 ## 빌드
 
@@ -28,7 +29,7 @@ Xcode에서 작업하려면 `Package.swift`를 엽니다. 먼저 `make engine`�
 
 | 경로 | 내용 |
 |---|---|
-| `App/` | SwiftUI·PDFKit 앱: `Document/`(열기·내보내기), `Workspace/`(화면), `Editing/`(엔진 편집 세션) |
+| `App/` | SwiftUI 문서 앱: `Document/`(`HwpDocument`: 열기·편집·저장), `Workspace/`(창, 편집 캔버스), `Editing/`(엔진 세션, 프로토콜, 좌표) |
 | `Engine/` | rhwp를 감싸는 Rust C ABI (`hwp-engine-abi`). `editing/`은 편집 세션(명령, 기록, 보존 검사, 좌표, `ffi`) |
 | `Vendor/` | 체크섬으로 검증하는 rhwp 소스 압축본과 레이아웃 패치 |
 | `Tests/` | Swift 테스트와 생성된 공개 fixture |

@@ -6,6 +6,7 @@
 
 - limits the workspace to the library crates;
 - fixes missing line geometry around flow/inline pictures in table cells (anchoring, text exclusion, row height, duplicated prefix text);
-- tries the installed `Pretendard Variable` before unrelated fallbacks for regular weight.
+- tries the installed `Pretendard Variable` before unrelated fallbacks for regular weight;
+- makes `get_selection_rects_native` public for the editor's selection highlight.
 
 Private regression: `HWP_LAYOUT_FIXTURE=<report.hwp> cargo test -- --ignored` (never commit the input).
