@@ -1,6 +1,6 @@
 use rhwp::DocumentCore;
-pub mod layout_audit;
 pub mod editing;
+pub mod layout_audit;
 use std::ffi::{c_char, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -27,7 +27,10 @@ fn failure(status: u32, message: String) -> HwpOpenResult {
         message: CString::new(message.replace('\0', " ")).unwrap().into_raw(),
     }
 }
-/// Requires a valid readable buffer. Panic containment is not process isolation.
+/// Panic containment is not process isolation.
+///
+/// # Safety
+/// `data` must be readable for `length` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_open(data: *const u8, length: usize) -> HwpOpenResult {
     if length > 64 * 1024 * 1024 {
@@ -54,22 +57,10 @@ pub unsafe extern "C" fn hwp_engine_open(data: *const u8, length: usize) -> HwpO
         if pages > 1000 {
             return failure(5, "Documents exceeding 1,000 pages are unsupported.".into());
         }
-        let mut overlap_pages = Vec::new();
-        for page in 0..pages {
-            match core.build_page_render_tree(page) {
-                Ok(tree)
-                    if layout_audit::has_unexpected_image_overlap(&tree.root)
-                        || layout_audit::has_out_of_page_content(&tree.root) =>
-                {
-                    overlap_pages.push((page + 1).to_string())
-                }
-                Ok(_) => {}
-                Err(error) => return failure(4, error.to_string()),
-            }
-        }
-        let warnings = CString::new(if overlap_pages.is_empty() { String::new() } else {
-            format!("그림·글 겹침 또는 페이지 밖 글자 의심: {}쪽. 제출용으로 사용하지 마세요. 이 검사는 모든 배치 오류를 검출하지는 못합니다.", overlap_pages.join(", "))
-        }).unwrap();
+        let warnings = match layout_audit::warnings(&core) {
+            Ok(text) => CString::new(text).unwrap(),
+            Err(error) => return failure(4, error.to_string()),
+        };
         match core.render_document_pdf_native() {
             Ok(pdf) => HwpOpenResult {
                 snapshot: Box::into_raw(Box::new(HwpSnapshot {
@@ -88,6 +79,8 @@ pub unsafe extern "C" fn hwp_engine_open(data: *const u8, length: usize) -> HwpO
     }
 }
 /// Borrowed UTF-8 warning text, valid until snapshot_free. Empty is not a fidelity guarantee.
+/// # Safety
+/// `snapshot` must be null or a live snapshot.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_layout_warnings(snapshot: *const HwpSnapshot) -> *const c_char {
     if snapshot.is_null() {
@@ -97,6 +90,8 @@ pub unsafe extern "C" fn hwp_engine_layout_warnings(snapshot: *const HwpSnapshot
     }
 }
 /// Borrowed bytes stay valid until snapshot_free; do not mutate or free them.
+/// # Safety
+/// `snapshot` must be null or a live snapshot.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_pdf_data(snapshot: *const HwpSnapshot) -> *const u8 {
     if snapshot.is_null() {
@@ -105,6 +100,8 @@ pub unsafe extern "C" fn hwp_engine_pdf_data(snapshot: *const HwpSnapshot) -> *c
         unsafe { (*snapshot).pdf.as_ptr() }
     }
 }
+/// # Safety
+/// `snapshot` must be null or a live snapshot.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_pdf_length(snapshot: *const HwpSnapshot) -> usize {
     if snapshot.is_null() {
@@ -113,6 +110,8 @@ pub unsafe extern "C" fn hwp_engine_pdf_length(snapshot: *const HwpSnapshot) -> 
         unsafe { (*snapshot).pdf.len() }
     }
 }
+/// # Safety
+/// `snapshot` must be null or a live snapshot.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_page_count(snapshot: *const HwpSnapshot) -> u32 {
     if snapshot.is_null() {
@@ -121,6 +120,7 @@ pub unsafe extern "C" fn hwp_engine_page_count(snapshot: *const HwpSnapshot) -> 
         unsafe { (*snapshot).pages }
     }
 }
+/// # Safety
 /// Free once; null allowed. Snapshot access must not overlap release.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_snapshot_free(snapshot: *mut HwpSnapshot) {
@@ -128,6 +128,8 @@ pub unsafe extern "C" fn hwp_engine_snapshot_free(snapshot: *mut HwpSnapshot) {
         drop(unsafe { Box::from_raw(snapshot) });
     }
 }
+/// # Safety
+/// `value` must be null or a message returned by this library, freed once.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_engine_string_free(value: *mut c_char) {
     if !value.is_null() {
@@ -208,11 +210,16 @@ mod tests {
     #[test]
     fn pretendard_variable_is_tried_before_unrelated_fallbacks() {
         let chain = rhwp::renderer::render_font_family_chain("Pretendard");
-        let variable = chain.find("'Pretendard Variable'").expect("installed variable family must be recognized");
+        let variable = chain
+            .find("'Pretendard Variable'")
+            .expect("installed variable family must be recognized");
         assert!(chain.find("'Pretendard'").unwrap() < variable);
         assert!(variable < chain.find("'Apple SD Gothic Neo'").unwrap());
         let bold = rhwp::renderer::render_font_family_chain_for_weight("Pretendard", true);
-        assert!(!bold.contains("'Pretendard Variable'"), "PDF backend cannot instantiate variable bold; preserve existing bold fallback");
+        assert!(
+            !bold.contains("'Pretendard Variable'"),
+            "PDF backend cannot instantiate variable bold; preserve existing bold fallback"
+        );
     }
 
     #[test]
@@ -336,9 +343,9 @@ mod tests {
                 }
                 RenderNodeType::Image(image)
                     if image.cell_context.as_ref().is_some_and(|c| {
-                        c.path
-                            .last()
-                            .is_some_and(|p| p.cell_index == 10 && p.cell_para_index == picture_para)
+                        c.path.last().is_some_and(|p| {
+                            p.cell_index == 10 && p.cell_para_index == picture_para
+                        })
                     }) =>
                 {
                     *picture_bottom = picture_bottom.max(node.bbox.y + node.bbox.height);
