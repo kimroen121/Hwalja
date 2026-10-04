@@ -5,6 +5,7 @@ bootstrap: engine
 engine:
 	./scripts/build-engine.sh
 test-rust:
+	bash scripts/prepare-engine.sh
 	cargo test --manifest-path Engine/Cargo.toml --locked --workspace
 test-abi: engine
 	clang -I Generated Tests/ABI/abi_smoke.c build/libhwp_engine_abi.a -o build/abi-smoke

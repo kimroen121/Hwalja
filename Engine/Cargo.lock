@@ -631,6 +631,9 @@ name = "hwp-engine-abi"
 version = "0.1.0"
 dependencies = [
  "rhwp",
+ "serde",
+ "serde_json",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -1094,7 +1097,6 @@ dependencies = [
 [[package]]
 name = "rhwp"
 version = "0.8.6"
-source = "git+https://github.com/edwardkim/rhwp.git?rev=f1f9c6ae58344ee9368996d3543f76b9345cf227#f1f9c6ae58344ee9368996d3543f76b9345cf227"
 dependencies = [
  "aes",
  "argon2",
@@ -1152,7 +1154,6 @@ dependencies = [
 [[package]]
 name = "rhwp-contracts"
 version = "0.1.0"
-source = "git+https://github.com/edwardkim/rhwp.git?rev=f1f9c6ae58344ee9368996d3543f76b9345cf227#f1f9c6ae58344ee9368996d3543f76b9345cf227"
 dependencies = [
  "serde_json",
 ]
@@ -1160,7 +1161,6 @@ dependencies = [
 [[package]]
 name = "rhwp-ooxml-chart"
 version = "0.1.0"
-source = "git+https://github.com/edwardkim/rhwp.git?rev=f1f9c6ae58344ee9368996d3543f76b9345cf227#f1f9c6ae58344ee9368996d3543f76b9345cf227"
 dependencies = [
  "quick-xml",
 ]
@@ -1168,7 +1168,6 @@ dependencies = [
 [[package]]
 name = "rhwp-password-crypto"
 version = "0.1.0"
-source = "git+https://github.com/edwardkim/rhwp.git?rev=f1f9c6ae58344ee9368996d3543f76b9345cf227#f1f9c6ae58344ee9368996d3543f76b9345cf227"
 dependencies = [
  "aes",
  "base64 0.23.1",

@@ -6,6 +6,7 @@ struct DocumentSnapshot: Sendable {
     let original: Data
     let pdf: Data
     let pageCount: UInt32
+    var layoutWarnings: String = ""
 
     static func open(_ url: URL) throws -> Self {
         let access = url.startAccessingSecurityScopedResource()
@@ -31,10 +32,14 @@ struct DocumentSnapshot: Sendable {
         guard let document = PDFDocument(data: pdf), document.pageCount == Int(hwp_engine_page_count(handle)), document.pageCount > 0 else {
             throw SnapshotError.message("생성된 PDF의 페이지를 검증할 수 없습니다.")
         }
-        return Self(sourceURL: url, original: original, pdf: pdf, pageCount: hwp_engine_page_count(handle))
+        let warnings = hwp_engine_layout_warnings(handle).map { String(cString: $0) } ?? ""
+        return Self(sourceURL: url, original: original, pdf: pdf, pageCount: hwp_engine_page_count(handle), layoutWarnings: warnings)
     }
 
-    func export(to url: URL) throws {
+    func export(to url: URL, acknowledgingLayoutWarnings: Bool = false) throws {
+        guard layoutWarnings.isEmpty || acknowledgingLayoutWarnings else {
+            throw SnapshotError.message(layoutWarnings)
+        }
         let sourceAccess = sourceURL.startAccessingSecurityScopedResource()
         let destinationAccess = url.startAccessingSecurityScopedResource()
         defer {
