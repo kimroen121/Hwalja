@@ -1,6 +1,10 @@
 use super::*;
-use rhwp::model::{control::Control, document::Document, paragraph::Paragraph};
+use rhwp::model::{control::Control, document::Document, paragraph::Paragraph, table::Table};
+use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
+
+/// 1 cm in HWPUNIT, the smallest paper side or body extent `SetPage` accepts.
+const CENTIMETER: u32 = 2835;
 
 pub(super) fn paragraphs<'a>(
     doc: &'a Document,
@@ -79,6 +83,51 @@ pub(super) fn editable(p: &Paragraph) -> bool {
         && p.orphan_field_ends.is_empty()
         && p.ctrl_data_records.len() <= p.controls.len()
         && !p.text.chars().any(|c| c.is_control() && c != '\t')
+}
+/// The table holding `t`'s cell.
+pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> {
+    let c = t.cell.as_ref()?;
+    match doc
+        .sections
+        .get(t.section as usize)?
+        .paragraphs
+        .get(t.paragraph as usize)?
+        .controls
+        .get(c.control as usize)?
+    {
+        Control::Table(table) => Some(table),
+        _ => None,
+    }
+}
+fn body_only(t: &EditTarget) -> Result<(), EditError> {
+    if t.cell.is_some() {
+        Err(EditError::UnsupportedTarget)
+    } else {
+        Ok(())
+    }
+}
+fn validate_page(page: &PageSetup) -> Result<(), EditError> {
+    let (width, height) = if page.landscape {
+        (page.height, page.width)
+    } else {
+        (page.width, page.height)
+    };
+    let sides = [width, height];
+    let across = page.margin_left as u64 + page.margin_right as u64 + page.margin_gutter as u64;
+    let down = page.margin_top as u64
+        + page.margin_bottom as u64
+        + page.margin_header as u64
+        + page.margin_footer as u64;
+    if sides
+        .iter()
+        .all(|&s| (CENTIMETER..=100 * CENTIMETER).contains(&s))
+        && across + (CENTIMETER as u64) <= width as u64
+        && down + (CENTIMETER as u64) <= height as u64
+    {
+        Ok(())
+    } else {
+        Err(EditError::InvalidInput)
+    }
 }
 pub(super) fn boundary(text: &str, scalar: u32) -> Result<(), EditError> {
     let mut offset = 0;
@@ -174,8 +223,124 @@ impl EditSession {
                 self.validate_range(selection, false)?;
                 super::format::validate_para(style)
             }
+            EditCommand::Break { position, .. } => {
+                body_only(&position.target)?;
+                self.validate_position(position)
+            }
+            EditCommand::InsertTable {
+                position,
+                rows,
+                columns,
+            } => {
+                body_only(&position.target)?;
+                self.validate_position(position)?;
+                if (1..=1000).contains(rows)
+                    && (1..=256).contains(columns)
+                    && *rows as u32 * *columns as u32 <= 10_000
+                {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
+            EditCommand::EditTable { cell, change } => {
+                let doc = self.core.document();
+                paragraphs(doc, cell)?;
+                let t = table(doc, cell).ok_or(EditError::UnsupportedTarget)?;
+                match change {
+                    TableChange::DeleteRow if t.row_count < 2 => Err(EditError::InvalidInput),
+                    TableChange::DeleteColumn if t.col_count < 2 => Err(EditError::InvalidInput),
+                    _ => Ok(()),
+                }
+            }
+            EditCommand::SetPage { section, page } => {
+                self.core
+                    .document()
+                    .sections
+                    .get(*section as usize)
+                    .ok_or(EditError::InvalidInput)?;
+                validate_page(page)
+            }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
+    }
+    /// Paper and margins of a section.
+    pub fn page_setup(&self, section: u32) -> Result<PageSetup, EditError> {
+        let json = self.core.get_page_def_native(section as usize)?;
+        serde_json::from_str(&json).map_err(|_| EditError::InvalidInput)
+    }
+    /// Adds or removes a row or column, keeping the caret in the cell it was in (or the
+    /// one that takes its place).
+    fn edit_table(
+        &mut self,
+        target: &EditTarget,
+        change: TableChange,
+    ) -> Result<EditSelection, EditError> {
+        let c = target.cell.as_ref().ok_or(EditError::UnsupportedTarget)?;
+        let (s, host, control) = (
+            target.section as usize,
+            target.paragraph as usize,
+            c.control as usize,
+        );
+        let cell = table(self.core.document(), target)
+            .and_then(|t| t.cells.get(c.cell as usize))
+            .ok_or(EditError::InvalidInput)?;
+        let (mut row, mut col) = (cell.row, cell.col);
+        let (last_row, last_col) = (
+            row + cell.row_span.max(1) - 1,
+            col + cell.col_span.max(1) - 1,
+        );
+        match change {
+            TableChange::InsertRowAbove => {
+                self.core
+                    .insert_table_row_native(s, host, control, row, false)?;
+                row += 1;
+            }
+            TableChange::InsertRowBelow => {
+                self.core
+                    .insert_table_row_native(s, host, control, last_row, true)?;
+            }
+            TableChange::InsertColumnLeft => {
+                self.core
+                    .insert_table_column_native(s, host, control, col, false)?;
+                col += 1;
+            }
+            TableChange::InsertColumnRight => {
+                self.core
+                    .insert_table_column_native(s, host, control, last_col, true)?;
+            }
+            TableChange::DeleteRow => {
+                self.core.delete_table_row_native(s, host, control, row)?;
+            }
+            TableChange::DeleteColumn => {
+                self.core
+                    .delete_table_column_native(s, host, control, col)?;
+            }
+        }
+        let t = table(self.core.document(), target).ok_or(EditError::RenderFailed)?;
+        let (row, col) = (
+            row.min(t.row_count.saturating_sub(1)),
+            col.min(t.col_count.saturating_sub(1)),
+        );
+        let cell = t
+            .cells
+            .iter()
+            .position(|x| {
+                (x.row..x.row + x.row_span.max(1)).contains(&row)
+                    && (x.col..x.col + x.col_span.max(1)).contains(&col)
+            })
+            .unwrap_or(0);
+        Ok(EditSelection::caret(EditPosition {
+            target: EditTarget {
+                cell: Some(CellTarget {
+                    control: c.control,
+                    cell: cell as u32,
+                    paragraph: 0,
+                }),
+                ..target.clone()
+            },
+            scalar: 0,
+        }))
     }
     fn length(&self, t: &EditTarget) -> Result<u32, EditError> {
         Ok(get(self.core.document(), t)?.text.chars().count() as u32)
@@ -356,6 +521,72 @@ impl EditSession {
                     self.format_paragraph(&at_index(&start.target, i), &props)?;
                 }
                 Ok(selection.clone())
+            }
+            EditCommand::Break { position, column } => {
+                let t = &position.target;
+                let (s, p, o) = (
+                    t.section as usize,
+                    t.paragraph as usize,
+                    position.scalar as usize,
+                );
+                if *column {
+                    self.core.insert_column_break_native(s, p, o)?;
+                } else {
+                    self.core.insert_page_break_native(s, p, o)?;
+                }
+                Ok(EditSelection::caret(EditPosition {
+                    target: at_index(t, index(t) + 1),
+                    scalar: 0,
+                }))
+            }
+            EditCommand::InsertTable {
+                position,
+                rows,
+                columns,
+            } => {
+                let t = &position.target;
+                let json = self.core.create_table_native(
+                    t.section as usize,
+                    t.paragraph as usize,
+                    position.scalar as usize,
+                    *rows,
+                    *columns,
+                )?;
+                let made: Value =
+                    serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
+                let field = |key: &str| {
+                    made.get(key)
+                        .and_then(Value::as_u64)
+                        .map(|v| v as u32)
+                        .ok_or(EditError::RenderFailed)
+                };
+                Ok(EditSelection::caret(EditPosition {
+                    target: EditTarget {
+                        section: t.section,
+                        paragraph: field("paraIdx")?,
+                        cell: Some(CellTarget {
+                            control: field("controlIdx")?,
+                            cell: 0,
+                            paragraph: 0,
+                        }),
+                    },
+                    scalar: 0,
+                }))
+            }
+            EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
+            EditCommand::SetPage { section, page } => {
+                let json = serde_json::to_string(page).map_err(|_| EditError::InvalidInput)?;
+                self.core.set_page_def_native(*section as usize, &json)?;
+                Ok(self.selection.clone().unwrap_or_else(|| {
+                    EditSelection::caret(EditPosition {
+                        target: EditTarget {
+                            section: *section,
+                            paragraph: 0,
+                            cell: None,
+                        },
+                        scalar: 0,
+                    })
+                }))
             }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }

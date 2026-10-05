@@ -45,6 +45,10 @@ enum Request {
         motion: Motion,
         goal_x: Option<f64>,
     },
+    /// Paper and margins of a section.
+    PageSetup {
+        section: u32,
+    },
     /// Every match of `query`, as selections in document order.
     #[serde(rename_all = "camelCase")]
     Find {
@@ -115,6 +119,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         ),
         Request::Format { revision, position } => {
             HwpEditResult::ok(session.format(revision, &position)?, Vec::new())
+        }
+        Request::PageSetup { section } => {
+            HwpEditResult::ok(session.page_setup(section)?, Vec::new())
         }
         Request::Find {
             query,

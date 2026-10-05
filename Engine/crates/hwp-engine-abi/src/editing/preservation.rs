@@ -6,6 +6,8 @@ use rhwp::model::{control::Control, document::Document, paragraph::Paragraph};
 fn normalize(paragraphs: &mut [Paragraph]) {
     for p in paragraphs {
         p.line_segs.clear();
+        // IR-only axis of the stored line segments, rebuilt with them.
+        p.hwpx_axis_shift = 0;
         p.source_line_seg_vertical_pos = None;
         p.single_line_overflow_memo = Default::default();
         p.layout_only_fill_lines = 0;
@@ -112,9 +114,23 @@ pub(super) fn check(
         | EditCommand::FormatParagraphs { selection, .. } => {
             return check_format(before, after, selection)
         }
-        EditCommand::Split { position } => {
+        EditCommand::Split { position } | EditCommand::Break { position, .. } => {
             (&position.target, commands::index(&position.target), 1, 2)
         }
+        EditCommand::InsertTable { position, .. } => {
+            let section = position.target.section as usize;
+            let grown = after.sections[section].paragraphs.len()
+                - before.sections[section].paragraphs.len();
+            return check_inserted_table(
+                before,
+                after,
+                &position.target,
+                commands::index(&position.target),
+                grown,
+            );
+        }
+        EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
+        EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
         EditCommand::MergePrevious { position } => (
             &position.target,
             commands::index(&position.target) - 1,
@@ -155,6 +171,121 @@ pub(super) fn check(
     }
 }
 
+/// DocInfo may only gain entries (shapes, fonts, border fills) at the end of its lists;
+/// trims them off `b` and drops both cached streams.
+fn trim_appended(a: &mut Document, b: &mut Document) -> bool {
+    fn prefix<T: std::fmt::Debug>(old: &[T], new: &mut Vec<T>) -> bool {
+        let same =
+            new.len() >= old.len() && format!("{old:?}") == format!("{:?}", &new[..old.len()]);
+        new.truncate(old.len());
+        same
+    }
+    let (x, y) = (&mut a.doc_info, &mut b.doc_info);
+    let appended = prefix(&x.char_shapes, &mut y.char_shapes)
+        && prefix(&x.para_shapes, &mut y.para_shapes)
+        && prefix(&x.border_fills, &mut y.border_fills)
+        && x.font_faces.len() <= y.font_faces.len()
+        && {
+            y.font_faces.truncate(x.font_faces.len());
+            x.font_faces
+                .iter()
+                .zip(y.font_faces.iter_mut())
+                .all(|(old, new)| prefix(old, new))
+        };
+    for info in [x, y] {
+        info.raw_stream = None;
+        info.raw_stream_dirty = false;
+    }
+    appended
+}
+/// Compares what is left after a structural edit took out its own changes: line layout
+/// and the edited section's cached stream are ignored.
+fn same_rest(a: &mut Document, b: &mut Document, section: u32) -> Result<(), EditError> {
+    for doc in [&mut *a, &mut *b] {
+        doc.sections[section as usize].raw_stream = None;
+        for s in &mut doc.sections {
+            normalize(&mut s.paragraphs);
+        }
+    }
+    if same(a, b) {
+        Ok(())
+    } else {
+        Err(EditError::PreservationFailed)
+    }
+}
+/// A new table may only replace the paragraph at `start` with `grown + 1` paragraphs that
+/// hold its controls plus one table, and append DocInfo entries.
+fn check_inserted_table(
+    before: &Document,
+    after: &Document,
+    target: &EditTarget,
+    start: usize,
+    grown: usize,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let old = remove(&mut a, target, start, 1)?;
+    let (mut controls, mut data) = remove(&mut b, target, start, grown + 1)?;
+    let tables: Vec<usize> = (0..controls.len())
+        .filter(|&i| matches!(controls[i], Control::Table(_)))
+        .collect();
+    let [table] = tables[..] else {
+        return Err(EditError::PreservationFailed);
+    };
+    controls.remove(table);
+    data.remove(table);
+    if format!("{old:?}") != format!("{:?}", (controls, data)) || !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, target.section)
+}
+/// Row and column edits may only change the table holding `cell`.
+fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result<(), EditError> {
+    let control = cell
+        .cell
+        .as_ref()
+        .ok_or(EditError::PreservationFailed)?
+        .control as usize;
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let host = doc.sections[cell.section as usize]
+            .paragraphs
+            .get_mut(cell.paragraph as usize)
+            .ok_or(EditError::PreservationFailed)?;
+        if !matches!(host.controls.get(control), Some(Control::Table(_))) {
+            return Err(EditError::PreservationFailed);
+        }
+        host.controls.remove(control);
+        if control < host.ctrl_data_records.len() {
+            host.ctrl_data_records.remove(control);
+        }
+    }
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, cell.section)
+}
+/// Page setup may only change the section's paper and margins.
+fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let (x, y) = (
+        &mut a.sections[section as usize],
+        &b.sections[section as usize],
+    );
+    x.section_def.page_def = y.section_def.page_def.clone();
+    // The section's first paragraph carries its own copy of the definition.
+    for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
+        for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+            if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
+                c.page_def = d.page_def.clone();
+            }
+        }
+    }
+    same_rest(&mut a, &mut b, section)
+}
+
 /// Formatting may only restyle the selected paragraphs and append shapes and fonts to
 /// DocInfo; existing DocInfo entries and everything else must be unchanged.
 fn check_format(
@@ -167,29 +298,10 @@ fn check_format(
     let range = commands::index(target)..=commands::index(&end.target);
     let mut a = before.clone();
     let mut b = after.clone();
-    fn prefix<T: std::fmt::Debug>(old: &[T], new: &mut Vec<T>) -> bool {
-        let same =
-            new.len() >= old.len() && format!("{old:?}") == format!("{:?}", &new[..old.len()]);
-        new.truncate(old.len());
-        same
-    }
-    let (x, y) = (&a.doc_info, &mut b.doc_info);
-    let appended = prefix(&x.char_shapes, &mut y.char_shapes)
-        && prefix(&x.para_shapes, &mut y.para_shapes)
-        && x.font_faces.len() <= y.font_faces.len()
-        && {
-            y.font_faces.truncate(x.font_faces.len());
-            x.font_faces
-                .iter()
-                .zip(y.font_faces.iter_mut())
-                .all(|(old, new)| prefix(old, new))
-        };
-    if !appended {
+    if !trim_appended(&mut a, &mut b) {
         return Err(EditError::PreservationFailed);
     }
     for doc in [&mut a, &mut b] {
-        doc.doc_info.raw_stream = None;
-        doc.doc_info.raw_stream_dirty = false;
         doc.sections[target.section as usize].raw_stream = None;
         let paragraphs = edited_paragraphs(doc, target)?;
         for p in paragraphs

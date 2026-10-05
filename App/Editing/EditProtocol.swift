@@ -32,10 +32,18 @@ enum EditCommand: Encodable, Sendable {
     case mergePrevious(EditPosition)
     case formatText(EditSelection, CharStyle)
     case formatParagraphs(EditSelection, ParaStyle)
+    /// A new page (or column) from `position` in the body.
+    case pageBreak(EditPosition, column: Bool)
+    case insertTable(EditPosition, rows: Int, columns: Int)
+    /// Adds or removes a row or column of the table holding the cell `target`.
+    case editTable(EditTarget, TableChange)
+    case setPage(section: UInt32, PageSetup)
     case undo
     case redo
 
-    private enum Key: String, CodingKey { case kind, selection, text, position, style }
+    private enum Key: String, CodingKey {
+        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page
+    }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
@@ -57,10 +65,45 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("formatParagraphs", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(style, forKey: .style)
+        case let .pageBreak(position, column):
+            try c.encode("break", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(column, forKey: .column)
+        case let .insertTable(position, rows, columns):
+            try c.encode("insertTable", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(rows, forKey: .rows)
+            try c.encode(columns, forKey: .columns)
+        case let .editTable(cell, change):
+            try c.encode("editTable", forKey: .kind)
+            try c.encode(cell, forKey: .cell)
+            try c.encode(change, forKey: .change)
+        case let .setPage(section, page):
+            try c.encode("setPage", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(page, forKey: .page)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
     }
+}
+
+enum TableChange: String, Encodable, Sendable {
+    case insertRowAbove, insertRowBelow, insertColumnLeft, insertColumnRight, deleteRow, deleteColumn
+}
+
+/// A section's paper in HWPUNIT (1/7200 inch); `width` and `height` describe it upright.
+struct PageSetup: Codable, Hashable, Sendable {
+    var width: UInt32
+    var height: UInt32
+    var marginLeft: UInt32
+    var marginRight: UInt32
+    var marginTop: UInt32
+    var marginBottom: UInt32
+    var marginHeader: UInt32
+    var marginFooter: UInt32
+    var marginGutter: UInt32
+    var landscape: Bool
 }
 
 struct EditReply: Decodable, Sendable {
@@ -178,10 +221,11 @@ enum EngineRequest: Encodable, Sendable {
     case format(revision: UInt64, EditPosition)
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, caseSensitive: Bool)
+    case pageSetup(section: UInt32)
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
-        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive
+        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section
     }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
@@ -221,6 +265,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("find", forKey: .op)
             try c.encode(query, forKey: .query)
             try c.encode(caseSensitive, forKey: .caseSensitive)
+        case let .pageSetup(section):
+            try c.encode("pageSetup", forKey: .op)
+            try c.encode(section, forKey: .section)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)

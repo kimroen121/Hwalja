@@ -206,6 +206,30 @@ struct DocumentTests {
         #expect(try await document.find("사과").count == 3)
     }
 
+    @Test func structureCommandsRunFromTheViewer() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        #expect(viewer.inBody && !viewer.inTable)
+        viewer.insertTable(rows: 2, columns: 2)
+        await document.settle()
+        #expect(viewer.inTable)
+        viewer.editTable(.insertRowBelow)
+        await document.settle()
+        #expect(viewer.inTable)
+        document.selection = .caret(EditPosition(target: EditTarget(section: 0, paragraph: 1, cell: nil), scalar: 0))
+        viewer.insertBreak(column: false)
+        await document.settle()
+        #expect(document.reply.pageCount == 2 && document.pages.count == 2)
+        var page = try await document.pageSetup(section: 0)
+        page.landscape.toggle()
+        viewer.setPage(page, section: 0)
+        await document.settle()
+        #expect(try await document.pageSetup(section: 0) == page)
+        #expect(document.pages[0].size.width > document.pages[0].size.height)
+    }
+
     @Test func spreadsLayPagesSideBySide() async throws {
         let document = HwpDocument()
         document.selection = .caret(EditPosition(target: body, scalar: 0))

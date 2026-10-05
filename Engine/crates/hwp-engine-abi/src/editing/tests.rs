@@ -931,3 +931,208 @@ fn find_reports_body_and_cell_matches() {
     assert!(s.find("없는 말", true).unwrap().is_empty());
     assert!(s.find("", true).unwrap().is_empty());
 }
+fn run(s: &mut EditSession, command: EditCommand) -> Result<EditReply, EditError> {
+    s.apply(EditRequest {
+        version: 1,
+        amend: false,
+        revision: s.revision,
+        command,
+    })
+}
+fn table_shape(s: &EditSession, paragraph: usize) -> (u16, u16, usize) {
+    let Control::Table(t) = s.core.document().sections[0].paragraphs[paragraph]
+        .controls
+        .iter()
+        .find(|c| matches!(c, Control::Table(_)))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    (t.row_count, t.col_count, t.cells.len())
+}
+#[test]
+fn page_break_starts_a_page_and_undoes() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let text = s.paragraph(&body()).unwrap().text;
+        let pages = s.core.page_count();
+        let reply = run(
+            &mut s,
+            EditCommand::Break {
+                position: point(body(), 1),
+                column: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(reply.page_count, pages + 1);
+        let next = commands::at_index(&body(), 2);
+        assert_eq!(reply.selection.unwrap().focus, point(next, 0));
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(s.core.page_count(), pages);
+        assert_eq!(s.paragraph(&body()).unwrap().text, text);
+    }
+}
+#[test]
+fn inserts_tables_where_the_caret_is() {
+    for format in ["hwp", "hwpx"] {
+        // Middle of a paragraph, its start, and the section's structure-only first line.
+        for (paragraph, scalar) in [(1, 1), (1, 0), (0, 0)] {
+            let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+            let target = commands::at_index(&body(), paragraph);
+            let reply = run(
+                &mut s,
+                EditCommand::InsertTable {
+                    position: point(target, scalar),
+                    rows: 2,
+                    columns: 3,
+                },
+            )
+            .unwrap_or_else(|e| panic!("{format} {paragraph}:{scalar} {e:?}"));
+            let caret = reply.selection.unwrap().focus;
+            let cell = caret.target.cell.clone().unwrap();
+            assert_eq!((cell.cell, caret.scalar), (0, 0));
+            assert_eq!(table_shape(&s, caret.target.paragraph as usize), (2, 3, 6));
+            replace(&mut s, caret.target.clone(), 0, 0, "칸").unwrap();
+            assert_eq!(s.paragraph(&caret.target).unwrap().text, "칸");
+            assert!(s.find("보존 문단", true).unwrap().len() == 1);
+        }
+    }
+}
+#[test]
+fn edits_table_rows_and_columns() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = |index| EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: index,
+            paragraph: 0,
+        }),
+    };
+    for (change, shape) in [
+        (TableChange::InsertRowBelow, (2, 2, 4)),
+        (TableChange::InsertColumnRight, (2, 3, 6)),
+        (TableChange::InsertRowAbove, (3, 3, 9)),
+        (TableChange::InsertColumnLeft, (3, 4, 12)),
+        // Removes the row and column holding the caret, which hold no text by now.
+        (TableChange::DeleteRow, (2, 4, 8)),
+        (TableChange::DeleteColumn, (2, 3, 6)),
+    ] {
+        let caret = s.selection.clone().map_or(cell(0), |s| s.focus.target);
+        let reply = run(
+            &mut s,
+            EditCommand::EditTable {
+                cell: caret,
+                change,
+            },
+        )
+        .unwrap_or_else(|e| panic!("{change:?} {e:?}"));
+        assert_eq!(table_shape(&s, 2), shape, "{change:?}");
+        assert!(reply.selection.unwrap().focus.target.cell.is_some());
+    }
+    let one = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let mut one = one;
+    assert!(run(
+        &mut one,
+        EditCommand::EditTable {
+            cell: cell(0),
+            change: TableChange::DeleteRow,
+        },
+    )
+    .is_err());
+}
+#[test]
+fn sets_paper_and_margins() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let mut page = s.page_setup(0).unwrap();
+        let width = s.core.get_page_info_native(0).unwrap();
+        page.landscape = !page.landscape;
+        page.margin_left += 2835;
+        run(
+            &mut s,
+            EditCommand::SetPage {
+                section: 0,
+                page: page.clone(),
+            },
+        )
+        .unwrap();
+        assert_eq!(s.page_setup(0).unwrap(), page);
+        assert_ne!(s.core.get_page_info_native(0).unwrap(), width);
+        page.margin_left = page.width.max(page.height);
+        assert!(run(&mut s, EditCommand::SetPage { section: 0, page }).is_err());
+    }
+}
+/// Opt-in: `HWP_CORPUS=<folder> cargo test --release structure_edits_on_corpus -- --ignored --nocapture`.
+/// Runs each structure command once on every document and reports refusals.
+#[test]
+#[ignore]
+fn structure_edits_on_corpus() {
+    let folder = std::env::var("HWP_CORPUS").unwrap();
+    let (mut runs, mut failures) = (0, 0);
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let path = entry.unwrap().path();
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(opened) = EditSession::open(&bytes) else {
+            continue;
+        };
+        let doc = opened.core.document().clone();
+        let body = doc.sections[0]
+            .paragraphs
+            .iter()
+            .position(|p| commands::editable(p) && !p.text.is_empty());
+        let cell = doc.sections[0]
+            .paragraphs
+            .iter()
+            .enumerate()
+            .find_map(|(i, p)| {
+                p.controls.iter().enumerate().find_map(|(j, c)| {
+                    let Control::Table(t) = c else { return None };
+                    (t.cells.first()?.text_direction == 0).then_some(EditTarget {
+                        section: 0,
+                        paragraph: i as u32,
+                        cell: Some(CellTarget {
+                            control: j as u32,
+                            cell: 0,
+                            paragraph: 0,
+                        }),
+                    })
+                })
+            });
+        let mut commands = vec![];
+        if let Some(p) = body {
+            let position = point(commands::at_index(&self::body(), p), 1);
+            commands.push(EditCommand::Break {
+                position: position.clone(),
+                column: false,
+            });
+            commands.push(EditCommand::InsertTable {
+                position,
+                rows: 2,
+                columns: 2,
+            });
+        }
+        if let Some(cell) = cell {
+            commands.push(EditCommand::EditTable {
+                cell,
+                change: TableChange::InsertRowBelow,
+            });
+        }
+        let mut page = opened.page_setup(0).unwrap();
+        page.margin_left += 283;
+        commands.push(EditCommand::SetPage { section: 0, page });
+        for command in commands {
+            let mut s = EditSession::open(&bytes).unwrap();
+            runs += 1;
+            let label = format!("{command:?}").chars().take(24).collect::<String>();
+            if let Err(e) = run(&mut s, command) {
+                failures += 1;
+                println!("{}: {label} {e:?}", path.display());
+            }
+        }
+    }
+    println!("{failures} of {runs} refused");
+}

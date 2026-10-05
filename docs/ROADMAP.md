@@ -28,7 +28,9 @@ rhwp에 저장 API가 있으므로 저장도 마지막까지 미루지 않았다
 - 편집 캔버스: PDFView 대신 쪽을 동기적으로 그리는 자체 뷰(바뀐 쪽과 커서가 같은 프레임에 바뀜, 페이드 없음). 클릭·드래그(자동 스크롤)·Shift 선택, 더블클릭 단어·트리플클릭 문단 선택, I-빔 포인터, 커서를 화면 안에 유지, 문서 안 한글 조합,
   - 커서 이동은 엔진 조판 기준: 글자·단어(⌥←→)·줄 처음/끝(⌘←→)·위아래(열 유지, 쪽·셀 경계 넘김)·문단(⌥↑↓)·문서(⌘↑↓)·쪽(PageUp/Down), 각각 Shift로 선택 확장. 단어·줄 단위 삭제(⌥⌫, ⌘⌫). 화살표·줄 끝·문단 끝 이동, 삭제·문단 합치기, 여러 문단 선택 삭제·교체, 전체 선택(본문 또는 셀), 오려 두기·복사·붙이기, `UndoManager`와 연결한 실행 취소.
 - 편집 엔진:
-  - 명령: 본문·최상위 표 셀의 Replace(여러 문단 가능)/Split/MergePrevious, FormatText/FormatParagraphs, Undo/Redo(20단계), 조합용 amend.
+  - 명령: 본문·최상위 표 셀의 Replace(여러 문단 가능)/Split/MergePrevious, FormatText/FormatParagraphs, Break(쪽·단 나누기), InsertTable, EditTable(줄·칸 추가/삭제), SetPage(편집 용지), Undo/Redo(20단계), 조합용 amend.
+  - 구조 명령의 보존 검사: 표 삽입은 편집 문단 자리에 원래 컨트롤 + 표 하나만 생겨야 하고, 줄·칸 편집은 그 표만, 편집 용지는 그 구역의 용지 정의(구역 정의 컨트롤 사본 포함)만 바뀌어야 한다. DocInfo는 목록 끝에 덧붙는 것만 허용한다. 로컬 문서 47개에서 156회 실행해 거부 0(`structure_edits_on_corpus`, opt-in).
+  - 조회: 찾기(본문·최상위 표 셀, 글상자·중첩 표·수식 제외), 편집 용지.
   - 안전장치: 문자소(grapheme) 경계 검증, 보존 검사, 실패 시 롤백.
   - 조회: hit-test, 커서·선택 영역 좌표, 캐럿 위치 서식과 글꼴 대체 순서.
   - 저장: 검증을 거친 HWP/HWPX 저장.
@@ -53,7 +55,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | 파일 | 저장하기 (⌘S), 다른 이름으로 저장하기 | 기본 메뉴, 새로 만들기·열기·최근 문서·버전 포함 | `export_hwp(x)_native` | 완료 |
 | | 다운로드, PDF로 다운로드 | PDF로 내보내기 (⇧⌘E) | `render_document_pdf_native` | 완료 |
 | | 인쇄 (⌘P) | 프린트 (⌘P) | 위와 같음 | 완료 |
-| | 편집 용지 (F7) | 편집 용지… (F7) | `get/set_page_def_native` | |
+| | 편집 용지 (F7) | 쪽 > 편집 용지… (F7): 용지 종류·폭·길이·방향·여백 | `get/set_page_def_native` | 완료 |
 | | 문서 정보 | 문서 정보… | | |
 | | 공유, 이름 바꾸기 | 공유·이름 변경은 macOS 기본 기능(제목 막대) | | 해당 없음 |
 | 편집 | 되돌리기 (⌘Z), 다시 실행 (⇧⌘Z) | 같음 | snapshot | 완료 |
@@ -74,7 +76,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 메모: 모든 메모 표시, 메모 안내선 표시 | | | 2차 |
 | 입력 | 도형(가로 글상자, 직사각형, 타원, 직선, 호), 글상자 | | `create_shape_control_native` | |
 | | 그림 | | `insert_picture_native` | |
-| | 표 | 표… | `create_table_native` | |
+| | 표 | 표… (줄·칸 개수) | `create_table_native` | 완료(본문) |
 | | 차트, 웹 동영상 | | `set_chart_data_native` | 2차 |
 | | 수식 | | `insert_equation_native` | |
 | | 문자표 (⌘F10) | 이모티콘 및 기호(⌃⌘Space, macOS 기본) | | 완료 |
@@ -88,15 +90,15 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 글머리표 모양, 문단 번호 모양, 한 수준 증가/감소 | | | |
 | | 스타일 (F6) | | `apply_style_native` | |
 | | 개체 속성 | | `set_*_properties_native` | |
-| 쪽 | 편집 용지 (F7) | 파일 메뉴와 같은 항목 | `set_page_def_native` | |
+| 쪽 | 편집 용지 (F7) | 같음 | `set_page_def_native` | 완료 |
 | | 머리말, 꼬리말: 모양 없음, 왼쪽·가운데·오른쪽 쪽 번호 | | `create_header_footer_native`, `apply_hf_template_native` | |
 | | 새 번호로 시작, 현재 쪽만 감추기 | | `insert_new_number_native`, `set_page_hide_native` | |
-| | 쪽 나누기 (Ctrl+Return), 단 나누기 (Ctrl+Shift+Return) | 쪽 나누기 (⌘↩), 단 나누기 (⇧⌘↩) | `insert_page_break_native`, `insert_column_break_native` | |
+| | 쪽 나누기 (Ctrl+Return), 단 나누기 (Ctrl+Shift+Return) | 쪽 나누기 (⌘↩), 단 나누기 (⇧⌘↩) | `insert_page_break_native`, `insert_column_break_native` | 완료(본문) |
 | | 단: 하나·둘·셋·왼쪽·오른쪽, 다단 설정 나누기 | | `set_column_def_native` | |
-| 표 | 표 만들기 | 표… (입력 메뉴와 같은 항목) | `create_table_native` | |
+| 표 | 표 만들기 | 표 만들기… | `create_table_native` | 완료 |
 | | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | | `set_table/cell_properties_native` | |
-| | 줄/칸 추가하기: 위·아래 줄, 왼쪽·오른쪽 칸 | 같음 | `insert_table_row/column_native` | |
-| | 줄/칸 지우기 | 같음 | `delete_table_row/column_native` | |
+| | 줄/칸 추가하기: 위·아래 줄, 왼쪽·오른쪽 칸 | 같음 | `insert_table_row/column_native` | 완료 |
+| | 줄/칸 지우기 | 같음 | `delete_table_row/column_native` | 완료 |
 | | 셀 나누기, 셀 합치기 | 같음 | `split/merge_table_cell(s)_native` | |
 | | 셀 높이를 같게, 셀 너비를 같게 | | `resize_table_cell_native` | |
 | | 블록 계산식(합계·평균·곱), 자릿점 넣기/빼기 | | `table_calc` | |

@@ -228,16 +228,21 @@ impl EditSession {
             EditCommand::Replace { selection, .. }
             | EditCommand::FormatText { selection, .. }
             | EditCommand::FormatParagraphs { selection, .. } => {
-                Some(commands::ordered(selection).0)
+                Some(commands::ordered(selection).0.clone())
             }
-            EditCommand::Split { position } | EditCommand::MergePrevious { position } => {
-                Some(position)
-            }
-            EditCommand::Undo | EditCommand::Redo => None,
+            EditCommand::Split { position }
+            | EditCommand::MergePrevious { position }
+            | EditCommand::Break { position, .. }
+            | EditCommand::InsertTable { position, .. } => Some(position.clone()),
+            EditCommand::EditTable { cell, .. } => Some(EditPosition {
+                target: cell.clone(),
+                scalar: 0,
+            }),
+            EditCommand::SetPage { .. } | EditCommand::Undo | EditCommand::Redo => None,
         };
         // A page earlier: joined or shortened text can move back onto the previous page.
         let from = start
-            .and_then(|p| self.page_of(p))
+            .and_then(|p| self.page_of(&p))
             .map_or(0, |p| p.saturating_sub(1));
         let snapshot = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {

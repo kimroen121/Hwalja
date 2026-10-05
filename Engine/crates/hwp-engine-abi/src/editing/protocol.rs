@@ -57,8 +57,55 @@ pub enum EditCommand {
         selection: EditSelection,
         style: ParaStyle,
     },
+    /// Starts a new page (or column) at `position` in the body, splitting its paragraph.
+    Break {
+        position: EditPosition,
+        column: bool,
+    },
+    /// A new table at `position` in the body; the caret moves into its first cell.
+    InsertTable {
+        position: EditPosition,
+        rows: u16,
+        columns: u16,
+    },
+    /// Adds or removes a row or column of the table holding `cell`.
+    EditTable {
+        cell: EditTarget,
+        change: TableChange,
+    },
+    /// Paper and margins of one section.
+    SetPage {
+        section: u32,
+        page: PageSetup,
+    },
     Undo,
     Redo,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TableChange {
+    InsertRowAbove,
+    InsertRowBelow,
+    InsertColumnLeft,
+    InsertColumnRight,
+    DeleteRow,
+    DeleteColumn,
+}
+/// A section's paper in HWPUNIT (1/7200 inch). `width` and `height` describe the paper
+/// upright; `landscape` turns it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSetup {
+    pub width: u32,
+    pub height: u32,
+    pub margin_left: u32,
+    pub margin_right: u32,
+    pub margin_top: u32,
+    pub margin_bottom: u32,
+    pub margin_header: u32,
+    pub margin_footer: u32,
+    pub margin_gutter: u32,
+    pub landscape: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

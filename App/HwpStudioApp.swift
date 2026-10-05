@@ -10,7 +10,10 @@ struct HwpStudioApp: App {
             FileCommands()
             EditCommands()
             ViewCommands()
+            InsertCommands()
             FormatCommands()
+            PageCommands()
+            TableCommands()
         }
     }
 }

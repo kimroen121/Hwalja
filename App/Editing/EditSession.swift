@@ -69,6 +69,10 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.find(query: query, caseSensitive: false)))
     }
 
+    func pageSetup(section: UInt32) async throws -> PageSetup {
+        try await decode(send(.pageSetup(section: section)))
+    }
+
     private func send(_ request: EngineRequest) async throws -> Payload {
         try await send(request) { $0 }
     }

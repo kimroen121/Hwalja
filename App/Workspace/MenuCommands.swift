@@ -84,3 +84,62 @@ struct ViewCommands: Commands {
         }
     }
 }
+
+struct InsertCommands: Commands {
+    @FocusedObject private var document: HwpDocument?
+    @FocusedObject private var viewer: Viewer?
+
+    var body: some Commands {
+        CommandMenu("입력") {
+            Button("표…") { viewer?.insertingTable = true }
+                .disabled(viewer?.inBody != true)
+        }
+    }
+}
+
+struct PageCommands: Commands {
+    @FocusedObject private var document: HwpDocument?
+    @FocusedObject private var viewer: Viewer?
+
+    var body: some Commands {
+        CommandMenu("쪽") {
+            Button("편집 용지…") { viewer?.showPageSetup() }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!)), modifiers: [])
+                .disabled(viewer == nil)
+            Divider()
+            Group {
+                Button("쪽 나누기") { viewer?.insertBreak(column: false) }
+                    .keyboardShortcut(.return)
+                Button("단 나누기") { viewer?.insertBreak(column: true) }
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+            }
+            .disabled(viewer?.inBody != true)
+        }
+    }
+}
+
+struct TableCommands: Commands {
+    @FocusedObject private var document: HwpDocument?
+    @FocusedObject private var viewer: Viewer?
+
+    var body: some Commands {
+        CommandMenu("표") {
+            Button("표 만들기…") { viewer?.insertingTable = true }
+                .disabled(viewer?.inBody != true)
+            Divider()
+            Group {
+                Menu("줄/칸 추가하기") {
+                    Button("위쪽에 줄 추가하기") { viewer?.editTable(.insertRowAbove) }
+                    Button("아래쪽에 줄 추가하기") { viewer?.editTable(.insertRowBelow) }
+                    Button("왼쪽에 칸 추가하기") { viewer?.editTable(.insertColumnLeft) }
+                    Button("오른쪽에 칸 추가하기") { viewer?.editTable(.insertColumnRight) }
+                }
+                Menu("줄/칸 지우기") {
+                    Button("줄 지우기") { viewer?.editTable(.deleteRow) }
+                    Button("칸 지우기") { viewer?.editTable(.deleteColumn) }
+                }
+            }
+            .disabled(viewer?.inTable != true)
+        }
+    }
+}

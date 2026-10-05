@@ -233,6 +233,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func find(_ query: String) async throws -> [EditSelection] {
         try await session.find(query)
     }
+    func pageSetup(section: UInt32) async throws -> PageSetup {
+        try await session.pageSetup(section: section)
+    }
     /// The whole document as PDF, after queued edits.
     func pdf() async throws -> Data {
         await settle()

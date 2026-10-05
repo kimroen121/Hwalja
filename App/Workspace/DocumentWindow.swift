@@ -35,6 +35,10 @@ struct DocumentWindow: View {
             Button("이동") { Int(pageField).map { viewer.go(toPage: $0 - 1) } }
             Button("취소", role: .cancel) {}
         }
+        .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
+        .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
+            if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
+        }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
         .toolbar {
@@ -82,6 +86,9 @@ final class Viewer: ObservableObject {
         didSet { canvas.columns = columns }
     }
     @Published var goingToPage = false
+    @Published var insertingTable = false
+    /// The section and paper 편집 용지 is showing.
+    @Published var pageSetup: (section: UInt32, page: PageSetup)?
 
     // Find and replace.
     @Published var finding = false
