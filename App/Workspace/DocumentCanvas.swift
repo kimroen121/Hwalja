@@ -215,6 +215,22 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     // MARK: Pages
 
+    /// The 그리기 개체 being drawn (`textbox`, `rectangle`, `ellipse`, `line`, `arc`): the
+    /// next drag on a page draws it. Esc stops.
+    var drawingShape: String? {
+        didSet {
+            window?.invalidateCursorRects(for: self)
+            if drawingShape == nil { setRubber(nil) }
+        }
+    }
+    /// The drag drawing a shape, in view points.
+    private var rubber: (start: NSPoint, end: NSPoint)?
+    private func setRubber(_ new: (start: NSPoint, end: NSPoint)?) {
+        for band in [rubber, new].compactMap({ $0 }) {
+            setNeedsDisplay(NSRect(points: band.start, band.end).insetBy(dx: -4, dy: -4))
+        }
+        rubber = new
+    }
     /// 격자 보기: a 5 mm grid over the pages.
     var showsGrid = false {
         didSet { needsDisplay = true }
@@ -293,6 +309,20 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if let rect = objectRect, rect.insetBy(dx: -4, dy: -4).intersects(dirtyRect) {
             drawHandles(around: rect)
         }
+        if let rubber {
+            let band = NSBezierPath()
+            if drawingShape == "line" {
+                band.move(to: rubber.start)
+                band.line(to: rubber.end)
+            } else if drawingShape == "ellipse" {
+                band.appendOval(in: NSRect(points: rubber.start, rubber.end))
+            } else {
+                band.appendRect(NSRect(points: rubber.start, rubber.end))
+            }
+            band.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
+            NSColor.controlAccentColor.setStroke()
+            band.stroke()
+        }
     }
     private func drawGrid(in frame: NSRect) {
         // ponytail: fixed 5 mm spacing; make it a setting when 격자 설정 is added.
@@ -330,7 +360,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func resetCursorRects() {
-        pageFrames.forEach { addCursorRect($0, cursor: .iBeam) }
+        pageFrames.forEach { addCursorRect($0, cursor: drawingShape == nil ? .iBeam : .crosshair) }
     }
 
     // MARK: Presentation
@@ -417,6 +447,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseDown(with event: NSEvent) {
+        if drawingShape != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            return setRubber((point, point))
+        }
         guard let model, let hit = enginePoint(convert(event.locationInWindow, from: nil)) else { return }
         window?.makeFirstResponder(self)
         commitComposition()
@@ -445,7 +479,24 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
+    override func mouseUp(with event: NSEvent) {
+        guard let shape = drawingShape, let band = rubber, let model, !pageFrames.isEmpty else { return }
+        drawingShape = nil
+        let index = page(near: band.start)
+        let frame = pageFrames[index]
+        let start = PageGeometry.enginePoint(band.start, in: frame)
+        var end = PageGeometry.enginePoint(band.end, in: frame)
+        // A click without a drag draws Hancom's default size, 30 × 20 mm.
+        if hypot(end.x - start.x, end.y - start.y) < 4 {
+            end = CGPoint(x: start.x + 113, y: start.y + (shape == "line" ? 0 : 76))
+        }
+        model.insertShape(shape, page: index, from: start, to: end, undoManager)
+    }
+
     override func mouseDragged(with event: NSEvent) {
+        if let band = rubber {
+            return setRubber((band.start, convert(event.locationInWindow, from: nil)))
+        }
         autoscroll(with: event)
         pendingDrag = convert(event.locationInWindow, from: nil)
         extendToDrag()
@@ -519,6 +570,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     ]
 
     override func doCommand(by selector: Selector) {
+        if drawingShape != nil, selector == #selector(cancelOperation(_:)) {
+            drawingShape = nil
+            return
+        }
         if let object = model?.object {
             switch selector {
             case #selector(deleteBackward(_:)), #selector(deleteForward(_:)):
@@ -723,5 +778,12 @@ extension EditSelection {
     /// The ends in document order.
     var ordered: (start: EditPosition, end: EditPosition) {
         anchor.precedes(focus) ? (anchor, focus) : (focus, anchor)
+    }
+}
+
+private extension NSRect {
+    /// The rectangle with two opposite corners.
+    init(points a: NSPoint, _ b: NSPoint) {
+        self.init(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
 }

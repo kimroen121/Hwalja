@@ -156,6 +156,14 @@ pub(super) fn check(
             return check_inserted_note(before, after, &position.target)
         }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
+        EditCommand::InsertShape { position, .. } => {
+            return check_host(
+                before,
+                after,
+                position.target.section,
+                position.target.paragraph,
+            )
+        }
         EditCommand::SetObject { object, .. } | EditCommand::DeleteObject { object } => {
             return check_host(before, after, object.section, object.paragraph)
         }

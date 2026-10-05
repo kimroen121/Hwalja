@@ -229,6 +229,7 @@ impl EditSession {
             | EditCommand::InsertTable { position, .. }
             | EditCommand::InsertPicture { position, .. }
             | EditCommand::InsertEquation { position, .. }
+            | EditCommand::InsertShape { position, .. }
             | EditCommand::InsertNote { position, .. } => Some(position.clone()),
             EditCommand::EditTable { cell, .. } | EditCommand::SetCell { cell, .. } => {
                 Some(EditPosition {

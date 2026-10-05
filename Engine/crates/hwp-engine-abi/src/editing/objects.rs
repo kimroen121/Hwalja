@@ -28,6 +28,8 @@ pub(super) const CAPTIONS: [&str; 9] = [
     "RightCenter",
     "RightBottom",
 ];
+/// 그리기 개체 rhwp can draw: 가로 글상자, 직사각형, 타원, 직선, 호.
+const SHAPES: [&str; 5] = ["textbox", "rectangle", "ellipse", "line", "arc"];
 /// Longest equation script accepted, in characters.
 const SCRIPT_LIMIT: usize = 4096;
 
@@ -126,6 +128,7 @@ impl EditSession {
             (ObjectKind::Picture, Control::Shape(s)) => matches!(**s, ShapeObject::Picture(_)),
             (ObjectKind::Equation, Control::Equation(_)) => true,
             (ObjectKind::Table, Control::Table(_)) => true,
+            (ObjectKind::Shape, Control::Shape(s)) => !matches!(**s, ShapeObject::Picture(_)),
             _ => false,
         };
         if matches {
@@ -146,6 +149,7 @@ impl EditSession {
                 let kind = match c["type"].as_str()? {
                     "image" => ObjectKind::Picture,
                     "equation" => ObjectKind::Equation,
+                    "shape" | "line" => ObjectKind::Shape,
                     _ => return None,
                 };
                 // Objects in cells, notes, headers and text boxes are not selectable yet.
@@ -224,6 +228,7 @@ impl EditSession {
                     .get_equation_properties_native(s, p, c, None, None),
             )?,
             ObjectKind::Table => parse(self.core.get_table_properties_native(s, p, c))?,
+            ObjectKind::Shape => parse(self.core.get_shape_properties_native(s, p, c))?,
         };
         let Value::Object(mut map) = json else {
             return Err(EditError::RenderFailed);
@@ -346,6 +351,9 @@ impl EditSession {
                 None,
                 &Value::Object(json).to_string(),
             ),
+            ObjectKind::Shape => {
+                core.set_shape_properties_native(s, p, c, &Value::Object(json).to_string())
+            }
             ObjectKind::Table => core.set_table_properties_native(
                 s,
                 p,
@@ -372,8 +380,71 @@ impl EditSession {
             ObjectKind::Picture => self.core.delete_picture_control_native(s, p, c),
             ObjectKind::Equation => self.core.delete_equation_control_native(s, p, c),
             ObjectKind::Table => self.core.delete_table_control_native(s, p, c),
+            ObjectKind::Shape => self.core.delete_shape_control_native(s, p, c),
         }?;
         Ok(())
+    }
+    pub(super) fn validate_shape(&self, command: &EditCommand) -> Result<(), EditError> {
+        let EditCommand::InsertShape {
+            position,
+            shape,
+            x,
+            y,
+            width,
+            height,
+            ..
+        } = command
+        else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        commands::body_only(&position.target)?;
+        self.validate_position(position)?;
+        let lines = shape == "line";
+        if SHAPES.contains(&shape.as_str())
+            && x.abs() <= 1_000_000
+            && y.abs() <= 1_000_000
+            && *width <= 1_000_000
+            && *height <= 1_000_000
+            && (lines && *width + *height > 0 || *width > 0 && *height > 0)
+        {
+            Ok(())
+        } else {
+            Err(EditError::InvalidInput)
+        }
+    }
+    pub(super) fn insert_shape(
+        &mut self,
+        command: &EditCommand,
+    ) -> Result<EditSelection, EditError> {
+        let EditCommand::InsertShape {
+            position,
+            shape,
+            x,
+            y,
+            width,
+            height,
+            flip,
+        } = command
+        else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let t = &position.target;
+        self.core.create_shape_control_native(
+            t.section as usize,
+            t.paragraph as usize,
+            position.scalar as usize,
+            *width,
+            *height,
+            *x as u32,
+            *y as u32,
+            false,
+            "InFrontOfText",
+            shape,
+            false,
+            *flip,
+            &[],
+        )?;
+        Ok(EditSelection::caret(position.clone()))
     }
     /// An equation script laid out as a display list, for previews.
     pub fn equation_preview(

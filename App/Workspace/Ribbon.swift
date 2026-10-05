@@ -29,6 +29,8 @@ struct ToolRow: View {
             ToolTile("찾기", Icon.find, action: { viewer.showFind(replace: false) },
                      choices: { MenuItems.findChoices(viewer) })
             RowDivider()
+            ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
+                .disabled(!context.inBody)
             ToolTile("그림", Icon.picture) { viewer.insertPicture() }
                 .disabled(!context.inBody)
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true },
@@ -97,7 +99,8 @@ enum Icon {
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"
-    static let grid = "grid", caption = "text.below.photo"
+    static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
+    static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static func placement(_ placement: Placement?) -> String {
         switch placement {

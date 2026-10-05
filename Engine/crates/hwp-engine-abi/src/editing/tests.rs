@@ -1798,3 +1798,72 @@ fn numbering_and_bullets_head_paragraphs() {
     };
     assert_eq!(run(&mut s, wrong).unwrap_err(), EditError::InvalidInput);
 }
+#[test]
+fn shapes_are_drawn_selected_changed_and_deleted() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let shapes = ["textbox", "rectangle", "ellipse", "line", "arc"];
+    for (i, shape) in shapes.iter().enumerate() {
+        let insert = EditCommand::InsertShape {
+            position: point(body(), 0),
+            shape: shape.to_string(),
+            x: 10_000,
+            y: 20_000 + i as i32 * 8_000,
+            width: 14_000,
+            height: if *shape == "line" { 0 } else { 6_000 },
+            flip: false,
+        };
+        run(&mut s, insert).unwrap_or_else(|e| panic!("{shape}: {e:?}"));
+    }
+    let placed = s.placed(0).unwrap();
+    assert_eq!(placed.len(), shapes.len());
+    assert!(placed.iter().all(|o| o.object.kind == ObjectKind::Shape));
+    // 20 000 HWPUNIT from the paper's top is 266.7 px at 96 dpi.
+    let first = placed
+        .iter()
+        .min_by(|a, b| a.rect.y.total_cmp(&b.rect.y))
+        .unwrap();
+    assert!(
+        (first.rect.y - 266.7).abs() < 2.0 && (first.rect.x - 133.3).abs() < 2.0,
+        "{first:?}"
+    );
+    let r = &first.rect;
+    let hit = s
+        .object_at(s.revision, 0, r.x + r.width / 2.0, r.y + r.height / 2.0)
+        .unwrap();
+    assert_eq!(hit.map(|o| o.object), Some(first.object.clone()));
+
+    let wider = ObjectProps {
+        width: Some(20_000),
+        ..Default::default()
+    };
+    let shape = first.object.clone();
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: shape.clone(),
+            props: wider,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.object_props(&shape).unwrap().width, Some(20_000));
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(
+            reopened.object_props(&shape).unwrap().width,
+            Some(20_000),
+            "{format:?}"
+        );
+    }
+    run(&mut s, EditCommand::DeleteObject { object: shape }).unwrap();
+    assert_eq!(s.placed(0).unwrap().len(), shapes.len() - 1);
+    let bad = EditCommand::InsertShape {
+        position: point(body(), 0),
+        shape: "star".into(),
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        flip: false,
+    };
+    assert_eq!(run(&mut s, bad).unwrap_err(), EditError::InvalidInput);
+}

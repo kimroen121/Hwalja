@@ -36,6 +36,14 @@ struct MenuItems {
             },
         ]
     }
+    /// 그리기 개체, as in Hancom Office Web's 도형.
+    static let shapes: [(title: String, shape: String, symbol: String)] = [
+        ("가로 글상자", "textbox", Icon.textbox), ("직사각형", "rectangle", Icon.rectangle),
+        ("타원", "ellipse", Icon.ellipse), ("직선", "line", Icon.line), ("호", "arc", Icon.arc),
+    ]
+    static func shapeChoices(_ viewer: Viewer) -> [Choice?] {
+        shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
+    }
     /// 머리말 or 꼬리말 shapes, as in Hancom Office Web.
     static let headerShapes: [(title: String, placement: Placement?)] = [
         ("(모양 없음)", nil), ("왼쪽 쪽 번호", .left), ("가운데 쪽 번호", .center), ("오른쪽 쪽 번호", .right),
@@ -148,12 +156,18 @@ struct MenuItems {
 
     @ViewBuilder var insert: some View {
         Group {
-            item("표…", Icon.table) { viewer?.insertingTable = true }
-                .disabled(!context.inBody)
+            Menu {
+                ForEach(Self.shapes, id: \.shape) { item in
+                    self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
+                }
+            } label: { Label("도형", systemImage: Icon.shape) }
             item("그림…", Icon.picture) { viewer?.insertPicture() }
-                .disabled(!context.inBody)
+            item("표…", Icon.table) { viewer?.insertingTable = true }
+            item("글상자", Icon.textbox) { viewer?.draw("textbox") }
             item("수식…", Icon.equation) { viewer?.newEquation() }
-                .disabled(!context.inBody)
+        }
+        .disabled(!context.inBody)
+        Group {
             Divider()
             item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
                 .disabled(!context.hasSelection)

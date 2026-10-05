@@ -50,6 +50,9 @@ enum EditCommand: Encodable, Sendable {
     case insertEquation(EditPosition, script: String, fontSize: UInt32, color: UInt32)
     /// A 각주 (or 미주) at `position`; the caret moves into it.
     case insertNote(EditPosition, endnote: Bool)
+    /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
+    /// from the paper's corner in HWPUNIT. A line runs corner to corner, `flip` turning it.
+    case insertShape(EditPosition, shape: String, x: Int32, y: Int32, width: UInt32, height: UInt32, flip: Bool)
     /// Changes the properties set in `props` of a picture, equation or table.
     case setObject(ObjectRef, ObjectProps)
     /// Changes the properties set in `props` of the cell holding `target`.
@@ -71,7 +74,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -154,6 +157,15 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("equalizeCells", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(height, forKey: .height)
+        case let .insertShape(position, shape, x, y, width, height, flip):
+            try c.encode("insertShape", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(shape, forKey: .shape)
+            try c.encode(x, forKey: .x)
+            try c.encode(y, forKey: .y)
+            try c.encode(width, forKey: .width)
+            try c.encode(height, forKey: .height)
+            try c.encode(flip, forKey: .flip)
         case let .setObject(object, props):
             try c.encode("setObject", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -177,6 +189,8 @@ enum Placement: String, Encodable, Sendable {
 
 enum ObjectKind: String, Codable, Sendable {
     case picture, equation, table
+    /// A drawing object: 가로 글상자, 직사각형, 타원, 직선 or 호.
+    case shape
 }
 
 /// Control `control` of a body paragraph.

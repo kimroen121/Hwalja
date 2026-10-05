@@ -175,7 +175,7 @@ pub(super) fn not_in_note(t: &EditTarget) -> Result<(), EditError> {
         Ok(())
     }
 }
-fn body_only(t: &EditTarget) -> Result<(), EditError> {
+pub(super) fn body_only(t: &EditTarget) -> Result<(), EditError> {
     if t.cell.is_some() || t.note.is_some() {
         Err(EditError::UnsupportedTarget)
     } else {
@@ -227,7 +227,7 @@ impl EditSession {
             text: get(self.core.document(), target)?.text.clone(),
         })
     }
-    fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {
+    pub(super) fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {
         let para = get(self.core.document(), &p.target)?;
         if !editable(para) {
             return Err(EditError::UnsupportedTarget);
@@ -285,6 +285,7 @@ impl EditSession {
                 super::format::validate_char(style)
             }
             EditCommand::ApplyStyle { selection, style } => self.validate_style(selection, *style),
+            EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
                 not_in_note(&selection.anchor.target)?;
@@ -721,6 +722,7 @@ impl EditSession {
                 Ok(selection.clone())
             }
             EditCommand::ApplyStyle { selection, style } => self.apply_style(selection, *style),
+            EditCommand::InsertShape { .. } => self.insert_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 let (start, end) = ordered(selection);
                 let props = self.para_props(style);

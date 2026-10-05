@@ -147,6 +147,21 @@ struct DocumentTests {
         #expect(document.format?.paragraph.head == "None")
     }
 
+    /// A drag in 도형 drawing draws the shape and leaves it selected.
+    @Test func drawnShapesAreInsertedAndSelected() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.insertShape("ellipse", page: 0, from: CGPoint(x: 200, y: 300), to: CGPoint(x: 320, y: 380), undo)
+        await document.settle()
+        let object = try #require(document.object)
+        #expect(object.object.kind == .shape && document.context.object == .shape)
+        #expect(abs(object.rect.x - 200) < 2 && abs(object.rect.width - 120) < 2)
+        undo.undo()
+        await document.settle()
+        #expect(document.object == nil)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])
@@ -547,6 +562,10 @@ struct DocumentTests {
             let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: rep)
             try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "\(name).png"))
+        }
+        for (index, shape) in ["textbox", "rectangle", "ellipse", "line", "arc"].enumerated() {
+            let y = 320 + Double(index) * 90
+            document.insertShape(shape, page: 0, from: CGPoint(x: 160, y: y), to: CGPoint(x: 360, y: y + 70), nil)
         }
         viewer.showsControlCodes = true
         viewer.showsGrid = true

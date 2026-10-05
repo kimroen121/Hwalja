@@ -75,6 +75,11 @@ extension Viewer {
             setObject(table, ObjectProps(caption: position))
         }
     }
+    /// Starts drawing a 그리기 개체 with the next drag on a page.
+    func draw(_ shape: String) {
+        canvas.editor.drawingShape = shape
+        canvas.window?.makeFirstResponder(canvas.editor)
+    }
     func deleteObject() {
         guard let object = document?.object?.object else { return }
         document?.edit(undoManager) { _ in .deleteObject(object) }
@@ -121,7 +126,7 @@ struct ObjectSheet: View {
 
     private var basic: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if kind == .picture {
+            if kind == .picture || kind == .shape {
                 GroupTitle("크기")
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
@@ -170,7 +175,7 @@ struct ObjectSheet: View {
                 if kind != .table { Toggle("크기 고정", isOn: flag(\.sizeProtect)) }
             }
             .padding(.leading, 12)
-            if kind == .picture {
+            if kind == .picture || kind == .shape {
                 GroupTitle("개체 회전")
                 LabeledField("회전각") {
                     SpinField(value: number(\.rotationAngle), unit: "°", range: -360...360)
@@ -186,7 +191,7 @@ struct ObjectSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("바깥 여백")
             sides(\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom)
-            if kind != .equation {
+            if kind == .picture || kind == .table {
                 GroupTitle("캡션")
                 Picker("캡션", selection: text(\.caption, "None")) {
                     ForEach(Captions.all, id: \.value) { Text($0.title).tag($0.value) }

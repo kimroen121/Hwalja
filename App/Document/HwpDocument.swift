@@ -241,6 +241,23 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             document.registerHistory(.undo, undoManager)
         }
     }
+    /// Draws a 그리기 개체 from `start` to `end` (engine points on `page`), anchored to the
+    /// paragraph there, and selects it.
+    func insertShape(_ shape: String, page: Int, from start: CGPoint, to end: CGPoint, _ undoManager: UndoManager?) {
+        let units = { (pixels: Double) in Int32((pixels * 75).rounded()) }
+        let (x, y) = (min(start.x, end.x), min(start.y, end.y))
+        let (width, height) = (abs(end.x - start.x), abs(end.y - start.y))
+        perform(undoManager) { document in
+            let position = try await document.hitTest(page: page, x: start.x, y: start.y)
+            guard position.target.cell == nil, position.target.note == nil else { return nil }
+            return .insertShape(position, shape: shape, x: units(x), y: units(y),
+                                width: UInt32(units(width)), height: UInt32(units(height)),
+                                flip: shape == "line" && (end.x - start.x) * (end.y - start.y) < 0)
+        }
+        enqueue { document in
+            document.object = try? await document.objectAt(page: page, x: x + width / 2, y: y + height / 2)
+        }
+    }
     /// Applies 스타일 `style` to every paragraph the selection touches.
     func applyStyle(_ style: UInt32, _ undoManager: UndoManager?) {
         edit(undoManager) { $0.map { .applyStyle($0, style: style) } }

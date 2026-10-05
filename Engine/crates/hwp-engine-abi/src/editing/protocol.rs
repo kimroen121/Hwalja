@@ -105,6 +105,19 @@ pub enum EditCommand {
         font_size: u32,
         color: u32,
     },
+    /// A drawing object (`textbox`, `rectangle`, `ellipse`, `line` or `arc`) in front of
+    /// the text, anchored at `position` in the body. `x` and `y` place it from the
+    /// paper's corner, in HWPUNIT; a line runs from corner to corner, `flip` turning it.
+    InsertShape {
+        position: EditPosition,
+        shape: String,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        #[serde(default)]
+        flip: bool,
+    },
     /// Changes the properties `props` sets of a picture, equation or table.
     SetObject {
         object: ObjectRef,
@@ -178,6 +191,8 @@ pub enum ObjectKind {
     Picture,
     Equation,
     Table,
+    /// A drawing object: 가로 글상자, 직사각형, 타원, 직선 or 호.
+    Shape,
 }
 /// Control `control` of a body paragraph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
