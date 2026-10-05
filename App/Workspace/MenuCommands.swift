@@ -163,6 +163,13 @@ struct MenuItems {
                 item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
             } label: { Label("주석", systemImage: Icon.footnote) }
                 .disabled(!context.inBody)
+            Menu {
+                ForEach(Captions.all, id: \.value) { caption in
+                    if caption.value == "None" { Divider() }
+                    Button(caption.title) { viewer?.insertCaption(caption.value) }
+                }
+            } label: { Label("캡션 넣기", systemImage: Icon.caption) }
+                .disabled(context.object != .picture && !context.inTable)
         }
     }
 

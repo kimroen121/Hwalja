@@ -47,6 +47,8 @@ pub(super) fn validate_para(style: &ParaStyle) -> Result<(), EditError> {
         && style.indent.is_none_or(|v| (-1000.0..=1000.0).contains(&v));
     if spacing_ok
         && lengths_ok
+        && style.korean_break_unit.is_none_or(|v| v <= 1)
+        && style.english_break_unit.is_none_or(|v| v <= 2)
         && style.line_spacing_kind.is_some() == style.line_spacing.is_some()
         && *style != ParaStyle::default()
     {
@@ -95,6 +97,14 @@ pub(super) fn para_props(style: &ParaStyle) -> String {
         ("keepLines", style.keep_lines),
         ("widowOrphan", style.widow_orphan),
         ("pageBreakBefore", style.page_break_before),
+    ] {
+        if let Some(value) = value {
+            props.insert(key.into(), json!(value));
+        }
+    }
+    for (key, value) in [
+        ("koreanBreakUnit", style.korean_break_unit),
+        ("englishBreakUnit", style.english_break_unit),
     ] {
         if let Some(value) = value {
             props.insert(key.into(), json!(value));
@@ -332,6 +342,7 @@ impl EditSession {
             LineSpacingType::Minimum => (LineSpacingKind::Minimum, points(shape.line_spacing)),
         };
         let para_flag = |key: &str| para.get(key).and_then(Value::as_bool);
+        let para_unit = |key: &str| para.get(key).and_then(Value::as_u64).map(|v| v as u8);
         Ok(Format {
             text: CharStyle {
                 font: Some(font),
@@ -385,6 +396,8 @@ impl EditSession {
                 keep_lines: para_flag("keepLines"),
                 widow_orphan: para_flag("widowOrphan"),
                 page_break_before: para_flag("pageBreakBefore"),
+                korean_break_unit: para_unit("koreanBreakUnit"),
+                english_break_unit: para_unit("englishBreakUnit"),
             },
             fonts,
         })

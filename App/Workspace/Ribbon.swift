@@ -97,7 +97,7 @@ enum Icon {
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"
-    static let grid = "grid"
+    static let grid = "grid", caption = "text.below.photo"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static func placement(_ placement: Placement?) -> String {
         switch placement {
@@ -240,7 +240,10 @@ private struct TableGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(rows)줄 × \(columns)칸").font(.callout).monospacedDigit().opacity(rows > 0 ? 1 : 0)
+            // As in the web editor: 취소 until a size is pointed at.
+            Button(rows > 0 ? "\(rows) × \(columns)" : "취소") { dismiss() }
+                .buttonStyle(.borderless)
+                .monospacedDigit()
             Grid(horizontalSpacing: 2, verticalSpacing: 2) {
                 ForEach(1...8, id: \.self) { row in
                     GridRow {

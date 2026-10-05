@@ -206,7 +206,7 @@ struct ObjectProps: PartialFormat {
     var vertOffset: Int32?
     var restrictInPage: Bool?
     var allowOverlap: Bool?
-    /// Pictures and tables: None, Top, Bottom, Left, Right.
+    /// Pictures and tables: None, Top, Bottom, or LeftTop … RightBottom (캡션 넣기).
     var caption: String?
     var outerMarginLeft: Int32?
     var outerMarginRight: Int32?
@@ -376,11 +376,9 @@ struct ParaStyle: PartialFormat {
     var indent: Double?
     var spacingBefore: Double?
     var spacingAfter: Double?
-    var keepWithNext: Bool?
-    var keepLines: Bool?
-    var widowOrphan: Bool?
-    var pageBreakBefore: Bool?
-
+    /// 줄 나눔 기준: 한글 단위 0 어절, 1 글자; 영문 단위 0 단어, 1 하이픈, 2 글자.
+    var koreanBreakUnit: Int?
+    var englishBreakUnit: Int?
 }
 
 /// A caret motion, resolved against the engine's line layout.

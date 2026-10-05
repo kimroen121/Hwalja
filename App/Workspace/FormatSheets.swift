@@ -191,8 +191,8 @@ struct CharShapeSheet: View {
     }
 }
 
-/// 문단 모양, laid out like the web editor's: 기본 (alignment, margins, first line,
-/// spacing) and 확장 (page-break rules). Only changed attributes apply.
+/// 문단 모양, laid out like the web editor's 기본 tab: alignment, margins, first line,
+/// spacing and line breaking. Only changed attributes apply.
 struct ParaShapeSheet: View {
     let original: ParaStyle
     let viewer: Viewer
@@ -209,94 +209,99 @@ struct ParaShapeSheet: View {
 
     var body: some View {
         DialogFrame("문단 모양") {
-            TabView {
-                VStack(alignment: .leading, spacing: 14) {
-                    GroupTitle("정렬 방식")
-                    HStack(spacing: 6) {
-                        ForEach(Alignment.allCases, id: \.self) { alignment in
-                            let label = FormatChoices.label(alignment)
-                            Button { style.alignment = alignment } label: {
-                                Image(systemName: label.symbol).font(.system(size: 15, weight: .light)).frame(width: 32, height: 32)
-                            }
-                            .buttonStyle(ToolButtonStyle(on: (style.alignment ?? .justify) == alignment))
-                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
-                            .help(label.title)
+            VStack(alignment: .leading, spacing: 14) {
+                GroupTitle("정렬 방식")
+                HStack(spacing: 6) {
+                    ForEach(Alignment.allCases, id: \.self) { alignment in
+                        let label = FormatChoices.label(alignment)
+                        Button { style.alignment = alignment } label: {
+                            Image(systemName: label.symbol).font(.system(size: 15, weight: .light)).frame(width: 32, height: 32)
                         }
+                        .buttonStyle(ToolButtonStyle(on: (style.alignment ?? .justify) == alignment))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                        .help(label.title)
                     }
-                    .padding(.leading, 12)
-                    HStack(alignment: .top, spacing: 32) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            GroupTitle("여백")
-                            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                                GridRow { FieldLabel("왼쪽"); SpinField(value: length(\.marginLeft), unit: "pt", range: 0...1000) }
-                                GridRow { FieldLabel("오른쪽"); SpinField(value: length(\.marginRight), unit: "pt", range: 0...1000) }
-                            }
-                            .padding(.leading, 12)
+                }
+                .padding(.leading, 12)
+                HStack(alignment: .top, spacing: 32) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("여백")
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                            GridRow { FieldLabel("왼쪽"); SpinField(value: length(\.marginLeft), unit: "pt", range: 0...1000) }
+                            GridRow { FieldLabel("오른쪽"); SpinField(value: length(\.marginRight), unit: "pt", range: 0...1000) }
                         }
-                        VStack(alignment: .leading, spacing: 8) {
-                            GroupTitle("첫 줄")
-                            HStack(alignment: .bottom, spacing: 10) {
-                                Picker("첫 줄", selection: firstLine) {
-                                    Text("보통").tag(FirstLine.normal)
-                                    Text("들여쓰기").tag(FirstLine.indent)
-                                    Text("내어쓰기").tag(FirstLine.hang)
-                                }
-                                .pickerStyle(.radioGroup)
-                                .labelsHidden()
-                                SpinField(value: Binding { abs(style.indent ?? 0) } set: {
-                                    style.indent = (style.indent ?? 0) < 0 ? -$0 : $0
-                                }, unit: "pt", range: 0...1000)
-                                .disabled((style.indent ?? 0) == 0)
-                            }
-                            .padding(.leading, 12)
-                        }
+                        .padding(.leading, 12)
                     }
-                    GroupTitle("간격")
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            FieldLabel("줄 간격")
-                            Picker("줄 간격", selection: Binding { style.lineSpacingKind ?? .percent } set: { kind in
-                                guard kind != style.lineSpacingKind else { return }
-                                style.lineSpacingKind = kind
-                                style.lineSpacing = kind == .percent ? 160 : 12
-                            }) {
-                                Text("글자에 따라").tag(LineSpacingKind.percent)
-                                Text("고정 값").tag(LineSpacingKind.fixed)
-                                Text("여백만 지정").tag(LineSpacingKind.spaceOnly)
-                                Text("최소").tag(LineSpacingKind.minimum)
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("첫 줄")
+                        HStack(alignment: .bottom, spacing: 10) {
+                            Picker("첫 줄", selection: firstLine) {
+                                Text("보통").tag(FirstLine.normal)
+                                Text("들여쓰기").tag(FirstLine.indent)
+                                Text("내어쓰기").tag(FirstLine.hang)
                             }
+                            .pickerStyle(.radioGroup)
                             .labelsHidden()
-                            .fixedSize()
-                            FieldLabel("문단 위")
-                            SpinField(value: length(\.spacingBefore), unit: "pt", range: 0...1000)
+                            SpinField(value: Binding { abs(style.indent ?? 0) } set: {
+                                style.indent = (style.indent ?? 0) < 0 ? -$0 : $0
+                            }, unit: "pt", range: 0...1000)
+                            .disabled((style.indent ?? 0) == 0)
                         }
-                        GridRow {
-                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
-                            let percent = (style.lineSpacingKind ?? .percent) == .percent
-                            SpinField(value: length(\.lineSpacing), unit: percent ? "%" : "pt",
-                                      range: percent ? 50...500 : 0...1000)
-                            FieldLabel("문단 아래")
-                            SpinField(value: length(\.spacingAfter), unit: "pt", range: 0...1000)
+                        .padding(.leading, 12)
+                    }
+                }
+                GroupTitle("간격")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("줄 간격")
+                        Picker("줄 간격", selection: Binding { style.lineSpacingKind ?? .percent } set: { kind in
+                            guard kind != style.lineSpacingKind else { return }
+                            style.lineSpacingKind = kind
+                            style.lineSpacing = kind == .percent ? 160 : 12
+                        }) {
+                            Text("글자에 따라").tag(LineSpacingKind.percent)
+                            Text("고정 값").tag(LineSpacingKind.fixed)
+                            Text("여백만 지정").tag(LineSpacingKind.spaceOnly)
+                            Text("최소").tag(LineSpacingKind.minimum)
                         }
+                        .labelsHidden()
+                        .fixedSize()
+                        FieldLabel("문단 위")
+                        SpinField(value: length(\.spacingBefore), unit: "pt", range: 0...1000)
                     }
-                    .padding(.leading, 12)
-                }
-                .padding(16)
-                .tabItem { Text("기본") }
-                VStack(alignment: .leading, spacing: 8) {
-                    GroupTitle("기타")
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("외톨이줄 보호", isOn: flag(\.widowOrphan))
-                        Toggle("다음 문단과 함께", isOn: flag(\.keepWithNext))
-                        Toggle("문단 보호", isOn: flag(\.keepLines))
-                        Toggle("문단 앞에서 항상 쪽 나눔", isOn: flag(\.pageBreakBefore))
+                    GridRow {
+                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        let percent = (style.lineSpacingKind ?? .percent) == .percent
+                        SpinField(value: length(\.lineSpacing), unit: percent ? "%" : "pt",
+                                  range: percent ? 50...500 : 0...1000)
+                        FieldLabel("문단 아래")
+                        SpinField(value: length(\.spacingAfter), unit: "pt", range: 0...1000)
                     }
-                    .padding(.leading, 12)
-                    Spacer(minLength: 0)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .tabItem { Text("확장") }
+                .padding(.leading, 12)
+                GroupTitle("줄 나눔 기준")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("한글 단위")
+                        Picker("한글 단위", selection: unit(\.koreanBreakUnit, 1)) {
+                            Text("글자").tag(1)
+                            Text("어절").tag(0)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    GridRow {
+                        FieldLabel("영문 단위")
+                        Picker("영문 단위", selection: unit(\.englishBreakUnit, 0)) {
+                            Text("단어").tag(0)
+                            Text("하이픈").tag(1)
+                            Text("글자").tag(2)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                .padding(.leading, 12)
             }
             .dialogTabs()
         } confirm: {
@@ -322,7 +327,7 @@ struct ParaShapeSheet: View {
     private func length(_ key: WritableKeyPath<ParaStyle, Double?>) -> Binding<Double> {
         Binding { style[keyPath: key] ?? 0 } set: { style[keyPath: key] = $0 }
     }
-    private func flag(_ key: WritableKeyPath<ParaStyle, Bool?>) -> Binding<Bool> {
-        Binding { style[keyPath: key] ?? false } set: { style[keyPath: key] = $0 }
+    private func unit(_ key: WritableKeyPath<ParaStyle, Int?>, _ fallback: Int) -> Binding<Int> {
+        Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
     }
 }

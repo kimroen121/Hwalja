@@ -2,6 +2,15 @@ import SwiftUI
 
 // Objects (pictures, equations, tables): their commands and 개체 속성.
 
+/// The positions of 입력 › 캡션 넣기, in the web editor's order and names.
+enum Captions {
+    static let all: [(title: String, value: String)] = [
+        ("위", "Top"), ("왼쪽 위", "LeftTop"), ("왼쪽 가운데", "LeftCenter"), ("왼쪽 아래", "LeftBottom"),
+        ("오른쪽 위", "RightTop"), ("오른쪽 가운데", "RightCenter"), ("오른쪽 아래", "RightBottom"),
+        ("아래", "Bottom"), ("캡션 없음", "None"),
+    ]
+}
+
 /// 개체 속성 as opened: the object with its properties, and for a table the cell
 /// holding the caret with its own.
 struct ObjectSheetState: Identifiable {
@@ -54,6 +63,16 @@ extension Viewer {
             var changed = props
             change(&changed)
             setObject(placed.object, changed.changes(from: props))
+        }
+    }
+    /// 캡션 넣기: for the selected object, or the table holding the caret.
+    func insertCaption(_ position: String) {
+        guard let document else { return }
+        if let placed = document.object {
+            setObject(placed.object, ObjectProps(caption: position))
+        } else if let target = document.selection?.focus.target, let cell = target.cell {
+            let table = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
+            setObject(table, ObjectProps(caption: position))
         }
     }
     func deleteObject() {
@@ -170,11 +189,7 @@ struct ObjectSheet: View {
             if kind != .equation {
                 GroupTitle("캡션")
                 Picker("캡션", selection: text(\.caption, "None")) {
-                    Text("캡션 없음").tag("None")
-                    Text("위").tag("Top")
-                    Text("아래").tag("Bottom")
-                    Text("왼쪽").tag("Left")
-                    Text("오른쪽").tag("Right")
+                    ForEach(Captions.all, id: \.value) { Text($0.title).tag($0.value) }
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -194,7 +209,7 @@ struct ObjectSheet: View {
             GroupTitle("그림 효과")
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
-                    FieldLabel("색조")
+                    FieldLabel("색조 조정")
                     Picker("색조", selection: text(\.effect, "RealPic")) {
                         Text("효과 없음").tag("RealPic")
                         Text("회색조").tag("GrayScale")

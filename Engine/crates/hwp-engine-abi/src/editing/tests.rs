@@ -597,7 +597,7 @@ fn objects_are_found_changed_and_deleted() {
         effect: Some("GrayScale".into()),
         brightness: Some(20),
         outer_margin_left: Some(283),
-        caption: Some("Top".into()),
+        caption: Some("LeftBottom".into()),
         ..Default::default()
     };
     run(
@@ -611,7 +611,7 @@ fn objects_are_found_changed_and_deleted() {
     let props = s.object_props(&picture).unwrap();
     assert_eq!((props.width, props.height), (Some(15_000), Some(15_000)));
     assert_eq!(props.effect.as_deref(), Some("GrayScale"));
-    assert_eq!(props.caption.as_deref(), Some("Top"));
+    assert_eq!(props.caption.as_deref(), Some("LeftBottom"));
     assert_eq!(
         (props.brightness, props.outer_margin_left),
         (Some(20), Some(283))
@@ -652,7 +652,7 @@ fn objects_are_found_changed_and_deleted() {
         repeat_header: Some(true),
         outer_margin_top: Some(567),
         page_break: Some(2),
-        caption: Some("Bottom".into()),
+        caption: Some("RightCenter".into()),
         ..Default::default()
     };
     run(
@@ -665,7 +665,7 @@ fn objects_are_found_changed_and_deleted() {
     .unwrap();
     let props = s.object_props(&table).unwrap();
     assert_eq!(props.repeat_header, Some(true));
-    assert_eq!(props.caption.as_deref(), Some("Bottom"));
+    assert_eq!(props.caption.as_deref(), Some("RightCenter"));
     assert_eq!(
         (props.outer_margin_top, props.page_break),
         (Some(567), Some(2))
@@ -1657,4 +1657,21 @@ fn cell_blocks_merge_split_and_equalize() {
         };
         assert_eq!(run(&mut s, one).unwrap_err(), EditError::InvalidInput);
     }
+}
+
+#[test]
+fn line_break_units_are_set_and_read() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let style = ParaStyle {
+        korean_break_unit: Some(0),
+        english_break_unit: Some(2),
+        ..Default::default()
+    };
+    let selection = EditSelection::caret(point(body(), 0));
+    run(&mut s, EditCommand::FormatParagraphs { selection, style }).unwrap();
+    let format = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    assert_eq!(
+        (format.korean_break_unit, format.english_break_unit),
+        (Some(0), Some(2))
+    );
 }

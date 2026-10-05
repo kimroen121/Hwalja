@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-// 수식 편집기: Hancom's equation script with its template and symbol palettes, and a
+// 수식: Hancom's equation script with its template and symbol palettes, and a
 // preview drawn by the same renderer as the page.
 
-/// The equation 수식 편집기 is showing: a new one, or `object` being changed.
+/// The equation 수식 is showing: a new one, or `object` being changed.
 struct EquationEdit: Identifiable {
     let id = UUID()
     var object: ObjectRef?
@@ -17,7 +17,7 @@ struct EquationEdit: Identifiable {
 
 extension Viewer {
 
-    /// Opens 수식 편집기 for a new equation in the caret's text size.
+    /// Opens 수식 for a new equation in the caret's text size.
     func newEquation() {
         equation = EquationEdit(script: "", fontSize: document?.format?.text.size ?? 10, color: 0)
     }
@@ -34,75 +34,74 @@ extension Viewer {
     }
 }
 
-/// A palette entry: what it shows and the script it puts at the caret. `{}` marks the
-/// places to fill; the caret lands in the first.
+/// A palette entry: what it shows and the script it puts at the caret (also its help).
+/// `{}` marks the places to fill; the caret lands in the first.
 struct EquationItem: Hashable {
-    let title: String
     let sample: String
     let script: String
 }
 
-/// The palettes, in Hancom's order and names.
+/// The palettes, in Hancom's order.
 enum EquationPalette {
     /// Each palette with the sample its button shows.
-    static let templates: [(title: String, face: String, items: [EquationItem])] = [
-        ("첨자", "{x}^{2}", [
-            EquationItem(title: "위 첨자", sample: "{x}^{2}", script: "{}^{}"),
-            EquationItem(title: "아래 첨자", sample: "{x}_{1}", script: "{}_{}"),
-            EquationItem(title: "위아래 첨자", sample: "{x}_{1}^{2}", script: "{}_{}^{}"),
+    static let templates: [(face: String, items: [EquationItem])] = [
+        ("{x}^{2}", [
+            EquationItem(sample: "{x}^{2}", script: "{}^{}"),
+            EquationItem(sample: "{x}_{1}", script: "{}_{}"),
+            EquationItem(sample: "{x}_{1}^{2}", script: "{}_{}^{}"),
         ]),
-        ("장식 기호", "bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
-            EquationItem(title: $0, sample: "\($0) a", script: "\($0) {}")
+        ("bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
+            EquationItem(sample: "\($0) a", script: "\($0) {}")
         }),
-        ("분수", "{a} over {b}", [
-            EquationItem(title: "분수", sample: "{a} over {b}", script: "{} over {}"),
-            EquationItem(title: "위아래", sample: "{a} atop {b}", script: "{} atop {}"),
+        ("{a} over {b}", [
+            EquationItem(sample: "{a} over {b}", script: "{} over {}"),
+            EquationItem(sample: "{a} atop {b}", script: "{} atop {}"),
         ]),
-        ("근호", "sqrt {x}", [
-            EquationItem(title: "제곱근", sample: "sqrt {x}", script: "sqrt {}"),
-            EquationItem(title: "거듭제곱근", sample: "root {n} of {x}", script: "root {} of {}"),
+        ("sqrt {x}", [
+            EquationItem(sample: "sqrt {x}", script: "sqrt {}"),
+            EquationItem(sample: "root {n} of {x}", script: "root {} of {}"),
         ]),
-        ("합", "sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
-            EquationItem(title: $0, sample: "\($0) from {i} to {n}", script: "\($0) from {} to {}")
+        ("sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
+            EquationItem(sample: "\($0) from {i} to {n}", script: "\($0) from {} to {}")
         }),
-        ("적분", "int", [
-            EquationItem(title: "int", sample: "int from {a} to {b}", script: "int from {} to {}"),
-            EquationItem(title: "iint", sample: "iint", script: "iint "),
-            EquationItem(title: "iiint", sample: "iiint", script: "iiint "),
-            EquationItem(title: "oint", sample: "oint", script: "oint "),
+        ("int", [
+            EquationItem(sample: "int from {a} to {b}", script: "int from {} to {}"),
+            EquationItem(sample: "iint", script: "iint "),
+            EquationItem(sample: "iiint", script: "iiint "),
+            EquationItem(sample: "oint", script: "oint "),
         ]),
-        ("극한", "lim", [
-            EquationItem(title: "lim", sample: "lim from {x rarrow 0}", script: "lim from {}"),
-            EquationItem(title: "Lim", sample: "Lim from {n rarrow INF}", script: "Lim from {}"),
+        ("lim", [
+            EquationItem(sample: "lim from {x rarrow 0}", script: "lim from {}"),
+            EquationItem(sample: "Lim from {n rarrow INF}", script: "Lim from {}"),
         ]),
-        ("괄호", "left ( a right )", [("(", ")"), ("[", "]"), ("lbrace", "rbrace"), ("|", "|"), ("langle", "rangle"), ("lceil", "rceil"),
+        ("left ( a right )", [("(", ")"), ("[", "]"), ("lbrace", "rbrace"), ("|", "|"), ("langle", "rangle"), ("lceil", "rceil"),
                  ("lfloor", "rfloor")].map {
-            EquationItem(title: "\($0.0) \($0.1)", sample: "left \($0.0) a right \($0.1)", script: "left \($0.0) {} right \($0.1)")
+            EquationItem(sample: "left \($0.0) a right \($0.1)", script: "left \($0.0) {} right \($0.1)")
         }),
-        ("경우", "cases{a # b}", [EquationItem(title: "cases", sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
-        ("세로 쌓기", "pile{a # b}", ["pile", "lpile", "rpile"].map {
-            EquationItem(title: $0, sample: "\($0){a # bb}", script: "\($0){ # }")
+        ("cases{a # b}", [EquationItem(sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
+        ("pile{a # b}", ["pile", "lpile", "rpile"].map {
+            EquationItem(sample: "\($0){a # bb}", script: "\($0){ # }")
         }),
-        ("행렬", "matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
-            EquationItem(title: $0, sample: "\($0){a & b # c & d}", script: "\($0){ & # & }")
+        ("matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
+            EquationItem(sample: "\($0){a & b # c & d}", script: "\($0){ & # & }")
         }),
     ]
 
-    static let symbols: [(title: String, items: [EquationItem])] = [
-        ("그리스 대문자", group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω")),
-        ("그리스 소문자", group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω")),
-        ("그리스 기호", group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω")),
-        ("합·집합 기호", group("SUM ∑ PROD ∏ COPROD ∐ INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ EMPTYSET ∅")),
-        ("연산·논리 기호", group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ LNOT ¬ FORALL ∀ EXIST ∃ THEREFORE ∴ BECAUSE ∵ PARTIAL ∂ nabla ∇ VDASH ⊢ MODELS ⊨")),
-        ("화살표", group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪")),
-        ("기타 기호", group("INF ∞ DEG ° prime ′ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇")),
+    static let symbols: [[EquationItem]] = [
+        group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω"),
+        group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω"),
+        group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω"),
+        group("SUM ∑ PROD ∏ COPROD ∐ INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ EMPTYSET ∅"),
+        group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ LNOT ¬ FORALL ∀ EXIST ∃ THEREFORE ∴ BECAUSE ∵ PARTIAL ∂ nabla ∇ VDASH ⊢ MODELS ⊨"),
+        group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪"),
+        group("INF ∞ DEG ° prime ′ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇"),
     ]
 
     /// "keyword glyph keyword glyph …" as items that show the glyph and put the keyword.
     private static func group(_ pairs: String) -> [EquationItem] {
         let words = pairs.split(separator: " ").map(String.init)
         return stride(from: 0, to: words.count - 1, by: 2).map {
-            EquationItem(title: words[$0], sample: words[$0 + 1], script: words[$0])
+            EquationItem(sample: words[$0 + 1], script: words[$0])
         }
     }
 }
@@ -168,7 +167,6 @@ private struct Sample: View {
 
 /// One palette in the editor's tool row: its first sample, opening a grid of all of them.
 private struct PaletteButton: View {
-    let title: String
     /// The button's sample; the first item's when nil.
     var face: String?
     let items: [EquationItem]
@@ -191,11 +189,9 @@ private struct PaletteButton: View {
             .frame(height: 30)
         }
         .buttonStyle(ToolButtonStyle(on: open))
-        .help(title)
-        .accessibilityLabel(title)
+        .help(face ?? items[0].script)
         .popover(isPresented: $open, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.callout.weight(.semibold))
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(symbols ? 30 : 76), spacing: 4),
                                          count: symbols ? 8 : min(4, items.count)), spacing: 4) {
                     ForEach(items, id: \.self) { item in
@@ -206,7 +202,7 @@ private struct PaletteButton: View {
                             face(item).frame(width: symbols ? 30 : 76, height: symbols ? 30 : 52)
                         }
                         .buttonStyle(ToolButtonStyle())
-                        .help(item.title)
+                        .help(item.script)
                     }
                 }
             }
@@ -223,7 +219,7 @@ private struct PaletteButton: View {
     }
 }
 
-/// 수식 편집기: palettes and size above, the preview, and the script below it.
+/// 수식: palettes and size above, the preview, and the script below it.
 struct EquationEditor: View {
     let viewer: Viewer
     let renderer: EquationRenderer
@@ -243,7 +239,7 @@ struct EquationEditor: View {
     }
 
     var body: some View {
-        DialogFrame("수식 편집기", confirmTitle: edit.object == nil ? "넣기" : "확인", canConfirm: valid) {
+        DialogFrame("수식", canConfirm: valid) {
             editor
         } confirm: {
             viewer.commit(edit)
@@ -259,16 +255,15 @@ struct EquationEditor: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 1) {
-                ForEach(EquationPalette.templates, id: \.title) { palette in
-                    PaletteButton(title: palette.title, face: palette.face, items: palette.items, renderer: renderer,
-                                  symbols: false) {
+                ForEach(EquationPalette.templates, id: \.face) { palette in
+                    PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: false) {
                         script.insert($0.script)
                     }
                 }
             }
             HStack(spacing: 1) {
-                ForEach(EquationPalette.symbols, id: \.title) { palette in
-                    PaletteButton(title: palette.title, items: palette.items, renderer: renderer, symbols: true) {
+                ForEach(EquationPalette.symbols, id: \.self) { items in
+                    PaletteButton(items: items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
                     }
                 }

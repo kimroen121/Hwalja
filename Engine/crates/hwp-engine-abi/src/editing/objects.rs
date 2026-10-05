@@ -12,8 +12,22 @@ const TABLE_NAMES: [(&str, &str); 4] = [
     ("outerMarginTop", "outerTop"),
     ("outerMarginBottom", "outerBottom"),
 ];
-/// Caption sides in the order rhwp numbers them for tables.
+/// Caption sides and, beside the object, their alignment, in the order rhwp numbers them
+/// for tables.
 const CAPTION_SIDES: [&str; 4] = ["Left", "Right", "Top", "Bottom"];
+const CAPTION_ALIGNS: [&str; 3] = ["Top", "Center", "Bottom"];
+/// The positions of 캡션 넣기: above, below, or beside at the top, middle or bottom.
+pub(super) const CAPTIONS: [&str; 9] = [
+    "None",
+    "Top",
+    "Bottom",
+    "LeftTop",
+    "LeftCenter",
+    "LeftBottom",
+    "RightTop",
+    "RightCenter",
+    "RightBottom",
+];
 /// Longest equation script accepted, in characters.
 const SCRIPT_LIMIT: usize = 4096;
 
@@ -29,37 +43,41 @@ fn object_json(props: &impl Serialize) -> Map<String, Value> {
         _ => Map::new(),
     }
 }
-/// Reads rhwp's caption fields as one `caption` side.
+/// Reads rhwp's caption fields as one `caption` position.
 fn read_caption(map: &mut Map<String, Value>) {
-    let side = match map.get("captionDirection") {
-        Some(Value::Number(n)) => n
-            .as_u64()
-            .and_then(|n| CAPTION_SIDES.get(n as usize))
-            .map(|s| s.to_string()),
-        Some(Value::String(s)) => Some(s.clone()),
+    let name = |key: &str, names: &[&'static str]| match map.get(key) {
+        Some(Value::Number(n)) => n.as_u64().and_then(|n| names.get(n as usize).copied()),
+        Some(Value::String(s)) => names.iter().find(|n| **n == s.as_str()).copied(),
         _ => None,
     };
-    let has = map.get("hasCaption") == Some(&Value::Bool(true));
-    let side = if has {
-        side.unwrap_or("Bottom".into())
-    } else {
-        "None".into()
+    let side = name("captionDirection", &CAPTION_SIDES).unwrap_or("Bottom");
+    let align = name("captionVertAlign", &CAPTION_ALIGNS).unwrap_or("Top");
+    let position = match (map.get("hasCaption") == Some(&Value::Bool(true)), side) {
+        (false, _) => "None".to_string(),
+        (true, "Left" | "Right") => format!("{side}{align}"),
+        (true, _) => side.to_string(),
     };
-    map.insert("caption".into(), Value::String(side));
+    map.insert("caption".into(), Value::String(position));
 }
-/// Writes `caption` as rhwp's caption fields; tables number the side.
+/// Writes `caption` as rhwp's caption fields; tables number them.
 fn write_caption(map: &mut Map<String, Value>, table: bool) {
-    let Some(Value::String(side)) = map.remove("caption") else {
+    let Some(Value::String(position)) = map.remove("caption") else {
         return;
     };
-    map.insert("hasCaption".into(), Value::Bool(side != "None"));
-    if side != "None" {
-        let direction = match CAPTION_SIDES.iter().position(|s| *s == side) {
-            Some(n) if table => Value::from(n),
-            _ => Value::String(side),
-        };
-        map.insert("captionDirection".into(), direction);
+    map.insert("hasCaption".into(), Value::Bool(position != "None"));
+    if position == "None" {
+        return;
     }
+    let (side, align) = ["Left", "Right"]
+        .iter()
+        .find_map(|side| position.strip_prefix(side).map(|align| (*side, align)))
+        .unwrap_or((position.as_str(), "Top"));
+    let value = |name: &str, names: &[&str]| match names.iter().position(|n| *n == name) {
+        Some(n) if table => Value::from(n),
+        _ => Value::String(name.to_string()),
+    };
+    map.insert("captionDirection".into(), value(side, &CAPTION_SIDES));
+    map.insert("captionVertAlign".into(), value(align, &CAPTION_ALIGNS));
 }
 fn rename(mut map: Map<String, Value>, to_table: bool) -> Map<String, Value> {
     for (object, table) in TABLE_NAMES {
@@ -272,7 +290,7 @@ impl EditSession {
             && one_of(&props.vert_rel_to, &["Paper", "Page", "Para"])
             && one_of(&props.vert_align, &["Top", "Center", "Bottom"])
             && one_of(&props.effect, &["RealPic", "GrayScale", "BlackWhite"])
-            && one_of(&props.caption, &["None", "Top", "Bottom", "Left", "Right"])
+            && one_of(&props.caption, &CAPTIONS)
             && (o.kind != ObjectKind::Equation || props.caption.is_none())
             && props.script.as_deref().is_none_or(is_script)
             && props.font_size.is_none_or(|v| (100..=12_700).contains(&v))

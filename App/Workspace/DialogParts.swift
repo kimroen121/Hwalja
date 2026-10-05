@@ -37,7 +37,7 @@ struct DialogFrame<Content: View>: View {
 
 extension View {
     /// The width every tabbed dialog shares.
-    func dialogTabs() -> some View { frame(width: 460) }
+    func dialogTabs() -> some View { frame(width: 460, alignment: .topLeading) }
 }
 
 /// A group's name.
@@ -93,8 +93,9 @@ struct ColorWell: View {
         HStack(spacing: 6) {
             ColorPicker("", selection: Binding { HexColor.color(hex) } set: { hex = HexColor.hex($0) }, supportsOpacity: false)
                 .labelsHidden()
-            if let none, hex != none {
-                Button("없음") { hex = none }.buttonStyle(.borderless)
+            if let none {
+                Button { hex = none } label: { Image(nsImage: FormatChoices.swatch(none, none: true)) }
+                    .buttonStyle(ToolButtonStyle(on: hex == none))
             }
         }
     }

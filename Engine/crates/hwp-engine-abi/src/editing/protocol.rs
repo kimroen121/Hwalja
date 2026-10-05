@@ -211,7 +211,8 @@ pub struct ObjectProps {
     pub vert_offset: Option<i32>,
     pub restrict_in_page: Option<bool>,
     pub allow_overlap: Option<bool>,
-    /// Pictures and tables: None, Top, Bottom, Left, Right.
+    /// Pictures and tables: None, Top, Bottom, or Left/Right with Top, Center or Bottom
+    /// (LeftTop … RightBottom), the positions of 캡션 넣기.
     pub caption: Option<String>,
     pub outer_margin_left: Option<i32>,
     pub outer_margin_right: Option<i32>,
@@ -387,6 +388,10 @@ pub struct ParaStyle {
     pub keep_lines: Option<bool>,
     pub widow_orphan: Option<bool>,
     pub page_break_before: Option<bool>,
+    /// 줄 나눔 기준 for Korean: 0 어절, 1 글자.
+    pub korean_break_unit: Option<u8>,
+    /// 줄 나눔 기준 for Latin: 0 단어, 1 하이픈, 2 글자.
+    pub english_break_unit: Option<u8>,
 }
 /// A caret motion, resolved against the engine's line layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

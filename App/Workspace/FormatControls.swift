@@ -5,15 +5,11 @@ import SwiftUI
 enum FormatChoices {
     static let sizes: [Double] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
     static let lineSpacings: [Double] = [100, 130, 160, 180, 200, 250, 300]
-    static let colors: [(name: String, hex: String)] = [
-        ("검정", "#000000"), ("회색", "#808080"), ("빨강", "#ff0000"), ("주황", "#ff8000"),
-        ("노랑", "#ffd700"), ("초록", "#008000"), ("파랑", "#0000ff"), ("남색", "#000080"), ("보라", "#800080"),
-    ]
-    /// 형광펜 colors; white removes the highlight.
-    static let highlights: [(name: String, hex: String)] = [
-        ("노랑", "#ffff00"), ("연두", "#a6ff4d"), ("하늘", "#66ffff"), ("분홍", "#ff99cc"), ("주황", "#ffc04d"),
-        ("없음", "#ffffff"),
-    ]
+    static let colors = ["#000000", "#808080", "#ff0000", "#ff8000", "#ffd700", "#008000", "#0000ff", "#000080", "#800080"]
+    /// 형광펜 colors; `none` removes the highlight.
+    static let highlights = ["#ffff00", "#a6ff4d", "#66ffff", "#ff99cc", "#ffc04d"]
+    /// No color: white, drawn as the web editor's slashed swatch.
+    static let none = "#ffffff"
     /// Installed font families, by the name the user reads.
     static let families: [(name: String, family: String)] = NSFontManager.shared.availableFontFamilies
         .filter { !$0.hasPrefix(".") }
@@ -33,15 +29,28 @@ enum FormatChoices {
     static func points(_ size: Double) -> String {
         size.rounded() == size ? "\(Int(size)) pt" : String(format: "%.1f pt", size)
     }
-    static func swatch(_ hex: String) -> NSImage {
+    /// A square of `hex`; `none` is white with a red slash, as in the web editor.
+    static func swatch(_ hex: String, none: Bool = false) -> NSImage {
         let value = Int(hex.dropFirst(), radix: 16) ?? 0
         let color = NSColor(srgbRed: CGFloat(value >> 16 & 255) / 255, green: CGFloat(value >> 8 & 255) / 255,
                             blue: CGFloat(value & 255) / 255, alpha: 1)
-        return NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            let square = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: 2, yRadius: 2)
             color.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
+            square.fill()
+            NSColor.separatorColor.setStroke()
+            square.stroke()
+            if none {
+                let slash = NSBezierPath()
+                slash.move(to: NSPoint(x: rect.minX + 2, y: rect.minY + 2))
+                slash.line(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 2))
+                NSColor.systemRed.setStroke()
+                slash.stroke()
+            }
             return true
         }
+        image.accessibilityDescription = hex
+        return image
     }
 }
 
@@ -69,18 +78,18 @@ struct FormatRow: View {
                 ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
                 ToolIcon("기울임", glyph: Text("가").italic(), on: text?.italic == true) { editor.toggleItalic() }
                 ToolIcon("밑줄", glyph: Text("가").underline(), on: text?.underline == true) { editor.toggleUnderline() }
-                ShapeMenu(title: "밑줄 모양", colorTitle: "밑줄 색", pick: editor.format,
+                ShapeMenu(title: "밑줄", colorTitle: "밑줄 색", pick: editor.format,
                           shape: { CharStyle(underline: true, underlineShape: $0) },
                           color: { CharStyle(underline: true, underlineColor: $0) })
                 ToolIcon("취소선", glyph: Text("가").strikethrough(), on: text?.strikethrough == true) { editor.toggleStrikethrough() }
-                ShapeMenu(title: "취소선 모양", colorTitle: "취소선 색", pick: editor.format,
+                ShapeMenu(title: "취소선", colorTitle: "취소선 색", pick: editor.format,
                           shape: { CharStyle(strikethrough: true, strikeShape: $0) },
                           color: { CharStyle(strikethrough: true, strikeColor: $0) })
                 RowDivider()
                 ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
                           colors: FormatChoices.colors) { editor.format(CharStyle(color: $0)) }
                 ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
-                          colors: FormatChoices.highlights) { editor.format(CharStyle(shade: $0)) }
+                          colors: FormatChoices.highlights, clears: true) { editor.format(CharStyle(shade: $0)) }
             }
             .disabled(!context.canFormat)
             RowDivider()
@@ -231,8 +240,8 @@ private struct ShapeMenu: View {
             let shapes: [Choice?] = LineShapes.names.indices.map { index in
                 Choice(title: "", image: LineShapes.images[index]) { pick(shape(index)) }
             }
-            let colors: [Choice?] = FormatChoices.colors.map { color in
-                Choice(title: color.name, image: FormatChoices.swatch(color.hex)) { pick(self.color(color.hex)) }
+            let colors: [Choice?] = FormatChoices.colors.map { hex in
+                Choice(title: "", image: FormatChoices.swatch(hex)) { pick(self.color(hex)) }
             }
             DropDown.show(shapes + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: colors)],
                           below: anchor.view)
@@ -253,15 +262,13 @@ private struct Chevron: View {
 /// A color button: the symbol over a bar of the current color, with a palette.
 private struct ColorMenu: View {
     let title: String, symbol: String, current: String
-    let colors: [(name: String, hex: String)]
+    let colors: [String]
+    /// Offers `FormatChoices.none` after the colors.
+    var clears = false
     let pick: (String) -> Void
-    @State private var anchor = Anchor()
+    @State private var open = false
     var body: some View {
-        Button {
-            DropDown.show(colors.map { color in
-                Choice(title: color.name, image: FormatChoices.swatch(color.hex), on: color.hex == current) { pick(color.hex) }
-            }, below: anchor.view)
-        } label: {
+        Button { open = true } label: {
             HStack(spacing: 0) {
                 VStack(spacing: 1) {
                     Image(systemName: symbol).font(.system(size: 12, weight: .light))
@@ -271,9 +278,23 @@ private struct ColorMenu: View {
                 Chevron()
             }
         }
-        .buttonStyle(ToolButtonStyle())
-        .background(AnchorView(anchor: anchor))
+        .buttonStyle(ToolButtonStyle(on: open))
         .help(title)
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            HStack(spacing: 4) {
+                ForEach(colors + (clears ? [FormatChoices.none] : []), id: \.self) { hex in
+                    Button {
+                        open = false
+                        pick(hex)
+                    } label: {
+                        Image(nsImage: FormatChoices.swatch(hex, none: clears && hex == FormatChoices.none))
+                            .padding(3)
+                    }
+                    .buttonStyle(ToolButtonStyle(on: hex == current))
+                }
+            }
+            .padding(8)
+        }
     }
 }
 
