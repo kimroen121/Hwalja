@@ -386,6 +386,45 @@ impl EditSession {
         )?;
         Ok(())
     }
+    pub(super) fn validate_move(&self, o: &ObjectRef) -> Result<(), EditError> {
+        // Only an equation, which sits in the text like a character, is moved this way.
+        if o.kind != ObjectKind::Equation || o.cell.is_some() {
+            return Err(EditError::UnsupportedTarget);
+        }
+        self.control(o).map(|_| ())
+    }
+    /// Takes an equation out of its paragraph and puts it into the text at `to`.
+    pub(super) fn move_object(
+        &mut self,
+        o: &ObjectRef,
+        to: &EditPosition,
+    ) -> Result<(), EditError> {
+        let props = self.object_props(o)?;
+        let (script, font_size, color) = (
+            props.script.clone().ok_or(EditError::RenderFailed)?,
+            props.font_size.ok_or(EditError::RenderFailed)?,
+            props.color.unwrap_or(0),
+        );
+        self.delete_object(o)?;
+        let t = &to.target;
+        let inserted = self.core.insert_equation_native(
+            t.section as usize,
+            t.paragraph as usize,
+            to.scalar as usize,
+            &script,
+            font_size,
+            color,
+        )?;
+        let moved = ObjectRef {
+            control: parse::<Value>(Ok(inserted))?["controlIdx"]
+                .as_u64()
+                .ok_or(EditError::RenderFailed)? as u32,
+            section: t.section,
+            paragraph: t.paragraph,
+            ..o.clone()
+        };
+        self.set_object(&moved, &props)
+    }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         match o.kind {

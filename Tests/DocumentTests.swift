@@ -337,7 +337,7 @@ struct DocumentTests {
         let after = try #require(try await document.tableLines(page: 0).first { !$0.row && $0.line == 0 && $0.table == line.table })
         #expect(abs((after.at - line.at) * PageGeometry.pointsPerPixel - 30) < 2)
 
-        // A picture set in the text: clicked, sized, then dragged off its line.
+        // A picture set in the text: clicked, sized; dragging it neither moves it nor floats it.
         document.deselectObject()
         let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
         let end = try await document.paragraph(body).text.unicodeScalars.count
@@ -360,8 +360,29 @@ struct DocumentTests {
         #expect(abs(grown.width - (rect.width + 20)) < 2)
         await drag(NSPoint(x: grown.midX, y: grown.midY), NSPoint(x: grown.midX + 100, y: grown.midY + 120))
         let dropped = PageGeometry.viewRect(try #require(document.object).rect, in: page)
-        #expect(abs(dropped.minX - (grown.minX + 100)) < 2 && abs(dropped.minY - (grown.minY + 120)) < 2)
-        #expect(try await document.objectProps(inline.object).treatAsChar == false)
+        #expect(abs(dropped.minX - grown.minX) < 2 && abs(dropped.minY - grown.minY) < 2)
+        #expect(try await document.objectProps(inline.object).treatAsChar == true)
+    }
+
+    /// Changing an object leaves the text caret where it was.
+    @Test func objectChangesKeepTheCaret() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(nil) { _ in .insertPicture(EditPosition(target: self.body, scalar: 0), data: png, width: 7_500, height: 7_500,
+                                                  naturalWidth: 1, naturalHeight: 1, extension: "png", description: "p.png") }
+        await document.settle()
+        var found: PlacedObject?
+        for y in stride(from: 0.0, to: 1000, by: 5) where found == nil {
+            for x in stride(from: 0.0, to: 800, by: 10) where found == nil {
+                found = try await document.objectAt(page: 0, x: x, y: y)
+            }
+        }
+        let object = try #require(found).object
+        document.selection = .caret(EditPosition(target: body, scalar: 3))
+        document.edit(nil) { _ in .setObject(object, ObjectProps(width: 3_000, height: 3_000)) }
+        await document.settle()
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 3)))
     }
 
     /// Text typed after a click inside a 글상자 lands in the box; table commands stay off.

@@ -351,7 +351,7 @@ struct ParaShapeSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .tabItem { Text("테두리/배경") }.tag("테두리/배경")
             }
-            .frame(width: 520, height: 470)
+            .frame(width: 520, height: 400)
         } confirm: {
             var change = style.changesWithBorderFill(from: original)
             // The engine reads a line spacing by its kind, so they go together.
@@ -364,7 +364,7 @@ struct ParaShapeSheet: View {
     }
 
     private var basic: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             GroupTitle("정렬 방식")
             HStack(spacing: 6) {
                 ForEach(Alignment.allCases, id: \.self) { alignment in

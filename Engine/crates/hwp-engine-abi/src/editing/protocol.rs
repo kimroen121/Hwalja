@@ -130,6 +130,11 @@ pub enum EditCommand {
         cell: EditTarget,
         props: CellProps,
     },
+    /// Moves an equation to another place in the text of the body.
+    MoveObject {
+        object: ObjectRef,
+        to: EditPosition,
+    },
     /// Removes an object of the body.
     DeleteObject {
         object: ObjectRef,

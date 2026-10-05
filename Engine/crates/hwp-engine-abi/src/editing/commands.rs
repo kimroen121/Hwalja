@@ -266,6 +266,11 @@ impl EditSession {
     }
     /// Both ends valid, in one container, with only editable paragraphs between them.
     pub(super) fn validate_range(&self, selection: &EditSelection) -> Result<(), EditError> {
+        self.validate_span(selection, false)
+    }
+    /// Like `validate_range`; `whole` lets paragraphs that are read-only (fields, title
+    /// marks) lie between the ends, as when a replacement removes them entirely.
+    fn validate_span(&self, selection: &EditSelection, whole: bool) -> Result<(), EditError> {
         let (start, end) = ordered(selection);
         if !same_container(&start.target, &end.target) {
             return Err(EditError::UnsupportedTarget);
@@ -274,7 +279,8 @@ impl EditSession {
         self.validate_position(end)?;
         let all = paragraphs(self.core.document(), &start.target)?;
         let (s, e) = (index(&start.target), index(&end.target));
-        if all[s..=e].iter().any(|p| !editable(p)) {
+        let checked = if whole { &[] } else { &all[s..=e] };
+        if checked.iter().any(|p| !editable(p)) {
             return Err(EditError::UnsupportedTarget);
         }
         Ok(())
@@ -282,7 +288,7 @@ impl EditSession {
     pub(super) fn validate_command(&self, command: &EditCommand) -> Result<(), EditError> {
         match command {
             EditCommand::Replace { selection, text } => {
-                self.validate_range(selection)?;
+                self.validate_span(selection, true)?;
                 if text.len() > 1024 * 1024 {
                     return Err(EditError::ResourceLimit);
                 }
@@ -417,6 +423,11 @@ impl EditSession {
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
                 self.validate_object(object, &ObjectProps::default())
+            }
+            EditCommand::MoveObject { object, to } => {
+                body_only(&to.target)?;
+                self.validate_position(to)?;
+                self.validate_move(object)
             }
             EditCommand::ResizeTable { .. } => self.validate_resize(command),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
@@ -936,6 +947,10 @@ impl EditSession {
             EditCommand::SetCell { cell, props } => {
                 self.set_cell(cell, props)?;
                 Ok(self.kept(cell.section))
+            }
+            EditCommand::MoveObject { object, to } => {
+                self.move_object(object, to)?;
+                Ok(self.kept(object.section))
             }
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;

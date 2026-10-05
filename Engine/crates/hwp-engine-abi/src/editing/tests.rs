@@ -2171,3 +2171,56 @@ fn picture_in_a_table_cell_floats_beside_the_table() {
     run(&mut s, EditCommand::Undo).unwrap();
     assert!(s.placed(0).unwrap().is_empty());
 }
+
+#[test]
+fn an_equation_moves_within_the_text() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertEquation {
+            position: point(body(), 1),
+            script: "x^2".into(),
+            font_size: 1000,
+            color: 0,
+        };
+        run(&mut s, insert).unwrap();
+        let host = 1;
+        let find = |s: &EditSession, paragraph: usize| {
+            s.core.document().sections[0].paragraphs[paragraph]
+                .controls
+                .iter()
+                .position(|c| matches!(c, Control::Equation(_)))
+        };
+        let control = find(&s, host).unwrap() as u32;
+        let object = ObjectRef {
+            kind: ObjectKind::Equation,
+            section: 0,
+            paragraph: host as u32,
+            control,
+            cell: None,
+        };
+        for to in [point(body(), 0), point(commands::at_index(&body(), 0), 0)] {
+            let target = to.target.paragraph as usize;
+            let command = EditCommand::MoveObject {
+                object: ObjectRef {
+                    paragraph: if target == host {
+                        host as u32
+                    } else {
+                        host as u32
+                    },
+                    control: find(&s, host).unwrap_or(0) as u32,
+                    ..object.clone()
+                },
+                to,
+            };
+            run(&mut s, command).unwrap();
+            assert!(find(&s, target).is_some());
+            let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+            assert!(reopened.core.document().sections[0].paragraphs[target]
+                .controls
+                .iter()
+                .any(|c| matches!(c, Control::Equation(_))));
+            run(&mut s, EditCommand::Undo).unwrap();
+            assert!(find(&s, host).is_some());
+        }
+    }
+}

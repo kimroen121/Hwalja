@@ -34,8 +34,8 @@ struct ToolRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 2) { tiles(context) }
                     .padding(.horizontal, 8)
-                    .padding(.top, 10)
-                    .padding(.bottom, 1)
+                    .padding(.top, 5)
+                    .padding(.bottom, 8)
             }
         }
     }
@@ -76,7 +76,17 @@ struct ToolRow: View {
         ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
             .disabled(!context.inBody)
         RowDivider()
+        notes(context)
+        RowDivider()
+        ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
+            .disabled(!context.hasSelection)
+        RowDivider()
         shapes(context)
+        RowDivider()
+        objectProperties(context)
+        RowDivider()
+        headers
+        MarkTiles(viewer: viewer)
     }
 
     @ViewBuilder private func edit(_ context: EditingContext) -> some View {

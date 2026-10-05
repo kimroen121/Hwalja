@@ -238,6 +238,7 @@ impl EditSession {
                 })
             }
             EditCommand::SetObject { object, .. }
+            | EditCommand::MoveObject { object, .. }
             | EditCommand::DeleteObject { object }
             | EditCommand::ResizeTable { table: object, .. } => Some(EditPosition {
                 target: EditTarget {

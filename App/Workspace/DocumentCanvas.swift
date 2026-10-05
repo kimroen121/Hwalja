@@ -694,8 +694,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
     /// Gives the selected object the frame `rect` (view points) it was dragged or sized to.
     /// A floating object placed from the left (top) moves by its offset; one placed
-    /// otherwise, or a 글자처럼 취급 one, is placed on the paper where it was dropped.
-    private func place(_ rect: NSRect, from: NSRect) {
+    /// otherwise is placed on the paper where it was dropped. A 글자처럼 취급 equation moves
+    /// into the text at `drop`; other 글자처럼 취급 objects only change size.
+    private func place(_ rect: NSRect, from: NSRect, dropAt drop: NSPoint? = nil) {
         guard let model, let placed = model.object, rect != from,
               let frame = frame(ofPage: Int(placed.rect.page)) else { return }
         // View points are 1/72 inch; HWPUNIT is 1/7200 inch.
@@ -707,9 +708,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             if rect.size != from.size {
                 (change.width, change.height) = (UInt32(max(1, hwp(rect.width))), UInt32(max(1, hwp(rect.height))))
             }
-            let inline = props.treatAsChar == true
-            if inline, rect.origin != from.origin {
-                (change.treatAsChar, change.textWrap) = (false, "TopAndBottom")
+            let inline = props.treatAsChar == true || placed.object.kind == .equation
+            if inline, rect.origin != from.origin, rect.size == from.size {
+                guard placed.object.kind == .equation, let drop, let hit = enginePoint(drop) else { return }
+                let target = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+                guard let target, target.target.cell == nil, target.target.note == nil else { return NSSound.beep() }
+                model.edit(undoManager) { _ in .moveObject(placed.object, to: target) }
+                return
             }
             if rect.minX != from.minX {
                 if !inline, (props.horzAlign ?? "Left") == "Left" {
@@ -740,7 +745,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 place(resized(handle, from: from, to: point, keepRatio: keepsRatio(event)), from: from)
             case let .move(start, from, moved, click):
                 if moved {
-                    place(from.offsetBy(dx: point.x - start.x, dy: point.y - start.y), from: from)
+                    place(from.offsetBy(dx: point.x - start.x, dy: point.y - start.y), from: from, dropAt: point)
                 } else if let click, let model {
                     self.click(model, click, clicks: 1, extend: false)
                 }

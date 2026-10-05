@@ -401,6 +401,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             document.goalX = nil
             try await document.run(command)
             if case .deleteObject = command { document.object = nil }
+            if case .moveObject = command { document.object = nil }
             document.registerHistory(.undo, undoManager)
         }
     }

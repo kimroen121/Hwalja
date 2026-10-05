@@ -62,6 +62,8 @@ enum EditCommand: Encodable, Sendable {
     /// Changes the properties set in `props` of the cell holding `target`.
     case setCell(EditTarget, CellProps)
     case deleteObject(ObjectRef)
+    /// Moves an equation to another place in the text.
+    case moveObject(ObjectRef, to: EditPosition)
     /// Moves a table border: column `line` becomes `size` wide (or, with `row`, row `line` that high).
     case resizeTable(ObjectRef, row: Bool, line: UInt16, size: UInt32)
     /// Adds or removes a row or column of the table holding the cell `target`.
@@ -80,7 +82,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -180,6 +182,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setCell", forKey: .kind)
             try c.encode(cell, forKey: .cell)
             try c.encode(props, forKey: .props)
+        case let .moveObject(object, to):
+            try c.encode("moveObject", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(to, forKey: .to)
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)

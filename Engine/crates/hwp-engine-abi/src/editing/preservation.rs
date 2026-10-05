@@ -183,6 +183,14 @@ pub(super) fn check(
                 position.target.paragraph,
             )
         }
+        EditCommand::MoveObject { object, to } => {
+            return check_hosts(
+                before,
+                after,
+                object.section,
+                [object.paragraph, to.target.paragraph],
+            )
+        }
         EditCommand::SetObject { object, .. }
         | EditCommand::DeleteObject { object }
         | EditCommand::ResizeTable { table: object, .. } => {
@@ -507,6 +515,33 @@ fn check_host(
             return Err(EditError::PreservationFailed);
         }
         paragraphs.remove(paragraph as usize);
+    }
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, section)
+}
+/// Like `check_host`, for a change that touches two paragraphs.
+fn check_hosts(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    mut paragraphs: [u32; 2],
+) -> Result<(), EditError> {
+    paragraphs.sort_unstable_by(|a, b| b.cmp(a));
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let list = &mut doc.sections[section as usize].paragraphs;
+        for (i, &p) in paragraphs.iter().enumerate() {
+            if i > 0 && p == paragraphs[i - 1] {
+                continue;
+            }
+            if p as usize >= list.len() {
+                return Err(EditError::PreservationFailed);
+            }
+            list.remove(p as usize);
+        }
     }
     if !trim_appended(&mut a, &mut b) {
         return Err(EditError::PreservationFailed);
