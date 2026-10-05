@@ -834,6 +834,91 @@ fn formats_text_and_paragraphs_and_saves() {
     }
 }
 #[test]
+fn borders_and_backgrounds_are_set_read_and_saved() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let selection = EditSelection {
+            anchor: point(body(), 0),
+            focus: point(body(), 1),
+        };
+        let text = CharStyle {
+            border_line: Some(1),
+            border_width: Some(3),
+            border_color: Some("#0000FF".into()),
+            fill_color: Some("#FFFF00".into()),
+            pattern_color: Some("#000000".into()),
+            pattern: Some(0),
+            underline: Some(true),
+            underline_top: Some(true),
+            relative_size: Some(80.0),
+            offset: Some(-10.0),
+            ..Default::default()
+        };
+        let command = EditCommand::FormatText {
+            selection: selection.clone(),
+            style: text,
+        };
+        run(&mut s, command).unwrap();
+        let paragraph = ParaStyle {
+            border_line: Some(2),
+            border_width: Some(1),
+            border_color: Some("#ff0000".into()),
+            fill_color: Some("none".into()),
+            pattern_color: Some("#00ff00".into()),
+            pattern: Some(3),
+            border_connect: Some(true),
+            ..Default::default()
+        };
+        let command = EditCommand::FormatParagraphs {
+            selection: selection.clone(),
+            style: paragraph,
+        };
+        run(&mut s, command).unwrap();
+        let check = |s: &EditSession| {
+            let at = s.format(s.revision, &point(body(), 1)).unwrap();
+            let t = &at.text;
+            assert_eq!(
+                (t.border_line, t.border_width, t.border_color.as_deref()),
+                (Some(1), Some(3), Some("#0000ff"))
+            );
+            assert_eq!(
+                (t.fill_color.as_deref(), t.pattern),
+                (Some("#ffff00"), Some(0))
+            );
+            assert_eq!(
+                (t.underline_top, t.relative_size, t.offset),
+                (Some(true), Some(80.0), Some(-10.0))
+            );
+            let p = &at.paragraph;
+            assert_eq!((p.border_line, p.border_width), (Some(2), Some(1)));
+            assert_eq!(
+                (p.pattern, p.pattern_color.as_deref()),
+                (Some(3), Some("#00ff00"))
+            );
+            assert_eq!(p.border_connect, Some(true));
+        };
+        check(&s);
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        check(&EditSession::open(&saved).unwrap());
+        // Half a set is refused.
+        let half = CharStyle {
+            border_line: Some(1),
+            ..Default::default()
+        };
+        let command = EditCommand::FormatText {
+            selection,
+            style: half,
+        };
+        assert_eq!(run(&mut s, command).unwrap_err(), EditError::InvalidInput);
+    }
+}
+#[test]
 fn format_rejects_empty_changes() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let selection = EditSelection {

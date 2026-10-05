@@ -20,8 +20,20 @@ pub(super) fn validate_char(style: &CharStyle) -> Result<(), EditError> {
         .iter()
         .all(|s| s.is_none_or(|s| s <= 12));
     let scale_ok = style.ratio.is_none_or(|r| (50.0..=200.0).contains(&r))
-        && style.spacing.is_none_or(|s| (-50.0..=50.0).contains(&s));
-    if font_ok && size_ok && color_ok && shapes_ok && scale_ok && *style != CharStyle::default() {
+        && style.spacing.is_none_or(|s| (-50.0..=50.0).contains(&s))
+        && style
+            .relative_size
+            .is_none_or(|r| (10.0..=250.0).contains(&r))
+        && style.offset.is_none_or(|o| (-100.0..=100.0).contains(&o));
+    let border_ok = BorderFill::of_char(style).valid();
+    if font_ok
+        && size_ok
+        && color_ok
+        && shapes_ok
+        && scale_ok
+        && border_ok
+        && *style != CharStyle::default()
+    {
         Ok(())
     } else {
         Err(EditError::InvalidInput)
@@ -66,12 +78,130 @@ pub(super) fn validate_para(style: &ParaStyle) -> Result<(), EditError> {
         && style.korean_break_unit.is_none_or(|v| v <= 1)
         && style.english_break_unit.is_none_or(|v| v <= 2)
         && style.line_spacing_kind.is_some() == style.line_spacing.is_some()
+        && BorderFill::of_para(style).valid()
         && *style != ParaStyle::default()
     {
         Ok(())
     } else {
         Err(EditError::InvalidInput)
     }
+}
+/// 테두리 and 배경 of a character or paragraph change, all set or none.
+struct BorderFill<'a> {
+    line: Option<u8>,
+    width: Option<u8>,
+    color: Option<&'a String>,
+    fill: Option<&'a String>,
+    pattern_color: Option<&'a String>,
+    pattern: Option<u8>,
+}
+impl<'a> BorderFill<'a> {
+    fn of_char(s: &'a CharStyle) -> Self {
+        BorderFill {
+            line: s.border_line,
+            width: s.border_width,
+            color: s.border_color.as_ref(),
+            fill: s.fill_color.as_ref(),
+            pattern_color: s.pattern_color.as_ref(),
+            pattern: s.pattern,
+        }
+    }
+    fn of_para(s: &'a ParaStyle) -> Self {
+        BorderFill {
+            line: s.border_line,
+            width: s.border_width,
+            color: s.border_color.as_ref(),
+            fill: s.fill_color.as_ref(),
+            pattern_color: s.pattern_color.as_ref(),
+            pattern: s.pattern,
+        }
+    }
+    fn set(&self) -> [bool; 6] {
+        [
+            self.line.is_some(),
+            self.width.is_some(),
+            self.color.is_some(),
+            self.fill.is_some(),
+            self.pattern_color.is_some(),
+            self.pattern.is_some(),
+        ]
+    }
+    fn valid(&self) -> bool {
+        let set = self.set();
+        if set.iter().all(|s| !s) {
+            return true;
+        }
+        set.iter().all(|s| *s)
+            && self.line.is_some_and(|l| l <= 17)
+            && self.width.is_some_and(|w| w <= 15)
+            && self.pattern.is_some_and(|p| p <= 6)
+            && self.color.is_some_and(|c| color(c).is_some())
+            && self.pattern_color.is_some_and(|c| color(c).is_some())
+            && self.fill.is_some_and(|c| c == "none" || color(c).is_some())
+    }
+    /// rhwp's keys: the same line on all four sides, and a solid fill or none.
+    fn insert(&self, props: &mut Map<String, Value>) {
+        let (Some(line), Some(width), Some(c), Some(fill), Some(pc), Some(pattern)) = (
+            self.line,
+            self.width,
+            self.color,
+            self.fill,
+            self.pattern_color,
+            self.pattern,
+        ) else {
+            return;
+        };
+        let side = json!({ "type": line, "width": width, "color": c.to_lowercase() });
+        for key in ["borderLeft", "borderRight", "borderTop", "borderBottom"] {
+            props.insert(key.into(), side.clone());
+        }
+        // A pattern alone still needs a solid fill under it.
+        let none = fill == "none" && pattern == 0;
+        props.insert(
+            "fillType".into(),
+            json!(if none { "none" } else { "solid" }),
+        );
+        props.insert(
+            "fillColor".into(),
+            json!(if fill == "none" {
+                "#ffffff".into()
+            } else {
+                fill.to_lowercase()
+            }),
+        );
+        props.insert("patternColor".into(), json!(pc.to_lowercase()));
+        props.insert("patternType".into(), json!(pattern));
+    }
+}
+/// 테두리 and 배경 as rhwp reports them: the left side stands for all four.
+type ReadBorderFill = (
+    Option<u8>,
+    Option<u8>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<u8>,
+);
+fn read_border_fill(v: &Value) -> ReadBorderFill {
+    let side = &v["borderLeft"];
+    let text = |v: &Value| v.as_str().map(str::to_string);
+    let solid = v["fillType"] == "solid";
+    (
+        side["type"].as_u64().map(|n| n as u8),
+        side["width"].as_u64().map(|n| n as u8),
+        text(&side["color"]),
+        if solid {
+            text(&v["fillColor"])
+        } else {
+            Some("none".into())
+        },
+        text(&v["patternColor"]).or(Some("#000000".into())),
+        Some(if solid {
+            v["patternType"].as_u64().unwrap_or(0).min(6) as u8
+        } else {
+            0
+        }),
+    )
 }
 /// `#rrggbb` → the same string, normalized to lowercase.
 fn color(text: &str) -> Option<String> {
@@ -168,6 +298,10 @@ fn plain_para_props(style: &ParaStyle) -> Map<String, Value> {
             props.insert(key.into(), json!(value));
         }
     }
+    if let Some(on) = style.border_connect {
+        props.insert("borderConnect".into(), json!(on));
+    }
+    BorderFill::of_para(style).insert(&mut props);
     props
 }
 
@@ -263,8 +397,12 @@ impl EditSession {
                 props.insert(key.into(), json!(value));
             }
         }
-        if style.underline == Some(true) {
-            props.insert("underlineType".into(), json!("Bottom"));
+        if style.underline == Some(true) || style.underline_top.is_some() {
+            let top = style.underline_top == Some(true);
+            props.insert(
+                "underlineType".into(),
+                json!(if top { "Top" } else { "Bottom" }),
+            );
         }
         if let Some(c) = style.color.as_deref().and_then(color) {
             props.insert("textColor".into(), json!(c));
@@ -292,6 +430,13 @@ impl EditSession {
         if let Some(spacing) = style.spacing {
             props.insert("spacings".into(), json!(vec![spacing.round() as i8; 7]));
         }
+        if let Some(size) = style.relative_size {
+            props.insert("relativeSizes".into(), json!(vec![size.round() as u8; 7]));
+        }
+        if let Some(offset) = style.offset {
+            props.insert("charOffsets".into(), json!(vec![offset.round() as i8; 7]));
+        }
+        BorderFill::of_char(style).insert(&mut props);
         // One of superscript and subscript at a time.
         if let Some(on) = style.superscript {
             props.insert("superscript".into(), json!(on));
@@ -471,6 +616,9 @@ impl EditSession {
         let para_flag = |key: &str| para.get(key).and_then(Value::as_bool);
         let para_unit = |key: &str| para.get(key).and_then(Value::as_u64).map(|v| v as u8);
         let style = get(self.core.document(), t)?.style_id as u32;
+        let (line, width, border, fill, pattern_color, pattern) = read_border_fill(&text);
+        let (p_line, p_width, p_border, p_fill, p_pattern_color, p_pattern) =
+            read_border_fill(&para);
         Ok(Format {
             style,
             text_box: super::commands::in_text_box(self.core.document(), t),
@@ -510,6 +658,18 @@ impl EditSession {
                 shadow: on("shadowType"),
                 emboss: flag("emboss"),
                 engrave: flag("engrave"),
+                underline_top: text
+                    .get("underlineType")
+                    .and_then(Value::as_str)
+                    .map(|t| t == "Top"),
+                relative_size: first("relativeSizes"),
+                offset: first("charOffsets"),
+                border_line: line,
+                border_width: width,
+                border_color: border,
+                fill_color: fill,
+                pattern_color,
+                pattern,
             },
             paragraph: ParaStyle {
                 alignment: para
@@ -535,6 +695,13 @@ impl EditSession {
                 level: para_unit("paraLevel"),
                 korean_break_unit: para_unit("koreanBreakUnit"),
                 english_break_unit: para_unit("englishBreakUnit"),
+                border_line: p_line,
+                border_width: p_width,
+                border_color: p_border,
+                fill_color: p_fill,
+                pattern_color: p_pattern_color,
+                pattern: p_pattern,
+                border_connect: para_flag("borderConnect"),
             },
             fonts,
         })

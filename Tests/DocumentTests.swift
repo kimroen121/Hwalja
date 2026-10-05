@@ -653,6 +653,8 @@ struct DocumentTests {
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("char", AnyView(CharShapeSheet(style: format.text, viewer: viewer))),
             ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),
+            ("charExtended", AnyView(CharShapeSheet(style: format.text, viewer: viewer, tab: "확장"))),
+            ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),

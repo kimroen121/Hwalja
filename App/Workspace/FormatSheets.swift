@@ -64,85 +64,237 @@ enum LineShapes {
     }
 }
 
+/// Formats with 테두리 and 배경, which the engine takes all together.
+protocol BorderFillStyle: PartialFormat {
+    var borderLine: Int? { get set }
+    var borderWidth: Int? { get set }
+    var borderColor: String? { get set }
+    var fillColor: String? { get set }
+    var patternColor: String? { get set }
+    var pattern: Int? { get set }
+}
+extension CharStyle: BorderFillStyle {}
+extension ParaStyle: BorderFillStyle {}
+
+extension BorderFillStyle {
+    /// The changes from `old`, with all of 테두리 and 배경 when any of them changed.
+    func changesWithBorderFill(from old: Self) -> Self {
+        var change = changes(from: old)
+        let keys: [WritableKeyPath<Self, Int?>] = [\.borderLine, \.borderWidth, \.pattern]
+        let colors: [WritableKeyPath<Self, String?>] = [\.borderColor, \.fillColor, \.patternColor]
+        guard keys.contains(where: { change[keyPath: $0] != nil }) || colors.contains(where: { change[keyPath: $0] != nil })
+        else { return change }
+        change.borderLine = borderLine ?? 0
+        change.borderWidth = borderWidth ?? 0
+        change.borderColor = borderColor ?? "#000000"
+        change.fillColor = fillColor ?? "none"
+        change.patternColor = patternColor ?? "#000000"
+        change.pattern = pattern ?? 0
+        return change
+    }
+}
+
+/// 테두리 and 배경 side by side, as the web 글자 모양 확장 and 문단 모양 테두리/배경 tabs.
+struct BorderFillGroups<Style: BorderFillStyle, Extra: View>: View {
+    @Binding var style: Style
+    @ViewBuilder var extra: Extra
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 32) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("테두리")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("종류")
+                        ChoiceField(int(\.borderLine), Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
+                    }
+                    GridRow {
+                        FieldLabel("굵기")
+                        ChoiceField(int(\.borderWidth), Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, minWidth: 100)
+                    }
+                    GridRow {
+                        FieldLabel("색")
+                        ColorWell(hex: text(\.borderColor, "#000000"))
+                    }
+                }
+                .padding(.leading, 12)
+                extra.padding(.leading, 12)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("배경")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("면 색")
+                        ColorWell(hex: text(\.fillColor, "none"), none: "none")
+                    }
+                    GridRow {
+                        FieldLabel("무늬 색")
+                        ColorWell(hex: text(\.patternColor, "#000000"))
+                    }
+                    GridRow {
+                        FieldLabel("무늬 모양")
+                        ChoiceField(int(\.pattern), Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+                    }
+                }
+                .padding(.leading, 12)
+            }
+        }
+    }
+    private func int(_ key: WritableKeyPath<Style, Int?>) -> Binding<Int> {
+        Binding { style[keyPath: key] ?? 0 } set: { style[keyPath: key] = $0 }
+    }
+    private func text(_ key: WritableKeyPath<Style, String?>, _ fallback: String) -> Binding<String> {
+        Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
+    }
+}
+
 /// 글자 모양, laid out like the web editor's: 기본 (size, per-language settings,
-/// attributes, colors) and 확장 (line shapes and colors). Only changed attributes apply.
+/// attributes, colors) and 확장 (밑줄, 취소선, 테두리, 배경). Only changed attributes apply.
 struct CharShapeSheet: View {
     let original: CharStyle
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var style: CharStyle
+    @State private var tab: String
 
-    init(style: CharStyle, viewer: Viewer) {
+    init(style: CharStyle, viewer: Viewer, tab: String = "기본") {
         original = style
+        _tab = State(initialValue: tab)
         self.viewer = viewer
         _style = State(initialValue: style)
     }
 
     var body: some View {
         DialogFrame("글자 모양") {
-            TabView {
-                VStack(alignment: .leading, spacing: 14) {
-                    LabeledField("기준 크기") { SpinField(value: value(\.size, 10), unit: "pt", range: 1...4096) }
-                    GroupTitle("언어별 설정")
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            FieldLabel("글꼴")
-                            ChoiceField(value(\.font, ""), fonts, minWidth: 200)
-                                .gridCellColumns(3)
-                        }
-                        GridRow {
-                            FieldLabel("장평")
-                            SpinField(value: value(\.ratio, 100), unit: "%", range: 50...200)
-                            FieldLabel("자간")
-                            SpinField(value: value(\.spacing, 0), unit: "%", range: -50...50)
-                        }
-                    }
-                    .padding(.leading, 12)
-                    GroupTitle("속성")
-                    HStack(spacing: 6) {
-                        attribute("진하게", \.bold) { Text("가").bold() }
-                        attribute("기울임", \.italic) { Text("가").italic() }
-                        attribute("밑줄", \.underline) { Text("가").underline() }
-                        attribute("취소선", \.strikethrough) { Text("가").strikethrough() }
-                        attribute("외곽선", \.outline) {
-                            Text("가").foregroundStyle(.background)
-                                .shadow(color: .primary, radius: 0, x: 0.7).shadow(color: .primary, radius: 0, x: -0.7)
-                                .shadow(color: .primary, radius: 0, y: 0.7).shadow(color: .primary, radius: 0, y: -0.7)
-                        }
-                        attribute("그림자", \.shadow) { Text("가").shadow(color: .secondary, radius: 0, x: 1.5, y: 1.5) }
-                        attribute("양각", \.emboss) { Text("가").foregroundStyle(.background).shadow(color: .primary, radius: 0, x: 1, y: 1) }
-                        attribute("음각", \.engrave) { Text("가").foregroundStyle(.background).shadow(color: .primary, radius: 0, x: -1, y: -1) }
-                        attribute("위 첨자", \.superscript) { Image(systemName: "textformat.superscript") }
-                        attribute("아래 첨자", \.`subscript`) { Image(systemName: "textformat.subscript") }
-                    }
-                    .padding(.leading, 12)
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            FieldLabel("글자 색")
-                            ColorWell(hex: value(\.color, "#000000"))
-                            FieldLabel("음영 색")
-                            ColorWell(hex: value(\.shade, "#ffffff"), none: "#ffffff")
-                        }
-                    }
-                    .padding(.leading, 12)
-                }
-                .padding(16)
-                .tabItem { Text("기본") }
-                VStack(alignment: .leading, spacing: 14) {
-                    line("밑줄", shape: \.underlineShape, color: \.underlineColor)
-                    line("취소선", shape: \.strikeShape, color: \.strikeColor)
-                    Spacer(minLength: 0)
-                }
-                .padding(16)
-                .tabItem { Text("확장") }
+            TabView(selection: $tab) {
+                basic.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("기본") }.tag("기본")
+                extended.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("확장") }.tag("확장")
             }
-            .dialogTabs()
+            .frame(width: 520, height: 330)
         } confirm: {
-            viewer.applyCharShape(style.changes(from: original))
+            viewer.applyCharShape(style.changesWithBorderFill(from: original))
             dismiss()
         }
     }
 
+    private var basic: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            LabeledField("기준 크기") { SpinField(value: value(\.size, 10), unit: "pt", range: 1...4096) }
+            GroupTitle("언어별 설정")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("언어")
+                    ChoiceField(.constant(0), [(0, "대표")], minWidth: 90)
+                    FieldLabel("글꼴")
+                    ChoiceField(value(\.font, ""), fonts, minWidth: 110)
+                }
+                GridRow {
+                    FieldLabel("상대 크기")
+                    SpinField(value: value(\.relativeSize, 100), unit: "%", range: 10...250)
+                    FieldLabel("장평")
+                    SpinField(value: value(\.ratio, 100), unit: "%", range: 50...200)
+                }
+                GridRow {
+                    FieldLabel("글자 위치")
+                    SpinField(value: value(\.offset, 0), unit: "%", range: -100...100)
+                    FieldLabel("자간")
+                    SpinField(value: value(\.spacing, 0), unit: "%", range: -50...50)
+                }
+            }
+            .padding(.leading, 12)
+            GroupTitle("속성")
+            HStack(spacing: 6) {
+                attribute("진하게", \.bold) { Text("가").bold() }
+                attribute("기울임", \.italic) { Text("가").italic() }
+                attribute("밑줄", \.underline) { Text("가").underline() }
+                attribute("취소선", \.strikethrough) { Text("가").strikethrough() }
+                attribute("외곽선", \.outline) {
+                    Text("가").foregroundStyle(.background)
+                        .shadow(color: .primary, radius: 0, x: 0.7).shadow(color: .primary, radius: 0, x: -0.7)
+                        .shadow(color: .primary, radius: 0, y: 0.7).shadow(color: .primary, radius: 0, y: -0.7)
+                }
+                attribute("그림자", \.shadow) { Text("가").shadow(color: .secondary, radius: 0, x: 1.5, y: 1.5) }
+                attribute("양각", \.emboss) { Text("가").foregroundStyle(.background).shadow(color: .primary, radius: 0, x: 1, y: 1) }
+                attribute("음각", \.engrave) { Text("가").foregroundStyle(.background).shadow(color: .primary, radius: 0, x: -1, y: -1) }
+                Spacer().frame(width: 8)
+                attribute("위 첨자", \.superscript) { Image(systemName: "textformat.superscript") }
+                attribute("아래 첨자", \.`subscript`) { Image(systemName: "textformat.subscript") }
+            }
+            .padding(.leading, 12)
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("글자 색")
+                    ColorWell(hex: value(\.color, "#000000"))
+                    Spacer().frame(width: 24)
+                    FieldLabel("음영 색")
+                    ColorWell(hex: value(\.shade, "#ffffff"), none: "#ffffff")
+                }
+            }
+            .padding(.leading, 12)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var extended: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 32) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("밑줄")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            FieldLabel("위치")
+                            ChoiceField(underlinePlace, [(0, "없음"), (1, "아래"), (2, "위")], minWidth: 100)
+                        }
+                        Group {
+                            GridRow {
+                                FieldLabel("모양")
+                                ChoiceField(value(\.underlineShape, 0), LineShapes.names.indices.map { ($0, "") },
+                                            images: LineShapes.images, minWidth: 100)
+                            }
+                            GridRow {
+                                FieldLabel("색")
+                                ColorWell(hex: value(\.underlineColor, "#000000"))
+                            }
+                        }
+                        .disabled(style.underline != true)
+                    }
+                    .padding(.leading, 12)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("취소선")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            FieldLabel("모양")
+                            ChoiceField(strikeShape, Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
+                        }
+                        GridRow {
+                            FieldLabel("색")
+                            ColorWell(hex: value(\.strikeColor, "#000000"))
+                        }
+                        .disabled(style.strikethrough != true)
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+            BorderFillGroups(style: $style) { EmptyView() }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 밑줄 위치: 없음 (0), 아래 (1) or 위 (2).
+    private var underlinePlace: Binding<Int> {
+        Binding { style.underline != true ? 0 : style.underlineTop == true ? 2 : 1 } set: { place in
+            style.underline = place != 0
+            if place != 0 { style.underlineTop = place == 2 }
+        }
+    }
+    /// 취소선 모양: none (0) or a line shape (n + 1).
+    private var strikeShape: Binding<Int> {
+        Binding { style.strikethrough == true ? (style.strikeShape ?? 0) + 1 : 0 } set: { kind in
+            style.strikethrough = kind != 0
+            if kind != 0 { style.strikeShape = kind - 1 }
+        }
+    }
     private func value<T>(_ key: WritableKeyPath<CharStyle, T?>, _ fallback: T) -> Binding<T> {
         Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
     }
@@ -168,34 +320,20 @@ struct CharShapeSheet: View {
         .help(title)
         .accessibilityLabel(title)
     }
-    private func line(_ title: String, shape: WritableKeyPath<CharStyle, Int?>,
-                      color: WritableKeyPath<CharStyle, String?>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            GroupTitle(title)
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    FieldLabel("모양")
-                    ChoiceField(value(shape, 0), LineShapes.names.indices.map { ($0, LineShapes.names[$0]) },
-                                images: LineShapes.images)
-                    FieldLabel("색")
-                    ColorWell(hex: value(color, "#000000"))
-                }
-            }
-            .padding(.leading, 12)
-        }
-    }
 }
 
-/// 문단 모양, laid out like the web editor's 기본 tab: alignment, margins, first line,
-/// spacing and line breaking. Only changed attributes apply.
+/// 문단 모양, laid out like the web editor's: 기본 (alignment, margins, first line,
+/// spacing, line breaking) and 테두리/배경. Only changed attributes apply.
 struct ParaShapeSheet: View {
     let original: ParaStyle
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var style: ParaStyle
+    @State private var tab: String
 
-    init(style: ParaStyle, viewer: Viewer) {
+    init(style: ParaStyle, viewer: Viewer, tab: String = "기본") {
         original = style
+        _tab = State(initialValue: tab)
         self.viewer = viewer
         _style = State(initialValue: style)
     }
@@ -204,91 +342,103 @@ struct ParaShapeSheet: View {
 
     var body: some View {
         DialogFrame("문단 모양") {
-            VStack(alignment: .leading, spacing: 14) {
-                GroupTitle("정렬 방식")
-                HStack(spacing: 6) {
-                    ForEach(Alignment.allCases, id: \.self) { alignment in
-                        let label = FormatChoices.label(alignment)
-                        Button { style.alignment = alignment } label: {
-                            Image(systemName: label.symbol).font(.system(size: 15, weight: .light)).frame(width: 32, height: 32)
-                        }
-                        .buttonStyle(ToolButtonStyle(on: (style.alignment ?? .justify) == alignment))
-                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
-                        .help(label.title)
-                    }
+            TabView(selection: $tab) {
+                basic.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("기본") }.tag("기본")
+                BorderFillGroups(style: $style) {
+                    Toggle("문단 테두리 연결", isOn: Binding { style.borderConnect ?? false } set: { style.borderConnect = $0 })
                 }
-                .padding(.leading, 12)
-                HStack(alignment: .top, spacing: 32) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("여백")
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                            GridRow { FieldLabel("왼쪽"); SpinField(value: length(\.marginLeft), unit: "pt", range: 0...1000) }
-                            GridRow { FieldLabel("오른쪽"); SpinField(value: length(\.marginRight), unit: "pt", range: 0...1000) }
-                        }
-                        .padding(.leading, 12)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("첫 줄")
-                        HStack(alignment: .bottom, spacing: 10) {
-                            Picker("첫 줄", selection: firstLine) {
-                                Text("보통").tag(FirstLine.normal)
-                                Text("들여쓰기").tag(FirstLine.indent)
-                                Text("내어쓰기").tag(FirstLine.hang)
-                            }
-                            .pickerStyle(.radioGroup)
-                            .labelsHidden()
-                            SpinField(value: Binding { abs(style.indent ?? 0) } set: {
-                                style.indent = (style.indent ?? 0) < 0 ? -$0 : $0
-                            }, unit: "pt", range: 0...1000)
-                            .disabled((style.indent ?? 0) == 0)
-                        }
-                        .padding(.leading, 12)
-                    }
-                }
-                GroupTitle("간격")
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
-                        FieldLabel("줄 간격")
-                        ChoiceField(Binding { style.lineSpacingKind ?? .percent } set: { kind in
-                            guard kind != style.lineSpacingKind else { return }
-                            style.lineSpacingKind = kind
-                            style.lineSpacing = kind == .percent ? 160 : 12
-                        }, [(.percent, "글자에 따라"), (.fixed, "고정 값"), (.spaceOnly, "여백만 지정"), (.minimum, "최소")])
-                        FieldLabel("문단 위")
-                        SpinField(value: length(\.spacingBefore), unit: "pt", range: 0...1000)
-                    }
-                    GridRow {
-                        Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
-                        let percent = (style.lineSpacingKind ?? .percent) == .percent
-                        SpinField(value: length(\.lineSpacing), unit: percent ? "%" : "pt",
-                                  range: percent ? 50...500 : 0...1000)
-                        FieldLabel("문단 아래")
-                        SpinField(value: length(\.spacingAfter), unit: "pt", range: 0...1000)
-                    }
-                }
-                .padding(.leading, 12)
-                GroupTitle("줄 나눔 기준")
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
-                        FieldLabel("한글 단위")
-                        ChoiceField(unit(\.koreanBreakUnit, 1), [(1, "글자"), (0, "어절")])
-                    }
-                    GridRow {
-                        FieldLabel("영문 단위")
-                        ChoiceField(unit(\.englishBreakUnit, 0), [(0, "단어"), (1, "하이픈"), (2, "글자")])
-                    }
-                }
-                .padding(.leading, 12)
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .tabItem { Text("테두리/배경") }.tag("테두리/배경")
             }
-            .dialogTabs()
+            .frame(width: 520, height: 470)
         } confirm: {
-            var change = style.changes(from: original)
+            var change = style.changesWithBorderFill(from: original)
             // The engine reads a line spacing by its kind, so they go together.
             if change.lineSpacing != nil || change.lineSpacingKind != nil {
                 (change.lineSpacing, change.lineSpacingKind) = (style.lineSpacing, style.lineSpacingKind)
             }
             viewer.applyParaShape(change)
             dismiss()
+        }
+    }
+
+    private var basic: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("정렬 방식")
+            HStack(spacing: 6) {
+                ForEach(Alignment.allCases, id: \.self) { alignment in
+                    let label = FormatChoices.label(alignment)
+                    Button { style.alignment = alignment } label: {
+                        Image(systemName: label.symbol).font(.system(size: 15, weight: .light)).frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(ToolButtonStyle(on: (style.alignment ?? .justify) == alignment))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                    .help(label.title)
+                }
+            }
+            .padding(.leading, 12)
+            HStack(alignment: .top, spacing: 32) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("여백")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow { FieldLabel("왼쪽"); SpinField(value: length(\.marginLeft), unit: "pt", range: 0...1000) }
+                        GridRow { FieldLabel("오른쪽"); SpinField(value: length(\.marginRight), unit: "pt", range: 0...1000) }
+                    }
+                    .padding(.leading, 12)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("첫 줄")
+                    HStack(alignment: .bottom, spacing: 10) {
+                        Picker("첫 줄", selection: firstLine) {
+                            Text("보통").tag(FirstLine.normal)
+                            Text("들여쓰기").tag(FirstLine.indent)
+                            Text("내어쓰기").tag(FirstLine.hang)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        SpinField(value: Binding { abs(style.indent ?? 0) } set: {
+                            style.indent = (style.indent ?? 0) < 0 ? -$0 : $0
+                        }, unit: "pt", range: 0...1000)
+                        .disabled((style.indent ?? 0) == 0)
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+            GroupTitle("간격")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("줄 간격")
+                    ChoiceField(Binding { style.lineSpacingKind ?? .percent } set: { kind in
+                        guard kind != style.lineSpacingKind else { return }
+                        style.lineSpacingKind = kind
+                        style.lineSpacing = kind == .percent ? 160 : 12
+                    }, [(.percent, "글자에 따라"), (.fixed, "고정 값"), (.spaceOnly, "여백만 지정"), (.minimum, "최소")])
+                    FieldLabel("문단 위")
+                    SpinField(value: length(\.spacingBefore), unit: "pt", range: 0...1000)
+                }
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    let percent = (style.lineSpacingKind ?? .percent) == .percent
+                    SpinField(value: length(\.lineSpacing), unit: percent ? "%" : "pt",
+                              range: percent ? 50...500 : 0...1000)
+                    FieldLabel("문단 아래")
+                    SpinField(value: length(\.spacingAfter), unit: "pt", range: 0...1000)
+                }
+            }
+            .padding(.leading, 12)
+            GroupTitle("줄 나눔 기준")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("한글 단위")
+                    ChoiceField(unit(\.koreanBreakUnit, 1), [(1, "글자"), (0, "어절")], minWidth: 90)
+                }
+                GridRow {
+                    FieldLabel("영문 단위")
+                    ChoiceField(unit(\.englishBreakUnit, 0), [(0, "단어"), (1, "하이픈"), (2, "글자")], minWidth: 90)
+                }
+            }
+            .padding(.leading, 12)
         }
     }
 

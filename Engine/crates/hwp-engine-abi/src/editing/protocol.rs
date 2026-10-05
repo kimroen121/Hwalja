@@ -390,6 +390,22 @@ pub struct CharStyle {
     pub shadow: Option<bool>,
     pub emboss: Option<bool>,
     pub engrave: Option<bool>,
+    /// The underline above the text instead of below (밑줄 위치 위).
+    pub underline_top: Option<bool>,
+    /// 상대 크기 in percent, 10–250.
+    pub relative_size: Option<f64>,
+    /// 글자 위치 in percent of the size, −100–100.
+    pub offset: Option<f64>,
+    /// 테두리: line kind (0 none, 1 solid, 2 dash, 3 dot, …), width (an index into
+    /// 0.1, 0.12, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 1, 1.5, 2, 3, 4, 5 mm) and
+    /// `#rrggbb`. 배경: 면 색 (`#rrggbb`, or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6).
+    /// As a change, set all six together.
+    pub border_line: Option<u8>,
+    pub border_width: Option<u8>,
+    pub border_color: Option<String>,
+    pub fill_color: Option<String>,
+    pub pattern_color: Option<String>,
+    pub pattern: Option<u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -444,6 +460,18 @@ pub struct ParaStyle {
     pub korean_break_unit: Option<u8>,
     /// 줄 나눔 기준 for Latin: 0 단어, 1 하이픈, 2 글자.
     pub english_break_unit: Option<u8>,
+    /// 테두리: line kind (0 none, 1 solid, 2 dash, 3 dot, …), width (an index into
+    /// 0.1, 0.12, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 1, 1.5, 2, 3, 4, 5 mm) and
+    /// `#rrggbb`. 배경: 면 색 (`#rrggbb`, or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6).
+    /// As a change, set all six together.
+    pub border_line: Option<u8>,
+    pub border_width: Option<u8>,
+    pub border_color: Option<String>,
+    pub fill_color: Option<String>,
+    pub pattern_color: Option<String>,
+    pub pattern: Option<u8>,
+    /// 문단 테두리 연결: one border around consecutive paragraphs with the same one.
+    pub border_connect: Option<bool>,
 }
 /// A caret motion, resolved against the engine's line layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

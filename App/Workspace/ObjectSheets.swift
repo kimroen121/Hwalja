@@ -148,7 +148,7 @@ struct ObjectSheet: View {
                         Text("본문과의 배치")
                         IconTiles(selection: text(\.textWrap, "Square"), options: [
                             ("Square", "어울림"), ("TopAndBottom", "자리 차지"), ("BehindText", "글 뒤로"), ("InFrontOfText", "글 앞으로"),
-                        ]) { Pictogram.wrap($0) }
+                        ]) { Pictogram.wrap($0, on: $1) }
                     }
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
                         GridRow {
@@ -226,7 +226,7 @@ struct ObjectSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("쪽 경계에서")
                 IconTiles(selection: Binding { props.pageBreak ?? 0 } set: { props.pageBreak = $0 },
-                          options: [(UInt8(2), "셀 단위로 나눔"), (1, "나눔"), (0, "나누지 않음")]) { Pictogram.pageBreak($0) }
+                          options: [(UInt8(2), "셀 단위로 나눔"), (1, "나눔"), (0, "나누지 않음")]) { Pictogram.pageBreak($0, on: $1) }
                 Toggle("제목 줄 자동 반복", isOn: flag(\.repeatHeader))
             }
             .padding(.leading, 12)
@@ -327,12 +327,12 @@ private extension View {
 private struct IconTiles<Value: Hashable, Picture: View>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
-    @ViewBuilder let picture: (Value) -> Picture
+    @ViewBuilder let picture: (Value, Bool) -> Picture
     var body: some View {
         HStack(spacing: 6) {
             ForEach(options, id: \.value) { option in
                 Button { selection = option.value } label: {
-                    picture(option.value).frame(width: 30, height: 30).padding(4)
+                    picture(option.value, selection == option.value).frame(width: 30, height: 30).padding(4)
                 }
                 .buttonStyle(ToolButtonStyle(on: selection == option.value))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
@@ -354,7 +354,7 @@ private struct CaptionGrid: View {
             ForEach(Self.places, id: \.self) { row in
                 GridRow {
                     ForEach(row, id: \.self) { place in
-                        Button { selection = place } label: { Pictogram.caption(place).frame(width: 40, height: 34).padding(3) }
+                        Button { selection = place } label: { Pictogram.caption(place, on: selection == place).frame(width: 40, height: 34).padding(3) }
                             .buttonStyle(ToolButtonStyle(on: selection == place))
                             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
                             .help(Captions.all.first { $0.value == place }?.title ?? "")
@@ -365,15 +365,16 @@ private struct CaptionGrid: View {
     }
 }
 
-/// Small drawings for the picture choices: text as gray lines, the object as a blue box.
+/// Small drawings for the picture choices: text as gray lines and the object as a box,
+/// in the accent color only when chosen.
 private enum Pictogram {
-    static let ink = Color.accentColor
-    static func wrap(_ value: String) -> some View {
+    static func ink(_ on: Bool) -> Color { on ? .accentColor : .secondary }
+    static func wrap(_ value: String, on: Bool) -> some View {
         Canvas { context, size in
-            let c = context
+            let c = context, ink = ink(on)
             let box = CGRect(x: size.width * 0.3, y: size.height * 0.3, width: size.width * 0.4, height: size.height * 0.4)
             let lines = stride(from: 3.0, to: size.height, by: 5).map { CGRect(x: 1, y: $0, width: size.width - 2, height: 1.2) }
-            let text = { (rects: [CGRect]) in for r in rects { c.fill(Path(r), with: .color(.secondary)) } }
+            let text = { (rects: [CGRect]) in for r in rects { c.fill(Path(r), with: .color(.secondary.opacity(0.6))) } }
             let object = { (opacity: Double) in
                 c.fill(Path(box), with: .color(ink.opacity(opacity)))
                 c.stroke(Path(box), with: .color(ink), lineWidth: 1)
@@ -398,9 +399,9 @@ private enum Pictogram {
         }
     }
     /// 셀 단위로 나눔 (2), 나눔 (1), 나누지 않음 (0): a table across a page boundary.
-    static func pageBreak(_ value: UInt8) -> some View {
+    static func pageBreak(_ value: UInt8, on: Bool) -> some View {
         Canvas { context, size in
-            let c = context
+            let c = context, ink = ink(on)
             let cut = size.height / 2
             c.stroke(Path { $0.move(to: CGPoint(x: 0, y: cut)); $0.addLine(to: CGPoint(x: size.width, y: cut)) },
                      with: .color(.secondary), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
@@ -420,9 +421,9 @@ private enum Pictogram {
             }
         }
     }
-    static func caption(_ place: String) -> some View {
+    static func caption(_ place: String, on: Bool) -> some View {
         Canvas { context, size in
-            let c = context
+            let c = context, ink = ink(on)
             guard place != "None" else {
                 let box = CGRect(x: size.width / 2 - 8, y: size.height / 2 - 8, width: 16, height: 16)
                 c.fill(Path(box), with: .color(ink.opacity(0.35)))

@@ -393,7 +393,19 @@ struct CharStyle: PartialFormat {
     var shadow: Bool?
     var emboss: Bool?
     var engrave: Bool?
-
+    /// 밑줄 위치 위.
+    var underlineTop: Bool?
+    /// 상대 크기 (10–250%) and 글자 위치 (−100–100%).
+    var relativeSize: Double?
+    var offset: Double?
+    /// 테두리: 종류 (0 none, 1 solid, …), 굵기 (an index into `BorderWidths`) and color;
+    /// 배경: 면 색 (`#rrggbb` or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6). Sent all together.
+    var borderLine: Int?
+    var borderWidth: Int?
+    var borderColor: String?
+    var fillColor: String?
+    var patternColor: String?
+    var pattern: Int?
 }
 
 enum Alignment: String, Codable, CaseIterable, Sendable {
@@ -427,6 +439,16 @@ struct ParaStyle: PartialFormat {
     /// 줄 나눔 기준: 한글 단위 0 어절, 1 글자; 영문 단위 0 단어, 1 하이픈, 2 글자.
     var koreanBreakUnit: Int?
     var englishBreakUnit: Int?
+    /// 테두리: 종류 (0 none, 1 solid, …), 굵기 (an index into `BorderWidths`) and color;
+    /// 배경: 면 색 (`#rrggbb` or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6). Sent all together.
+    var borderLine: Int?
+    var borderWidth: Int?
+    var borderColor: String?
+    var fillColor: String?
+    var patternColor: String?
+    var pattern: Int?
+    /// 문단 테두리 연결.
+    var borderConnect: Bool?
 }
 
 /// A caret motion, resolved against the engine's line layout.
