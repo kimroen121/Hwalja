@@ -1727,3 +1727,74 @@ fn styles_apply_to_paragraphs() {
         assert_eq!(run(&mut s, wrong).unwrap_err(), EditError::InvalidInput);
     }
 }
+#[test]
+fn numbering_and_bullets_head_paragraphs() {
+    // The generated HWP lays its body out past page 0; pages are checked in HWPX.
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let both = EditSelection {
+        anchor: point(body(), 0),
+        focus: point(commands::at_index(&body(), 2), 0),
+    };
+    let apply = |s: &mut EditSession, style: ParaStyle| {
+        let command = EditCommand::FormatParagraphs {
+            selection: both.clone(),
+            style,
+        };
+        run(s, command).unwrap();
+        // One `<text>` per character: the page's text in order.
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        svg.split("</text>")
+            .filter_map(|t| t.rsplit('>').next())
+            .collect::<String>()
+    };
+    let number = ParaStyle {
+        head: Some("Number".into()),
+        numbering: Some(0),
+        ..Default::default()
+    };
+    let text = apply(&mut s, number.clone());
+    assert!(
+        text.starts_with("1.가") && text.contains("2.보존"),
+        "{text}"
+    );
+    let numberings = s.core.document().doc_info.numberings.len();
+    apply(&mut s, number);
+    assert_eq!(s.core.document().doc_info.numberings.len(), numberings);
+    let deeper = ParaStyle {
+        level: Some(1),
+        ..Default::default()
+    };
+    let text = apply(&mut s, deeper);
+    assert!(text.starts_with("가.가"), "{text}");
+    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    assert_eq!((now.head.as_deref(), now.level), (Some("Number"), Some(1)));
+    let bullet = ParaStyle {
+        head: Some("Bullet".into()),
+        bullet: Some("■".into()),
+        ..Default::default()
+    };
+    assert!(apply(&mut s, bullet).contains('■'));
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let head = reopened
+            .format(0, &point(body(), 0))
+            .unwrap()
+            .paragraph
+            .head;
+        assert_eq!(head.as_deref(), Some("Bullet"), "{format:?}");
+    }
+    let none = ParaStyle {
+        head: Some("None".into()),
+        ..Default::default()
+    };
+    assert!(!apply(&mut s, none).contains('■'));
+    let wrong = EditCommand::FormatParagraphs {
+        selection: both.clone(),
+        style: ParaStyle {
+            head: Some("Number".into()),
+            numbering: Some(99),
+            ..Default::default()
+        },
+    };
+    assert_eq!(run(&mut s, wrong).unwrap_err(), EditError::InvalidInput);
+}

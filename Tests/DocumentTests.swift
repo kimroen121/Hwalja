@@ -130,6 +130,23 @@ struct DocumentTests {
         #expect(document.format?.style == style.id)
     }
 
+    /// 문단 번호 매기기 and 한 수준 증가 from the editor, as the format row runs them.
+    @Test func listsNumberAndStepLevels() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        viewer.canvas.editor.format(ParaStyle(head: "Number", numbering: 1))
+        await document.settle()
+        #expect(document.format?.paragraph.head == "Number" && document.format?.paragraph.level == 0)
+        viewer.canvas.editor.stepLevel(by: 1)
+        await document.settle()
+        #expect(document.format?.paragraph.level == 1)
+        viewer.canvas.editor.format(ParaStyle(head: "None"))
+        await document.settle()
+        #expect(document.format?.paragraph.head == "None")
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

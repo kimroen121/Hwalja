@@ -45,8 +45,24 @@ pub(super) fn validate_para(style: &ParaStyle) -> Result<(), EditError> {
     .iter()
     .all(|v| v.is_none_or(|v| (0.0..=1000.0).contains(&v)))
         && style.indent.is_none_or(|v| (-1000.0..=1000.0).contains(&v));
+    let head_ok = match style.head.as_deref() {
+        None | Some("None") => style.numbering.is_none() && style.bullet.is_none(),
+        Some("Number") => {
+            style
+                .numbering
+                .is_none_or(|n| (n as usize) < NUMBERINGS.len())
+                && style.bullet.is_none()
+        }
+        Some("Bullet") => {
+            style.bullet.as_ref().is_none_or(|b| b.chars().count() == 1)
+                && style.numbering.is_none()
+        }
+        _ => false,
+    };
     if spacing_ok
         && lengths_ok
+        && head_ok
+        && style.level.is_none_or(|v| v <= 6)
         && style.korean_break_unit.is_none_or(|v| v <= 1)
         && style.english_break_unit.is_none_or(|v| v <= 2)
         && style.line_spacing_kind.is_some() == style.line_spacing.is_some()
@@ -62,10 +78,51 @@ fn color(text: &str) -> Option<String> {
     let hex = text.strip_prefix('#')?;
     (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| text.to_lowercase())
 }
+/// 문단 번호 kinds: each level's format (`^n` is the level's number) and number shape
+/// (0 1·2·3, 1 ①, 5 a·b·c, 8 가·나·다, 10 ㄱ·ㄴ·ㄷ), deeper levels as Hancom's default.
+pub(super) const NUMBERINGS: [[(&str, u8); 7]; 4] = [
+    [
+        ("^1.", 0),
+        ("^2.", 8),
+        ("^3)", 0),
+        ("^4)", 8),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1.", 8),
+        ("^2)", 0),
+        ("^3)", 8),
+        ("(^4)", 0),
+        ("(^5)", 8),
+        ("^6", 1),
+        ("^7", 10),
+    ],
+    [
+        ("^1", 1),
+        ("^2.", 0),
+        ("^3.", 8),
+        ("^4)", 0),
+        ("^5)", 8),
+        ("(^6)", 0),
+        ("(^7)", 8),
+    ],
+    [
+        ("^1.", 5),
+        ("^2)", 0),
+        ("^3)", 8),
+        ("(^4)", 0),
+        ("(^5)", 8),
+        ("^6", 1),
+        ("^7", 10),
+    ],
+];
 /// Paragraph lengths are stored in 1/200 pt (twice HWPUNIT).
 const PARA_UNITS_PER_POINT: f64 = 200.0;
 
-pub(super) fn para_props(style: &ParaStyle) -> String {
+/// rhwp property JSON for a paragraph change, without its head (see `EditSession::para_props`).
+fn plain_para_props(style: &ParaStyle) -> Map<String, Value> {
     let mut props = Map::new();
     if let Some(alignment) = style.alignment {
         props.insert("alignment".into(), serde_json::to_value(alignment).unwrap());
@@ -105,15 +162,85 @@ pub(super) fn para_props(style: &ParaStyle) -> String {
     for (key, value) in [
         ("koreanBreakUnit", style.korean_break_unit),
         ("englishBreakUnit", style.english_break_unit),
+        ("paraLevel", style.level),
     ] {
         if let Some(value) = value {
             props.insert(key.into(), json!(value));
         }
     }
-    Value::Object(props).to_string()
+    props
 }
 
 impl EditSession {
+    /// rhwp property JSON for a paragraph change. A 문단 번호 or 글머리표 head gets its
+    /// definition, added to the document when it has none like it.
+    pub(super) fn para_props(&mut self, style: &ParaStyle) -> String {
+        let mut props = plain_para_props(style);
+        if let Some(head) = &style.head {
+            let id = match head.as_str() {
+                "Number" => self.numbering(style.numbering.unwrap_or(0) as usize),
+                "Bullet" => self.bullet(
+                    style
+                        .bullet
+                        .as_deref()
+                        .and_then(|b| b.chars().next())
+                        .unwrap_or('●'),
+                ),
+                _ => 0,
+            };
+            props.insert("headType".into(), json!(head));
+            props.insert("numberingId".into(), json!(id));
+        }
+        Value::Object(props).to_string()
+    }
+    /// The 1-based id of 문단 번호 kind `kind`, added if the document lacks it.
+    fn numbering(&mut self, kind: usize) -> u16 {
+        use rhwp::model::style::{Numbering, NumberingHead};
+        let levels = NUMBERINGS[kind];
+        let info = &mut self.core.document_mut().doc_info;
+        let same = |n: &Numbering| {
+            levels.iter().enumerate().all(|(i, (format, shape))| {
+                n.level_formats[i] == *format && n.heads[i].number_format == *shape
+            })
+        };
+        if let Some(i) = info.numberings.iter().position(same) {
+            return i as u16 + 1;
+        }
+        let mut n = Numbering {
+            start_number: 1,
+            level_start_numbers: [1; 7],
+            ..Default::default()
+        };
+        for (i, (format, shape)) in levels.iter().enumerate() {
+            n.level_formats[i] = format.to_string();
+            n.heads[i] = NumberingHead {
+                number_format: *shape,
+                ..Default::default()
+            };
+        }
+        info.numberings.push(n);
+        info.raw_stream_dirty = true;
+        info.numberings.len() as u16
+    }
+    /// The 1-based id of the 글머리표 drawing `c`, added if the document lacks it.
+    fn bullet(&mut self, c: char) -> u16 {
+        use rhwp::model::style::Bullet;
+        let info = &mut self.core.document_mut().doc_info;
+        if let Some(i) = info
+            .bullets
+            .iter()
+            .position(|b| rhwp::renderer::layout::map_pua_bullet_char(b.bullet_char) == c)
+        {
+            return i as u16 + 1;
+        }
+        info.bullets.push(Bullet {
+            bullet_char: c,
+            text_distance: 50,
+            ..Default::default()
+        });
+        info.raw_stream_dirty = true;
+        info.bullets.len() as u16
+    }
     /// rhwp property JSON for a character change. Registers a new font name if needed.
     pub(super) fn char_props(&mut self, style: &CharStyle) -> String {
         let mut props = Map::new();
@@ -398,6 +525,13 @@ impl EditSession {
                 keep_lines: para_flag("keepLines"),
                 widow_orphan: para_flag("widowOrphan"),
                 page_break_before: para_flag("pageBreakBefore"),
+                head: para
+                    .get("headType")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                numbering: None,
+                bullet: None,
+                level: para_unit("paraLevel"),
                 korean_break_unit: para_unit("koreanBreakUnit"),
                 english_break_unit: para_unit("englishBreakUnit"),
             },

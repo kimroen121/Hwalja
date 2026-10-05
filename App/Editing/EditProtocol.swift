@@ -382,6 +382,14 @@ struct ParaStyle: PartialFormat {
     var indent: Double?
     var spacingBefore: Double?
     var spacingAfter: Double?
+    /// The head: None, Number (문단 번호), Bullet (글머리표) or Outline. As a change,
+    /// Number takes `numbering` (a kind, see `FormatChoices.numberings`) and Bullet takes
+    /// `bullet` (its character).
+    var head: String?
+    var numbering: Int?
+    var bullet: String?
+    /// The list level, 0–6.
+    var level: Int?
     /// 줄 나눔 기준: 한글 단위 0 어절, 1 글자; 영문 단위 0 단어, 1 하이픈, 2 글자.
     var koreanBreakUnit: Int?
     var englishBreakUnit: Int?

@@ -394,6 +394,15 @@ pub struct ParaStyle {
     pub keep_lines: Option<bool>,
     pub widow_orphan: Option<bool>,
     pub page_break_before: Option<bool>,
+    /// The paragraph head: None, Number (문단 번호), Bullet (글머리표) or Outline. As a
+    /// change, Number takes `numbering` and Bullet takes `bullet`.
+    pub head: Option<String>,
+    /// A 문단 번호 kind, an index into `format::NUMBERINGS`.
+    pub numbering: Option<u8>,
+    /// The 글머리표 character.
+    pub bullet: Option<String>,
+    /// The list level, 0–6 (한 수준 증가/감소).
+    pub level: Option<u8>,
     /// 줄 나눔 기준 for Korean: 0 어절, 1 글자.
     pub korean_break_unit: Option<u8>,
     /// 줄 나눔 기준 for Latin: 0 단어, 1 하이픈, 2 글자.

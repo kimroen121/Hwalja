@@ -5,6 +5,10 @@ import SwiftUI
 enum FormatChoices {
     static let sizes: [Double] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
     static let lineSpacings: [Double] = [100, 130, 160, 180, 200, 250, 300]
+    /// 글머리표 characters.
+    static let bullets = ["●", "■", "◆", "▶", "○", "□", "◇", "▷", "★", "☆", "✓", "※", "-"]
+    /// Each 문단 번호 kind as its first level reads (the engine's `NUMBERINGS`).
+    static let numberings = ["1.", "가.", "①", "a."]
     static let colors = ["#000000", "#808080", "#ff0000", "#ff8000", "#ffd700", "#008000", "#0000ff", "#000080", "#800080"]
     /// 형광펜 colors; `none` removes the highlight.
     static let highlights = ["#ffff00", "#a6ff4d", "#66ffff", "#ff99cc", "#ffc04d"]
@@ -104,6 +108,29 @@ struct FormatRow: View {
                 }
                 RowDivider()
                 SpacingField(paragraph: paragraph, editor: editor)
+                RowDivider()
+                let head = paragraph?.head
+                ToolIcon("글머리표 매기기", symbol: "list.bullet", on: head == "Bullet") {
+                    editor.format(head == "Bullet" ? ParaStyle(head: "None") : ParaStyle(head: "Bullet", bullet: FormatChoices.bullets[0]))
+                }
+                MenuArrow(title: "글머리표 매기기") {
+                    FormatChoices.bullets.map { bullet in
+                        Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
+                    }
+                }
+                ToolIcon("문단 번호 매기기", symbol: "list.number", on: head == "Number") {
+                    editor.format(head == "Number" ? ParaStyle(head: "None") : ParaStyle(head: "Number", numbering: 0))
+                }
+                MenuArrow(title: "문단 번호 매기기") {
+                    FormatChoices.numberings.indices.map { kind in
+                        Choice(title: FormatChoices.numberings[kind]) { editor.format(ParaStyle(head: "Number", numbering: kind)) }
+                    }
+                }
+                Group {
+                    ToolIcon("한 수준 증가", symbol: "increase.indent") { editor.stepLevel(by: 1) }
+                    ToolIcon("한 수준 감소", symbol: "decrease.indent") { editor.stepLevel(by: -1) }
+                }
+                .disabled(head == nil || head == "None")
             }
             .disabled(!context.canFormat)
             Spacer(minLength: 0)
@@ -245,18 +272,26 @@ private struct ShapeMenu: View {
     let title: String, colorTitle: String
     let pick: (CharStyle) -> Void
     let shape: (Int) -> CharStyle, color: (String) -> CharStyle
-    @State private var anchor = Anchor()
     var body: some View {
-        Button {
+        MenuArrow(title: title) {
             let shapes: [Choice?] = LineShapes.names.indices.map { index in
                 Choice(title: "", image: LineShapes.images[index]) { pick(shape(index)) }
             }
             let colors: [Choice?] = FormatChoices.colors.map { hex in
                 Choice(title: "", image: FormatChoices.swatch(hex)) { pick(self.color(hex)) }
             }
-            DropDown.show(shapes + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: colors)],
-                          below: anchor.view)
-        } label: { Chevron() }
+            return shapes + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: colors)]
+        }
+    }
+}
+
+/// The small arrow beside a format button that opens its choices.
+private struct MenuArrow: View {
+    let title: String
+    let choices: () -> [Choice?]
+    @State private var anchor = Anchor()
+    var body: some View {
+        Button { DropDown.show(choices(), below: anchor.view) } label: { Chevron() }
             .buttonStyle(ToolButtonStyle())
             .background(AnchorView(anchor: anchor))
             .help(title)

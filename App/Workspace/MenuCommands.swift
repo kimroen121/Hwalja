@@ -181,6 +181,11 @@ struct MenuItems {
             item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t")
         }
         .disabled(!context.canFormat)
+        Group {
+            Button("한 수준 증가") { editor?.stepLevel(by: 1) }
+            Button("한 수준 감소") { editor?.stepLevel(by: -1) }
+        }
+        .disabled(!context.canFormat || !["Number", "Bullet", "Outline"].contains(document?.format?.paragraph.head ?? ""))
         Divider()
         item("개체 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(context.object == nil && !context.inTable)

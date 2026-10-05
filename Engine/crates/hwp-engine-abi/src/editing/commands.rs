@@ -723,7 +723,7 @@ impl EditSession {
             EditCommand::ApplyStyle { selection, style } => self.apply_style(selection, *style),
             EditCommand::FormatParagraphs { selection, style } => {
                 let (start, end) = ordered(selection);
-                let props = super::format::para_props(style);
+                let props = self.para_props(style);
                 for i in index(&start.target)..=index(&end.target) {
                     self.format_paragraph(&at_index(&start.target, i), &props)?;
                 }

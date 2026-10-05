@@ -642,6 +642,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         guard let size = model?.format?.text.size else { return }
         format(CharStyle(size: max(1, size + step)))
     }
+    /// 한 수준 증가 (or 감소) for the selected list paragraphs.
+    func stepLevel(by step: Int) {
+        guard let level = model?.format?.paragraph.level else { return NSSound.beep() }
+        format(ParaStyle(level: min(max(level + step, 0), 6)))
+    }
     func format(_ style: CharStyle) { model?.formatText(style, undoManager) }
     func format(_ style: ParaStyle) { model?.formatParagraphs(style, undoManager) }
 

@@ -293,6 +293,8 @@ fn trim_appended(a: &mut Document, b: &mut Document) -> bool {
     let appended = prefix(&x.char_shapes, &mut y.char_shapes)
         && prefix(&x.para_shapes, &mut y.para_shapes)
         && prefix(&x.border_fills, &mut y.border_fills)
+        && prefix(&x.numberings, &mut y.numberings)
+        && prefix(&x.bullets, &mut y.bullets)
         && x.font_faces.len() <= y.font_faces.len()
         && {
             y.font_faces.truncate(x.font_faces.len());
