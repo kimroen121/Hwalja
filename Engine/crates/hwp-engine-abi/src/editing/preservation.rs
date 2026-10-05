@@ -86,6 +86,16 @@ fn edited_paragraphs<'a>(
             .get_mut(c.cell as usize)
             .ok_or(EditError::PreservationFailed)?
             .paragraphs
+    } else if let Some(n) = &t.note {
+        match section
+            .paragraphs
+            .get_mut(t.paragraph as usize)
+            .and_then(|p| p.controls.get_mut(n.control as usize))
+        {
+            Some(Control::Footnote(note)) => &mut note.paragraphs,
+            Some(Control::Endnote(note)) => &mut note.paragraphs,
+            _ => return Err(EditError::PreservationFailed),
+        }
     } else {
         &mut section.paragraphs
     })
@@ -130,6 +140,9 @@ pub(super) fn check(
             );
         }
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
+        EditCommand::InsertNote { position, .. } => {
+            return check_inserted_note(before, after, &position.target)
+        }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
         EditCommand::HeaderFooter {
             section, footer, ..
@@ -239,6 +252,62 @@ fn check_inserted_table(
     data.remove(table);
     if format!("{old:?}") != format!("{:?}", (controls, data)) || !trim_appended(&mut a, &mut b) {
         return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, target.section)
+}
+/// Note numbers, which a new note renumbers in document order.
+fn unnumber(paragraphs: &mut [Paragraph]) {
+    for p in paragraphs {
+        for c in &mut p.controls {
+            match c {
+                Control::Footnote(n) => n.number = 0,
+                Control::Endnote(n) => n.number = 0,
+                Control::Table(t) => t.cells.iter_mut().for_each(|c| unnumber(&mut c.paragraphs)),
+                _ => {}
+            }
+        }
+    }
+}
+/// A new note may only add one note control to the paragraph at `target`, leaving its
+/// text and other controls, and renumber the notes.
+fn check_inserted_note(
+    before: &Document,
+    after: &Document,
+    target: &EditTarget,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let (x, y) = (
+        &mut a.sections[target.section as usize].paragraphs[target.paragraph as usize],
+        &mut b.sections[target.section as usize].paragraphs[target.paragraph as usize],
+    );
+    let added: Vec<usize> = (0..y.controls.len())
+        .filter(|&i| matches!(y.controls[i], Control::Footnote(_) | Control::Endnote(_)))
+        .filter(|&i| {
+            let shown = format!("{:?}", y.controls[i]);
+            !x.controls.iter().any(|c| format!("{c:?}") == shown)
+        })
+        .collect();
+    let [added] = added[..] else {
+        return Err(EditError::PreservationFailed);
+    };
+    y.ctrl_data_records.resize(y.controls.len(), None);
+    x.ctrl_data_records.resize(x.controls.len(), None);
+    y.controls.remove(added);
+    y.ctrl_data_records.remove(added);
+    if x.text != y.text {
+        return Err(EditError::PreservationFailed);
+    }
+    // The control's room in the text stream.
+    for p in [&mut *x, &mut *y] {
+        p.char_offsets.clear();
+        p.char_count = 0;
+        p.control_mask = 0;
+        p.has_para_text = true;
+        p.char_shapes.iter_mut().for_each(|c| c.start_pos = 0);
+    }
+    for doc in [&mut a, &mut b] {
+        unnumber(&mut doc.sections[target.section as usize].paragraphs);
     }
     same_rest(&mut a, &mut b, target.section)
 }

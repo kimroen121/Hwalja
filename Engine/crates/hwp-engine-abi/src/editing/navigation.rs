@@ -100,6 +100,17 @@ impl EditSession {
                     },
                 )
             }
+            // Notes have no line queries; their paragraphs stand in for lines.
+            Motion::LineStart if from.target.note.is_some() => at(i, 0),
+            Motion::LineEnd if from.target.note.is_some() => at(i, len),
+            Motion::Up if from.target.note.is_some() => {
+                previous_end().map(|p| at(index(&p.target), p.scalar.min(s)))?
+            }
+            Motion::Down if from.target.note.is_some() => {
+                let next = next_start();
+                let end = length(index(&next.target))?;
+                at(index(&next.target), s.min(end))
+            }
             Motion::LineStart | Motion::LineEnd => {
                 let line = self.line(from)?;
                 let field = |key| line.get(key).and_then(Value::as_u64).unwrap_or(0) as u32;
@@ -202,6 +213,7 @@ impl EditSession {
                 section,
                 paragraph,
                 cell: None,
+                note: None,
             }),
             (Some(section), _, Some(parent)) => match (
                 field("controlIndex"),
@@ -216,6 +228,7 @@ impl EditSession {
                         cell,
                         paragraph,
                     }),
+                    note: None,
                 }),
                 _ => None,
             },
@@ -253,6 +266,7 @@ impl EditSession {
                         }),
                         None => None,
                     },
+                    note: None,
                 };
                 // Drops text boxes, which share the cell coordinates.
                 get(doc, &target).ok()?;

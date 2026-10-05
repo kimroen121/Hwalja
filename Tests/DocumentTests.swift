@@ -236,6 +236,21 @@ struct DocumentTests {
         #expect(document.reply.revision == revision + 2)
     }
 
+    @Test func notesTakeTypedText() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 1))
+        viewer.insertNote(endnote: false)
+        await document.settle()
+        let caret = try #require(document.selection?.focus)
+        #expect(caret.target.note != nil && document.context.inNote && !document.context.canFormat)
+        document.type("각주 내용", nil)
+        await document.settle()
+        #expect(document.selection?.focus.scalar == caret.scalar + 5)
+        #expect(document.presentation.caret != nil)
+    }
+
     @Test func styleChosenAtTheCaretAppliesToTheNextText() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let undo = UndoManager()

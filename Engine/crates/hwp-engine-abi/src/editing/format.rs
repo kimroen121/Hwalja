@@ -262,6 +262,7 @@ impl EditSession {
             return Err(EditError::StaleRevision);
         }
         get(self.core.document(), &p.target)?;
+        super::commands::not_in_note(&p.target)?;
         let t = &p.target;
         let offset = p.scalar.saturating_sub(1) as usize;
         let parse = |text: Result<String, rhwp::error::HwpError>| -> Result<Value, EditError> {

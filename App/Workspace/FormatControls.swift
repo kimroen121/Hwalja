@@ -78,7 +78,7 @@ struct FormatRow: View {
                 ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
                           colors: FormatChoices.highlights) { editor.setShade($0) }
             }
-            .disabled(!context.hasSelection)
+            .disabled(!context.canFormat)
             RowDivider()
             Group {
                 ForEach(Alignment.allCases, id: \.self) { alignment in
@@ -88,7 +88,7 @@ struct FormatRow: View {
                 RowDivider()
                 SpacingField(paragraph: paragraph, editor: editor)
             }
-            .disabled(!context.hasSelection)
+            .disabled(!context.canFormat)
             Spacer(minLength: 0)
         }
         .controlSize(.small)

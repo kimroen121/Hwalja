@@ -64,7 +64,7 @@ struct MenuItems {
     @ViewBuilder var styleCopy: some View {
         item("모양 복사", Icon.styleCopy) { viewer?.paintFormat() }
             .keyboardShortcut("c", modifiers: [.command, .option])
-            .disabled(!context.hasSelection)
+            .disabled(!context.canFormat)
     }
     @ViewBuilder var find: some View {
         Group {
@@ -112,10 +112,16 @@ struct MenuItems {
     @ViewBuilder var insert: some View {
         Group {
             item("표…", Icon.table) { viewer?.insertingTable = true }
-                .disabled(!context.hasSelection || context.inTable)
+                .disabled(!context.inBody)
             Divider()
             item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
                 .disabled(!context.hasSelection)
+            Divider()
+            Menu {
+                item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
+                item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
+            } label: { Label("주석", systemImage: Icon.footnote) }
+                .disabled(!context.inBody)
         }
     }
 
@@ -126,7 +132,7 @@ struct MenuItems {
             Divider()
             item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t")
         }
-        .disabled(!context.hasSelection)
+        .disabled(!context.canFormat)
         Divider()
         Group {
             toggle("진하게", text?.bold == true) { editor?.toggleBold() }.keyboardShortcut("b")
@@ -138,7 +144,7 @@ struct MenuItems {
             Button("글자 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
             Button("글자 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
         }
-        .disabled(!context.hasSelection)
+        .disabled(!context.canFormat)
         Divider()
         Group {
             ForEach(Alignment.allCases, id: \.self) { alignment in
@@ -162,7 +168,7 @@ struct MenuItems {
                 }
             }
         }
-        .disabled(!context.hasSelection)
+        .disabled(!context.canFormat)
     }
 
     @ViewBuilder var page: some View {
@@ -181,7 +187,7 @@ struct MenuItems {
             item("단 나누기", Icon.columnBreak) { viewer?.insertBreak(column: true) }
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
         }
-        .disabled(!context.hasSelection || context.inTable)
+        .disabled(!context.inBody)
     }
     private func headerItems(footer: Bool) -> some View {
         ForEach(Self.headerShapes, id: \.title) { shape in
@@ -193,7 +199,7 @@ struct MenuItems {
 
     @ViewBuilder var table: some View {
         item("표 만들기…", Icon.table) { viewer?.insertingTable = true }
-            .disabled(!context.hasSelection || context.inTable)
+            .disabled(!context.inBody)
         Divider()
         Group {
             Menu {

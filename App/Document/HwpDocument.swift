@@ -32,11 +32,17 @@ struct EditingContext: Equatable {
     var hasSelection = false
     /// The selection covers text.
     var hasRange = false
-    /// The caret is in a table cell (otherwise in body text).
+    /// The caret is in a table cell.
     var inTable = false
+    /// The caret is in a 각주 or 미주.
+    var inNote = false
     var pageCount = 0
     var canUndo = false
     var canRedo = false
+    /// The caret is in the body text, where objects and breaks go.
+    var inBody: Bool { hasSelection && !inTable && !inNote }
+    /// Formats can be read and changed here (not yet inside notes).
+    var canFormat: Bool { hasSelection && !inNote }
 }
 
 /// One open HWP/HWPX document: the engine session plus the state views render.
@@ -367,7 +373,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         presented.send()
         if format != self.format { self.format = format }
         let context = EditingContext(hasSelection: selection != nil, hasRange: selection.map { $0.anchor != $0.focus } ?? false,
-                              inTable: selection?.focus.target.cell != nil, pageCount: pages.count,
+                              inTable: selection?.focus.target.cell != nil, inNote: selection?.focus.target.note != nil,
+                              pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }

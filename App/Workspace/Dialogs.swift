@@ -7,7 +7,7 @@ extension Viewer {
     private var undoManager: UndoManager? { canvas.editor.undoManager }
 
     /// Whether the caret is in body text, where breaks and tables go.
-    var inBody: Bool { document?.selection.map { $0.focus.target.cell == nil } ?? false }
+    var inBody: Bool { document?.selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false }
     /// Whether the caret is in a table cell.
     var inTable: Bool { document?.selection?.focus.target.cell != nil }
 
@@ -16,6 +16,9 @@ extension Viewer {
     }
     func insertTable(rows: Int, columns: Int) {
         document?.edit(undoManager) { $0.map { .insertTable($0.ordered.start, rows: rows, columns: columns) } }
+    }
+    func insertNote(endnote: Bool) {
+        document?.edit(undoManager) { $0.map { .insertNote($0.ordered.start, endnote: endnote) } }
     }
     func editTable(_ change: TableChange) {
         document?.edit(undoManager) { selection in

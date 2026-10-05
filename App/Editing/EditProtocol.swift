@@ -9,10 +9,17 @@ struct CellTarget: Codable, Hashable, Sendable {
     var paragraph: UInt32
 }
 
+/// A paragraph of the 각주 or 미주 that is control `control` of the body paragraph.
+struct NoteTarget: Codable, Hashable, Sendable {
+    var control: UInt32
+    var paragraph: UInt32
+}
+
 struct EditTarget: Codable, Hashable, Sendable {
     var section: UInt32
     var paragraph: UInt32
     var cell: CellTarget?
+    var note: NoteTarget?
 }
 
 struct EditPosition: Codable, Hashable, Sendable {
@@ -35,6 +42,8 @@ enum EditCommand: Encodable, Sendable {
     /// A new page (or column) from `position` in the body.
     case pageBreak(EditPosition, column: Bool)
     case insertTable(EditPosition, rows: Int, columns: Int)
+    /// A 각주 (or 미주) at `position`; the caret moves into it.
+    case insertNote(EditPosition, endnote: Bool)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
     case setPage(section: UInt32, PageSetup)
@@ -44,7 +53,7 @@ enum EditCommand: Encodable, Sendable {
     case redo
 
     private enum Key: String, CodingKey {
-        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page, footer, pageNumber
+        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page, footer, pageNumber, endnote
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -76,6 +85,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(position, forKey: .position)
             try c.encode(rows, forKey: .rows)
             try c.encode(columns, forKey: .columns)
+        case let .insertNote(position, endnote):
+            try c.encode("insertNote", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(endnote, forKey: .endnote)
         case let .editTable(cell, change):
             try c.encode("editTable", forKey: .kind)
             try c.encode(cell, forKey: .cell)

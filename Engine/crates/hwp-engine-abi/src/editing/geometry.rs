@@ -50,6 +50,9 @@ impl EditSession {
         if page >= self.core.page_count() {
             return Err(EditError::InvalidInput);
         }
+        if let Some(position) = self.hit_test_footnote(page, x, y)? {
+            return Ok(position);
+        }
         let hit = parse(self.core.hit_test_native(page, x, y))?;
         if hit.get("isTextBox").is_some() {
             return Err(EditError::UnsupportedTarget);
@@ -60,6 +63,7 @@ impl EditSession {
                 section,
                 paragraph: field(&hit, "paragraphIndex")?,
                 cell: None,
+                note: None,
             },
             Some(path) if path.len() == 1 => EditTarget {
                 section,
@@ -69,6 +73,7 @@ impl EditSession {
                     cell: field(&hit, "cellIndex")?,
                     paragraph: field(&hit, "cellParaIndex")?,
                 }),
+                note: None,
             },
             Some(_) => return Err(EditError::UnsupportedTarget),
         };
@@ -78,11 +83,73 @@ impl EditSession {
             scalar: field(&hit, "charOffset")?,
         })
     }
+    /// A position in the 각주 area at the foot of the page, if the point falls there.
+    fn hit_test_footnote(
+        &self,
+        page: u32,
+        x: f64,
+        y: f64,
+    ) -> Result<Option<EditPosition>, EditError> {
+        if !self.core.page_has_footnote_footholds_native(page)
+            || parse(self.core.hit_test_footnote_native(page, x, y))?.get("hit")
+                != Some(&Value::Bool(true))
+        {
+            return Ok(None);
+        }
+        let hit = parse(self.core.hit_test_in_footnote_native(page, x, y))?;
+        if hit.get("hit") != Some(&Value::Bool(true)) {
+            return Ok(None);
+        }
+        let source = parse(
+            self.core
+                .get_page_footnote_info_native(page, field(&hit, "footnoteIndex")? as usize),
+        )?;
+        let target = EditTarget {
+            section: field(&source, "sectionIdx")?,
+            paragraph: field(&source, "paraIdx")?,
+            cell: None,
+            note: Some(NoteTarget {
+                control: field(&source, "controlIdx")?,
+                paragraph: field(&hit, "fnParaIndex")?,
+            }),
+        };
+        commands::get(self.core.document(), &target)?;
+        Ok(Some(EditPosition {
+            target,
+            scalar: field(&hit, "charOffset")?,
+        }))
+    }
+    /// Where the 각주 holding `t` is listed on `page`.
+    fn footnote_index(&self, page: u32, t: &EditTarget) -> Result<usize, EditError> {
+        let control = t.note.as_ref().ok_or(EditError::UnsupportedTarget)?.control;
+        (0..)
+            .map_while(|i| {
+                parse(self.core.get_page_footnote_info_native(page, i))
+                    .ok()
+                    .map(|info| (i, info))
+            })
+            .find(|(_, info)| {
+                field(info, "sectionIdx").ok() == Some(t.section)
+                    && field(info, "paraIdx").ok() == Some(t.paragraph)
+                    && field(info, "controlIdx").ok() == Some(control)
+            })
+            .map(|(i, _)| i)
+            .ok_or(EditError::UnsupportedTarget)
+    }
     /// Caret rectangle (96 dpi, top-left origin) for a position at the current revision.
     pub fn caret(&self, revision: u64, p: &EditPosition) -> Result<PageRect, EditError> {
         self.check_revision(revision)?;
         commands::get(self.core.document(), &p.target)?;
         let t = &p.target;
+        if let Some(n) = &t.note {
+            return rect(&parse(self.core.get_cursor_rect_in_note_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                p.scalar as usize,
+            ))?);
+        }
         let json = parse(match &t.cell {
             Some(c) => self.core.get_cursor_rect_in_cell_native(
                 t.section as usize,
@@ -111,7 +178,10 @@ impl EditSession {
         if a.target.section != b.target.section
             || a.target.cell.as_ref().map(|c| (c.control, c.cell))
                 != b.target.cell.as_ref().map(|c| (c.control, c.cell))
-            || (a.target.cell.is_some() && a.target.paragraph != b.target.paragraph)
+            || a.target.note.as_ref().map(|n| n.control)
+                != b.target.note.as_ref().map(|n| n.control)
+            || ((a.target.cell.is_some() || a.target.note.is_some())
+                && a.target.paragraph != b.target.paragraph)
         {
             return Err(EditError::UnsupportedTarget);
         }
@@ -120,7 +190,17 @@ impl EditSession {
         commands::get(self.core.document(), &start.target)?;
         commands::get(self.core.document(), &end.target)?;
         let t = &start.target;
-        let json = parse(
+        let json = parse(if t.note.is_some() {
+            let page = self.caret(revision, start)?.page;
+            self.core.get_selection_rects_in_footnote_native(
+                page,
+                self.footnote_index(page, t)?,
+                commands::index(&start.target),
+                start.scalar as usize,
+                commands::index(&end.target),
+                end.scalar as usize,
+            )
+        } else {
             self.core.get_selection_rects_native(
                 t.section as usize,
                 commands::index(&start.target),
@@ -131,8 +211,8 @@ impl EditSession {
                     .as_ref()
                     .map(|c| (t.paragraph as usize, c.control as usize, c.cell as usize)),
                 None,
-            ),
-        )?;
+            )
+        })?;
         let rects = json.as_array().ok_or(EditError::RenderFailed)?;
         rects
             .iter()

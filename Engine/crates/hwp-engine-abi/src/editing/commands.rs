@@ -36,17 +36,33 @@ pub(super) fn paragraphs<'a>(
             return Err(EditError::UnsupportedTarget);
         }
         Ok(&cell.paragraphs)
+    } else if let Some(n) = &t.note {
+        let host = section
+            .paragraphs
+            .get(t.paragraph as usize)
+            .ok_or(EditError::InvalidInput)?;
+        match host.controls.get(n.control as usize) {
+            Some(Control::Footnote(note)) => Ok(&note.paragraphs),
+            Some(Control::Endnote(note)) => Ok(&note.paragraphs),
+            _ => Err(EditError::UnsupportedTarget),
+        }
     } else {
         Ok(&section.paragraphs)
     }
 }
 pub(super) fn index(t: &EditTarget) -> usize {
-    t.cell.as_ref().map_or(t.paragraph, |c| c.paragraph) as usize
+    (match (&t.cell, &t.note) {
+        (Some(c), _) => c.paragraph,
+        (_, Some(n)) => n.paragraph,
+        _ => t.paragraph,
+    }) as usize
 }
 pub(super) fn at_index(t: &EditTarget, index: usize) -> EditTarget {
     let mut result = t.clone();
     if let Some(c) = &mut result.cell {
         c.paragraph = index as u32;
+    } else if let Some(n) = &mut result.note {
+        n.paragraph = index as u32;
     } else {
         result.paragraph = index as u32;
     }
@@ -71,8 +87,16 @@ fn same_container(a: &EditTarget, b: &EditTarget) -> bool {
             }
             _ => false,
         }
+        && match (&a.note, &b.note) {
+            (None, None) => true,
+            (Some(x), Some(y)) => a.paragraph == b.paragraph && x.control == y.control,
+            _ => false,
+        }
 }
 pub(super) fn get<'a>(doc: &'a Document, t: &EditTarget) -> Result<&'a Paragraph, EditError> {
+    if t.cell.is_some() && t.note.is_some() {
+        return Err(EditError::UnsupportedTarget);
+    }
     paragraphs(doc, t)?
         .get(index(t))
         .ok_or(EditError::InvalidInput)
@@ -117,8 +141,41 @@ pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> 
         _ => None,
     }
 }
+/// The offset rhwp's paragraph split takes for the text offset `scalar`: it counts each
+/// object in the text flow (table, picture, note, number…) as one position.
+fn split_offset(p: &Paragraph, scalar: u32) -> usize {
+    let scalar = scalar as usize;
+    let objects = p
+        .controls
+        .iter()
+        .zip(p.control_text_positions())
+        .filter(|(c, at)| {
+            *at < scalar
+                && matches!(
+                    c,
+                    Control::Shape(_)
+                        | Control::Table(_)
+                        | Control::Picture(_)
+                        | Control::Equation(_)
+                        | Control::Footnote(_)
+                        | Control::Endnote(_)
+                        | Control::AutoNumber(_)
+                        | Control::CharOverlap(_)
+                )
+        })
+        .count();
+    scalar + objects
+}
+/// Formatting inside notes is not supported yet.
+pub(super) fn not_in_note(t: &EditTarget) -> Result<(), EditError> {
+    if t.note.is_some() {
+        Err(EditError::UnsupportedTarget)
+    } else {
+        Ok(())
+    }
+}
 fn body_only(t: &EditTarget) -> Result<(), EditError> {
-    if t.cell.is_some() {
+    if t.cell.is_some() || t.note.is_some() {
         Err(EditError::UnsupportedTarget)
     } else {
         Ok(())
@@ -227,6 +284,7 @@ impl EditSession {
             }
             EditCommand::FormatText { selection, style } => {
                 self.validate_range(selection)?;
+                not_in_note(&selection.anchor.target)?;
                 let (start, end) = ordered(selection);
                 if start == end {
                     return Err(EditError::InvalidInput);
@@ -235,7 +293,12 @@ impl EditSession {
             }
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
+                not_in_note(&selection.anchor.target)?;
                 super::format::validate_para(style)
+            }
+            EditCommand::InsertNote { position, .. } => {
+                body_only(&position.target)?;
+                self.validate_position(position)
             }
             EditCommand::Break { position, .. } => {
                 body_only(&position.target)?;
@@ -291,6 +354,7 @@ impl EditSession {
                     section,
                     paragraph: 0,
                     cell: None,
+                    note: None,
                 },
                 scalar: 0,
             })
@@ -429,7 +493,14 @@ impl EditSession {
     }
     /// Joins the paragraph at `t` onto the previous one.
     fn merge(&mut self, t: &EditTarget) -> Result<(), EditError> {
-        if let Some(c) = &t.cell {
+        if let Some(n) = &t.note {
+            self.core.merge_paragraph_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+            )?;
+        } else if let Some(c) = &t.cell {
             self.core.merge_paragraph_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
@@ -478,7 +549,16 @@ impl EditSession {
     }
     fn insert(&mut self, p: &EditPosition, text: &str) -> Result<(), EditError> {
         let t = &p.target;
-        if let Some(c) = &t.cell {
+        if let Some(n) = &t.note {
+            self.core.insert_text_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                p.scalar as usize,
+                text,
+            )?;
+        } else if let Some(c) = &t.cell {
             self.core.insert_text_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
@@ -500,7 +580,16 @@ impl EditSession {
     }
     fn delete(&mut self, p: &EditPosition, count: u32) -> Result<(), EditError> {
         let t = &p.target;
-        if let Some(c) = &t.cell {
+        if let Some(n) = &t.note {
+            self.core.delete_text_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                p.scalar as usize,
+                count as usize,
+            )?;
+        } else if let Some(c) = &t.cell {
             self.core.delete_text_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
@@ -522,23 +611,29 @@ impl EditSession {
     }
     fn split(&mut self, p: &EditPosition) -> Result<EditPosition, EditError> {
         let t = &p.target;
-        if let Some(c) = &t.cell {
+        let at = split_offset(get(self.core.document(), t)?, p.scalar);
+        if let Some(n) = &t.note {
+            self.core.split_paragraph_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                at,
+                None,
+            )?;
+        } else if let Some(c) = &t.cell {
             self.core.split_paragraph_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
                 c.control as usize,
                 c.cell as usize,
                 c.paragraph as usize,
-                p.scalar as usize,
+                at,
                 None,
             )?;
         } else {
-            self.core.split_paragraph_native(
-                t.section as usize,
-                t.paragraph as usize,
-                p.scalar as usize,
-                None,
-            )?;
+            self.core
+                .split_paragraph_native(t.section as usize, t.paragraph as usize, at, None)?;
         }
         Ok(EditPosition {
             target: at_index(t, index(t) + 1),
@@ -609,7 +704,7 @@ impl EditSession {
                 let (s, p, o) = (
                     t.section as usize,
                     t.paragraph as usize,
-                    position.scalar as usize,
+                    split_offset(get(self.core.document(), t)?, position.scalar),
                 );
                 if *column {
                     self.core.insert_column_break_native(s, p, o)?;
@@ -651,9 +746,39 @@ impl EditSession {
                             cell: 0,
                             paragraph: 0,
                         }),
+                        note: None,
                     },
                     scalar: 0,
                 }))
+            }
+            EditCommand::InsertNote { position, endnote } => {
+                let t = &position.target;
+                let (s, p, o) = (
+                    t.section as usize,
+                    t.paragraph as usize,
+                    position.scalar as usize,
+                );
+                let json = if *endnote {
+                    self.core.insert_endnote_native(s, p, o)?
+                } else {
+                    self.core.insert_footnote_native(s, p, o)?
+                };
+                let made: Value =
+                    serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
+                let control = made
+                    .get("controlIdx")
+                    .and_then(Value::as_u64)
+                    .ok_or(EditError::RenderFailed)? as u32;
+                let target = EditTarget {
+                    note: Some(NoteTarget {
+                        control,
+                        paragraph: 0,
+                    }),
+                    ..t.clone()
+                };
+                // After the number and the space that follows it.
+                let scalar = self.length(&target)?;
+                Ok(EditSelection::caret(EditPosition { target, scalar }))
             }
             EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
             EditCommand::SetPage { section, page } => {

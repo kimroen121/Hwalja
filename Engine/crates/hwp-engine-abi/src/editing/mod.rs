@@ -218,7 +218,8 @@ impl EditSession {
             EditCommand::Split { position }
             | EditCommand::MergePrevious { position }
             | EditCommand::Break { position, .. }
-            | EditCommand::InsertTable { position, .. } => Some(position.clone()),
+            | EditCommand::InsertTable { position, .. }
+            | EditCommand::InsertNote { position, .. } => Some(position.clone()),
             EditCommand::EditTable { cell, .. } => Some(EditPosition {
                 target: cell.clone(),
                 scalar: 0,

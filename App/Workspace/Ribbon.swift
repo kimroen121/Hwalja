@@ -19,14 +19,20 @@ struct ToolRow: View {
             ToolTile("붙이기", Icon.paste) { send(#selector(NSText.paste(_:))) }
                 .disabled(!context.hasSelection)
             ToolTile("모양 복사", Icon.styleCopy) { viewer.paintFormat() }
-                .disabled(!context.hasSelection)
+                .disabled(!context.canFormat)
             RowDivider()
             ToolTile("찾기", Icon.find, action: { viewer.showFind(replace: false) },
                      choices: { MenuItems.findChoices(viewer) })
             RowDivider()
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true },
                      panel: AnyView(TableGrid(viewer: viewer)))
-                .disabled(!context.hasSelection || context.inTable)
+                .disabled(!context.inBody)
+            RowDivider()
+            Group {
+                ToolTile("각주", Icon.footnote) { viewer.insertNote(endnote: false) }
+                ToolTile("미주", Icon.endnote) { viewer.insertNote(endnote: true) }
+            }
+            .disabled(!context.inBody)
             RowDivider()
             ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
                 .disabled(!context.hasSelection)
@@ -35,7 +41,7 @@ struct ToolRow: View {
                 ToolTile("글자 모양", Icon.charShape) { viewer.editingCharShape = true }
                 ToolTile("문단 모양", Icon.paraShape) { viewer.editingParaShape = true }
             }
-            .disabled(!context.hasSelection)
+            .disabled(!context.canFormat)
             RowDivider()
             ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
             ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
@@ -53,6 +59,7 @@ enum Icon {
     static let goTo = "arrow.right.to.line", table = "tablecells", symbols = "character.book.closed"
     static let charShape = "textformat", paraShape = "text.alignleft"
     static let header = "rectangle.topthird.inset.filled", footer = "rectangle.bottomthird.inset.filled"
+    static let footnote = "note.text", endnote = "doc.plaintext"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"

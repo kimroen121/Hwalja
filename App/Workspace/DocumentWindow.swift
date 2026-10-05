@@ -282,8 +282,8 @@ extension EditPosition {
     /// Sort key in document order across the body and table cells; a table's cells come
     /// after the text of the paragraph holding it.
     var order: [Int] {
-        [Int(target.section), Int(target.paragraph), target.cell.map { Int($0.control) } ?? -1,
-         Int(target.cell?.cell ?? 0), Int(target.cell?.paragraph ?? 0), Int(scalar)]
+        [Int(target.section), Int(target.paragraph), target.cell.map { Int($0.control) } ?? target.note.map { Int($0.control) } ?? -1,
+         Int(target.cell?.cell ?? 0), Int(target.cell?.paragraph ?? target.note?.paragraph ?? 0), Int(scalar)]
     }
 }
 

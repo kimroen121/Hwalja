@@ -28,6 +28,7 @@ fn body() -> EditTarget {
         section: 0,
         paragraph: 1,
         cell: None,
+        note: None,
     }
 }
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
@@ -69,6 +70,7 @@ fn replace_preserves_other_content() {
                 cell: 0,
                 paragraph: 0,
             }),
+            note: None,
         };
         replace(&mut s, cell.clone(), 0, 1, "셀").unwrap();
         assert_eq!(s.paragraph(&cell).unwrap().text, "셀 내용");
@@ -91,6 +93,7 @@ fn rejects_unsupported_target() {
             cell: 1,
             paragraph: 0,
         }),
+        note: None,
     };
     let request = EditRequest {
         version: 1,
@@ -228,6 +231,7 @@ fn inline_metadata_and_vertical_cells_are_read_only() {
             cell: 0,
             paragraph: 0,
         }),
+        note: None,
     };
     assert_eq!(
         replace(&mut s, cell, 0, 0, "x").unwrap_err(),
@@ -385,6 +389,7 @@ fn first_paragraph_with_section_definition_is_editable() {
         section: 0,
         paragraph: 0,
         cell: None,
+        note: None,
     };
     let controls = format!("{:?}", s.core.document().sections[0].paragraphs[0].controls);
     assert!(controls.contains("SectionDef"));
@@ -517,6 +522,7 @@ fn blank_document_is_editable() {
         section: 0,
         paragraph: 0,
         cell: None,
+        note: None,
     };
     replace(&mut s, first.clone(), 0, 0, "새 문서").unwrap();
     assert_eq!(s.paragraph(&first).unwrap().text, "새 문서");
@@ -693,6 +699,7 @@ fn bench_typing() {
             section: 0,
             paragraph,
             cell: None,
+            note: None,
         })
         .find(|t| commands::get(s.core.document(), t).is_ok_and(commands::editable))
         .unwrap();
@@ -872,6 +879,7 @@ fn horizontal_and_word_motions() {
         section: 0,
         paragraph: 0,
         cell: None,
+        note: None,
     };
     let second = EditTarget {
         paragraph: 1,
@@ -915,6 +923,7 @@ fn vertical_motion_keeps_its_column_and_lines_have_edges() {
         section: 0,
         paragraph: 0,
         cell: None,
+        note: None,
     };
     let start = point(first.clone(), 5);
     let down = go(&s, start.clone(), Motion::Down, None);
@@ -970,6 +979,7 @@ fn find_reports_body_and_cell_matches() {
             cell: 0,
             paragraph: 0,
         }),
+        note: None,
     };
     let hits = s.find("내용", true).unwrap();
     assert_eq!(hits.len(), 1);
@@ -1060,6 +1070,7 @@ fn edits_table_rows_and_columns() {
             cell: index,
             paragraph: 0,
         }),
+        note: None,
     };
     for (change, shape) in [
         (TableChange::InsertRowBelow, (2, 2, 4)),
@@ -1156,6 +1167,7 @@ fn structure_edits_on_corpus() {
                             cell: 0,
                             paragraph: 0,
                         }),
+                        note: None,
                     })
                 })
             });
@@ -1167,10 +1179,16 @@ fn structure_edits_on_corpus() {
                 column: false,
             });
             commands.push(EditCommand::InsertTable {
-                position,
+                position: position.clone(),
                 rows: 2,
                 columns: 2,
             });
+            for endnote in [false, true] {
+                commands.push(EditCommand::InsertNote {
+                    position: position.clone(),
+                    endnote,
+                });
+            }
         }
         if let Some(cell) = cell {
             commands.push(EditCommand::EditTable {
@@ -1332,5 +1350,89 @@ fn header_and_footer_number_pages_and_save() {
         run(&mut s, EditCommand::Undo).unwrap();
         run(&mut s, EditCommand::Undo).unwrap();
         assert_eq!(count(&s), 0, "{format}");
+    }
+}
+#[test]
+fn notes_are_inserted_and_edited() {
+    for format in ["hwp", "hwpx"] {
+        for endnote in [false, true] {
+            let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+            let label = format!("{format} endnote={endnote}");
+            let reply = run(
+                &mut s,
+                EditCommand::InsertNote {
+                    position: point(body(), 1),
+                    endnote,
+                },
+            )
+            .unwrap();
+            let caret = reply.selection.unwrap().focus;
+            let note = caret.target.clone();
+            assert!(note.note.is_some(), "{label}");
+            assert_eq!(caret.scalar, 2, "{label}");
+            replace(&mut s, note.clone(), 2, 2, "주석 글").unwrap();
+            run(
+                &mut s,
+                EditCommand::Split {
+                    position: point(note.clone(), 5),
+                },
+            )
+            .unwrap();
+            let second = commands::at_index(&note, 1);
+            assert_eq!(s.paragraph(&second).unwrap().text, "글", "{label}");
+            run(
+                &mut s,
+                EditCommand::MergePrevious {
+                    position: point(second, 0),
+                },
+            )
+            .unwrap();
+            replace(&mut s, note.clone(), 4, 5, "").unwrap();
+            assert_eq!(s.paragraph(&note).unwrap().text, "  주석글", "{label}");
+            // The body keeps its text; the caret and a click find the note again.
+            assert_eq!(
+                s.paragraph(&body()).unwrap().text,
+                "가👨‍👩‍👧‍👦e\u{301} 끝",
+                "{label}"
+            );
+            let rect = s.caret(s.revision, &point(note.clone(), 3)).unwrap();
+            if !endnote {
+                let hit = s
+                    .hit_test(
+                        s.revision,
+                        rect.page,
+                        rect.x + 1.0,
+                        rect.y + rect.height / 2.0,
+                    )
+                    .unwrap();
+                assert_eq!(hit.target, note, "{label}");
+                let rects = s
+                    .selection_rects(
+                        s.revision,
+                        &EditSelection {
+                            anchor: point(note.clone(), 2),
+                            focus: point(note.clone(), 4),
+                        },
+                    )
+                    .unwrap();
+                assert!(!rects.is_empty(), "{label}");
+            }
+            let saved = s
+                .export(if format == "hwp" {
+                    SaveFormat::Hwp
+                } else {
+                    SaveFormat::Hwpx
+                })
+                .unwrap();
+            let reopened = EditSession::open(&saved).unwrap();
+            assert!(
+                reopened.paragraph(&note).unwrap().text.contains("주석"),
+                "{label}"
+            );
+            for _ in 0..5 {
+                run(&mut s, EditCommand::Undo).unwrap();
+            }
+            assert!(commands::get(s.core.document(), &note).is_err(), "{label}");
+        }
     }
 }

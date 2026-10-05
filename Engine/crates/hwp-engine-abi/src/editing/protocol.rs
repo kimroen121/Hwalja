@@ -7,12 +7,21 @@ pub struct CellTarget {
     pub cell: u32,
     pub paragraph: u32,
 }
+/// A paragraph inside the 각주 or 미주 that is control `control` of the body paragraph.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteTarget {
+    pub control: u32,
+    pub paragraph: u32,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditTarget {
     pub section: u32,
     pub paragraph: u32,
     pub cell: Option<CellTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<NoteTarget>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -67,6 +76,11 @@ pub enum EditCommand {
         position: EditPosition,
         rows: u16,
         columns: u16,
+    },
+    /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
+    InsertNote {
+        position: EditPosition,
+        endnote: bool,
     },
     /// Adds or removes a row or column of the table holding `cell`.
     EditTable {
