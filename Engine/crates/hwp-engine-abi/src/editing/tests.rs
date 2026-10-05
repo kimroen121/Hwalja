@@ -575,6 +575,8 @@ fn formats_text_and_paragraphs_and_saves() {
         let style = ParaStyle {
             alignment: Some(Alignment::Center),
             line_spacing: Some(200.0),
+            line_spacing_kind: Some(LineSpacingKind::Percent),
+            ..Default::default()
         };
         s.apply(EditRequest {
             version: 1,
@@ -1135,4 +1137,77 @@ fn structure_edits_on_corpus() {
         }
     }
     println!("{failures} of {runs} refused");
+}
+#[test]
+fn full_char_and_para_formats_round_trip() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let selection = EditSelection {
+            anchor: point(body(), 0),
+            focus: point(body(), 1),
+        };
+        let text = CharStyle {
+            underline: Some(true),
+            underline_shape: Some(2),
+            strikethrough: Some(true),
+            strike_shape: Some(1),
+            shade: Some("#ffff00".into()),
+            ratio: Some(80.0),
+            spacing: Some(-10.0),
+            superscript: Some(true),
+            outline: Some(true),
+            shadow: Some(true),
+            emboss: Some(true),
+            ..Default::default()
+        };
+        run(
+            &mut s,
+            EditCommand::FormatText {
+                selection: selection.clone(),
+                style: text.clone(),
+            },
+        )
+        .unwrap();
+        let paragraph = ParaStyle {
+            line_spacing: Some(18.0),
+            line_spacing_kind: Some(LineSpacingKind::Fixed),
+            margin_left: Some(10.0),
+            margin_right: Some(5.0),
+            indent: Some(-8.0),
+            spacing_before: Some(6.0),
+            spacing_after: Some(3.0),
+            keep_with_next: Some(true),
+            ..Default::default()
+        };
+        run(
+            &mut s,
+            EditCommand::FormatParagraphs {
+                selection,
+                style: paragraph.clone(),
+            },
+        )
+        .unwrap();
+        let at = s.format(s.revision, &point(body(), 1)).unwrap();
+        let t = at.text;
+        assert_eq!(
+            (t.underline_shape, t.strike_shape, t.shade.as_deref()),
+            (Some(2), Some(1), Some("#ffff00"))
+        );
+        assert_eq!((t.ratio, t.spacing), (Some(80.0), Some(-10.0)));
+        assert_eq!(
+            (t.superscript, t.subscript, t.outline, t.shadow, t.emboss),
+            (Some(true), Some(false), Some(true), Some(true), Some(true))
+        );
+        let p = at.paragraph;
+        assert_eq!(
+            (p.line_spacing_kind, p.line_spacing),
+            (Some(LineSpacingKind::Fixed), Some(18.0))
+        );
+        assert_eq!(
+            (p.margin_left, p.margin_right, p.indent),
+            (Some(10.0), Some(5.0), Some(-8.0))
+        );
+        assert_eq!((p.spacing_before, p.spacing_after), (Some(6.0), Some(3.0)));
+        assert_eq!(p.keep_with_next, Some(true));
+    }
 }

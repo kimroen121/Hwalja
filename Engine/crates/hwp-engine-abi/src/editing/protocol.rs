@@ -146,6 +146,21 @@ pub struct CharStyle {
     pub strikethrough: Option<bool>,
     /// `#rrggbb`.
     pub color: Option<String>,
+    /// Line shape of the underline and strikethrough (0 solid, 1 long dash, 2 dot, …).
+    pub underline_shape: Option<u8>,
+    pub strike_shape: Option<u8>,
+    /// Shade behind the text, `#rrggbb`; white is none (also serves 형광펜).
+    pub shade: Option<String>,
+    /// Width in percent (장평), 50–200.
+    pub ratio: Option<f64>,
+    /// Letter spacing in percent of the size (자간), −50–50.
+    pub spacing: Option<f64>,
+    pub superscript: Option<bool>,
+    pub subscript: Option<bool>,
+    pub outline: Option<bool>,
+    pub shadow: Option<bool>,
+    pub emboss: Option<bool>,
+    pub engrave: Option<bool>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,12 +172,36 @@ pub enum Alignment {
     Distribute,
     Split,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LineSpacingKind {
+    /// Percent of the font height.
+    Percent,
+    /// Exact line height in points.
+    Fixed,
+    /// Points between lines.
+    SpaceOnly,
+    /// At least this height in points.
+    Minimum,
+}
+/// Paragraph format; lengths are points. As a query result every field is set.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParaStyle {
     pub alignment: Option<Alignment>,
-    /// Percent of the font height; unset when the paragraph uses another spacing kind.
+    /// Percent for `Percent`, otherwise points; set together with `line_spacing_kind`.
     pub line_spacing: Option<f64>,
+    pub line_spacing_kind: Option<LineSpacingKind>,
+    pub margin_left: Option<f64>,
+    pub margin_right: Option<f64>,
+    /// First-line indent; negative hangs (내어쓰기).
+    pub indent: Option<f64>,
+    pub spacing_before: Option<f64>,
+    pub spacing_after: Option<f64>,
+    pub keep_with_next: Option<bool>,
+    pub keep_lines: Option<bool>,
+    pub widow_orphan: Option<bool>,
+    pub page_break_before: Option<bool>,
 }
 /// A caret motion, resolved against the engine's line layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
