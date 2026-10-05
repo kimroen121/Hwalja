@@ -69,21 +69,25 @@ struct FormatRow: View {
                 ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
                 ToolIcon("기울임", glyph: Text("가").italic(), on: text?.italic == true) { editor.toggleItalic() }
                 ToolIcon("밑줄", glyph: Text("가").underline(), on: text?.underline == true) { editor.toggleUnderline() }
-                ShapeMenu(title: "밑줄 모양") { editor.setUnderline(shape: $0) }
+                ShapeMenu(title: "밑줄 모양", colorTitle: "밑줄 색", pick: editor.format,
+                          shape: { CharStyle(underline: true, underlineShape: $0) },
+                          color: { CharStyle(underline: true, underlineColor: $0) })
                 ToolIcon("취소선", glyph: Text("가").strikethrough(), on: text?.strikethrough == true) { editor.toggleStrikethrough() }
-                ShapeMenu(title: "취소선 모양") { editor.setStrikethrough(shape: $0) }
+                ShapeMenu(title: "취소선 모양", colorTitle: "취소선 색", pick: editor.format,
+                          shape: { CharStyle(strikethrough: true, strikeShape: $0) },
+                          color: { CharStyle(strikethrough: true, strikeColor: $0) })
                 RowDivider()
                 ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
-                          colors: FormatChoices.colors) { editor.setTextColor($0) }
+                          colors: FormatChoices.colors) { editor.format(CharStyle(color: $0)) }
                 ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
-                          colors: FormatChoices.highlights) { editor.setShade($0) }
+                          colors: FormatChoices.highlights) { editor.format(CharStyle(shade: $0)) }
             }
             .disabled(!context.canFormat)
             RowDivider()
             Group {
                 ForEach(Alignment.allCases, id: \.self) { alignment in
                     let label = FormatChoices.label(alignment)
-                    ToolIcon(label.title, symbol: label.symbol, on: paragraph?.alignment == alignment) { editor.setAlignment(alignment) }
+                    ToolIcon(label.title, symbol: label.symbol, on: paragraph?.alignment == alignment) { editor.format(ParaStyle(alignment: alignment)) }
                 }
                 RowDivider()
                 SpacingField(paragraph: paragraph, editor: editor)
@@ -99,7 +103,7 @@ struct FormatRow: View {
     /// Every installed family, built only when the menu opens.
     private static func fonts(_ current: String?, _ editor: PageEditor) -> [Choice?] {
         FormatChoices.families.map { font in
-            Choice(title: font.name, on: font.name == current || font.family == current) { editor.setFont(font.family) }
+            Choice(title: font.name, on: font.name == current || font.family == current) { editor.format(CharStyle(font: font.family)) }
         }
     }
 }
@@ -113,11 +117,11 @@ private struct SizeField: View {
     var body: some View {
         FieldBox(title: "글자 크기", choices: {
             FormatChoices.sizes.map { value in
-                Choice(title: FormatChoices.points(value), on: value == size) { editor.setFontSize(value) }
+                Choice(title: FormatChoices.points(value), on: value == size) { editor.format(CharStyle(size: value)) }
             }
         }) {
             HStack(spacing: 2) {
-                NumberField(text: $text) { Double($0).map { editor.setFontSize(min(max($0, 1), 4096)) } }
+                NumberField(text: $text) { Double($0).map { editor.format(CharStyle(size: min(max($0, 1), 4096))) } }
                     .frame(width: 34)
                 Text("pt").foregroundStyle(.secondary)
                 VStack(spacing: 0) {
@@ -144,13 +148,13 @@ private struct SpacingField: View {
         FieldBox(title: "줄 간격", choices: {
             FormatChoices.lineSpacings.map { percent in
                 Choice(title: "\(Int(percent)) %", on: paragraph?.lineSpacingKind == .percent && paragraph?.lineSpacing == percent) {
-                    editor.setLineSpacing(percent)
+                    editor.format(ParaStyle(lineSpacing: percent, lineSpacingKind: .percent))
                 }
             }
         }) {
             HStack(spacing: 3) {
                 Image(systemName: "arrow.up.and.down.text.horizontal").font(.system(size: 12, weight: .light))
-                NumberField(text: $text) { Double($0).map { editor.setLineSpacing(min(max($0, 1), 500)) } }
+                NumberField(text: $text) { Double($0).map { editor.format(ParaStyle(lineSpacing: min(max($0, 50), 500), lineSpacingKind: .percent)) } }
                     .frame(width: 30)
                 Text(paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt").foregroundStyle(.secondary)
             }
@@ -178,7 +182,7 @@ private struct NumberField: View {
 }
 
 /// A small arrow of a size stepper.
-private struct StepArrow: View {
+struct StepArrow: View {
     let symbol: String, action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -208,23 +212,29 @@ private struct FieldBox<Content: View>: View {
                 Button(action: open) { Chevron().contentShape(Rectangle()) }.buttonStyle(.plain)
             }
         }
-        .frame(height: 22)
-        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+        .fieldBox()
         .background(AnchorView(anchor: anchor))
         .help(title)
     }
     private func open() { DropDown.show(choices(), below: anchor.view) }
 }
 
-/// Line shapes for underline or strikethrough.
+/// Line shapes for underline or strikethrough, drawn as in the web editor, with the
+/// line's color below them.
 private struct ShapeMenu: View {
-    let title: String
-    let pick: (Int) -> Void
+    let title: String, colorTitle: String
+    let pick: (CharStyle) -> Void
+    let shape: (Int) -> CharStyle, color: (String) -> CharStyle
     @State private var anchor = Anchor()
     var body: some View {
         Button {
-            DropDown.show(LineShapes.names.indices.map { index in Choice(title: LineShapes.names[index]) { pick(index) } },
+            let shapes: [Choice?] = LineShapes.names.indices.map { index in
+                Choice(title: LineShapes.names[index], image: LineShapes.images[index]) { pick(shape(index)) }
+            }
+            let colors: [Choice?] = FormatChoices.colors.map { color in
+                Choice(title: color.name, image: FormatChoices.swatch(color.hex)) { pick(self.color(color.hex)) }
+            }
+            DropDown.show(shapes + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: colors)],
                           below: anchor.view)
         } label: { Chevron() }
             .buttonStyle(ToolButtonStyle())
@@ -311,6 +321,15 @@ struct ToolButtonStyle: ButtonStyle {
             if on || configuration.isPressed { return Color.primary.opacity(0.14) }
             return hovering && enabled ? Color.primary.opacity(0.07) : .clear
         }
+    }
+}
+
+extension View {
+    /// The rounded box of the format row's fields and the dialogs' number fields.
+    func fieldBox() -> some View {
+        frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
     }
 }
 

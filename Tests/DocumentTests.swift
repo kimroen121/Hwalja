@@ -381,26 +381,38 @@ struct DocumentTests {
     }
     /// Opt-in: `HWP_ROWS_PNG=<file> swift test --filter snapshotRows` renders the tool and
     /// format rows (pop-up menus draw as placeholders).
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_ROWS_PNG"] != nil))
-    func snapshotRows() async throws {
+    /// Renders the tool rows and dialogs to PNGs in HWP_SNAPSHOT_DIR, drawn by AppKit
+    /// like the window (native controls included), for a look without screen recording.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_SNAPSHOT_DIR"] != nil))
+    func snapshots() async throws {
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_SNAPSHOT_DIR"]!)
         let document = try HwpDocument(data: fixture("hwpx"))
         document.selection = .caret(try await document.hitTest(page: 0, x: 200, y: 200))
         document.type("가", nil)
         await document.settle()
         let viewer = Viewer()
         viewer.canvas.bind(document)
-        let rows = VStack(spacing: 0) {
-            ToolRow(document: document, viewer: viewer)
-            Divider()
-            FormatRow(document: document, editor: viewer.canvas.editor)
+        let format = try #require(document.format)
+        let views: [(String, AnyView)] = [
+            ("rows", AnyView(VStack(spacing: 0) {
+                ToolRow(document: document, viewer: viewer)
+                Divider()
+                FormatRow(document: document, editor: viewer.canvas.editor)
+            }.frame(width: 1100))),
+            ("char", AnyView(CharShapeSheet(style: format.text, viewer: viewer))),
+            ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),
+            ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
+        ]
+        for (name, view) in views {
+            let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: [.borderless],
+                                  backing: .buffered, defer: false)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "\(name).png"))
         }
-        .frame(width: 1100)
-        .background(Color(nsColor: .windowBackgroundColor))
-        let renderer = ImageRenderer(content: rows)
-        renderer.scale = 2
-        let image = try #require(renderer.cgImage)
-        try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
-            .write(to: URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_ROWS_PNG"]!))
     }
 
     private static func findCanvas(_ window: NSWindow) -> DocumentCanvas? {

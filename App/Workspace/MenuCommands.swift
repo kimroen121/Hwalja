@@ -156,14 +156,14 @@ struct MenuItems {
                 default: nil
                 }
                 toggle(FormatChoices.label(alignment).title, document?.format?.paragraph.alignment == alignment) {
-                    editor?.setAlignment(alignment)
+                    editor?.format(ParaStyle(alignment: alignment))
                 }
                 .keyboardShortcut(shortcut)
             }
             Menu("줄 간격") {
                 ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
                     toggle("\(Int(percent))%", document?.format?.paragraph.lineSpacing == percent) {
-                        editor?.setLineSpacing(percent)
+                        editor?.format(ParaStyle(lineSpacing: percent, lineSpacingKind: .percent))
                     }
                 }
             }

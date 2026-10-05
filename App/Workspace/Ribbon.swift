@@ -48,7 +48,8 @@ struct ToolRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.top, 7)
+        .padding(.bottom, 4)
     }
 }
 
@@ -82,7 +83,9 @@ struct Choice {
     var modifiers: NSEvent.ModifierFlags = .command
     var enabled = true
     var on = false
-    let action: () -> Void
+    /// Shown as a submenu instead of running `action`.
+    var submenu: [Choice?] = []
+    var action: () -> Void = {}
 }
 
 /// A large icon over its name. With `choices` (a menu) or `panel` (a popover), the name
@@ -161,6 +164,10 @@ struct AnchorView: NSViewRepresentable {
 enum DropDown {
     static func show(_ choices: [Choice?], below view: NSView?) {
         guard let view else { return }
+        let y = view.isFlipped ? view.bounds.maxY + 2 : -2
+        menu(choices).popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: view)
+    }
+    private static func menu(_ choices: [Choice?]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         for choice in choices {
@@ -175,10 +182,10 @@ enum DropDown {
             item.isEnabled = choice.enabled
             item.state = choice.on ? .on : .off
             item.image = choice.image ?? choice.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            if !choice.submenu.isEmpty { item.submenu = Self.menu(choice.submenu) }
             menu.addItem(item)
         }
-        let y = view.isFlipped ? view.bounds.maxY + 2 : -2
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: view)
+        return menu
     }
     private final class Handler: NSObject {
         let action: () -> Void

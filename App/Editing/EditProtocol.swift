@@ -144,8 +144,34 @@ struct EditReply: Decodable, Sendable {
     var locked: Bool
 }
 
+/// A format whose fields are all optional: as a change, unset fields stay as they are.
+/// Fields are compared and merged by their JSON names, so new fields need no code here.
+protocol PartialFormat: Codable, Hashable, Sendable {
+    init()
+}
+
+extension PartialFormat {
+    private var fields: [String: NSObject] {
+        let data = (try? JSONEncoder().encode(self)) ?? Data()
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: NSObject] ?? [:]
+    }
+    private init(fields: [String: NSObject]) {
+        let data = (try? JSONSerialization.data(withJSONObject: fields)) ?? Data()
+        self = (try? JSONDecoder().decode(Self.self, from: data)) ?? Self()
+    }
+    /// The fields of `self` that differ from `old`.
+    func changes(from old: Self) -> Self {
+        let before = old.fields
+        return Self(fields: fields.filter { before[$0.key] != $0.value })
+    }
+    /// `self` with the fields `other` sets.
+    func merging(_ other: Self) -> Self {
+        Self(fields: fields.merging(other.fields) { $1 })
+    }
+}
+
 /// Character format: as a query result every field is set; as a change, nil fields stay.
-struct CharStyle: Codable, Hashable, Sendable {
+struct CharStyle: PartialFormat {
     var font: String?
     /// Points.
     var size: Double?
@@ -158,6 +184,9 @@ struct CharStyle: Codable, Hashable, Sendable {
     /// Line shapes (0 solid, 1 dash, 2 dot, …, 11 wave, 12 double wave).
     var underlineShape: Int?
     var strikeShape: Int?
+    /// `#rrggbb` of the underline and strikethrough lines.
+    var underlineColor: String?
+    var strikeColor: String?
     /// Shade behind the text (`#rrggbb`, white is none); also serves 형광펜.
     var shade: String?
     /// 장평 (50–200%) and 자간 (−50–50%).
@@ -170,28 +199,6 @@ struct CharStyle: Codable, Hashable, Sendable {
     var emboss: Bool?
     var engrave: Bool?
 
-    /// The fields of `self` that differ from `old`.
-    func changes(from old: CharStyle) -> CharStyle {
-        var change = CharStyle()
-        func keep<T: Equatable>(_ key: WritableKeyPath<CharStyle, T?>) {
-            if self[keyPath: key] != old[keyPath: key] { change[keyPath: key] = self[keyPath: key] }
-        }
-        keep(\.font); keep(\.size); keep(\.bold); keep(\.italic); keep(\.underline); keep(\.strikethrough)
-        keep(\.color); keep(\.underlineShape); keep(\.strikeShape); keep(\.shade); keep(\.ratio); keep(\.spacing)
-        keep(\.superscript); keep(\.`subscript`); keep(\.outline); keep(\.shadow); keep(\.emboss); keep(\.engrave)
-        return change
-    }
-    /// `self` with the fields `other` sets.
-    func merging(_ other: CharStyle) -> CharStyle {
-        var merged = self
-        func take<T>(_ key: WritableKeyPath<CharStyle, T?>) {
-            if let value = other[keyPath: key] { merged[keyPath: key] = value }
-        }
-        take(\.font); take(\.size); take(\.bold); take(\.italic); take(\.underline); take(\.strikethrough)
-        take(\.color); take(\.underlineShape); take(\.strikeShape); take(\.shade); take(\.ratio); take(\.spacing)
-        take(\.superscript); take(\.`subscript`); take(\.outline); take(\.shadow); take(\.emboss); take(\.engrave)
-        return merged
-    }
 }
 
 enum Alignment: String, Codable, CaseIterable, Sendable {
@@ -203,7 +210,7 @@ enum LineSpacingKind: String, Codable, CaseIterable, Sendable {
 }
 
 /// Paragraph format; lengths are points. As a query result every field is set.
-struct ParaStyle: Codable, Hashable, Sendable {
+struct ParaStyle: PartialFormat {
     var alignment: Alignment?
     /// Percent for `.percent`, otherwise points; sent together with `lineSpacingKind`.
     var lineSpacing: Double?
@@ -219,19 +226,6 @@ struct ParaStyle: Codable, Hashable, Sendable {
     var widowOrphan: Bool?
     var pageBreakBefore: Bool?
 
-    /// The fields of `self` that differ from `old`; line spacing goes with its kind.
-    func changes(from old: ParaStyle) -> ParaStyle {
-        var change = ParaStyle()
-        func keep<T: Equatable>(_ key: WritableKeyPath<ParaStyle, T?>) {
-            if self[keyPath: key] != old[keyPath: key] { change[keyPath: key] = self[keyPath: key] }
-        }
-        keep(\.alignment); keep(\.marginLeft); keep(\.marginRight); keep(\.indent); keep(\.spacingBefore)
-        keep(\.spacingAfter); keep(\.keepWithNext); keep(\.keepLines); keep(\.widowOrphan); keep(\.pageBreakBefore)
-        if lineSpacing != old.lineSpacing || lineSpacingKind != old.lineSpacingKind {
-            (change.lineSpacing, change.lineSpacingKind) = (lineSpacing, lineSpacingKind)
-        }
-        return change
-    }
 }
 
 /// A caret motion, resolved against the engine's line layout.

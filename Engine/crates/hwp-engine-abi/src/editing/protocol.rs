@@ -178,6 +178,9 @@ pub struct CharStyle {
     /// Line shape of the underline and strikethrough (0 solid, 1 long dash, 2 dot, …).
     pub underline_shape: Option<u8>,
     pub strike_shape: Option<u8>,
+    /// `#rrggbb` of the underline and strikethrough lines.
+    pub underline_color: Option<String>,
+    pub strike_color: Option<String>,
     /// Shade behind the text, `#rrggbb`; white is none (also serves 형광펜).
     pub shade: Option<String>,
     /// Width in percent (장평), 50–200.

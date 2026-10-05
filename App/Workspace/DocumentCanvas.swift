@@ -566,20 +566,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     func toggleStrikethrough() { toggle(\.strikethrough) { CharStyle(strikethrough: $0) } }
     func stepFontSize(by step: Double) {
         guard let size = model?.format?.text.size else { return }
-        setFontSize(max(1, size + step))
+        format(CharStyle(size: max(1, size + step)))
     }
-    func setFont(_ name: String) { model?.formatText(CharStyle(font: name), undoManager) }
-    func setFontSize(_ size: Double) { model?.formatText(CharStyle(size: size), undoManager) }
-    func setTextColor(_ hex: String) { model?.formatText(CharStyle(color: hex), undoManager) }
-    func setAlignment(_ alignment: Alignment) { model?.formatParagraphs(ParaStyle(alignment: alignment), undoManager) }
-    func setLineSpacing(_ percent: Double) {
-        model?.formatParagraphs(ParaStyle(lineSpacing: percent, lineSpacingKind: .percent), undoManager)
-    }
-    func setUnderline(shape: Int) { model?.formatText(CharStyle(underline: true, underlineShape: shape), undoManager) }
-    func setStrikethrough(shape: Int) {
-        model?.formatText(CharStyle(strikethrough: true, strikeShape: shape), undoManager)
-    }
-    func setShade(_ hex: String) { model?.formatText(CharStyle(shade: hex), undoManager) }
+    func format(_ style: CharStyle) { model?.formatText(style, undoManager) }
+    func format(_ style: ParaStyle) { model?.formatParagraphs(style, undoManager) }
 
     // MARK: NSTextInputClient
 

@@ -1251,6 +1251,7 @@ fn full_char_and_para_formats_round_trip() {
         let text = CharStyle {
             underline: Some(true),
             underline_shape: Some(2),
+            underline_color: Some("#ff0000".into()),
             strikethrough: Some(true),
             strike_shape: Some(1),
             shade: Some("#ffff00".into()),
@@ -1292,8 +1293,13 @@ fn full_char_and_para_formats_round_trip() {
         let at = s.format(s.revision, &point(body(), 1)).unwrap();
         let t = at.text;
         assert_eq!(
-            (t.underline_shape, t.strike_shape, t.shade.as_deref()),
-            (Some(2), Some(1), Some("#ffff00"))
+            (
+                t.underline_shape,
+                t.strike_shape,
+                t.shade.as_deref(),
+                t.underline_color.as_deref()
+            ),
+            (Some(2), Some(1), Some("#ffff00"), Some("#ff0000"))
         );
         assert_eq!((t.ratio, t.spacing), (Some(80.0), Some(-10.0)));
         assert_eq!(

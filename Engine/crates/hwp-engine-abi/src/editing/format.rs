@@ -8,9 +8,14 @@ pub(super) fn validate_char(style: &CharStyle) -> Result<(), EditError> {
         !f.trim().is_empty() && f.chars().count() <= 64 && !f.chars().any(char::is_control)
     });
     let size_ok = style.size.is_none_or(|s| (1.0..=4096.0).contains(&s));
-    let color_ok = [&style.color, &style.shade]
-        .iter()
-        .all(|c| c.as_ref().is_none_or(|c| color(c).is_some()));
+    let color_ok = [
+        &style.color,
+        &style.shade,
+        &style.underline_color,
+        &style.strike_color,
+    ]
+    .iter()
+    .all(|c| c.as_ref().is_none_or(|c| color(c).is_some()));
     let shapes_ok = [style.underline_shape, style.strike_shape]
         .iter()
         .all(|s| s.is_none_or(|s| s <= 12));
@@ -129,6 +134,14 @@ impl EditSession {
         }
         if let Some(c) = style.shade.as_deref().and_then(color) {
             props.insert("shadeColor".into(), json!(c));
+        }
+        for (key, value) in [
+            ("underlineColor", &style.underline_color),
+            ("strikeColor", &style.strike_color),
+        ] {
+            if let Some(c) = value.as_deref().and_then(color) {
+                props.insert(key.into(), json!(c));
+            }
         }
         if let Some(shape) = style.underline_shape {
             props.insert("underlineShape".into(), json!(shape));
@@ -336,6 +349,14 @@ impl EditSession {
                     .map(str::to_string),
                 underline_shape: number(&text, "underlineShape").map(|v| v as u8),
                 strike_shape: number(&text, "strikeShape").map(|v| v as u8),
+                underline_color: text
+                    .get("underlineColor")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                strike_color: text
+                    .get("strikeColor")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 shade: text
                     .get("shadeColor")
                     .and_then(Value::as_str)
