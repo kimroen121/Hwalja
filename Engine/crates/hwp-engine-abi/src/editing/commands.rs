@@ -235,7 +235,7 @@ impl EditSession {
         boundary(&para.text, p.scalar)
     }
     /// Both ends valid, in one container, with only editable paragraphs between them.
-    fn validate_range(&self, selection: &EditSelection) -> Result<(), EditError> {
+    pub(super) fn validate_range(&self, selection: &EditSelection) -> Result<(), EditError> {
         let (start, end) = ordered(selection);
         if !same_container(&start.target, &end.target) {
             return Err(EditError::UnsupportedTarget);
@@ -284,6 +284,7 @@ impl EditSession {
                 }
                 super::format::validate_char(style)
             }
+            EditCommand::ApplyStyle { selection, style } => self.validate_style(selection, *style),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
                 not_in_note(&selection.anchor.target)?;
@@ -719,6 +720,7 @@ impl EditSession {
                 }
                 Ok(selection.clone())
             }
+            EditCommand::ApplyStyle { selection, style } => self.apply_style(selection, *style),
             EditCommand::FormatParagraphs { selection, style } => {
                 let (start, end) = ordered(selection);
                 let props = super::format::para_props(style);

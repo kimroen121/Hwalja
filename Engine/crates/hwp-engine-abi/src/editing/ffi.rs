@@ -71,6 +71,8 @@ enum Request {
         font_size: u32,
         color: u32,
     },
+    /// The document's styles, in order.
+    Styles,
     /// Shows or hides 문단 부호 and 조판 부호.
     ShowMarks {
         paragraph: bool,
@@ -179,6 +181,7 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
                 data,
             )
         }
+        Request::Styles => HwpEditResult::ok(session.styles(), Vec::new()),
         Request::ShowMarks { paragraph, control } => {
             session.show_marks(paragraph, control)?;
             state(session)

@@ -10,9 +10,11 @@ mod objects;
 mod preservation;
 mod protocol;
 mod save;
+mod styles;
 pub use protocol::*;
 use rhwp::DocumentCore;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+pub use styles::StyleInfo;
 
 /// Undo + redo states kept in memory; the original bytes are kept separately.
 const HISTORY_LIMIT: usize = 20;
@@ -214,7 +216,8 @@ impl EditSession {
         let start = match &request.command {
             EditCommand::Replace { selection, .. }
             | EditCommand::FormatText { selection, .. }
-            | EditCommand::FormatParagraphs { selection, .. } => {
+            | EditCommand::FormatParagraphs { selection, .. }
+            | EditCommand::ApplyStyle { selection, .. } => {
                 Some(commands::ordered(selection).0.clone())
             }
             EditCommand::MergeCells { selection }

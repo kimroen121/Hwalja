@@ -121,7 +121,8 @@ pub(super) fn check(
             )
         }
         EditCommand::FormatText { selection, .. }
-        | EditCommand::FormatParagraphs { selection, .. } => {
+        | EditCommand::FormatParagraphs { selection, .. }
+        | EditCommand::ApplyStyle { selection, .. } => {
             return check_format(before, after, selection)
         }
         EditCommand::Split { position } | EditCommand::Break { position, .. } => {
@@ -532,6 +533,7 @@ fn check_format(
         {
             p.char_shapes.clear();
             p.para_shape_id = 0;
+            p.style_id = 0;
         }
         for s in &mut doc.sections {
             normalize(&mut s.paragraphs);

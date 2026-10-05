@@ -70,6 +70,10 @@ struct FormatRow: View {
                 .disabled(!context.canRedo)
             RowDivider()
             Group {
+                FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
+                    Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
+                        .lineLimit(1).frame(width: 84, alignment: .leading)
+                }
                 FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(text?.font, editor) }) {
                     Text(text?.font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
                 }
@@ -110,6 +114,13 @@ struct FormatRow: View {
     }
 
     /// Every installed family, built only when the menu opens.
+    private static func styles(_ document: HwpDocument, _ editor: PageEditor) -> [Choice?] {
+        document.styles.map { style in
+            Choice(title: style.name, on: style.id == document.format?.style) {
+                document.applyStyle(style.id, editor.undoManager)
+            }
+        }
+    }
     private static func fonts(_ current: String?, _ editor: PageEditor) -> [Choice?] {
         FormatChoices.families.map { font in
             Choice(title: font.name, on: font.name == current || font.family == current) { editor.format(CharStyle(font: font.family)) }

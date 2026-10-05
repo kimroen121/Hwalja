@@ -1675,3 +1675,55 @@ fn line_break_units_are_set_and_read() {
         (Some(0), Some(2))
     );
 }
+
+#[test]
+fn styles_apply_to_paragraphs() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let styles = s.styles();
+        assert!(styles.len() > 2 && !styles[0].name.is_empty());
+        let selection = EditSelection {
+            anchor: point(body(), 0),
+            focus: point(commands::at_index(&body(), 2), 0),
+        };
+        run(
+            &mut s,
+            EditCommand::ApplyStyle {
+                selection,
+                style: 2,
+            },
+        )
+        .unwrap();
+        for p in [body(), commands::at_index(&body(), 2)] {
+            assert_eq!(s.format(s.revision, &point(p, 0)).unwrap().style, 2);
+        }
+        let cell = EditTarget {
+            section: 0,
+            paragraph: 2,
+            cell: Some(CellTarget {
+                control: 0,
+                cell: 0,
+                paragraph: 0,
+            }),
+            note: None,
+        };
+        let selection = EditSelection::caret(point(cell.clone(), 0));
+        run(
+            &mut s,
+            EditCommand::ApplyStyle {
+                selection,
+                style: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.format(s.revision, &point(cell, 0)).unwrap().style, 1);
+        let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+        assert_eq!(reopened.format(0, &point(body(), 0)).unwrap().style, 2);
+        run(&mut s, EditCommand::Undo).unwrap();
+        let wrong = EditCommand::ApplyStyle {
+            selection: EditSelection::caret(point(body(), 0)),
+            style: 9_999,
+        };
+        assert_eq!(run(&mut s, wrong).unwrap_err(), EditError::InvalidInput);
+    }
+}

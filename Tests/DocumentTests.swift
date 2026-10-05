@@ -118,6 +118,18 @@ struct DocumentTests {
         #expect(!document.reply.dirty && !document.reply.canUndo)
     }
 
+    @Test func stylesListAndApply() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.select { $0.selection }
+        await document.settle()
+        let style = try #require(document.styles.last)
+        #expect(document.format?.style != style.id)
+        document.applyStyle(style.id, UndoManager())
+        await document.settle()
+        #expect(document.format?.style == style.id)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

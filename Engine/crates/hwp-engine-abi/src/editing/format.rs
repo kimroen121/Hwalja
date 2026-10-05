@@ -343,7 +343,9 @@ impl EditSession {
         };
         let para_flag = |key: &str| para.get(key).and_then(Value::as_bool);
         let para_unit = |key: &str| para.get(key).and_then(Value::as_u64).map(|v| v as u8);
+        let style = get(self.core.document(), t)?.style_id as u32;
         Ok(Format {
+            style,
             text: CharStyle {
                 font: Some(font),
                 size: text

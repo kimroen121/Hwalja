@@ -56,6 +56,12 @@ pub enum EditCommand {
     MergePrevious {
         position: EditPosition,
     },
+    /// 스타일 `style` (an index into the document's styles) for every paragraph the
+    /// selection touches.
+    ApplyStyle {
+        selection: EditSelection,
+        style: u32,
+    },
     /// Character format over the selected text (one container, any number of paragraphs).
     FormatText {
         selection: EditSelection,
@@ -430,6 +436,8 @@ pub struct Navigation {
 pub struct Format {
     pub text: CharStyle,
     pub paragraph: ParaStyle,
+    /// The paragraph's 스타일.
+    pub style: u32,
     pub fonts: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize)]

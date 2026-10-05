@@ -37,6 +37,8 @@ enum EditCommand: Encodable, Sendable {
     case replace(EditSelection, text: String)
     case split(EditPosition)
     case mergePrevious(EditPosition)
+    /// 스타일 `style` (an index into the document's styles) for the selected paragraphs.
+    case applyStyle(EditSelection, style: UInt32)
     case formatText(EditSelection, CharStyle)
     case formatParagraphs(EditSelection, ParaStyle)
     /// A new page (or column) from `position` in the body.
@@ -134,6 +136,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(footer, forKey: .footer)
             try c.encode(pageNumber, forKey: .pageNumber)
+        case let .applyStyle(selection, style):
+            try c.encode("applyStyle", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(style, forKey: .style)
         case let .mergeCells(selection):
             try c.encode("mergeCells", forKey: .kind)
             try c.encode(selection, forKey: .selection)
@@ -406,6 +412,8 @@ struct Navigation: Decodable, Sendable {
 struct Format: Decodable, Hashable, Sendable {
     var text: CharStyle
     var paragraph: ParaStyle
+    /// The paragraph's 스타일.
+    var style: UInt32
     var fonts: [String]
 }
 
@@ -414,6 +422,12 @@ struct ParagraphInfo: Decodable, Sendable {
     /// Paragraphs in the same container (body or cell).
     var count: UInt32
     var text: String
+}
+
+/// One of the document's styles.
+struct StyleInfo: Decodable, Hashable, Sendable {
+    var id: UInt32
+    var name: String
 }
 
 /// 96 dpi, top-left origin within `page`.
@@ -462,6 +476,7 @@ enum EngineRequest: Encodable, Sendable {
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
     case showMarks(paragraph: Bool, control: Bool)
+    case styles
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
@@ -531,6 +546,8 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(script, forKey: .script)
             try c.encode(fontSize, forKey: .fontSize)
             try c.encode(color, forKey: .color)
+        case .styles:
+            try c.encode("styles", forKey: .op)
         case let .showMarks(paragraph, control):
             try c.encode("showMarks", forKey: .op)
             try c.encode(paragraph, forKey: .paragraph)

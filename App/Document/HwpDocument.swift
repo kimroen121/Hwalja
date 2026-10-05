@@ -81,6 +81,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     /// Format at the caret (or at the end of the selection), with any pending style.
     private(set) var format: Format? { willSet { objectWillChange.send() } }
+    /// The document's styles, read once.
+    private(set) var styles: [StyleInfo] = []
     /// A character format chosen at a caret, for the next text typed there.
     private var pendingStyle: (at: EditPosition, style: CharStyle)?
     private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
@@ -238,6 +240,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             try await document.run(.formatText(selection, style))
             document.registerHistory(.undo, undoManager)
         }
+    }
+    /// Applies 스타일 `style` to every paragraph the selection touches.
+    func applyStyle(_ style: UInt32, _ undoManager: UndoManager?) {
+        edit(undoManager) { $0.map { .applyStyle($0, style: style) } }
     }
     /// Applies a paragraph format to every paragraph the selection touches.
     func formatParagraphs(_ style: ParaStyle, _ undoManager: UndoManager?) {
@@ -408,6 +414,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             }
             format = try? await session.format(revision: revision, at: selection.ordered.end)
         }
+        if styles.isEmpty, let list = try? await session.styles() { styles = list }
         // A pending style lasts while the caret stays put or composition continues there.
         if let pending = pendingStyle {
             if marked == nil && selection != .caret(pending.at) {

@@ -81,6 +81,9 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.pageSetup(section: section)))
     }
 
+    func styles() async throws -> [StyleInfo] {
+        try await decode(send(.styles))
+    }
     /// Shows or hides 문단 부호 and 조판 부호; the pages that change come back.
     func showMarks(paragraph: Bool, control: Bool) async throws -> Output {
         try await send(.showMarks(paragraph: paragraph, control: control), Output.init)
