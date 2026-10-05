@@ -346,7 +346,7 @@ fn ffi_round_trip_owns_results() {
                 .unwrap()
                 .to_owned()
         };
-        let opened = hwp_edit_open(bytes.as_ptr(), bytes.len(), &mut session);
+        let opened = hwp_edit_open_v2(PROTOCOL_VERSION, bytes.as_ptr(), bytes.len(), &mut session);
         assert_eq!(hwp_edit_result_status(opened), 0, "{}", json(opened));
         let data = std::slice::from_raw_parts(
             hwp_edit_result_data(opened),
@@ -367,10 +367,53 @@ fn ffi_round_trip_owns_results() {
         assert_eq!(json(bad), r#"{"error":"InvalidInput"}"#);
         hwp_edit_result_free(bad);
         hwp_edit_close(session);
-        let failed = hwp_edit_open(b"junk".as_ptr(), 4, &mut session);
+        let failed = hwp_edit_open_v2(PROTOCOL_VERSION, b"junk".as_ptr(), 4, &mut session);
         assert!(session.is_null() && hwp_edit_result_status(failed) == 1);
         hwp_edit_result_free(failed);
     }
+}
+
+#[test]
+fn legacy_open_rejects_before_returning_rendering() {
+    use super::ffi::*;
+    let bytes = plain_document("hwpx", false);
+    let mut session = std::ptr::null_mut();
+    let result = unsafe { hwp_edit_open(bytes.as_ptr(), bytes.len(), &mut session) };
+    assert_eq!(unsafe { hwp_edit_result_status(result) }, 1);
+    assert!(session.is_null());
+    assert_eq!(unsafe { hwp_edit_result_length(result) }, 0);
+    let json = unsafe { std::ffi::CStr::from_ptr(hwp_edit_result_json(result)) };
+    assert!(json.to_str().unwrap().contains("IncompatibleEngine"));
+    unsafe { hwp_edit_result_free(result) };
+}
+
+#[test]
+fn versioned_open_negotiates_before_returning_rendering() {
+    use super::ffi::*;
+    let bytes = plain_document("hwpx", false);
+    let mut session = std::ptr::null_mut();
+    let current =
+        unsafe { hwp_edit_open_v2(PROTOCOL_VERSION, bytes.as_ptr(), bytes.len(), &mut session) };
+    assert_eq!(unsafe { hwp_edit_result_status(current) }, 0);
+    assert!(!session.is_null());
+    unsafe {
+        hwp_edit_result_free(current);
+        hwp_edit_close(session);
+    }
+
+    session = std::ptr::null_mut();
+    let old = unsafe {
+        hwp_edit_open_v2(
+            PROTOCOL_VERSION - 1,
+            bytes.as_ptr(),
+            bytes.len(),
+            &mut session,
+        )
+    };
+    assert_eq!(unsafe { hwp_edit_result_status(old) }, 1);
+    assert!(session.is_null());
+    assert_eq!(unsafe { hwp_edit_result_length(old) }, 0);
+    unsafe { hwp_edit_result_free(old) };
 }
 #[test]
 fn first_paragraph_with_section_definition_is_editable() {

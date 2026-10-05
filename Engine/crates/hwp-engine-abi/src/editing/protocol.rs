@@ -528,6 +528,7 @@ pub struct ParagraphInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum EditError {
     InvalidInput,
+    IncompatibleEngine,
     PasswordRequired,
     UnsupportedFormat,
     StaleRevision,

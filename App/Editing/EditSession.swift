@@ -26,9 +26,12 @@ final class EditSession: @unchecked Sendable {
         if original?.isEmpty == true { throw EditError.invalidInput }
         var raw: OpaquePointer?
         let result = if let original {
-            original.withUnsafeBytes { hwp_edit_open($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &raw) }
+            original.withUnsafeBytes {
+                hwp_edit_open_v2(EditProtocolVersion.current,
+                                 $0.bindMemory(to: UInt8.self).baseAddress, $0.count, &raw)
+            }
         } else {
-            hwp_edit_open(nil, 0, &raw)
+            hwp_edit_open_v2(EditProtocolVersion.current, nil, 0, &raw)
         }
         // The engine may succeed but Swift may reject its rendering payload.
         // In that case ownership has not transferred to an EditSession yet.
@@ -159,7 +162,7 @@ extension EditSession.Output {
         let reply: EditReply = try decode(payload)
         guard reply.version == EditProtocolVersion.current else {
             renderLog.error("Incompatible engine protocol: expected=\(EditProtocolVersion.current) actual=\(reply.version)")
-            throw EditError.invalidInput
+            throw EditError.incompatibleEngine
         }
         var reader = ByteReader(payload.data)
         let displays: [PageDisplay?]

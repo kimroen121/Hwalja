@@ -18,7 +18,7 @@ make run      # build/HwpStudio.app 생성(ad-hoc 서명) 후 실행
 make dist     # 유니버설 빌드, Developer ID 서명, 공증, build/HwpStudio.zip
 ```
 
-엔진 프로토콜이 바뀐 커밋을 pull한 뒤에는 예전에 만든 앱이나 `libhwp_engine_abi.a`를 그대로 실행하지 마세요. `make run`은 Rust 엔진과 Swift 앱을 함께 다시 만든 뒤 실행하며, `make test`는 엔진 생성부터 양쪽 전체 테스트까지 확인하는 기준 명령입니다. 앱과 엔진의 프로토콜 버전이 다르면 HwpStudio는 문서 화면을 해석하기 전에 열기를 거부하고 진단 로그에 두 버전을 남깁니다.
+엔진 프로토콜이 바뀐 커밋을 pull한 뒤에는 예전에 만든 앱이나 `libhwp_engine_abi.a`를 그대로 실행하지 마세요. `make run`은 Rust 엔진과 Swift 앱을 함께 다시 만든 뒤 실행하며, `make test`는 엔진 생성부터 양쪽 전체 테스트까지 확인하는 기준 명령입니다. 앱과 엔진의 프로토콜 버전이 다르면 HwpStudio는 렌더링을 시작하기 전에 열기를 거부하고 “앱과 엔진을 함께 다시 빌드”하라는 안내를 표시합니다. 이때 `make engine` 뒤 `make run`을 실행하세요.
 
 `make dist` 준비:
 `rustup target add x86_64-apple-darwin`,

@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 import PDFKit
 import SwiftUI
+import UniformTypeIdentifiers
 @testable import HwpStudio
 
 @MainActor
@@ -13,6 +14,12 @@ struct DocumentTests {
         #expect(document.pages.isEmpty)
         #expect(!document.context.hasSelection)
         #expect(throws: EditError.self) { try document.snapshot(contentType: .hwpx) }
+    }
+
+    @Test func blankEngineMismatchExplainsHowToRecover() {
+        let document = HwpDocument(blankUsing: { _ in throw EditError.incompatibleEngine })
+        #expect(document.creationError?.contains("엔진") == true)
+        #expect(document.creationError?.contains("다시 빌드") == true)
     }
 
     @Test func corruptExistingDocumentStillThrows() {
@@ -30,8 +37,9 @@ struct DocumentTests {
     }
 
     /// A save that starts after an edit was accepted must not overtake that edit.
-    @Test func immediateSaveIncludesQueuedTyping() async throws {
-        let document = try HwpDocument(data: fixture("hwpx"))
+    @Test(arguments: ["hwp", "hwpx"])
+    func immediateSaveIncludesQueuedTyping(ext: String) async throws {
+        let document = try HwpDocument(data: fixture(ext))
         let original = try await document.paragraph(body).text
         document.selection = .caret(EditPosition(target: body, scalar: 0))
         document.select { document in
@@ -40,14 +48,16 @@ struct DocumentTests {
         }
         document.type("저장 직전 입력", nil)
 
-        let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
+        let contentType: UTType = ext == "hwp" ? .hwp : .hwpx
+        let saved = try await Task.detached { try document.snapshot(contentType: contentType) }.value
         let reopened = try HwpDocument(data: saved)
         #expect(try await reopened.paragraph(body).text == "저장 직전 입력" + original)
     }
 
     /// Object changes already accepted by the document are part of the same save boundary.
-    @Test func immediateSaveIncludesQueuedObjectEdit() async throws {
-        let document = try HwpDocument(data: fixture("hwpx"))
+    @Test(arguments: ["hwp", "hwpx"])
+    func immediateSaveIncludesQueuedObjectEdit(ext: String) async throws {
+        let document = try HwpDocument(data: fixture(ext))
         let position = EditPosition(target: body, scalar: 0)
         document.selection = .caret(position)
         document.edit(nil) { _ in .insertEquation(position, script: "x", fontSize: 1_000, color: 0) }
@@ -62,11 +72,54 @@ struct DocumentTests {
             try await Task.sleep(for: .milliseconds(100))
             return document.selection
         }
-        document.edit(nil) { _ in .setObject(object, ObjectProps(script: "a over b")) }
+        let changed = ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
+                                  horzOffset: 1_200, vertOffset: 1_800, script: "a over b")
+        document.edit(nil) { _ in .setObject(object, changed) }
 
-        let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
+        let contentType: UTType = ext == "hwp" ? .hwp : .hwpx
+        let saved = try await Task.detached { try document.snapshot(contentType: contentType) }.value
         let reopened = try HwpDocument(data: saved)
-        #expect(try await reopened.objectProps(object).script == "a over b")
+        let props = try await reopened.objectProps(object)
+        #expect(props.script == "a over b")
+        #expect(props.width == 14_000 && props.height == 9_000)
+        #expect(props.treatAsChar == false)
+        #expect(props.horzOffset == 1_200 && props.vertOffset == 1_800)
+    }
+
+    @Test(arguments: ["hwp", "hwpx"])
+    func immediateSaveIncludesQueuedFormatting(ext: String) async throws {
+        let document = try HwpDocument(data: fixture(ext))
+        let start = EditPosition(target: body, scalar: 0)
+        let end = EditPosition(target: body, scalar: 1)
+        document.selection = EditSelection(anchor: start, focus: end)
+        document.select { document in
+            try await Task.sleep(for: .milliseconds(100))
+            return document.selection
+        }
+        document.formatText(CharStyle(bold: true), nil)
+
+        let contentType: UTType = ext == "hwp" ? .hwp : .hwpx
+        let saved = try await Task.detached { try document.snapshot(contentType: contentType) }.value
+        let reopened = try HwpDocument(data: saved)
+        #expect(try await reopened.session(formatAt: start).text.bold == true)
+    }
+
+    @Test func failedQueuedWorkReleasesSaveBarrier() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.select { _ in throw EditError.unsupportedTarget }
+        let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
+        #expect(!saved.isEmpty)
+        #expect(try HwpDocument(data: saved).creationError == nil)
+    }
+
+    @Test func mainThreadSnapshotRefusesPendingWorkWithoutDeadlock() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.select { document in
+            try await Task.sleep(for: .milliseconds(100))
+            return document.selection
+        }
+        #expect(throws: EditError.saveFailed) { try document.snapshot(contentType: .hwpx) }
+        await document.settle()
     }
 
     /// A pending token holds saves, and finishing it twice cannot corrupt the count.
@@ -401,7 +454,6 @@ struct DocumentTests {
         await document.settle()
         editor.setMarkedText("요", selectedRange: NSRange(location: 1, length: 0),
                              replacementRange: NSRange(location: NSNotFound, length: 0))
-        await document.settle()
 
         editor.selectAll(nil)
         editor.insertText("반갑습니다", replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -436,8 +488,10 @@ struct DocumentTests {
 
     @Test func compositionThenPasteAppendsAfterCommittedText() async throws {
         let (document, editor, _) = await editorComposingGreeting()
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("!", forType: .string)
+        let pasteboard = NSPasteboard.withUniqueName()
+        editor.pasteboard = pasteboard
+        pasteboard.clearContents()
+        pasteboard.setString("!", forType: .string)
         editor.paste(nil)
         await document.settle()
         #expect(try await document.paragraph(body).text == "안녕하세요!")

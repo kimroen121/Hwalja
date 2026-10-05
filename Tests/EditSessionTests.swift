@@ -9,7 +9,7 @@ func fixture(_ ext: String) throws -> Data {
 struct EditSessionTests {
     @Test func protocolVersionMismatchIsRejectedBeforeRendering() {
         let json = Data(#"{"version":999,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
-        #expect(throws: EditError.invalidInput) { try EditSession.Output((json, Data([2]))) }
+        #expect(throws: EditError.incompatibleEngine) { try EditSession.Output((json, Data([2]))) }
     }
 
     @Test func rejectsMalformedRenderingPayloads() {

@@ -191,6 +191,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// Latest drag point waiting for the hit test in flight.
     private var pendingDrag: NSPoint?
     private var hitTesting = false
+    /// Injectable so editor tests never overwrite the user's system clipboard.
+    var pasteboard = NSPasteboard.general
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -919,7 +921,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// Pastes text, or else an image as a picture.
     @objc func paste(_ sender: Any?) {
         commitComposition()
-        let board = NSPasteboard.general
+        let board = pasteboard
         if let text = board.string(forType: .string) {
             replaceSelection(with: text)
         } else if let image = NSImage(pasteboard: board), let data = image.tiffRepresentation {
@@ -944,8 +946,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         guard let model, let selection = model.selection, selection.anchor != selection.focus else { return NSSound.beep() }
         Task {
             guard let text = try? await model.text(of: selection) else { return NSSound.beep() }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
             if cut { replaceSelection(with: "") }
         }
     }
@@ -968,7 +970,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         case #selector(pasteFont(_:)): return hasRange && Self.copiedStyle != nil
         case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return hasRange
         case #selector(paste(_:)):
-            return model?.selection != nil && (NSPasteboard.general.string(forType: .string) != nil || NSImage.canInit(with: .general))
+            return model?.selection != nil && (pasteboard.string(forType: .string) != nil || NSImage.canInit(with: pasteboard))
         case #selector(selectAll(_:)): return model?.selection != nil
         default: return responds(to: item.action)
         }

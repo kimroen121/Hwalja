@@ -205,14 +205,33 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
     })
 }
 
-/// Opens a session over a copy of `data`, or a blank document when `data` is null.
-/// On success `*session` receives the handle and the result carries the initial state;
-/// on failure `*session` is null.
+/// Legacy unversioned opening cannot safely consume this engine's rendering protocol.
+/// It always rejects before opening or returning rendering bytes.
 ///
 /// # Safety
 /// `data` must be null or readable for `length` bytes, and `session` must be writable.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_edit_open(
+    _data: *const u8,
+    _length: usize,
+    session: *mut *mut EditSession,
+) -> *mut HwpEditResult {
+    if session.is_null() {
+        return HwpEditResult::error(EditError::InvalidInput);
+    }
+    unsafe { *session = std::ptr::null_mut() };
+    HwpEditResult::error(EditError::IncompatibleEngine)
+}
+
+/// Opens a session after negotiating the rendering and request protocol version.
+/// On success `*session` receives the handle and the result carries the initial state;
+/// on failure `*session` is null and no rendering bytes are returned.
+///
+/// # Safety
+/// `data` must be null or readable for `length` bytes, and `session` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn hwp_edit_open_v2(
+    version: u32,
     data: *const u8,
     length: usize,
     session: *mut *mut EditSession,
@@ -221,6 +240,9 @@ pub unsafe extern "C" fn hwp_edit_open(
         return HwpEditResult::error(EditError::InvalidInput);
     }
     unsafe { *session = std::ptr::null_mut() };
+    if version != PROTOCOL_VERSION {
+        return HwpEditResult::error(EditError::IncompatibleEngine);
+    }
     let opened = catch_unwind(|| {
         if data.is_null() {
             EditSession::blank()
@@ -240,7 +262,7 @@ pub unsafe extern "C" fn hwp_edit_open(
 }
 
 /// # Safety
-/// `session` must come from `hwp_edit_open`; `json` must be readable for `length` bytes.
+/// `session` must come from `hwp_edit_open_v2`; `json` must be readable for `length` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_edit_request(
     session: *mut EditSession,
@@ -270,7 +292,7 @@ pub unsafe extern "C" fn hwp_edit_request(
 }
 
 /// # Safety
-/// `session` must come from `hwp_edit_open` and not be used afterwards. Null is allowed.
+/// `session` must come from `hwp_edit_open_v2` and not be used afterwards. Null is allowed.
 #[no_mangle]
 pub unsafe extern "C" fn hwp_edit_close(session: *mut EditSession) {
     if !session.is_null() {

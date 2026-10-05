@@ -511,6 +511,7 @@ struct PageRect: Decodable, Hashable, Sendable {
 }
 
 enum EditError: String, Error, Decodable, Sendable {
+    case incompatibleEngine = "IncompatibleEngine"
     case invalidInput = "InvalidInput"
     case passwordRequired = "PasswordRequired"
     case unsupportedFormat = "UnsupportedFormat"
@@ -522,6 +523,17 @@ enum EditError: String, Error, Decodable, Sendable {
     case preservationFailed = "PreservationFailed"
     case saveFailed = "SaveFailed"
     case locked = "Locked"
+}
+
+extension EditError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .incompatibleEngine:
+            "앱과 문서 엔진 버전이 맞지 않습니다. HwpStudio 앱과 엔진을 함께 다시 빌드해 주세요."
+        default:
+            nil
+        }
+    }
 }
 
 enum SaveFormat: String, Encodable, Sendable {
