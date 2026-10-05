@@ -77,6 +77,34 @@ struct DocumentTests {
         #expect(document.revision == 2 && !document.reply.dirty)
     }
 
+    /// The equation inserted at `body`, found the way the canvas finds what was clicked.
+    @Test func objectsAreSelectedChangedAndDeleted() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        let position = EditPosition(target: body, scalar: 0)
+        document.selection = .caret(position)
+        document.edit(undo) { _ in .insertEquation(position, script: "x^2", fontSize: 1_000, color: 0) }
+        await document.settle()
+        var object: ObjectRef?
+        for control in UInt32(0)..<16 {
+            let candidate = ObjectRef(kind: .equation, section: 0, paragraph: 0, control: control)
+            if (try? await document.objectProps(candidate)) != nil { object = candidate }
+        }
+        let equation = try #require(object)
+        document.edit(undo) { _ in .setObject(equation, ObjectProps(script: "a over b", fontSize: 1_400)) }
+        await document.settle()
+        let props = try await document.objectProps(equation)
+        #expect(props.script == "a over b" && props.fontSize == 1_400)
+        let preview = try await document.equationPreview("sqrt {x}", fontSize: 1_000, color: 0)
+        #expect(preview.width > 0 && !preview.ops.isEmpty)
+        document.edit(undo) { _ in .deleteObject(equation) }
+        await document.settle()
+        #expect((try? await document.objectProps(equation)) == nil)
+        undo.undo()
+        await document.settle()
+        #expect(try await document.objectProps(equation).script == "a over b")
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])
@@ -446,12 +474,20 @@ struct DocumentTests {
             ("char", AnyView(CharShapeSheet(style: format.text, viewer: viewer))),
             ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
+            ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
+                                                                   fontSize: 10, color: 0), viewer: viewer, document: document))),
+            ("object", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
+                                                                   props: ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
+                                                                                      textWrap: "Square", caption: "None")),
+                                           viewer: viewer))),
         ]
         for (name, view) in views {
             let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: [.borderless],
                                   backing: .buffered, defer: false)
             window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(300))
             host.layoutSubtreeIfNeeded()
             let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: rep)

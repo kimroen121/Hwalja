@@ -150,6 +150,12 @@ pub(super) fn check(
             return check_inserted_note(before, after, &position.target)
         }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
+        EditCommand::SetObject { object, .. } | EditCommand::DeleteObject { object } => {
+            return check_host(before, after, object.section, object.paragraph)
+        }
+        EditCommand::SetCell { cell, .. } => {
+            return check_host(before, after, cell.section, cell.paragraph)
+        }
         EditCommand::HeaderFooter {
             section, footer, ..
         } => return check_header_footer(before, after, *section, *footer),
@@ -418,6 +424,28 @@ fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result
         return Err(EditError::PreservationFailed);
     }
     same_rest(&mut a, &mut b, cell.section)
+}
+/// An object edit may only change the body paragraph holding the object, and append
+/// DocInfo entries.
+fn check_host(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    paragraph: u32,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let paragraphs = &mut doc.sections[section as usize].paragraphs;
+        if paragraph as usize >= paragraphs.len() {
+            return Err(EditError::PreservationFailed);
+        }
+        paragraphs.remove(paragraph as usize);
+    }
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, section)
 }
 /// Page setup may only change the section's paper and margins.
 fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {

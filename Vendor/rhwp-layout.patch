@@ -417,3 +417,97 @@ index 3989968..e268160 100644
  
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
+diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
+--- a/src/document_core/commands/table_ops.rs
++++ b/src/document_core/commands/table_ops.rs
+@@ -1259,7 +1259,7 @@
+         Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
+     }
+ 
+-    pub(crate) fn get_cell_properties_native(
++    pub fn get_cell_properties_native(
+         &self,
+         section_idx: usize,
+         parent_para_idx: usize,
+@@ -2783,7 +2783,7 @@
+     }
+ 
+     /// 표 속성을 조회한다 (네이티브).
+-    pub(crate) fn get_table_properties_native(
++    pub fn get_table_properties_native(
+         &self,
+         section_idx: usize,
+         parent_para_idx: usize,
+@@ -2823,34 +2823,34 @@
+         let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
+             u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
+         } else {
+-            0
++            table.common.width
+         };
+         let table_height = if rd.len() >= common_obj_offsets::HEIGHT.end {
+             u32::from_le_bytes(rd[common_obj_offsets::HEIGHT].try_into().unwrap())
+         } else {
+-            0
++            table.common.height
+         };
+         // outer_margin: [24..32] (parse_common_obj_attr 정합)
+         // [20..24]=z_order, [24..26]=left, [26..28]=right, [28..30]=top, [30..32]=bottom
+         let outer_left = if rd.len() >= common_obj_offsets::MARGIN_LEFT.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_LEFT].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.left
+         };
+         let outer_right = if rd.len() >= common_obj_offsets::MARGIN_RIGHT.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_RIGHT].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.right
+         };
+         let outer_top = if rd.len() >= common_obj_offsets::MARGIN_TOP.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_TOP].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.top
+         };
+         let outer_bottom = if rd.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_BOTTOM].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.bottom
+         };
+ 
+         // 캡션 정보
+@@ -2911,12 +2911,12 @@
+         let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
+             i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
+         } else {
+-            0
++            table.common.vertical_offset as i32
+         };
+         let horz_offset = if rd.len() >= common_obj_offsets::H_OFFSET.end {
+             i32::from_le_bytes(rd[common_obj_offsets::H_OFFSET].try_into().unwrap())
+         } else {
+-            0
++            table.common.horizontal_offset as i32
+         };
+         let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
+         let allow_overlap = (table.attr >> 14) & 0x01 != 0;
+@@ -3155,6 +3155,16 @@
+         }
+ 
+         // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
++        for (key, margin) in [
++            ("outerLeft", &mut table.common.margin.left),
++            ("outerRight", &mut table.common.margin.right),
++            ("outerTop", &mut table.common.margin.top),
++            ("outerBottom", &mut table.common.margin.bottom),
++        ] {
++            if let Some(v) = json_i16(json, key) {
++                *margin = v;
++            }
++        }
+         if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
+             if let Some(v) = json_i16(json, "outerLeft") {
+                 table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]

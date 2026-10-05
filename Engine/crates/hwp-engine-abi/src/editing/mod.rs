@@ -4,6 +4,7 @@ pub mod ffi;
 mod format;
 mod geometry;
 mod navigation;
+mod objects;
 #[cfg(test)]
 mod preservation;
 mod protocol;
@@ -222,10 +223,23 @@ impl EditSession {
             | EditCommand::InsertPicture { position, .. }
             | EditCommand::InsertEquation { position, .. }
             | EditCommand::InsertNote { position, .. } => Some(position.clone()),
-            EditCommand::EditTable { cell, .. } => Some(EditPosition {
-                target: cell.clone(),
-                scalar: 0,
-            }),
+            EditCommand::EditTable { cell, .. } | EditCommand::SetCell { cell, .. } => {
+                Some(EditPosition {
+                    target: cell.clone(),
+                    scalar: 0,
+                })
+            }
+            EditCommand::SetObject { object, .. } | EditCommand::DeleteObject { object } => {
+                Some(EditPosition {
+                    target: EditTarget {
+                        section: object.section,
+                        paragraph: object.paragraph,
+                        cell: None,
+                        note: None,
+                    },
+                    scalar: 0,
+                })
+            }
             EditCommand::SetPage { .. }
             | EditCommand::HeaderFooter { .. }
             | EditCommand::Undo

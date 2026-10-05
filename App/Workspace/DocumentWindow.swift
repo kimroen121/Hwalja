@@ -54,9 +54,8 @@ struct DocumentWindow: View {
             Button("취소", role: .cancel) {}
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
-        .sheet(isPresented: $viewer.insertingEquation) {
-            EquationSheet(fontSize: document.format?.text.size ?? 10, viewer: viewer)
-        }
+        .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
+        .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingCharShape) {
             CharShapeSheet(style: document.format?.text ?? CharStyle(), viewer: viewer)
         }
@@ -135,7 +134,9 @@ final class Viewer: ObservableObject {
     @Published var showsThumbnails = true
     @Published var goingToPage = false
     @Published var insertingTable = false
-    @Published var insertingEquation = false
+    /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
+    @Published var equation: EquationEdit?
+    @Published var objectSheet: ObjectSheetState?
     @Published var editingCharShape = false
     @Published var editingParaShape = false
     /// The section and paper 편집 용지 is showing.
@@ -162,6 +163,7 @@ final class Viewer: ObservableObject {
             if page != position.page { position.page = page }
         }
         canvas.editor.onPresent = { [weak self] in self?.documentPresented() }
+        canvas.editor.onOpenObject = { [weak self] in self?.open($0) }
     }
 
     /// Keeps the find bar's matches and count current as the document changes.

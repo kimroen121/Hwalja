@@ -29,7 +29,7 @@ struct ToolRow: View {
                 .disabled(!context.inBody)
             ToolTile("그림", Icon.picture) { viewer.insertPicture() }
                 .disabled(!context.inBody)
-            ToolTile("수식", Icon.equation) { viewer.insertingEquation = true }
+            ToolTile("수식", Icon.equation) { viewer.newEquation() }
                 .disabled(!context.inBody)
             RowDivider()
             Group {
@@ -46,6 +46,15 @@ struct ToolRow: View {
                 ToolTile("문단 모양", Icon.paraShape) { viewer.editingParaShape = true }
             }
             .disabled(!context.canFormat)
+            ToolTile("개체 속성", Icon.objectProps) { viewer.showObjectProperties() }
+                .disabled(context.object == nil && !context.inTable)
+            if context.object == .picture {
+                RowDivider()
+                ToolTile("색조 조정", Icon.pictureEffect, choices: { MenuItems.pictureEffects(viewer) })
+                ToolTile("밝기", Icon.brightness, choices: { MenuItems.brightness(viewer) })
+                ToolTile("대비", Icon.contrast, choices: { MenuItems.contrast(viewer) })
+                ToolTile("원래 그림으로", Icon.originalPicture) { MenuItems.restorePicture(viewer) }
+            }
             RowDivider()
             ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
             ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
@@ -65,6 +74,8 @@ enum Icon {
     static let charShape = "textformat", paraShape = "text.alignleft"
     static let header = "rectangle.topthird.inset.filled", footer = "rectangle.bottomthird.inset.filled"
     static let footnote = "note.text", endnote = "doc.plaintext"
+    static let objectProps = "slider.horizontal.3", pictureEffect = "camera.filters"
+    static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"

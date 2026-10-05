@@ -48,6 +48,11 @@ enum EditCommand: Encodable, Sendable {
     case insertEquation(EditPosition, script: String, fontSize: UInt32, color: UInt32)
     /// A 각주 (or 미주) at `position`; the caret moves into it.
     case insertNote(EditPosition, endnote: Bool)
+    /// Changes the properties set in `props` of a picture, equation or table.
+    case setObject(ObjectRef, ObjectProps)
+    /// Changes the properties set in `props` of the cell holding `target`.
+    case setCell(EditTarget, CellProps)
+    case deleteObject(ObjectRef)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
     case setPage(section: UInt32, PageSetup)
@@ -59,7 +64,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color
+             footer, pageNumber, endnote, script, fontSize, color, object, props
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -124,6 +129,17 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(footer, forKey: .footer)
             try c.encode(pageNumber, forKey: .pageNumber)
+        case let .setObject(object, props):
+            try c.encode("setObject", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(props, forKey: .props)
+        case let .setCell(cell, props):
+            try c.encode("setCell", forKey: .kind)
+            try c.encode(cell, forKey: .cell)
+            try c.encode(props, forKey: .props)
+        case let .deleteObject(object):
+            try c.encode("deleteObject", forKey: .kind)
+            try c.encode(object, forKey: .object)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
@@ -132,6 +148,96 @@ enum EditCommand: Encodable, Sendable {
 
 enum Placement: String, Encodable, Sendable {
     case left, center, right
+}
+
+enum ObjectKind: String, Codable, Sendable {
+    case picture, equation, table
+}
+
+/// Control `control` of a body paragraph.
+struct ObjectRef: Codable, Hashable, Sendable {
+    var kind: ObjectKind
+    var section: UInt32
+    var paragraph: UInt32
+    var control: UInt32
+}
+
+/// An object as laid out on a page.
+struct PlacedObject: Decodable, Hashable, Sendable {
+    var object: ObjectRef
+    var rect: PageRect
+}
+
+/// Object properties in the engine's names and units (lengths in HWPUNIT). As a query
+/// result the fields the object has are set; as a change, nil fields stay.
+struct ObjectProps: PartialFormat {
+    var width: UInt32?
+    var height: UInt32?
+    var sizeProtect: Bool?
+    var treatAsChar: Bool?
+    /// Square (어울림), TopAndBottom (자리 차지), BehindText (글 뒤로), InFrontOfText (글 앞으로).
+    var textWrap: String?
+    /// Paper, Page, Column, Para; Left, Center, Right.
+    var horzRelTo: String?
+    var horzAlign: String?
+    var horzOffset: Int32?
+    /// Paper, Page, Para; Top, Center, Bottom.
+    var vertRelTo: String?
+    var vertAlign: String?
+    var vertOffset: Int32?
+    var restrictInPage: Bool?
+    var allowOverlap: Bool?
+    /// Pictures and tables: None, Top, Bottom, Left, Right.
+    var caption: String?
+    var outerMarginLeft: Int32?
+    var outerMarginRight: Int32?
+    var outerMarginTop: Int32?
+    var outerMarginBottom: Int32?
+    /// Pictures: 그림 여백. Tables: every cell's inner margin.
+    var paddingLeft: Int32?
+    var paddingRight: Int32?
+    var paddingTop: Int32?
+    var paddingBottom: Int32?
+    var cropLeft: Int32?
+    var cropRight: Int32?
+    var cropTop: Int32?
+    var cropBottom: Int32?
+    /// Read only.
+    var originalWidth: UInt32?
+    var originalHeight: UInt32?
+    /// −100–100.
+    var brightness: Int32?
+    var contrast: Int32?
+    /// RealPic, GrayScale, BlackWhite.
+    var effect: String?
+    var rotationAngle: Int32?
+    var horzFlip: Bool?
+    var vertFlip: Bool?
+    /// Tables: 0 나누지 않음, 1 나눔, 2 셀 단위로 나눔.
+    var pageBreak: UInt8?
+    var repeatHeader: Bool?
+    var cellSpacing: Int32?
+    var script: String?
+    /// HWPUNIT, 100 per point.
+    var fontSize: UInt32?
+    /// 0x00bbggrr.
+    var color: UInt32?
+    var baseline: Int32?
+}
+
+/// Cell properties (lengths in HWPUNIT); nil fields stay.
+struct CellProps: PartialFormat {
+    var width: UInt32?
+    var height: UInt32?
+    var applyInnerMargin: Bool?
+    var paddingLeft: Int32?
+    var paddingRight: Int32?
+    var paddingTop: Int32?
+    var paddingBottom: Int32?
+    /// 0 top, 1 center, 2 bottom.
+    var verticalAlign: UInt8?
+    var isHeader: Bool?
+    var cellProtect: Bool?
 }
 
 enum TableChange: String, Encodable, Sendable {
@@ -324,10 +430,16 @@ enum EngineRequest: Encodable, Sendable {
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
+    case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
+    case place(revision: UInt64, ObjectRef, page: UInt32)
+    case objectProps(ObjectRef)
+    case cellProps(EditTarget)
+    case equationPreview(script: String, fontSize: UInt32, color: UInt32)
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
-        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section
+        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
+             object, cell, script, fontSize, color
     }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
@@ -370,6 +482,28 @@ enum EngineRequest: Encodable, Sendable {
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
             try c.encode(section, forKey: .section)
+        case let .objectAt(revision, page, x, y):
+            try c.encode("objectAt", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(page, forKey: .page)
+            try c.encode(x, forKey: .x)
+            try c.encode(y, forKey: .y)
+        case let .place(revision, object, page):
+            try c.encode("place", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(object, forKey: .object)
+            try c.encode(page, forKey: .page)
+        case let .objectProps(object):
+            try c.encode("objectProps", forKey: .op)
+            try c.encode(object, forKey: .object)
+        case let .cellProps(cell):
+            try c.encode("cellProps", forKey: .op)
+            try c.encode(cell, forKey: .cell)
+        case let .equationPreview(script, fontSize, color):
+            try c.encode("equationPreview", forKey: .op)
+            try c.encode(script, forKey: .script)
+            try c.encode(fontSize, forKey: .fontSize)
+            try c.encode(color, forKey: .color)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)

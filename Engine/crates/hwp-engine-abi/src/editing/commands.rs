@@ -354,12 +354,7 @@ impl EditSession {
             } => {
                 body_only(&position.target)?;
                 self.validate_position(position)?;
-                let valid_text = script
-                    .chars()
-                    .all(|ch| matches!(ch, '\n' | '\t') || !ch.is_control());
-                if script.trim().is_empty()
-                    || script.chars().count() > 4096
-                    || !valid_text
+                if !objects::is_script(script)
                     || !(400..=7_200).contains(font_size)
                     || *color > 0x00ff_ffff
                 {
@@ -383,6 +378,11 @@ impl EditSession {
                 validate_page(page)
             }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
+            EditCommand::SetObject { object, props } => self.validate_object(object, props),
+            EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
+            EditCommand::DeleteObject { object } => {
+                self.validate_object(object, &ObjectProps::default())
+            }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
     }
@@ -813,7 +813,7 @@ impl EditSession {
                     .decode(data)
                     .map_err(|_| EditError::InvalidInput)?;
                 let t = &position.target;
-                self.core.insert_picture_native(
+                let inserted = self.core.insert_picture_native(
                     t.section as usize,
                     t.paragraph as usize,
                     position.scalar as usize,
@@ -827,6 +827,18 @@ impl EditSession {
                     description,
                     None,
                     None,
+                )?;
+                // rhwp floats a new picture at the paper's corner; Hancom places it in
+                // the line, like a character.
+                let control = serde_json::from_str::<Value>(&inserted)
+                    .ok()
+                    .and_then(|v| v["controlIdx"].as_u64())
+                    .ok_or(EditError::RenderFailed)?;
+                self.core.set_picture_properties_native(
+                    t.section as usize,
+                    t.paragraph as usize,
+                    control as usize,
+                    r#"{"treatAsChar":true}"#,
                 )?;
                 Ok(EditSelection::caret(position.clone()))
             }
@@ -889,6 +901,18 @@ impl EditSession {
             } => {
                 self.header_footer(*section, *footer, *page_number)?;
                 Ok(self.kept(*section))
+            }
+            EditCommand::SetObject { object, props } => {
+                self.set_object(object, props)?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::SetCell { cell, props } => {
+                self.set_cell(cell, props)?;
+                Ok(self.kept(cell.section))
+            }
+            EditCommand::DeleteObject { object } => {
+                self.delete_object(object)?;
+                Ok(self.kept(object.section))
             }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }

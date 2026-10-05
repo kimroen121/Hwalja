@@ -81,6 +81,28 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.pageSetup(section: section)))
     }
 
+    /// The topmost picture or equation under a page point.
+    func objectAt(revision: UInt64, page: UInt32, x: Double, y: Double) async throws -> PlacedObject? {
+        try await decode(send(.objectAt(revision: revision, page: page, x: x, y: y)))
+    }
+    /// Where `object` is laid out, looking from `page` outward.
+    func place(revision: UInt64, _ object: ObjectRef, page: UInt32) async throws -> PlacedObject {
+        try await decode(send(.place(revision: revision, object, page: page)))
+    }
+    func objectProps(_ object: ObjectRef) async throws -> ObjectProps {
+        try await decode(send(.objectProps(object)))
+    }
+    func cellProps(_ cell: EditTarget) async throws -> CellProps {
+        try await decode(send(.cellProps(cell)))
+    }
+    /// An equation laid out by the engine's renderer, as on the page.
+    func equationPreview(_ script: String, fontSize: UInt32, color: UInt32) async throws -> PageDisplay {
+        try await send(.equationPreview(script: script, fontSize: fontSize, color: color)) { payload in
+            var reader = ByteReader(payload.data)
+            return try PageDisplay(&reader)
+        }
+    }
+
     private func send(_ request: EngineRequest) async throws -> Payload {
         try await send(request) { $0 }
     }

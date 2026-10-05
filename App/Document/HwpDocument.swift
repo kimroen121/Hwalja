@@ -25,6 +25,8 @@ struct Presentation: Equatable {
     var reflowed = false
     var caret: PageRect?
     var highlight: [PageRect] = []
+    /// The selected object's frame; the caret hides while an object is selected.
+    var object: PageRect?
 }
 
 /// What menus and bars depend on. It changes far less often than the caret, so SwiftUI
@@ -40,6 +42,8 @@ struct EditingContext: Equatable {
     var pageCount = 0
     var canUndo = false
     var canRedo = false
+    /// The kind of the selected object.
+    var object: ObjectKind?
     /// The caret is in the body text, where objects and breaks go.
     var inBody: Bool { hasSelection && !inTable && !inNote }
     /// Formats can be read and changed here (not yet inside notes).
@@ -65,6 +69,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
     private(set) var reply: EditReply
     var selection: EditSelection?
+    /// The picture or equation selected as an object.
+    var object: PlacedObject?
     /// Text the input method is still composing; it is already in the document.
     private(set) var marked: EditSelection?
     private(set) var presentation = Presentation()
@@ -243,6 +249,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func move(_ motion: Motion, extend: Bool) {
         enqueue { document in
             guard let selection = document.selection else { return }
+            document.object = nil
             let backward: Set<Motion> = [.left, .wordLeft, .lineStart, .up, .paragraphStart, .documentStart]
             let ranged = selection.anchor != selection.focus
             if !extend, ranged, motion == .left || motion == .right {
@@ -263,8 +270,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             if let selection = try await make(document) {
                 document.goalX = nil
                 document.selection = selection
+                document.object = nil
             }
         }
+    }
+    /// Lets go of the selected object, keeping the caret where it was.
+    func deselectObject() {
+        enqueue { $0.object = nil }
     }
     /// Waits for queued edits and moves.
     func settle() async { await queue?.value }
@@ -298,6 +310,18 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }
+    func objectAt(page: Int, x: Double, y: Double) async throws -> PlacedObject? {
+        try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
+    }
+    func objectProps(_ object: ObjectRef) async throws -> ObjectProps {
+        try await session.objectProps(object)
+    }
+    func cellProps(_ cell: EditTarget) async throws -> CellProps {
+        try await session.cellProps(cell)
+    }
+    func equationPreview(_ script: String, fontSize: UInt32, color: UInt32) async throws -> PageDisplay {
+        try await session.equationPreview(script, fontSize: fontSize, color: color)
+    }
     /// The whole document as PDF, after queued edits.
     func pdf() async throws -> Data {
         await settle()
@@ -324,6 +348,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             guard let command = try await make(document) else { return }
             document.goalX = nil
             try await document.run(command)
+            if case .deleteObject = command { document.object = nil }
             document.registerHistory(.undo, undoManager)
         }
     }
@@ -352,12 +377,19 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         let output = try await session.apply(command, at: revision, amend: amend)
         staged.append(output)
         reply = output.reply
-        if let selection = output.reply.selection { self.selection = selection }
+        if let selection = output.reply.selection, selection != self.selection {
+            self.selection = selection
+            object = nil
+        }
     }
     /// Gathers the caret, highlight and format for the current selection, then swaps in the
     /// staged pages and publishes everything at once.
     private func present() async {
         var caret: PageRect?, highlight: [PageRect] = [], format: Format?
+        if let placed = object {
+            // Edits may move it, or take it away with an undo.
+            object = try? await session.place(revision: revision, placed.object, page: placed.rect.page)
+        }
         if let selection {
             caret = reply.selection == selection ? reply.caret : nil
             if caret == nil { caret = try? await session.caret(revision: revision, at: selection.focus) }
@@ -375,7 +407,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 format?.text = text
             }
         }
-        var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight)
+        var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect)
         for output in staged {
             let count = pages.count
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {
@@ -392,7 +424,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         let context = EditingContext(hasSelection: selection != nil, hasRange: selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil, inNote: selection?.focus.target.note != nil,
                               pageCount: pages.count,
-                              canUndo: reply.canUndo, canRedo: reply.canRedo)
+                              canUndo: reply.canUndo, canRedo: reply.canRedo, object: object?.object.kind)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }
     }

@@ -99,6 +99,20 @@ pub enum EditCommand {
         font_size: u32,
         color: u32,
     },
+    /// Changes the properties `props` sets of a picture, equation or table.
+    SetObject {
+        object: ObjectRef,
+        props: ObjectProps,
+    },
+    /// Changes the properties `props` sets of the cell holding `cell`.
+    SetCell {
+        cell: EditTarget,
+        props: CellProps,
+    },
+    /// Removes an object of the body.
+    DeleteObject {
+        object: ObjectRef,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,
@@ -131,6 +145,103 @@ pub enum Placement {
     Left,
     Center,
     Right,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ObjectKind {
+    Picture,
+    Equation,
+    Table,
+}
+/// Control `control` of a body paragraph.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObjectRef {
+    pub kind: ObjectKind,
+    pub section: u32,
+    pub paragraph: u32,
+    pub control: u32,
+}
+/// An object as laid out on a page.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PlacedObject {
+    pub object: ObjectRef,
+    pub rect: PageRect,
+}
+/// Object properties in rhwp's names and units (lengths in HWPUNIT). As a query result
+/// the fields the object has are set; as a change, unset fields stay.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectProps {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub size_protect: Option<bool>,
+    pub treat_as_char: Option<bool>,
+    /// Square (어울림), TopAndBottom (자리 차지), BehindText, InFrontOfText.
+    pub text_wrap: Option<String>,
+    /// Paper, Page, Column, Para.
+    pub horz_rel_to: Option<String>,
+    /// Left, Center, Right.
+    pub horz_align: Option<String>,
+    pub horz_offset: Option<i32>,
+    /// Paper, Page, Para.
+    pub vert_rel_to: Option<String>,
+    /// Top, Center, Bottom.
+    pub vert_align: Option<String>,
+    pub vert_offset: Option<i32>,
+    pub restrict_in_page: Option<bool>,
+    pub allow_overlap: Option<bool>,
+    /// Pictures and tables: None, Top, Bottom, Left, Right.
+    pub caption: Option<String>,
+    pub outer_margin_left: Option<i32>,
+    pub outer_margin_right: Option<i32>,
+    pub outer_margin_top: Option<i32>,
+    pub outer_margin_bottom: Option<i32>,
+    /// Pictures: 그림 여백. Tables: the inner margin of every cell.
+    pub padding_left: Option<i32>,
+    pub padding_right: Option<i32>,
+    pub padding_top: Option<i32>,
+    pub padding_bottom: Option<i32>,
+    pub crop_left: Option<i32>,
+    pub crop_right: Option<i32>,
+    pub crop_top: Option<i32>,
+    pub crop_bottom: Option<i32>,
+    pub original_width: Option<u32>,
+    pub original_height: Option<u32>,
+    /// −100–100.
+    pub brightness: Option<i32>,
+    pub contrast: Option<i32>,
+    /// RealPic, GrayScale, BlackWhite.
+    pub effect: Option<String>,
+    pub rotation_angle: Option<i32>,
+    pub horz_flip: Option<bool>,
+    pub vert_flip: Option<bool>,
+    /// Tables: 0 나누지 않음, 1 나눔, 2 셀 단위로 나눔.
+    pub page_break: Option<u8>,
+    pub repeat_header: Option<bool>,
+    pub cell_spacing: Option<i32>,
+    pub script: Option<String>,
+    /// HWPUNIT (100 per point).
+    pub font_size: Option<u32>,
+    /// 0x00bbggrr.
+    pub color: Option<u32>,
+    pub baseline: Option<i32>,
+}
+/// Cell properties in rhwp's names (lengths in HWPUNIT); unset fields stay.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellProps {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub apply_inner_margin: Option<bool>,
+    pub padding_left: Option<i32>,
+    pub padding_right: Option<i32>,
+    pub padding_top: Option<i32>,
+    pub padding_bottom: Option<i32>,
+    /// 0 top, 1 center, 2 bottom.
+    pub vertical_align: Option<u8>,
+    pub is_header: Option<bool>,
+    pub cell_protect: Option<bool>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

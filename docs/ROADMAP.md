@@ -80,10 +80,10 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 문서 창: 눈금자 | 눈금자 보기 | | |
 | | 메모: 모든 메모 표시, 메모 안내선 표시 | | | 2차 |
 | 입력 | 도형(가로 글상자, 직사각형, 타원, 직선, 호), 글상자 | | `create_shape_control_native` | |
-| | 그림 | PNG/JPEG 파일 선택, 본문 삽입·비율 유지·Undo·저장 | `insert_picture_native` | 기본 완료 |
+| | 그림 | 모든 그림 파일(PNG·JPEG 외는 변환), 붙이기, 글자처럼 취급으로 본문 폭 안에 삽입. 클릭으로 선택(크기 조절 핸들), Delete로 지우기, 그림 ▾: 색조 조정·밝기·대비·원래 그림으로 | `insert_picture_native`, SetObject, DeleteObject | 완료(끌어 놓기·핸들로 크기 조절 제외) |
 | | 표 | 표… (줄·칸 개수) | `create_table_native` | 완료(본문) |
 | | 차트, 웹 동영상 | | `set_chart_data_native` | 2차 |
-| | 수식 | 한글 수식 스크립트·크기, 본문 삽입·Undo·저장 | `insert_equation_native` | 기본 완료 |
+| | 수식 | 수식 편집기: 첨자·장식 기호·분수·근호·합·적분·극한·괄호·경우·세로 쌓기·행렬 틀, 그리스 문자·기호 7묶음, 글자 크기·색, 페이지와 같은 렌더러로 그리는 실시간 미리 보기. 더블클릭으로 고치기 | `insert_equation_native`, `render_equation_preview_native` | 완료(여러 줄 수식 미리 보기 제외) |
 | | 문자표 (⌘F10) | 이모티콘 및 기호(⌃⌘Space, macOS 기본) | | 완료 |
 | | 필드 입력, 하이퍼링크, 책갈피 | | `add_bookmark_native` | |
 | | 문단 띠 | | | |
@@ -94,14 +94,14 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 문단 모양 (⌘T) | 문단 모양… (⌘T) | `apply_para_format_native` | 완료(탭·테두리·배경 제외) |
 | | 글머리표 모양, 문단 번호 모양, 한 수준 증가/감소 | | | |
 | | 스타일 (F6) | | `apply_style_native` | |
-| | 개체 속성 | | `set_*_properties_native` | |
+| | 개체 속성 | 개체 속성…: 기본(크기·글자처럼 취급·본문과의 배치·가로/세로 위치·회전각), 여백/캡션, 그림(자르기·그림 여백·효과·밝기·대비), 표, 셀 | SetObject, SetCell | 완료(본문 개체. 셀·글상자 안 개체 제외) |
 | 쪽 | 편집 용지 (F7) | 같음 | `set_page_def_native` | 완료 |
 | | 머리말, 꼬리말: 모양 없음, 왼쪽·가운데·오른쪽 쪽 번호 | 쪽 › 머리말·꼬리말, 도구 상자 ▾ | HeaderFooter (쪽 번호는 자동 번호 컨트롤) | 완료(글자 편집 제외) |
 | | 새 번호로 시작, 현재 쪽만 감추기 | | `insert_new_number_native`, `set_page_hide_native` | |
 | | 쪽 나누기 (Ctrl+Return), 단 나누기 (Ctrl+Shift+Return) | 쪽 나누기 (⌘↩), 단 나누기 (⇧⌘↩) | `insert_page_break_native`, `insert_column_break_native` | 완료(본문) |
 | | 단: 하나·둘·셋·왼쪽·오른쪽, 다단 설정 나누기 | | `set_column_def_native` | |
 | 표 | 표 만들기 | 표 만들기… | `create_table_native` | 완료 |
-| | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | | `set_table/cell_properties_native` | |
+| | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | 표/셀 속성…: 쪽 경계에서 나눔, 제목 줄 자동 반복, 모든 셀의 안 여백, 셀 간격, 셀 크기·안 여백·세로 정렬·제목 셀·셀 보호 | SetObject, SetCell | 완료(테두리/배경 제외) |
 | | 줄/칸 추가하기: 위·아래 줄, 왼쪽·오른쪽 칸 | 같음 | `insert_table_row/column_native` | 완료 |
 | | 줄/칸 지우기 | 같음 | `delete_table_row/column_native` | 완료 |
 | | 셀 나누기, 셀 합치기 | 같음 | `split/merge_table_cell(s)_native` | |

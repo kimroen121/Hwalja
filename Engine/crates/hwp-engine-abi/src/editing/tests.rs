@@ -555,6 +555,176 @@ fn equation_insert_undo_and_save_round_trip() {
 }
 
 #[test]
+fn objects_are_found_changed_and_deleted() {
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let picture = EditCommand::InsertPicture {
+        position: point(body(), 1),
+        data: png.into(),
+        width: 7_500,
+        height: 7_500,
+        natural_width: 1,
+        natural_height: 1,
+        extension: "png".into(),
+        description: "".into(),
+    };
+    run(&mut s, picture).unwrap();
+    let equation = EditCommand::InsertEquation {
+        position: point(body(), 0),
+        script: "x^2".into(),
+        font_size: 1000,
+        color: 0,
+    };
+    run(&mut s, equation).unwrap();
+
+    let placed = s.placed(0).unwrap();
+    let kinds: Vec<_> = placed.iter().map(|o| o.object.kind).collect();
+    assert_eq!(kinds, [ObjectKind::Equation, ObjectKind::Picture]);
+    for o in &placed {
+        let r = &o.rect;
+        let hit = s
+            .object_at(s.revision, 0, r.x + r.width / 2.0, r.y + r.height / 2.0)
+            .unwrap();
+        assert_eq!(hit.as_ref(), Some(o));
+        assert_eq!(s.place(s.revision, &o.object, 0).unwrap(), *o);
+    }
+    assert_eq!(s.object_at(s.revision, 0, 1.0, 1.0).unwrap(), None);
+
+    let (equation, picture) = (placed[0].object.clone(), placed[1].object.clone());
+    let change = ObjectProps {
+        width: Some(15_000),
+        height: Some(15_000),
+        effect: Some("GrayScale".into()),
+        brightness: Some(20),
+        outer_margin_left: Some(283),
+        caption: Some("Top".into()),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: picture.clone(),
+            props: change,
+        },
+    )
+    .unwrap();
+    let props = s.object_props(&picture).unwrap();
+    assert_eq!((props.width, props.height), (Some(15_000), Some(15_000)));
+    assert_eq!(props.effect.as_deref(), Some("GrayScale"));
+    assert_eq!(props.caption.as_deref(), Some("Top"));
+    assert_eq!(
+        (props.brightness, props.outer_margin_left),
+        (Some(20), Some(283))
+    );
+    let script = ObjectProps {
+        script: Some("a over b".into()),
+        font_size: Some(1_200),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: equation.clone(),
+            props: script,
+        },
+    )
+    .unwrap();
+    let props = s.object_props(&equation).unwrap();
+    assert_eq!(props.script.as_deref(), Some("a over b"));
+    assert_eq!(props.font_size, Some(1_200));
+    let wrong = ObjectProps {
+        text_wrap: Some("Sideways".into()),
+        ..Default::default()
+    };
+    let refused = EditCommand::SetObject {
+        object: picture.clone(),
+        props: wrong,
+    };
+    assert_eq!(run(&mut s, refused).unwrap_err(), EditError::InvalidInput);
+
+    let table = ObjectRef {
+        kind: ObjectKind::Table,
+        section: 0,
+        paragraph: 2,
+        control: 0,
+    };
+    let change = ObjectProps {
+        repeat_header: Some(true),
+        outer_margin_top: Some(567),
+        page_break: Some(2),
+        caption: Some("Bottom".into()),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: table.clone(),
+            props: change,
+        },
+    )
+    .unwrap();
+    let props = s.object_props(&table).unwrap();
+    assert_eq!(props.repeat_header, Some(true));
+    assert_eq!(props.caption.as_deref(), Some("Bottom"));
+    assert_eq!(
+        (props.outer_margin_top, props.page_break),
+        (Some(567), Some(2))
+    );
+    let cell = EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 0,
+            paragraph: 0,
+        }),
+        note: None,
+    };
+    let change = CellProps {
+        vertical_align: Some(1),
+        is_header: Some(true),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetCell {
+            cell: cell.clone(),
+            props: change,
+        },
+    )
+    .unwrap();
+    let props = s.cell_props(&cell).unwrap();
+    assert_eq!(
+        (props.vertical_align, props.is_header),
+        (Some(1), Some(true))
+    );
+
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+    assert_eq!(
+        reopened.object_props(&equation).unwrap().script.as_deref(),
+        Some("a over b")
+    );
+    assert_eq!(
+        reopened.object_props(&table).unwrap().repeat_header,
+        Some(true)
+    );
+
+    run(
+        &mut s,
+        EditCommand::DeleteObject {
+            object: equation.clone(),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.placed(0).unwrap().len(), 1);
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(s.placed(0).unwrap().len(), 2);
+
+    let preview = s.equation_preview("sqrt {x over 2}", 1_000, 0xff).unwrap();
+    assert!(preview.width > 0.0 && preview.height > 0.0 && !preview.ops.is_empty());
+}
+
+#[test]
 fn replace_spans_paragraphs() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();

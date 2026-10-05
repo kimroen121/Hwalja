@@ -15,7 +15,7 @@ const REQUEST_LIMIT: usize = 8 * 1024 * 1024;
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
 enum Request {
     Apply {
-        request: EditRequest,
+        request: Box<EditRequest>,
     },
     Paragraph {
         target: EditTarget,
@@ -44,6 +44,32 @@ enum Request {
         position: EditPosition,
         motion: Motion,
         goal_x: Option<f64>,
+    },
+    /// The topmost picture or equation under a page point, or null.
+    ObjectAt {
+        revision: u64,
+        page: u32,
+        x: f64,
+        y: f64,
+    },
+    /// Where an object is laid out, looking from `page` outward.
+    Place {
+        revision: u64,
+        object: ObjectRef,
+        page: u32,
+    },
+    ObjectProps {
+        object: ObjectRef,
+    },
+    CellProps {
+        cell: EditTarget,
+    },
+    /// A display list of the equation in `data`, its size in the JSON.
+    #[serde(rename_all = "camelCase")]
+    EquationPreview {
+        script: String,
+        font_size: u32,
+        color: u32,
     },
     /// Paper and margins of a section.
     PageSetup {
@@ -91,7 +117,7 @@ fn state(session: &EditSession) -> *mut HwpEditResult {
 fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditResult, EditError> {
     Ok(match request {
         Request::Apply { request } => {
-            session.apply(request)?;
+            session.apply(*request)?;
             state(session)
         }
         Request::Paragraph { target } => HwpEditResult::ok(session.paragraph(&target)?, Vec::new()),
@@ -119,6 +145,34 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         ),
         Request::Format { revision, position } => {
             HwpEditResult::ok(session.format(revision, &position)?, Vec::new())
+        }
+        Request::ObjectAt {
+            revision,
+            page,
+            x,
+            y,
+        } => HwpEditResult::ok(session.object_at(revision, page, x, y)?, Vec::new()),
+        Request::Place {
+            revision,
+            object,
+            page,
+        } => HwpEditResult::ok(session.place(revision, &object, page)?, Vec::new()),
+        Request::ObjectProps { object } => {
+            HwpEditResult::ok(session.object_props(&object)?, Vec::new())
+        }
+        Request::CellProps { cell } => HwpEditResult::ok(session.cell_props(&cell)?, Vec::new()),
+        Request::EquationPreview {
+            script,
+            font_size,
+            color,
+        } => {
+            let display = session.equation_preview(&script, font_size, color)?;
+            let mut data = Vec::new();
+            display.encode(&mut data);
+            HwpEditResult::ok(
+                serde_json::json!({ "width": display.width, "height": display.height }),
+                data,
+            )
         }
         Request::PageSetup { section } => {
             HwpEditResult::ok(session.page_setup(section)?, Vec::new())

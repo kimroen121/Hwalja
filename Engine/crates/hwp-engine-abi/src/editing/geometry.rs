@@ -27,7 +27,7 @@ fn parse(text: Result<String, rhwp::error::HwpError>) -> Result<Value, EditError
 }
 
 impl EditSession {
-    fn check_revision(&self, revision: u64) -> Result<(), EditError> {
+    pub(super) fn check_revision(&self, revision: u64) -> Result<(), EditError> {
         if self.locked {
             return Err(EditError::Locked);
         }

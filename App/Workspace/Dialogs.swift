@@ -20,43 +20,18 @@ extension Viewer {
     func insertTable(rows: Int, columns: Int) {
         document?.edit(undoManager) { $0.map { .insertTable($0.ordered.start, rows: rows, columns: columns) } }
     }
+    /// Asks for an image file and puts it at the caret.
     func insertPicture() {
-        guard let document, let position = document.selection?.ordered.start else { return NSSound.beep() }
+        guard document?.selection != nil else { return NSSound.beep() }
         let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.png, .jpeg]
+        panel.allowedContentTypes = [.image]
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
-                  data.count <= 5 * 1024 * 1024,
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                  let widthNumber = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-                  let heightNumber = properties[kCGImagePropertyPixelHeight] as? NSNumber
-            else { return NSSound.beep() }
-            let naturalWidth = widthNumber.uint32Value, naturalHeight = heightNumber.uint32Value
-            guard (1...20_000).contains(naturalWidth), (1...20_000).contains(naturalHeight),
-                  UInt64(naturalWidth) * UInt64(naturalHeight) <= 100_000_000
-            else { return NSSound.beep() }
-            let scale = min(1, 640 / Double(naturalWidth), 800 / Double(naturalHeight))
-            let width = UInt32(max(1, (Double(naturalWidth) * scale * 75).rounded()))
-            let height = UInt32(max(1, (Double(naturalHeight) * scale * 75).rounded()))
-            let ext = url.pathExtension.lowercased() == "jpeg" ? "jpeg" : url.pathExtension.lowercased()
-            document.edit(undoManager) { _ in
-                .insertPicture(position, data: data, width: width, height: height,
-                               naturalWidth: naturalWidth, naturalHeight: naturalHeight,
-                               extension: ext, description: url.lastPathComponent)
-            }
-        }
-    }
-    func insertEquation(script: String, fontSize: Double) {
-        guard let document, let position = document.selection?.ordered.start else { return NSSound.beep() }
-        let size = UInt32((min(max(fontSize, 4), 72) * 100).rounded())
-        document.edit(undoManager) { _ in
-            .insertEquation(position, script: script, fontSize: size, color: 0)
+            guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
+            document?.insertPicture(data, name: url.lastPathComponent, undoManager)
         }
     }
     func insertNote(endnote: Bool) {
@@ -109,55 +84,6 @@ struct TableSheet: View {
     }
 }
 
-/// 수식 만들기: Hancom's equation script plus the size inherited from the caret.
-struct EquationSheet: View {
-    @ObservedObject var viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var script = ""
-    @State private var fontSize: Double
-    @State private var showError = false
-
-    init(fontSize: Double, viewer: Viewer) {
-        self.viewer = viewer
-        _fontSize = State(initialValue: min(max(fontSize, 4), 72))
-    }
-
-    var body: some View {
-        DialogFrame {
-            VStack(alignment: .leading, spacing: 12) {
-                GroupTitle("수식")
-                Text("한글 수식 스크립트를 입력하세요.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                TextEditor(text: $script)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(width: 460, height: 130)
-                    .padding(6)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 7))
-                    .overlay { RoundedRectangle(cornerRadius: 7).stroke(.quaternary) }
-                Text("예:  1 over 2    x^2 + y^2 = z^2    sqrt x")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    FieldLabel("글자 크기")
-                    SpinField(value: $fontSize, unit: "pt", range: 4...72)
-                }
-                if showError {
-                    Text("수식을 입력해 주세요. 최대 4,096자까지 사용할 수 있습니다.")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-        } confirm: {
-            guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  script.count <= 4_096
-            else { showError = true; return }
-            viewer.insertEquation(script: script, fontSize: fontSize)
-            dismiss()
-        }
-    }
-}
-
 /// 편집 용지: paper size and orientation, and margins, in millimeters.
 struct PageSetupSheet: View {
     let section: UInt32
@@ -175,7 +101,6 @@ struct PageSetupSheet: View {
         ("A3", 297, 420), ("A4", 210, 297), ("A5", 148, 210), ("B4", 257, 364), ("B5", 182, 257),
         ("레터", 215.9, 279.4), ("리걸", 215.9, 355.6),
     ]
-    private static let unitsPerMillimeter = 7200 / 25.4
 
     var body: some View {
         DialogFrame {
@@ -220,21 +145,73 @@ struct PageSetupSheet: View {
     /// The named paper matching the size within half a millimeter.
     private var paper: Binding<String?> {
         Binding {
-            let size = (Self.millimeters(page.width), Self.millimeters(page.height))
+            let size = (Units.millimeters(page.width), Units.millimeters(page.height))
             return Self.papers.first { abs($0.width - size.0) < 0.5 && abs($0.height - size.1) < 0.5 }?.name
         } set: { name in
             guard let paper = Self.papers.first(where: { $0.name == name }) else { return }
-            page.width = Self.units(paper.width)
-            page.height = Self.units(paper.height)
+            page.width = Units.units(paper.width)
+            page.height = Units.units(paper.height)
         }
     }
     @ViewBuilder private func field(_ title: String, _ key: WritableKeyPath<PageSetup, UInt32>) -> some View {
         FieldLabel(title)
-        SpinField(value: Binding { Self.millimeters(page[keyPath: key]) } set: { page[keyPath: key] = Self.units($0) },
+        SpinField(value: Binding { Units.millimeters(page[keyPath: key]) } set: { page[keyPath: key] = Units.units($0) },
                   unit: "mm", range: 0...1000)
     }
-    private static func millimeters(_ units: UInt32) -> Double { (Double(units) / unitsPerMillimeter * 10).rounded() / 10 }
-    private static func units(_ millimeters: Double) -> UInt32 { UInt32(max(0, millimeters * unitsPerMillimeter).rounded()) }
+}
+
+extension HwpDocument {
+    /// Puts an image at the caret in the body, at its own size up to the text width, in
+    /// the line like a character. PNG and JPEG go in as they are; other images as PNG, or
+    /// as JPEG when they would not fit the engine's 5 MB.
+    func insertPicture(_ data: Data, name: String, _ undoManager: UndoManager?) {
+        guard let position = selection?.ordered.start, position.target.cell == nil, position.target.note == nil,
+              let picture = Picture(data)
+        else { return NSSound.beep() }
+        Task {
+            let page = try? await pageSetup(section: position.target.section)
+            let pixels = Double(picture.width) * 75
+            let text = page.map { Double(($0.landscape ? $0.height : $0.width) - $0.marginLeft - $0.marginRight - $0.marginGutter) }
+            let scale = min(1, (text ?? pixels) / pixels)
+            edit(undoManager) { _ in
+                .insertPicture(position, data: picture.data, width: UInt32(max(1, (pixels * scale).rounded())),
+                               height: UInt32(max(1, (Double(picture.height) * 75 * scale).rounded())),
+                               naturalWidth: picture.width, naturalHeight: picture.height,
+                               extension: picture.ext, description: name)
+            }
+        }
+    }
+}
+
+/// An image as the engine embeds it.
+private struct Picture {
+    let data: Data, ext: String, width: UInt32, height: UInt32
+    private static let limit = 5 * 1024 * 1024
+
+    init?(_ original: Data) {
+        guard let source = CGImageSourceCreateWithData(original as CFData, nil),
+              let type = CGImageSourceGetType(source).flatMap({ UTType($0 as String) }),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              (1...20_000).contains(image.width), (1...20_000).contains(image.height),
+              image.width * image.height <= 100_000_000
+        else { return nil }
+        (width, height) = (UInt32(image.width), UInt32(image.height))
+        if (type == .png || type == .jpeg), original.count <= Self.limit {
+            (data, ext) = (original, type == .png ? "png" : "jpg")
+        } else if let png = Self.encode(image, as: .png), png.count <= Self.limit {
+            (data, ext) = (png, "png")
+        } else if let jpeg = Self.encode(image, as: .jpeg), jpeg.count <= Self.limit {
+            (data, ext) = (jpeg, "jpg")
+        } else {
+            return nil
+        }
+    }
+    private static func encode(_ image: CGImage, as type: UTType) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
 }
 
 extension Viewer {

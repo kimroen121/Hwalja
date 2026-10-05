@@ -48,6 +48,38 @@ struct MenuItems {
         }
     }
 
+    /// 그림 drop-downs: 색조 조정, 밝기 and 대비, as in Hancom Office Web.
+    static func pictureEffects(_ viewer: Viewer) -> [Choice?] {
+        [("효과 없음", "RealPic"), ("회색조", "GrayScale"), ("흑백", "BlackWhite")].map { title, effect in
+            Choice(title: title) { viewer.adjustPicture { $0.effect = effect } }
+        } + [Choice(title: "워터마크") {
+            viewer.adjustPicture { ($0.effect, $0.brightness, $0.contrast) = ("RealPic", 70, -50) }
+        }]
+    }
+    static func brightness(_ viewer: Viewer) -> [Choice?] {
+        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 없음")
+    }
+    static func contrast(_ viewer: Viewer) -> [Choice?] {
+        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 없음")
+    }
+    private static func steps(_ viewer: Viewer, _ key: WritableKeyPath<ObjectProps, Int32?>,
+                              more: String, less: String, none: String) -> [Choice?] {
+        [
+            Choice(title: more) { viewer.adjustPicture { $0[keyPath: key] = min(100, ($0[keyPath: key] ?? 0) + 10) } },
+            Choice(title: less) { viewer.adjustPicture { $0[keyPath: key] = max(-100, ($0[keyPath: key] ?? 0) - 10) } },
+            nil,
+            Choice(title: none) { viewer.adjustPicture { $0[keyPath: key] = 0 } },
+        ]
+    }
+    /// 원래 그림으로: no effect, crop or turn, at the size it was put in.
+    static func restorePicture(_ viewer: Viewer) {
+        viewer.adjustPicture { props in
+            (props.effect, props.brightness, props.contrast, props.rotationAngle) = ("RealPic", 0, 0, 0)
+            (props.cropLeft, props.cropRight, props.cropTop, props.cropBottom) = (0, 0, 0, 0)
+            (props.width, props.height) = (props.originalWidth ?? props.width, props.originalHeight ?? props.height)
+        }
+    }
+
     /// 파일 items beyond the system's New, Open, Save and Revert.
     @ViewBuilder var file: some View {
         item("PDF로 내보내기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
@@ -115,7 +147,7 @@ struct MenuItems {
                 .disabled(!context.inBody)
             item("그림…", Icon.picture) { viewer?.insertPicture() }
                 .disabled(!context.inBody)
-            item("수식…", Icon.equation) { viewer?.insertingEquation = true }
+            item("수식…", Icon.equation) { viewer?.newEquation() }
                 .disabled(!context.inBody)
             Divider()
             item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
@@ -137,6 +169,9 @@ struct MenuItems {
             item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t")
         }
         .disabled(!context.canFormat)
+        Divider()
+        item("개체 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
+            .disabled(context.object == nil && !context.inTable)
         Divider()
         Group {
             toggle("진하게", text?.bold == true) { editor?.toggleBold() }.keyboardShortcut("b")
@@ -204,6 +239,8 @@ struct MenuItems {
     @ViewBuilder var table: some View {
         item("표 만들기…", Icon.table) { viewer?.insertingTable = true }
             .disabled(!context.inBody)
+        item("표/셀 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
+            .disabled(!context.inTable)
         Divider()
         Group {
             Menu {

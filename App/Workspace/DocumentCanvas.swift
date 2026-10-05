@@ -179,6 +179,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private let caret = NSView()
     /// Called after each presentation is applied.
     var onPresent: (() -> Void)?
+    /// Called to open the properties of an object (double-click or Return).
+    var onOpenObject: ((PlacedObject) -> Void)?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// Latest drag point waiting for the hit test in flight.
@@ -280,6 +282,27 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         for rect in highlightRects where rect.intersects(dirtyRect) {
             rect.fill(using: .multiply)
         }
+        if let rect = objectRect, rect.insetBy(dx: -4, dy: -4).intersects(dirtyRect) {
+            drawHandles(around: rect)
+        }
+    }
+    /// The frame and eight sizing handles of a selected object, one screen point thick.
+    private func drawHandles(around rect: NSRect) {
+        let scale = 1 / (enclosingScrollView?.magnification ?? 1)
+        NSColor.controlAccentColor.setStroke()
+        let frame = NSBezierPath(rect: rect)
+        frame.lineWidth = scale
+        frame.stroke()
+        let side = 6 * scale
+        for x in [rect.minX, rect.midX, rect.maxX] {
+            for y in [rect.minY, rect.midY, rect.maxY] where x != rect.midX || y != rect.midY {
+                let handle = NSBezierPath(rect: NSRect(x: x - side / 2, y: y - side / 2, width: side, height: side))
+                handle.lineWidth = scale
+                NSColor.white.setFill()
+                handle.fill()
+                handle.stroke()
+            }
+        }
     }
 
     override func resetCursorRects() {
@@ -290,6 +313,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     private var highlightRects: [NSRect] { shown.highlight.compactMap(viewRect) }
     private var caretRect: NSRect? { shown.caret.flatMap(viewRect) }
+    private var objectRect: NSRect? { shown.object.flatMap(viewRect) }
 
     private func viewRect(_ rect: PageRect) -> NSRect? {
         frame(ofPage: Int(rect.page)).map { PageGeometry.viewRect(rect, in: $0) }
@@ -299,14 +323,14 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// and caret in the same pass.
     private func sync() {
         guard let model, model.presentation.serial != shown.serial else { return }
-        let old = highlightRects
+        let old = highlightRects + [objectRect].compactMap { $0 }
         shown = model.presentation
         if shown.reflowed {
             layoutPages(force: true)
         } else {
             shown.changedPages.forEach { index in frame(ofPage: index).map { setNeedsDisplay($0) } }
         }
-        (old + highlightRects).forEach { setNeedsDisplay($0.insetBy(dx: -1, dy: -1)) }
+        (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
         placeCaret()
         if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
         onPresent?()
@@ -315,7 +339,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// Shows the caret where the presentation puts it, solid for a moment, then blinking.
     func placeCaret() {
         let active = window?.isKeyWindow == true && window?.firstResponder === self
-        guard active, let rect = caretRect, shown.highlight.isEmpty else {
+        guard active, let rect = caretRect, shown.highlight.isEmpty, shown.object == nil else {
             caret.isHidden = true
             return
         }
@@ -374,7 +398,12 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         commitComposition()
         let extend = event.modifierFlags.contains(.shift)
         let clicks = event.clickCount
-        model.select { model in
+        model.select { [weak self] model in
+            if !extend, let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y) {
+                model.object = object
+                if clicks == 2 { self?.onOpenObject?(object) }
+                return nil
+            }
             let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
             switch clicks {
             case 2:
@@ -462,6 +491,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     ]
 
     override func doCommand(by selector: Selector) {
+        if let object = model?.object {
+            switch selector {
+            case #selector(deleteBackward(_:)), #selector(deleteForward(_:)):
+                return model?.edit(undoManager) { _ in .deleteObject(object.object) } ?? ()
+            case #selector(insertNewline(_:)): return onOpenObject?(object) ?? ()
+            case #selector(cancelOperation(_:)): return model?.deselectObject() ?? ()
+            default: break
+            }
+        }
         if let move = Self.motions[selector] {
             model?.move(move.motion, extend: move.extend)
         } else if let motion = Self.deletions[selector] {
@@ -507,9 +545,16 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     @objc func copy(_ sender: Any?) { copySelection(cut: false) }
     @objc func cut(_ sender: Any?) { copySelection(cut: true) }
+    /// Pastes text, or else an image as a picture.
     @objc func paste(_ sender: Any?) {
-        guard let text = NSPasteboard.general.string(forType: .string) else { return NSSound.beep() }
-        replaceSelection(with: text)
+        let board = NSPasteboard.general
+        if let text = board.string(forType: .string) {
+            replaceSelection(with: text)
+        } else if let image = NSImage(pasteboard: board), let data = image.tiffRepresentation {
+            model?.insertPicture(data, name: "", undoManager)
+        } else {
+            NSSound.beep()
+        }
     }
     @objc func delete(_ sender: Any?) { replaceSelection(with: "") }
     /// Selects all text of the body or of the cell holding the caret.
@@ -549,7 +594,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         case #selector(copyFont(_:)): return model?.format != nil
         case #selector(pasteFont(_:)): return hasRange && Self.copiedStyle != nil
         case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return hasRange
-        case #selector(paste(_:)): return model?.selection != nil && NSPasteboard.general.string(forType: .string) != nil
+        case #selector(paste(_:)):
+            return model?.selection != nil && (NSPasteboard.general.string(forType: .string) != nil || NSImage.canInit(with: .general))
         case #selector(selectAll(_:)): return model?.selection != nil
         default: return responds(to: item.action)
         }
