@@ -333,6 +333,8 @@ struct EditReply: Decodable, Sendable {
     var canUndo: Bool
     var canRedo: Bool
     var dirty: Bool
+    /// The document cannot be edited.
+    var locked = false
 }
 
 /// A format whose fields are all optional: as a change, unset fields stay as they are.
@@ -342,6 +344,18 @@ protocol PartialFormat: Codable, Hashable, Sendable {
 }
 
 extension EditSelection {
+    /// Whether `position` is in the same body, table (any of its cells) or note as the anchor,
+    /// the only places a selection can reach.
+    func reaches(_ position: EditPosition) -> Bool {
+        let (a, b) = (anchor.target, position.target)
+        if a.section != b.section { return false }
+        switch (a.cell, b.cell, a.note, b.note) {
+        case (nil, nil, nil, nil): return true
+        case let (x?, y?, nil, nil): return a.paragraph == b.paragraph && x.control == y.control
+        case let (nil, nil, x?, y?): return a.paragraph == b.paragraph && x.control == y.control
+        default: return false
+        }
+    }
     /// Whether the ends are in two cells of one table: a block of cells.
     var isCellBlock: Bool {
         guard let a = anchor.target.cell, let b = focus.target.cell else { return false }

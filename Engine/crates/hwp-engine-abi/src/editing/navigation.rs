@@ -144,7 +144,19 @@ impl EditSession {
             Motion::DocumentStart => at(0, 0),
             Motion::DocumentEnd => at(count - 1, length(count - 1)?),
         };
-        let caret = self.caret(revision, &position)?;
+        let (position, caret) = match self.caret(revision, &position) {
+            Ok(caret) => (position, caret),
+            // The last paragraphs may hold no text to show (such as one that only carries
+            // section settings); the end of the document is the last one that does.
+            Err(EditError::UnsupportedTarget) if motion == Motion::DocumentEnd => (0..count - 1)
+                .rev()
+                .find_map(|i| {
+                    let p = at(i, length(i).ok()?);
+                    self.caret(revision, &p).ok().map(|c| (p, c))
+                })
+                .ok_or(EditError::UnsupportedTarget)?,
+            Err(e) => return Err(e),
+        };
         Ok(Navigation {
             goal_x: goal.unwrap_or(caret.x),
             position,

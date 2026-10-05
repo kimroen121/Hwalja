@@ -27,6 +27,8 @@ struct Presentation: Equatable {
     var highlight: [PageRect] = []
     /// The selected object's frame; the caret hides while an object is selected.
     var object: PageRect?
+    /// The selected object's size is protected (크기 고정).
+    var objectLocked = false
 }
 
 /// What menus and bars depend on. It changes far less often than the caret, so SwiftUI
@@ -51,7 +53,9 @@ struct EditingContext: Equatable {
     /// The kind of the selected object.
     var object: ObjectKind?
     /// Formats can be read and changed here (not yet inside notes).
-    var canFormat: Bool { hasSelection && !inNote }
+    var canFormat: Bool { hasSelection && !inNote && !locked }
+    /// The document is read-only (배포용 문서); editing commands are off.
+    var locked = false
     /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
     var canCaption: Bool { object == .picture || object == .table || (inTable && object == nil) }
 }
@@ -425,7 +429,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         let output = try await session.apply(command, at: revision, amend: amend)
         staged.append(output)
         reply = output.reply
-        if let selection = output.reply.selection, selection != self.selection {
+        // Changing an object leaves the text caret where it was.
+        var objectChange = false
+        if case .setObject = command { objectChange = true }
+        if !objectChange, let selection = output.reply.selection, selection != self.selection {
             self.selection = selection
             object = nil
         }
@@ -456,7 +463,12 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 format?.text = text
             }
         }
-        var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect)
+        var locked = false
+        if let placed = object, [.picture, .shape].contains(placed.object.kind) {
+            locked = (try? await session.objectProps(placed.object))?.sizeProtect == true
+        }
+        var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect,
+                                objectLocked: locked)
         for output in staged {
             let count = pages.count
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {
@@ -475,10 +487,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil && format?.textBox != true,
                               inNote: selection?.focus.target.note != nil,
-                              inBody: selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false,
+                              inBody: !reply.locked && (selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false),
                               inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
-                              canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind)
+                              canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind,
+                              locked: reply.locked)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }
     }

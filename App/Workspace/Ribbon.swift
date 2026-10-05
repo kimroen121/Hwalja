@@ -69,19 +69,14 @@ struct ToolRow: View {
         RowDivider()
         find
         RowDivider()
-        objects(context)
-        RowDivider()
-        notes(context)
-        RowDivider()
-        ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
-            .disabled(!context.hasSelection)
+        Group {
+            ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
+            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
+            ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
+        }
+        .disabled(!context.inBody)
         RowDivider()
         shapes(context)
-        RowDivider()
-        objectProperties(context)
-        RowDivider()
-        headers
-        MarkTiles(viewer: viewer)
     }
 
     @ViewBuilder private func edit(_ context: EditingContext) -> some View {
@@ -208,15 +203,6 @@ struct ToolRow: View {
     private var find: some View {
         ToolTile("찾기", Icon.find, action: { viewer.showFind(replace: false) }, choices: { MenuItems.findChoices(viewer) })
     }
-    @ViewBuilder private func objects(_ context: EditingContext) -> some View {
-        Group {
-            ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
-            ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-            ToolTile("수식", Icon.equation) { viewer.newEquation() }
-        }
-        .disabled(!context.inBody)
-    }
     @ViewBuilder private func notes(_ context: EditingContext) -> some View {
         Group {
             ToolTile("각주", Icon.footnote) { viewer.insertNote(endnote: false) }
@@ -296,8 +282,8 @@ struct Choice {
     var action: () -> Void = {}
 }
 
-/// A large icon over its name. With `choices` (a menu) or `panel` (a popover), the name
-/// carries an arrow that opens them, and the icon runs `action` when there is one.
+/// A large icon over its name. With `choices` (a menu) or `panel` (a popover), a small
+/// arrow beside the icon opens them, and the icon runs `action` when there is one.
 struct ToolTile: View {
     let title: String, symbol: String
     var action: (() -> Void)?
@@ -318,31 +304,35 @@ struct ToolTile: View {
 
     var body: some View {
         if choices == nil, panel == nil {
-            Button(action: { action?() }) {
-                // The arrow's room stays empty, so every name sits on one line.
-                VStack(spacing: 3) { icon; VStack(spacing: 0) { name; arrow.hidden() } }
-                    .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
-            }
-            .buttonStyle(ToolButtonStyle(on: on))
+            Button(action: { action?() }) { face(arrow: false) }
+                .buttonStyle(ToolButtonStyle(on: on))
         } else if let action {
-            VStack(spacing: 0) {
-                Button(action: action) { icon.frame(minWidth: 52).padding(.top, 3).padding(.bottom, 3) }
-                    .buttonStyle(ToolButtonStyle())
-                Button(action: open) { VStack(spacing: 0) { name; arrow }.frame(minWidth: 52) }
-                    .buttonStyle(ToolButtonStyle())
+            HStack(spacing: 0) {
+                Button(action: action) { face(arrow: false) }
+                Button(action: open) { arrowImage.frame(width: 12, height: 22) }
                     .background(AnchorView(anchor: anchor))
-            }
-            .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel }
-        } else {
-            Button(action: open) {
-                VStack(spacing: 3) { icon; VStack(spacing: 0) { name; arrow } }
-                    .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
+                    .padding(.trailing, 2)
             }
             .buttonStyle(ToolButtonStyle())
-            .background(AnchorView(anchor: anchor))
+            .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel }
+        } else {
+            Button(action: open) { face(arrow: true) }
+                .buttonStyle(ToolButtonStyle())
+                .background(AnchorView(anchor: anchor))
         }
     }
 
+    /// The name may take two lines; the arrow sits by the icon so it never changes the height.
+    private func face(arrow: Bool) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 2) {
+                icon
+                if arrow { arrowImage.frame(width: 8) }
+            }
+            name
+        }
+        .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
+    }
     private var icon: some View {
         Image(systemName: symbol).font(.system(size: 19, weight: .light)).frame(height: 22)
     }
@@ -360,8 +350,8 @@ struct ToolTile: View {
         }!
         return words[..<split].joined(separator: " ") + "\n" + words[split...].joined(separator: " ")
     }
-    private var arrow: some View {
-        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(height: 10)
+    private var arrowImage: some View {
+        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold))
     }
     private func open() {
         if panel != nil { showsPanel = true } else if let choices { DropDown.show(choices(), below: anchor.view) }

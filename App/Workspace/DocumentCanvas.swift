@@ -350,6 +350,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         frame.lineWidth = scale
         frame.stroke()
         let side = 6 * scale
+        guard resizable else { return }
         for x in [rect.minX, rect.midX, rect.maxX] {
             for y in [rect.minY, rect.midY, rect.maxY] where x != rect.midX || y != rect.midY {
                 let handle = NSBezierPath(rect: NSRect(x: x - side / 2, y: y - side / 2, width: side, height: side))
@@ -593,7 +594,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var linesGeneration = 0
 
     /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
-    private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) }
+    private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true }
     private var movable: Bool { [.picture, .shape, .equation].contains(model?.object?.object.kind) }
 
     private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
@@ -673,7 +674,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         return max(value, line.start + 8)
     }
 
-    /// The frame a handle drag gives: the opposite side stays; Shift on a corner keeps the ratio.
+    /// A picture's corners keep its ratio and Shift frees them; a shape's corners are free and Shift keeps the ratio.
+    private func keepsRatio(_ event: NSEvent) -> Bool {
+        event.modifierFlags.contains(.shift) != (model?.object?.object.kind == .picture)
+    }
+    /// The frame a handle drag gives: the opposite side stays.
     private func resized(_ handle: (x: Int, y: Int), from: NSRect, to point: NSPoint, keepRatio: Bool) -> NSRect {
         var (minX, maxX, minY, maxY) = (from.minX, from.maxX, from.minY, from.maxY)
         if handle.x < 0 { minX = min(point.x, maxX - 1) } else if handle.x > 0 { maxX = max(point.x, minX + 1) }
@@ -732,7 +737,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             defer { updateCursor(at: point) }
             switch current {
             case let .resize(handle, from):
-                place(resized(handle, from: from, to: point, keepRatio: event.modifierFlags.contains(.shift)), from: from)
+                place(resized(handle, from: from, to: point, keepRatio: keepsRatio(event)), from: from)
             case let .move(start, from, moved, click):
                 if moved {
                     place(from.offsetBy(dx: point.x - start.x, dy: point.y - start.y), from: from)
@@ -764,7 +769,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let point = convert(event.locationInWindow, from: nil)
         switch drag {
         case let .resize(handle, from):
-            let rect = resized(handle, from: from, to: point, keepRatio: event.modifierFlags.contains(.shift))
+            let rect = resized(handle, from: from, to: point, keepRatio: keepsRatio(event))
             return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
         case let .move(start, from, moved, click):
             guard moved || hypot(point.x - start.x, point.y - start.y) > 3 else { return }
@@ -800,7 +805,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             // A press that selected an object drags the object, never the text.
             guard model.object == nil, let anchor = model.selection?.anchor else { return nil }
             let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
-            return EditSelection(anchor: anchor, focus: position)
+            // The selection stops at the edge of its text, table or note.
+            let selection = EditSelection(anchor: anchor, focus: position)
+            return selection.reaches(position) ? selection : nil
         }
     }
 
