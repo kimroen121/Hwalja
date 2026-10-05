@@ -40,7 +40,7 @@ struct ToolRow: View {
     }
 }
 
-/// A large thin icon over its name.
+/// A large icon over its name.
 struct ToolTile: View {
     let title: String, symbol: String, action: () -> Void
     init(_ title: String, _ symbol: String, action: @escaping () -> Void) {
@@ -50,7 +50,7 @@ struct ToolTile: View {
         Button(action: action) {
             VStack(spacing: 3) {
                 Image(systemName: symbol)
-                    .font(.system(size: 19, weight: .ultraLight))
+                    .font(.system(size: 19, weight: .light))
                     .frame(height: 22)
                 Text(title).font(.system(size: 11))
             }
