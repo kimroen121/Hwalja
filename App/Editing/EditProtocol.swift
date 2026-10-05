@@ -177,9 +177,12 @@ enum EngineRequest: Encodable, Sendable {
     case selectionRects(revision: UInt64, EditSelection)
     case format(revision: UInt64, EditPosition)
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
+    case find(query: String, caseSensitive: Bool)
     case export(SaveFormat)
 
-    private enum Key: String, CodingKey { case op, request, target, revision, page, x, y, position, selection, format, motion, goalX }
+    private enum Key: String, CodingKey {
+        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive
+    }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -214,6 +217,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(position, forKey: .position)
             try c.encode(motion, forKey: .motion)
             try c.encodeIfPresent(goalX, forKey: .goalX)
+        case let .find(query, caseSensitive):
+            try c.encode("find", forKey: .op)
+            try c.encode(query, forKey: .query)
+            try c.encode(caseSensitive, forKey: .caseSensitive)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)

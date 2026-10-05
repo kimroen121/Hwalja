@@ -64,6 +64,11 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.format(revision: revision, position)))
     }
 
+    /// Every match of `query` the editor can select, in document order.
+    func find(_ query: String) async throws -> [EditSelection] {
+        try await decode(send(.find(query: query, caseSensitive: false)))
+    }
+
     private func send(_ request: EngineRequest) async throws -> Payload {
         try await send(request) { $0 }
     }

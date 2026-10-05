@@ -45,6 +45,12 @@ enum Request {
         motion: Motion,
         goal_x: Option<f64>,
     },
+    /// Every match of `query`, as selections in document order.
+    #[serde(rename_all = "camelCase")]
+    Find {
+        query: String,
+        case_sensitive: bool,
+    },
     /// Verified HWP/HWPX bytes, or the whole-document PDF, in `data`.
     Export {
         format: SaveFormat,
@@ -110,6 +116,10 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Format { revision, position } => {
             HwpEditResult::ok(session.format(revision, &position)?, Vec::new())
         }
+        Request::Find {
+            query,
+            case_sensitive,
+        } => HwpEditResult::ok(session.find(&query, case_sensitive)?, Vec::new()),
         Request::Export { format } => HwpEditResult::ok(session.reply(), session.export(format)?),
     })
 }

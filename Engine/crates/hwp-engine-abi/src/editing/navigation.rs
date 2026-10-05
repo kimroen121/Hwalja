@@ -227,4 +227,45 @@ impl EditSession {
             .map(|(target, scalar)| EditPosition { target, scalar });
         Ok((position.unwrap_or_else(|| p.clone()), x))
     }
+
+    /// Every match of `query` in document order, in the body and in top-level table cells.
+    /// Matches the editor cannot address (text boxes, nested tables, equations) are left out.
+    pub fn find(&self, query: &str, case_sensitive: bool) -> Result<Vec<EditSelection>, EditError> {
+        let json = self
+            .core
+            .search_all_text_native(query, case_sensitive, true)?;
+        let hits: Vec<Value> = serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
+        let doc = self.core.document();
+        Ok(hits
+            .iter()
+            .filter(|hit| hit.get("cellPath").is_none() && hit.get("equationControl").is_none())
+            .filter_map(|hit| {
+                let field = |v: &Value, key: &str| v.get(key)?.as_u64().map(|v| v as u32);
+                let cell = hit.get("cellContext");
+                let target = EditTarget {
+                    section: field(hit, "sec")?,
+                    paragraph: field(hit, "para")?,
+                    cell: match cell {
+                        Some(c) => Some(CellTarget {
+                            control: field(c, "ctrlIdx")?,
+                            cell: field(c, "cellIdx")?,
+                            paragraph: field(c, "cellPara")?,
+                        }),
+                        None => None,
+                    },
+                };
+                // Drops text boxes, which share the cell coordinates.
+                get(doc, &target).ok()?;
+                let start = field(hit, "charOffset")?;
+                let at = |scalar| EditPosition {
+                    target: target.clone(),
+                    scalar,
+                };
+                Some(EditSelection {
+                    anchor: at(start),
+                    focus: at(start + field(hit, "length")?),
+                })
+            })
+            .collect())
+    }
 }

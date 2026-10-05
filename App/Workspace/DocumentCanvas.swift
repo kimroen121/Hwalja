@@ -82,8 +82,17 @@ final class DocumentCanvas: NSScrollView {
         fit = mode
         applyFit()
     }
+    /// Pages side by side (한 쪽, 두 쪽, 세 쪽). Changing it fits the new spread to the window.
+    var columns: Int {
+        get { editor.columns }
+        set {
+            guard newValue != editor.columns else { return }
+            editor.columns = newValue
+            fit(.page)
+        }
+    }
     private func applyFit() {
-        guard let fit, let size = editor.largestPage, size.width > 0 else { return }
+        guard let fit, let size = editor.spread, size.width > 0 else { return }
         let space = contentSize
         let margin = PageEditor.margin * 2
         let width = space.width / (size.width + margin)
@@ -195,8 +204,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     // MARK: Pages
 
-    var largestPage: NSSize? {
-        pageFrames.isEmpty ? nil : NSSize(width: pageFrames.map(\.width).max()!, height: pageFrames.map(\.height).max()!)
+    /// Pages per row.
+    var columns = 1 {
+        didSet { layoutPages() }
+    }
+    /// Size of one row of pages, for fitting it to the window.
+    var spread: NSSize? {
+        guard !pageFrames.isEmpty else { return nil }
+        let width = pageFrames.map(\.width).max()!, n = CGFloat(min(columns, pageFrames.count))
+        return NSSize(width: width * n + Self.gap * (n - 1), height: pageFrames.map(\.height).max()!)
     }
     func frame(ofPage index: Int) -> NSRect? {
         pageFrames.indices.contains(index) ? pageFrames[index] : nil
@@ -205,19 +221,29 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         pageFrames.enumerated().min { distance($0.element, point) < distance($1.element, point) }?.offset ?? 0
     }
     private func distance(_ frame: NSRect, _ point: NSPoint) -> CGFloat {
-        point.y < frame.minY ? frame.minY - point.y : max(0, point.y - frame.maxY)
+        let dy = point.y < frame.minY ? frame.minY - point.y : max(0, point.y - frame.maxY)
+        let dx = point.x < frame.minX ? frame.minX - point.x : max(0, point.x - frame.maxX)
+        return hypot(dx, dy)
     }
 
-    /// Stacks the pages vertically, centered on the widest. The clip view centers the
-    /// whole stack, so the layout never depends on the viewport.
+    /// Lays the pages out in rows of `columns`, each centered in a slot as wide as the
+    /// widest page. The clip view centers the whole stack, so the layout never depends on
+    /// the viewport.
     func layoutPages(force: Bool = false) {
         guard let pages = model?.pages else { return }
         let sizes = pages.map(\.size)
-        let width = (sizes.map(\.width).max() ?? 0) + Self.margin * 2
+        let slot = sizes.map(\.width).max() ?? 0
+        let columns = max(1, min(columns, sizes.count))
+        let width = slot * CGFloat(columns) + Self.gap * CGFloat(columns - 1) + Self.margin * 2
+        var frames: [NSRect] = []
         var y = Self.margin
-        let frames = sizes.map { size in
-            defer { y += size.height + Self.gap }
-            return NSRect(x: ((width - size.width) / 2).rounded(), y: y, width: size.width, height: size.height)
+        for row in stride(from: 0, to: sizes.count, by: columns) {
+            let rowSizes = sizes[row..<min(row + columns, sizes.count)]
+            for (column, size) in rowSizes.enumerated() {
+                let x = Self.margin + CGFloat(column) * (slot + Self.gap) + (slot - size.width) / 2
+                frames.append(NSRect(x: x.rounded(), y: y, width: size.width, height: size.height))
+            }
+            y += rowSizes.map(\.height).max()! + Self.gap
         }
         let size = NSSize(width: width, height: y - Self.gap + Self.margin)
         guard force || frames != pageFrames || size != frame.size else { return }
@@ -486,9 +512,22 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
+    /// Character format taken by 모양 복사, shared by all windows like the font pasteboard.
+    private(set) static var copiedStyle: CharStyle?
+    @objc func copyFont(_ sender: Any?) {
+        guard let style = model?.format?.text else { return NSSound.beep() }
+        Self.copiedStyle = style
+    }
+    @objc func pasteFont(_ sender: Any?) {
+        guard let style = Self.copiedStyle else { return NSSound.beep() }
+        model?.formatText(style, undoManager)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let hasRange = model?.selection.map { $0.anchor != $0.focus } ?? false
         switch item.action {
+        case #selector(copyFont(_:)): return model?.format != nil
+        case #selector(pasteFont(_:)): return hasRange && Self.copiedStyle != nil
         case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return hasRange
         case #selector(paste(_:)): return model?.selection != nil && NSPasteboard.general.string(forType: .string) != nil
         case #selector(selectAll(_:)): return model?.selection != nil

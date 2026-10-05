@@ -149,6 +149,23 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         enqueue { $0.marked = nil }
     }
 
+    /// Replaces every match of `query` as one undo step. Matches in paragraphs the editor
+    /// cannot change are skipped.
+    func replaceAll(_ query: String, with text: String, _ undoManager: UndoManager?) {
+        enqueue { document in
+            var replaced = false
+            // Last first, so earlier matches keep their offsets.
+            for match in try await document.find(query).reversed() {
+                // ponytail: renders after every match; batch in the engine if large documents lag.
+                guard (try? await document.run(.replace(match, text: text), amend: replaced)) != nil else { continue }
+                replaced = true
+            }
+            guard replaced else { return NSSound.beep() }
+            document.goalX = nil
+            document.registerHistory(.undo, undoManager)
+        }
+    }
+
     /// Applies a character format to the selected text; does nothing without a selection.
     func formatText(_ style: CharStyle, _ undoManager: UndoManager?) {
         edit(undoManager) { selection in
@@ -211,6 +228,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await session.paragraph(target)
+    }
+    /// Matches of `query` in the current revision, in document order.
+    func find(_ query: String) async throws -> [EditSelection] {
+        try await session.find(query)
     }
     /// The whole document as PDF, after queued edits.
     func pdf() async throws -> Data {

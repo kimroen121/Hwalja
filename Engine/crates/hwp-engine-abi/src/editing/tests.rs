@@ -908,3 +908,26 @@ fn bench_display() {
         );
     }
 }
+#[test]
+fn find_reports_body_and_cell_matches() {
+    let s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 0,
+            paragraph: 0,
+        }),
+    };
+    let hits = s.find("내용", true).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(
+        (&hits[0].anchor, &hits[0].focus),
+        (&point(cell.clone(), 2), &point(cell, 4))
+    );
+    let hits = s.find("끝", true).unwrap();
+    assert_eq!(hits[0].anchor, point(body(), 11));
+    assert!(s.find("없는 말", true).unwrap().is_empty());
+    assert!(s.find("", true).unwrap().is_empty());
+}

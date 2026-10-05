@@ -180,6 +180,45 @@ struct DocumentTests {
 
     /// Layout no longer depends on the viewport, so zooming and pasting across pages cannot
     /// feed back into scrolling (this recursed until the stack overflowed).
+    @Test func findsAndReplacesAllAsOneUndoStep() async throws {
+        let document = HwpDocument()
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(undo) { $0.map { .replace($0, text: "사과 배 사과\n사과") } }
+        await document.settle()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        viewer.query = "사과"
+        document.selection = .caret(EditPosition(target: body, scalar: 1))
+        viewer.findNext()
+        await document.settle()
+        #expect(viewer.matches.count == 3)
+        #expect(document.selection == viewer.matches[1])
+        viewer.findNext(backward: true)
+        await document.settle()
+        #expect(document.selection == viewer.matches[0])
+        document.replaceAll("사과", with: "감", undo)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "감 배 감")
+        #expect(try await document.find("사과").isEmpty)
+        undo.undo()
+        await document.settle()
+        #expect(try await document.find("사과").count == 3)
+    }
+
+    @Test func spreadsLayPagesSideBySide() async throws {
+        let document = HwpDocument()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(nil) { $0.map { .replace($0, text: String(repeating: "줄\n", count: 120)) } }
+        await document.settle()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        canvas.bind(document)
+        canvas.columns = 2
+        let first = try #require(canvas.editor.frame(ofPage: 0)), second = try #require(canvas.editor.frame(ofPage: 1))
+        #expect(first.minY == second.minY && second.minX > first.maxX)
+        #expect(canvas.editor.page(near: NSPoint(x: second.midX, y: second.midY)) == 1)
+    }
+
     @Test func zoomingAndReflowingSettle() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
