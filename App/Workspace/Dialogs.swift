@@ -142,12 +142,7 @@ struct PageSetupSheet: View {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
                         FieldLabel("종류")
-                        Picker("종류", selection: paper) {
-                            ForEach(Self.papers, id: \.name) { Text($0.name).tag(Optional($0.name)) }
-                            Text("사용자 정의").tag(String?.none)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                        ChoiceField(paper, Self.papers.map { (Optional($0.name), $0.name) } + [(nil, "사용자 정의")])
                         FieldLabel("용지 방향")
                         Picker("용지 방향", selection: $page.landscape) {
                             Text("세로").tag(false)

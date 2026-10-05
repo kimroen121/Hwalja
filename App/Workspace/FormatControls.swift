@@ -299,7 +299,7 @@ private struct MenuArrow: View {
 }
 
 /// The small arrow that opens a button's choices.
-private struct Chevron: View {
+struct Chevron: View {
     var body: some View {
         Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(width: 14, height: 22)
     }

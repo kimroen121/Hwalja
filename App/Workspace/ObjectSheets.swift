@@ -115,6 +115,7 @@ struct ObjectSheet: View {
                 }
             }
             .dialogTabs()
+            .frame(height: 400)
         } confirm: {
             viewer.setObject(state.object, props.changes(from: state.props))
             if let original = state.cell { viewer.setCell(original.target, cell.changes(from: original.props)) }
@@ -128,18 +129,21 @@ struct ObjectSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             if kind == .picture || kind == .shape {
                 GroupTitle("크기")
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
-                        length("너비", \.width, range: 1...10_000)
-                        length("높이", \.height, range: 1...10_000)
+                VStack(alignment: .leading, spacing: 8) {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            length("너비", \.width, range: 1...10_000)
+                            length("높이", \.height, range: 1...10_000)
+                        }
                     }
+                    Toggle("크기 고정", isOn: flag(\.sizeProtect))
                 }
                 .padding(.leading, 12)
             }
             GroupTitle("위치")
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("글자처럼 취급", isOn: flag(\.treatAsChar))
-                if props.treatAsChar != true {
+                Group {
                     LabeledField("본문과의 배치") {
                         Picker("본문과의 배치", selection: text(\.textWrap, "Square")) {
                             Text("어울림").tag("Square")
@@ -169,10 +173,13 @@ struct ObjectSheet: View {
                             SpinField(value: millimeters(\.vertOffset), unit: "mm", range: -1000...1000)
                         }
                     }
-                    Toggle("쪽 영역 안으로 제한", isOn: flag(\.restrictInPage))
-                    Toggle("서로 겹침 허용", isOn: flag(\.allowOverlap))
+                    HStack(spacing: 16) {
+                        Toggle("쪽 영역 안으로 제한", isOn: flag(\.restrictInPage))
+                        Toggle("서로 겹침 허용", isOn: flag(\.allowOverlap))
+                    }
                 }
-                if kind != .table { Toggle("크기 고정", isOn: flag(\.sizeProtect)) }
+                // Kept in place while disabled, so the sheet never jumps.
+                .disabled(props.treatAsChar == true)
             }
             .padding(.leading, 12)
             if kind == .picture || kind == .shape {
@@ -193,12 +200,8 @@ struct ObjectSheet: View {
             sides(\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom)
             if kind == .picture || kind == .table {
                 GroupTitle("캡션")
-                Picker("캡션", selection: text(\.caption, "None")) {
-                    ForEach(Captions.all, id: \.value) { Text($0.title).tag($0.value) }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .padding(.leading, 12)
+                ChoiceField(text(\.caption, "None"), Captions.all.map { ($0.value, $0.title) }, minWidth: 90)
+                    .padding(.leading, 12)
             }
             Spacer(minLength: 0)
         }
@@ -215,13 +218,8 @@ struct ObjectSheet: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     FieldLabel("색조 조정")
-                    Picker("색조", selection: text(\.effect, "RealPic")) {
-                        Text("효과 없음").tag("RealPic")
-                        Text("회색조").tag("GrayScale")
-                        Text("흑백").tag("BlackWhite")
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    ChoiceField(text(\.effect, "RealPic"), [("RealPic", "효과 없음"), ("GrayScale", "회색조"), ("BlackWhite", "흑백")])
+                        .gridCellColumns(3)
                 }
                 GridRow {
                     FieldLabel("밝기")
@@ -241,13 +239,8 @@ struct ObjectSheet: View {
             GroupTitle("여러 쪽 지원")
             VStack(alignment: .leading, spacing: 8) {
                 LabeledField("쪽 경계에서") {
-                    Picker("쪽 경계에서", selection: Binding { props.pageBreak ?? 0 } set: { props.pageBreak = $0 }) {
-                        Text("나눔").tag(UInt8(1))
-                        Text("셀 단위로 나눔").tag(UInt8(2))
-                        Text("나누지 않음").tag(UInt8(0))
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    ChoiceField(Binding { props.pageBreak ?? 0 } set: { props.pageBreak = $0 },
+                                [(UInt8(1), "나눔"), (2, "셀 단위로 나눔"), (0, "나누지 않음")])
                 }
                 Toggle("제목 줄 자동 반복", isOn: flag(\.repeatHeader))
             }
@@ -321,11 +314,7 @@ struct ObjectSheet: View {
     }
     private func choice(_ key: WritableKeyPath<ObjectProps, String?>, _ fallback: String,
                         _ options: [(value: String, title: String)]) -> some View {
-        Picker("", selection: text(key, fallback)) {
-            ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
-        }
-        .labelsHidden()
-        .fixedSize()
+        ChoiceField(text(key, fallback), options, minWidth: 40)
     }
     @ViewBuilder private func length<T: BinaryInteger>(_ title: String, _ key: WritableKeyPath<ObjectProps, T?>,
                                                        range: ClosedRange<Double> = 0...1000) -> some View {

@@ -184,6 +184,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// Hancom's keys for a block of cells: 셀 합치기 (M), 셀 나누기 (S), and 셀 높이 (H)
     /// or 너비 (W)를 같게. Called with the key.
     var onCellBlockKey: ((Character) -> Bool)?
+    /// The 빠른 메뉴 for the selection, shown on a right click.
+    var onContextMenu: (() -> [Choice?])?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// Latest drag point waiting for the hit test in flight.
@@ -327,18 +329,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private func drawGrid(in frame: NSRect) {
         // ponytail: fixed 5 mm spacing; make it a setting when 격자 설정 is added.
         let step = 5 / 25.4 * 72
-        let path = NSBezierPath()
+        let dot = 1.2 / (enclosingScrollView?.magnification ?? 1)
+        let dots = NSBezierPath()
         for x in stride(from: frame.minX + step, to: frame.maxX, by: step) {
-            path.move(to: NSPoint(x: x, y: frame.minY))
-            path.line(to: NSPoint(x: x, y: frame.maxY))
+            for y in stride(from: frame.minY + step, to: frame.maxY, by: step) {
+                dots.appendRect(NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot))
+            }
         }
-        for y in stride(from: frame.minY + step, to: frame.maxY, by: step) {
-            path.move(to: NSPoint(x: frame.minX, y: y))
-            path.line(to: NSPoint(x: frame.maxX, y: y))
-        }
-        path.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
-        NSColor.systemBlue.withAlphaComponent(0.12).setStroke()
-        path.stroke()
+        NSColor.systemIndigo.withAlphaComponent(0.6).setFill()
+        dots.fill()
     }
     /// The frame and eight sizing handles of a selected object, one screen point thick.
     private func drawHandles(around rect: NSRect) {
@@ -361,6 +360,32 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     override func resetCursorRects() {
         pageFrames.forEach { addCursorRect($0, cursor: drawingShape == nil ? .iBeam : .crosshair) }
+        guard drawingShape == nil, let rect = objectRect, resizable else { return }
+        addCursorRect(rect, cursor: .arrow)
+        let reach = 5 / (enclosingScrollView?.magnification ?? 1)
+        for x in -1...1 {
+            for y in -1...1 where x != 0 || y != 0 {
+                let center = NSPoint(x: rect.midX + CGFloat(x) * rect.width / 2, y: rect.midY + CGFloat(y) * rect.height / 2)
+                addCursorRect(NSRect(x: center.x - reach, y: center.y - reach, width: reach * 2, height: reach * 2),
+                              cursor: Self.resizeCursor(x, y))
+            }
+        }
+    }
+    private static func resizeCursor(_ x: Int, _ y: Int) -> NSCursor {
+        if #available(macOS 15, *) {
+            let position: NSCursor.FrameResizePosition = switch (x, y) {
+            case (-1, -1): .topLeft
+            case (1, -1): .topRight
+            case (-1, 1): .bottomLeft
+            case (1, 1): .bottomRight
+            case (_, -1): .top
+            case (_, 1): .bottom
+            case (-1, _): .left
+            default: .right
+            }
+            return .frameResize(position: position, directions: .all)
+        }
+        return y == 0 ? .resizeLeftRight : x == 0 ? .resizeUpDown : .crosshair
     }
 
     // MARK: Presentation
@@ -377,7 +402,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// and caret in the same pass.
     private func sync() {
         guard let model, model.presentation.serial != shown.serial else { return }
-        let old = highlightRects + [objectRect].compactMap { $0 }
+        let oldObject = objectRect
+        let old = highlightRects + [oldObject].compactMap { $0 }
         shown = model.presentation
         if shown.reflowed {
             layoutPages(force: true)
@@ -385,6 +411,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             shown.changedPages.forEach { index in frame(ofPage: index).map { setNeedsDisplay($0) } }
         }
         (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
+        if oldObject != objectRect { window?.invalidateCursorRects(for: self) }
         placeCaret()
         if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
         onPresent?()
@@ -447,15 +474,40 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) { return rightMouseDown(with: event) }
         if drawingShape != nil {
             let point = convert(event.locationInWindow, from: nil)
             return setRubber((point, point))
         }
-        guard let model, let hit = enginePoint(convert(event.locationInWindow, from: nil)) else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if let rect = objectRect, let handle = handle(at: point, of: rect) {
+            resizing = (handle, rect)
+            return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+        }
+        guard let model, let hit = enginePoint(point) else { return }
         window?.makeFirstResponder(self)
         commitComposition()
-        let extend = event.modifierFlags.contains(.shift)
-        let clicks = event.clickCount
+        click(model, hit, clicks: event.clickCount, extend: event.modifierFlags.contains(.shift))
+    }
+
+    /// A right click selects what is under it, unless it is inside the selection, then
+    /// shows the 빠른 메뉴.
+    override func rightMouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard drawingShape == nil, let model, let hit = enginePoint(point) else { return }
+        window?.makeFirstResponder(self)
+        commitComposition()
+        if !(highlightRects + [objectRect].compactMap { $0 }).contains(where: { $0.contains(point) }) {
+            click(model, hit, clicks: 1, extend: false)
+        }
+        Task { [weak self] in
+            await model.settle()
+            guard let self, let choices = onContextMenu?(), !choices.isEmpty else { return }
+            NSMenu.popUpContextMenu(DropDown.menu(choices), with: event, for: self)
+        }
+    }
+
+    private func click(_ model: HwpDocument, _ hit: (page: Int, point: CGPoint), clicks: Int, extend: Bool) {
         model.select { [weak self] model in
             let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
             // A click on an object selects it, except inside a 글상자, away from its edge,
@@ -495,7 +547,71 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             && point.y > rect.y + edge && point.y < rect.y + rect.height - edge
     }
 
+    // MARK: Resizing
+
+    /// The handle being dragged (-1, 0 or 1 across and down) and the object's frame before.
+    private var resizing: (handle: (x: Int, y: Int), from: NSRect)?
+
+    /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
+    private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) }
+
+    private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
+        guard resizable else { return nil }
+        let reach = 5 / (enclosingScrollView?.magnification ?? 1)
+        for x in -1...1 {
+            for y in -1...1 where x != 0 || y != 0 {
+                let center = NSPoint(x: rect.midX + CGFloat(x) * rect.width / 2, y: rect.midY + CGFloat(y) * rect.height / 2)
+                if abs(point.x - center.x) <= reach, abs(point.y - center.y) <= reach { return (x, y) }
+            }
+        }
+        return nil
+    }
+    /// The frame a handle drag gives: the opposite side stays; Shift on a corner keeps the ratio.
+    private func resized(to point: NSPoint, keepRatio: Bool) -> NSRect? {
+        guard let (handle, from) = resizing else { return nil }
+        var (minX, maxX, minY, maxY) = (from.minX, from.maxX, from.minY, from.maxY)
+        if handle.x < 0 { minX = min(point.x, maxX - 1) } else if handle.x > 0 { maxX = max(point.x, minX + 1) }
+        if handle.y < 0 { minY = min(point.y, maxY - 1) } else if handle.y > 0 { maxY = max(point.y, minY + 1) }
+        var rect = NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        if keepRatio, handle.x != 0, handle.y != 0, from.width > 0, from.height > 0 {
+            let scale = max(rect.width / from.width, rect.height / from.height)
+            let size = NSSize(width: from.width * scale, height: from.height * scale)
+            rect = NSRect(x: handle.x < 0 ? from.maxX - size.width : from.minX,
+                          y: handle.y < 0 ? from.maxY - size.height : from.minY, width: size.width, height: size.height)
+        }
+        return rect
+    }
+    /// Sets the new size; a floating object anchored left or top also moves so its
+    /// opposite side stays put.
+    private func commitResize(_ rect: NSRect) {
+        guard let (_, from) = resizing, let model, let placed = model.object, rect != from else { return }
+        // View points are 1/72 inch; HWPUNIT is 1/7200 inch.
+        let hwp = { (v: CGFloat) in Int32((v * 100).rounded()) }
+        let undoManager = undoManager
+        Task {
+            guard let props = try? await model.objectProps(placed.object) else { return NSSound.beep() }
+            var change = ObjectProps()
+            (change.width, change.height) = (UInt32(max(1, hwp(rect.width))), UInt32(max(1, hwp(rect.height))))
+            if props.treatAsChar != true {
+                if rect.minX != from.minX, (props.horzAlign ?? "Left") == "Left" {
+                    change.horzOffset = (props.horzOffset ?? 0) + hwp(rect.minX - from.minX)
+                }
+                if rect.minY != from.minY, (props.vertAlign ?? "Top") == "Top" {
+                    change.vertOffset = (props.vertOffset ?? 0) + hwp(rect.minY - from.minY)
+                }
+            }
+            model.edit(undoManager) { _ in .setObject(placed.object, change) }
+        }
+    }
+
     override func mouseUp(with event: NSEvent) {
+        if resizing != nil {
+            defer { (resizing, rubber) = (nil, nil); needsDisplay = true }
+            if let rect = resized(to: convert(event.locationInWindow, from: nil), keepRatio: event.modifierFlags.contains(.shift)) {
+                commitResize(rect)
+            }
+            return
+        }
         guard let shape = drawingShape, let band = rubber, let model, !pageFrames.isEmpty else { return }
         drawingShape = nil
         let index = page(near: band.start)
@@ -510,6 +626,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if resizing != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            if let rect = resized(to: point, keepRatio: event.modifierFlags.contains(.shift)) {
+                setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+            }
+            return
+        }
         if let band = rubber {
             return setRubber((band.start, convert(event.locationInWindow, from: nil)))
         }

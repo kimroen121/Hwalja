@@ -105,6 +105,17 @@ struct DocumentTests {
         #expect(try await document.objectProps(equation).script == "a over b")
     }
 
+    /// The 빠른 메뉴 offers what fits the selection.
+    @Test func quickMenuFollowsTheSelection() {
+        let titles = { (context: EditingContext) in MenuItems.quickMenu(Viewer(), context).compactMap { $0?.title } }
+        let text = titles(EditingContext(hasSelection: true, hasRange: true))
+        #expect(text.starts(with: ["오려 두기", "복사하기", "붙이기", "지우기"]) && text.contains("글자 모양…"))
+        #expect(!text.contains("개체 속성…"))
+        let picture = titles(EditingContext(hasSelection: true, object: .picture))
+        #expect(picture.contains("원래 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))
+        #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
+    }
+
     /// 문단 부호 and 조판 부호 redraw the pages without touching the document or undo.
     @Test func marksRedrawPagesOnly() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))

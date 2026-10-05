@@ -125,3 +125,51 @@ enum Units {
         T(clamping: Int((millimeters * perMillimeter).rounded()))
     }
 }
+
+/// A drop-down in a dialog, drawn like the format row's boxes (글꼴, 글자 크기): the
+/// current choice in a rounded box with ▾, opening a native menu with it checked.
+struct ChoiceField<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: String)]
+    var images: [NSImage]?
+    var minWidth: CGFloat = 0
+    @State private var anchor = Anchor()
+
+    init(_ selection: Binding<Value>, _ options: [(value: Value, title: String)],
+         images: [NSImage]? = nil, minWidth: CGFloat = 0) {
+        (_selection, self.options, self.images, self.minWidth) = (selection, options, images, minWidth)
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 0) {
+                label.padding(.leading, 7).frame(minWidth: minWidth, alignment: .leading)
+                Spacer(minLength: 4)
+                Chevron()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .fieldBox()
+        .background(AnchorView(anchor: anchor))
+        .accessibilityLabel(current?.title ?? "")
+    }
+
+    private var index: Int? { options.firstIndex { $0.value == selection } }
+    private var current: (value: Value, title: String)? { index.map { options[$0] } }
+    @ViewBuilder private var label: some View {
+        if let images, let index {
+            Image(nsImage: images[index])
+        } else {
+            Text(current?.title ?? "").lineLimit(1)
+        }
+    }
+    private func open() {
+        DropDown.show(options.indices.map { i in
+            Choice(title: images == nil ? options[i].title : "", image: images?[i], on: options[i].value == selection) {
+                selection = options[i].value
+            }
+        }, below: anchor.view)
+    }
+}

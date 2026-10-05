@@ -176,6 +176,10 @@ final class Viewer: ObservableObject {
         }
         canvas.editor.onPresent = { [weak self] in self?.documentPresented() }
         canvas.editor.onOpenObject = { [weak self] in self?.open($0) }
+        canvas.editor.onContextMenu = { [weak self] in
+            guard let self, let document else { return [] }
+            return MenuItems.quickMenu(self, document.context)
+        }
         canvas.editor.onCellBlockKey = { [weak self] key in
             guard let self else { return false }
             switch key {

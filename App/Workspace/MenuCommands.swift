@@ -88,6 +88,75 @@ struct MenuItems {
         }
     }
 
+    /// 빠른 메뉴 (right click), in Hancom Office Web's order and names, for what the
+    /// selection is: text, an object, or cells.
+    static func quickMenu(_ viewer: Viewer, _ context: EditingContext) -> [Choice?] {
+        let editor = viewer.canvas.editor
+        let selected = context.hasRange || context.object != nil
+        var items: [Choice?] = [
+            Choice(title: "오려 두기", symbol: Icon.cut, key: "x", enabled: context.hasRange) { send(#selector(PageEditor.cut(_:))) },
+            Choice(title: "복사하기", symbol: Icon.copy, key: "c", enabled: context.hasRange) { send(#selector(PageEditor.copy(_:))) },
+            Choice(title: "붙이기", symbol: Icon.paste, key: "v", enabled: context.hasSelection) { send(#selector(PageEditor.paste(_:))) },
+        ]
+        if selected {
+            items.append(Choice(title: "지우기") { editor.doCommand(by: #selector(NSResponder.deleteBackward(_:))) })
+        }
+        if context.canFormat, context.object == nil {
+            items += [
+                nil,
+                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l") { viewer.editingCharShape = true },
+                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t") { viewer.editingParaShape = true },
+            ]
+        }
+        if context.inTable, context.object == nil {
+            let block = context.cellBlock
+            items += [
+                nil,
+                Choice(title: "표/셀 속성…", symbol: Icon.objectProps) { viewer.showObjectProperties() },
+                Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
+                    viewer.editCells { .equalizeCells($0, height: true) }
+                },
+                Choice(title: "셀 너비를 같게", key: "w", modifiers: [], enabled: block) {
+                    viewer.editCells { .equalizeCells($0, height: false) }
+                },
+                Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block) {
+                    viewer.editCells { .mergeCells($0) }
+                },
+                Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
+                Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, submenu: [
+                    Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
+                    Choice(title: "아래쪽에 줄 추가하기") { viewer.editTable(.insertRowBelow) },
+                    Choice(title: "왼쪽에 칸 추가하기") { viewer.editTable(.insertColumnLeft) },
+                    Choice(title: "오른쪽에 칸 추가하기") { viewer.editTable(.insertColumnRight) },
+                ]),
+                Choice(title: "줄/칸 지우기", symbol: Icon.deleteRow, submenu: [
+                    Choice(title: "줄 지우기") { viewer.editTable(.deleteRow) },
+                    Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) },
+                ]),
+            ]
+        }
+        if context.object == .picture || context.object == .table || (context.inTable && context.object == nil) {
+            items += [
+                nil,
+                Choice(title: "캡션 넣기", symbol: Icon.caption) { viewer.insertCaption("Bottom") },
+                Choice(title: "캡션 지우기") { viewer.insertCaption("None") },
+            ]
+        }
+        if context.object == .picture {
+            items += [
+                nil,
+                Choice(title: "색조 조정", symbol: Icon.pictureEffect, submenu: pictureEffects(viewer)),
+                Choice(title: "밝기", symbol: Icon.brightness, submenu: brightness(viewer)),
+                Choice(title: "대비", symbol: Icon.contrast, submenu: contrast(viewer)),
+                Choice(title: "원래 그림으로", symbol: Icon.originalPicture) { restorePicture(viewer) },
+            ]
+        }
+        if context.object != nil {
+            items += [nil, Choice(title: "개체 속성…", symbol: Icon.objectProps, key: "p", modifiers: []) { viewer.showObjectProperties() }]
+        }
+        return items
+    }
+
     /// 파일 items beyond the system's New, Open, Save and Revert.
     @ViewBuilder var file: some View {
         item("PDF로 내보내기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }

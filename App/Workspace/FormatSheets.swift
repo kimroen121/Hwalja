@@ -87,14 +87,8 @@ struct CharShapeSheet: View {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
                             FieldLabel("글꼴")
-                            Picker("글꼴", selection: value(\.font, "")) {
-                                ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
-                                if let font = original.font, !FormatChoices.families.contains(where: { $0.family == font }) {
-                                    Text(font).tag(font)
-                                }
-                            }
-                            .labelsHidden()
-                            .gridCellColumns(3)
+                            ChoiceField(value(\.font, ""), fonts, minWidth: 200)
+                                .gridCellColumns(3)
                         }
                         GridRow {
                             FieldLabel("장평")
@@ -152,6 +146,12 @@ struct CharShapeSheet: View {
     private func value<T>(_ key: WritableKeyPath<CharStyle, T?>, _ fallback: T) -> Binding<T> {
         Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
     }
+    /// Installed families, and the document's font when it isn't installed.
+    private var fonts: [(value: String, title: String)] {
+        let installed = FormatChoices.families.map { ($0.family, $0.name) }
+        guard let font = original.font, !installed.contains(where: { $0.0 == font }) else { return installed }
+        return installed + [(font, font)]
+    }
     private func attribute(_ title: String, _ key: WritableKeyPath<CharStyle, Bool?>,
                            @ViewBuilder glyph: () -> some View) -> some View {
         let on = style[keyPath: key] == true
@@ -175,13 +175,8 @@ struct CharShapeSheet: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     FieldLabel("모양")
-                    Picker("모양", selection: value(shape, 0)) {
-                        ForEach(LineShapes.names.indices, id: \.self) { index in
-                            Image(nsImage: LineShapes.images[index]).accessibilityLabel(LineShapes.names[index]).tag(index)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    ChoiceField(value(shape, 0), LineShapes.names.indices.map { ($0, LineShapes.names[$0]) },
+                                images: LineShapes.images)
                     FieldLabel("색")
                     ColorWell(hex: value(color, "#000000"))
                 }
@@ -254,18 +249,11 @@ struct ParaShapeSheet: View {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
                         FieldLabel("줄 간격")
-                        Picker("줄 간격", selection: Binding { style.lineSpacingKind ?? .percent } set: { kind in
+                        ChoiceField(Binding { style.lineSpacingKind ?? .percent } set: { kind in
                             guard kind != style.lineSpacingKind else { return }
                             style.lineSpacingKind = kind
                             style.lineSpacing = kind == .percent ? 160 : 12
-                        }) {
-                            Text("글자에 따라").tag(LineSpacingKind.percent)
-                            Text("고정 값").tag(LineSpacingKind.fixed)
-                            Text("여백만 지정").tag(LineSpacingKind.spaceOnly)
-                            Text("최소").tag(LineSpacingKind.minimum)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                        }, [(.percent, "글자에 따라"), (.fixed, "고정 값"), (.spaceOnly, "여백만 지정"), (.minimum, "최소")])
                         FieldLabel("문단 위")
                         SpinField(value: length(\.spacingBefore), unit: "pt", range: 0...1000)
                     }
@@ -283,22 +271,11 @@ struct ParaShapeSheet: View {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
                         FieldLabel("한글 단위")
-                        Picker("한글 단위", selection: unit(\.koreanBreakUnit, 1)) {
-                            Text("글자").tag(1)
-                            Text("어절").tag(0)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                        ChoiceField(unit(\.koreanBreakUnit, 1), [(1, "글자"), (0, "어절")])
                     }
                     GridRow {
                         FieldLabel("영문 단위")
-                        Picker("영문 단위", selection: unit(\.englishBreakUnit, 0)) {
-                            Text("단어").tag(0)
-                            Text("하이픈").tag(1)
-                            Text("글자").tag(2)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+                        ChoiceField(unit(\.englishBreakUnit, 0), [(0, "단어"), (1, "하이픈"), (2, "글자")])
                     }
                 }
                 .padding(.leading, 12)

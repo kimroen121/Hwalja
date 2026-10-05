@@ -178,48 +178,46 @@ private struct PaletteButton: View {
 
     var body: some View {
         Button { open = true } label: {
-            HStack(spacing: 2) {
+            HStack(spacing: 0) {
                 Group {
-                    if let face { Sample(script: face, renderer: renderer, zoom: 1.1) } else { self.face(items[0]) }
+                    if let face { Sample(script: face, renderer: renderer) } else { self.face(items[0]) }
                 }
-                .frame(minWidth: 22, minHeight: 22)
-                Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold))
+                .frame(minWidth: 18, minHeight: 20)
+                Chevron().frame(width: 10)
             }
-            .padding(.horizontal, 4)
-            .frame(height: 30)
+            .padding(.leading, 3)
+            .frame(height: 26)
         }
         .buttonStyle(ToolButtonStyle(on: open))
         .help(face ?? items[0].script)
         .popover(isPresented: $open, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(symbols ? 30 : 76), spacing: 4),
-                                         count: symbols ? 8 : min(4, items.count)), spacing: 4) {
-                    ForEach(items, id: \.self) { item in
-                        Button {
-                            open = false
-                            pick(item)
-                        } label: {
-                            face(item).frame(width: symbols ? 30 : 76, height: symbols ? 30 : 52)
-                        }
-                        .buttonStyle(ToolButtonStyle())
-                        .help(item.script)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(symbols ? 24 : 58), spacing: 0),
+                                     count: symbols ? 10 : min(4, items.count)), spacing: 0) {
+                ForEach(items, id: \.self) { item in
+                    Button {
+                        open = false
+                        pick(item)
+                    } label: {
+                        face(item).frame(width: symbols ? 24 : 58, height: symbols ? 24 : 40)
                     }
+                    .buttonStyle(ToolButtonStyle())
+                    .help(item.script)
                 }
             }
-            .padding(10)
+            .padding(4)
         }
     }
 
     @ViewBuilder private func face(_ item: EquationItem) -> some View {
         if symbols {
-            Text(item.sample).font(.custom("Times New Roman", size: 17))
+            Text(item.sample).font(.custom("Times New Roman", size: 15))
         } else {
-            Sample(script: item.sample, renderer: renderer, zoom: 1.2)
+            Sample(script: item.sample, renderer: renderer)
         }
     }
 }
 
-/// 수식: palettes and size above, the preview, and the script below it.
+/// 수식: palettes and size above, the script, and the preview below it.
 struct EquationEditor: View {
     let viewer: Viewer
     let renderer: EquationRenderer
@@ -253,15 +251,15 @@ struct EquationEditor: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 1) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 0) {
                 ForEach(EquationPalette.templates, id: \.face) { palette in
                     PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: false) {
                         script.insert($0.script)
                     }
                 }
             }
-            HStack(spacing: 1) {
+            HStack(spacing: 0) {
                 ForEach(EquationPalette.symbols, id: \.self) { items in
                     PaletteButton(items: items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
@@ -276,20 +274,21 @@ struct EquationEditor: View {
                 }
                 .padding(.leading, 8)
             }
+            ScriptView(text: $edit.script, proxy: script)
+                .frame(height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
             ScrollView([.horizontal, .vertical]) {
                 EquationGlyph(display: preview, zoom: 1.5)
-                    .padding(16)
-                    .frame(minWidth: 648, minHeight: 138)
+                    .padding(14)
+                    .frame(minWidth: 588, minHeight: 112, alignment: .center)
             }
-            .frame(height: 170)
+            .frame(height: 140)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
             .environment(\.colorScheme, .light)
-            ScriptView(text: $edit.script, proxy: script)
-                .frame(height: 120)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
         }
-        .frame(width: 680)
+        .frame(width: 620)
     }
 
     /// 0x00bbggrr and `#rrggbb`.

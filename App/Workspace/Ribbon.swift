@@ -207,7 +207,7 @@ enum DropDown {
         let y = view.isFlipped ? view.bounds.maxY + 2 : -2
         menu(choices).popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: view)
     }
-    private static func menu(_ choices: [Choice?]) -> NSMenu {
+    static func menu(_ choices: [Choice?]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         for choice in choices {
