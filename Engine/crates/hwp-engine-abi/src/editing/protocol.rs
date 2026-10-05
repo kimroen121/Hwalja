@@ -78,8 +78,23 @@ pub enum EditCommand {
         section: u32,
         page: PageSetup,
     },
+    /// Replaces the header (or footer) shown on every page of a section with an empty
+    /// one, or one holding the page number at `page_number`.
+    HeaderFooter {
+        section: u32,
+        footer: bool,
+        #[serde(rename = "pageNumber")]
+        page_number: Option<Placement>,
+    },
     Undo,
     Redo,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Placement {
+    Left,
+    Center,
+    Right,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -31,9 +31,9 @@ struct DocumentWindow: View {
             Divider()
             StatusBar(document: document, viewer: viewer, position: viewer.position)
         }
-        .alert("쪽으로 이동", isPresented: $viewer.goingToPage) {
+        .alert("찾아가기", isPresented: $viewer.goingToPage) {
             TextField("쪽", text: $pageField)
-            Button("이동") { Int(pageField).map { viewer.go(toPage: $0 - 1) } }
+            Button("가기") { Int(pageField).map { viewer.go(toPage: $0 - 1) } }
             Button("취소", role: .cancel) {}
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }

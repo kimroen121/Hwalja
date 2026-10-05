@@ -1,5 +1,11 @@
 use super::*;
-use rhwp::model::{control::Control, document::Document, paragraph::Paragraph, table::Table};
+use rhwp::model::{
+    control::{AutoNumber, AutoNumberType, Control},
+    document::Document,
+    header_footer::HeaderFooterApply,
+    paragraph::Paragraph,
+    table::Table,
+};
 use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -80,6 +86,21 @@ pub(super) fn editable(p: &Paragraph) -> bool {
         && p.orphan_field_ends.is_empty()
         && p.ctrl_data_records.len() <= p.controls.len()
         && !p.text.chars().any(|c| c.is_control() && c != '\t')
+}
+/// Where the header (or footer) for every page of section `s` sits: paragraph and control.
+pub(super) fn header_footer_at(doc: &Document, s: usize, footer: bool) -> Option<(usize, usize)> {
+    doc.sections[s]
+        .paragraphs
+        .iter()
+        .enumerate()
+        .find_map(|(p, para)| {
+            let c = para.controls.iter().position(|c| match c {
+                Control::Header(h) => !footer && h.apply_to == HeaderFooterApply::Both,
+                Control::Footer(f) => footer && f.apply_to == HeaderFooterApply::Both,
+                _ => false,
+            })?;
+            Some((p, c))
+        })
 }
 /// The table holding `t`'s cell.
 pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> {
@@ -247,15 +268,83 @@ impl EditSession {
                 }
             }
             EditCommand::SetPage { section, page } => {
-                self.core
-                    .document()
-                    .sections
-                    .get(*section as usize)
-                    .ok_or(EditError::InvalidInput)?;
+                self.section_exists(*section)?;
                 validate_page(page)
             }
+            EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
+    }
+    fn section_exists(&self, section: u32) -> Result<(), EditError> {
+        self.core
+            .document()
+            .sections
+            .get(section as usize)
+            .map(|_| ())
+            .ok_or(EditError::InvalidInput)
+    }
+    /// The selection, unchanged by an edit that only touched the section's page layout.
+    fn kept(&self, section: u32) -> EditSelection {
+        self.selection.clone().unwrap_or_else(|| {
+            EditSelection::caret(EditPosition {
+                target: EditTarget {
+                    section,
+                    paragraph: 0,
+                    cell: None,
+                },
+                scalar: 0,
+            })
+        })
+    }
+    /// Replaces the section's header or footer for every page, keeping an existing one's
+    /// place among its paragraph's controls.
+    fn header_footer(
+        &mut self,
+        section: u32,
+        footer: bool,
+        page_number: Option<Placement>,
+    ) -> Result<(), EditError> {
+        let s = section as usize;
+        let mut paragraph = Paragraph::default();
+        if page_number.is_some() {
+            // The page number is an inline auto number shown in place of a space, as
+            // rhwp reads one from a file.
+            paragraph.text = " ".into();
+            paragraph.char_offsets = vec![0];
+            paragraph.controls = vec![Control::AutoNumber(AutoNumber {
+                number_type: AutoNumberType::Page,
+                ..Default::default()
+            })];
+            paragraph.ctrl_data_records = vec![None];
+            paragraph.char_count = 9;
+            paragraph.control_mask = 1 << 0x12;
+            paragraph.has_para_text = true;
+        }
+        if header_footer_at(self.core.document(), s, footer).is_none() {
+            self.core.create_header_footer_native(s, !footer, 0)?;
+        }
+        let (p, c) =
+            header_footer_at(self.core.document(), s, footer).ok_or(EditError::RenderFailed)?;
+        match &mut self.core.document_mut().sections[s].paragraphs[p].controls[c] {
+            Control::Header(h) => h.paragraphs = vec![paragraph],
+            Control::Footer(f) => f.paragraphs = vec![paragraph],
+            _ => return Err(EditError::RenderFailed),
+        }
+        let alignment = match page_number {
+            Some(Placement::Left) => "left",
+            Some(Placement::Center) => "center",
+            Some(Placement::Right) => "right",
+            None => "justify",
+        };
+        // Also lays the section out again.
+        self.core.apply_para_format_in_hf_native(
+            s,
+            !footer,
+            0,
+            0,
+            &format!(r#"{{"alignment":"{alignment}"}}"#),
+        )?;
+        Ok(())
     }
     /// Paper and margins of a section.
     pub fn page_setup(&self, section: u32) -> Result<PageSetup, EditError> {
@@ -570,16 +659,15 @@ impl EditSession {
             EditCommand::SetPage { section, page } => {
                 let json = serde_json::to_string(page).map_err(|_| EditError::InvalidInput)?;
                 self.core.set_page_def_native(*section as usize, &json)?;
-                Ok(self.selection.clone().unwrap_or_else(|| {
-                    EditSelection::caret(EditPosition {
-                        target: EditTarget {
-                            section: *section,
-                            paragraph: 0,
-                            cell: None,
-                        },
-                        scalar: 0,
-                    })
-                }))
+                Ok(self.kept(*section))
+            }
+            EditCommand::HeaderFooter {
+                section,
+                footer,
+                page_number,
+            } => {
+                self.header_footer(*section, *footer, *page_number)?;
+                Ok(self.kept(*section))
             }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }

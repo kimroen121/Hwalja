@@ -131,6 +131,9 @@ pub(super) fn check(
         }
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
+        EditCommand::HeaderFooter {
+            section, footer, ..
+        } => return check_header_footer(before, after, *section, *footer),
         EditCommand::MergePrevious { position } => (
             &position.target,
             commands::index(&position.target) - 1,
@@ -282,6 +285,42 @@ fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), E
                 c.page_def = d.page_def.clone();
             }
         }
+    }
+    same_rest(&mut a, &mut b, section)
+}
+/// A header or footer command may only add or replace that one control and append
+/// paragraph shapes.
+fn check_header_footer(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    footer: bool,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let mut kinds = vec![];
+    for doc in [&mut a, &mut b] {
+        let found = commands::header_footer_at(doc, section as usize, footer);
+        kinds.push(found);
+        if let Some((p, c)) = found {
+            let p = &mut doc.sections[section as usize].paragraphs[p];
+            p.ctrl_data_records.resize(p.controls.len(), None);
+            p.controls.remove(c);
+            p.ctrl_data_records.remove(c);
+            p.char_count -= 8;
+        }
+    }
+    // An existing one is replaced where it was.
+    if kinds[1].is_none() || kinds[0].is_some_and(|k| Some(k) != kinds[1]) {
+        return Err(EditError::PreservationFailed);
+    }
+    for doc in [&mut a, &mut b] {
+        for p in &mut doc.sections[section as usize].paragraphs {
+            p.ctrl_data_records.resize(p.controls.len(), None);
+        }
+    }
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
     }
     same_rest(&mut a, &mut b, section)
 }

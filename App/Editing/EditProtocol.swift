@@ -38,11 +38,13 @@ enum EditCommand: Encodable, Sendable {
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
     case setPage(section: UInt32, PageSetup)
+    /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
+    case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
     case undo
     case redo
 
     private enum Key: String, CodingKey {
-        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page
+        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page, footer, pageNumber
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -82,10 +84,19 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setPage", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(page, forKey: .page)
+        case let .headerFooter(section, footer, pageNumber):
+            try c.encode("headerFooter", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(footer, forKey: .footer)
+            try c.encode(pageNumber, forKey: .pageNumber)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
     }
+}
+
+enum Placement: String, Encodable, Sendable {
+    case left, center, right
 }
 
 enum TableChange: String, Encodable, Sendable {

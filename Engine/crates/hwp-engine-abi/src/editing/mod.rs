@@ -223,7 +223,10 @@ impl EditSession {
                 target: cell.clone(),
                 scalar: 0,
             }),
-            EditCommand::SetPage { .. } | EditCommand::Undo | EditCommand::Redo => None,
+            EditCommand::SetPage { .. }
+            | EditCommand::HeaderFooter { .. }
+            | EditCommand::Undo
+            | EditCommand::Redo => None,
         };
         // A page earlier: joined or shortened text can move back onto the previous page.
         let from = start

@@ -1200,6 +1200,13 @@ fn structure_edits_on_corpus() {
                 });
             }
         }
+        for footer in [false, true] {
+            commands.push(EditCommand::HeaderFooter {
+                section: 0,
+                footer,
+                page_number: Some(Placement::Center),
+            });
+        }
         let mut page = opened.page_setup(0).unwrap();
         page.margin_left += 283;
         commands.push(EditCommand::SetPage { section: 0, page });
@@ -1286,5 +1293,44 @@ fn full_char_and_para_formats_round_trip() {
         );
         assert_eq!((p.spacing_before, p.spacing_after), (Some(6.0), Some(3.0)));
         assert_eq!(p.keep_with_next, Some(true));
+    }
+}
+#[test]
+fn header_and_footer_number_pages_and_save() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let count = |s: &EditSession| {
+            s.core.document().sections[0].paragraphs[0]
+                .controls
+                .iter()
+                .filter(|c| matches!(c, Control::Header(_) | Control::Footer(_)))
+                .count()
+        };
+        let place = |footer, page_number| EditCommand::HeaderFooter {
+            section: 0,
+            footer,
+            page_number,
+        };
+        run(&mut s, place(false, None)).unwrap();
+        run(&mut s, place(false, Some(Placement::Center))).unwrap();
+        run(&mut s, place(true, Some(Placement::Right))).unwrap();
+        assert_eq!(count(&s), 2, "{format}");
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        assert_eq!(svg.matches(">1<").count(), 2, "{format}");
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        let reopened = EditSession::open(&saved).unwrap();
+        assert_eq!(count(&reopened), 2, "{format}");
+        let svg = reopened.core.render_page_svg_native(0).unwrap();
+        assert_eq!(svg.matches(">1<").count(), 2, "{format}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(count(&s), 0, "{format}");
     }
 }

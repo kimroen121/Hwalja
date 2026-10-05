@@ -36,6 +36,12 @@ extension Viewer {
     func setPage(_ page: PageSetup, section: UInt32) {
         document?.edit(undoManager) { _ in .setPage(section: section, page) }
     }
+    /// Replaces the section's 머리말 (or 꼬리말) for every page.
+    func headerFooter(footer: Bool, pageNumber: Placement?) {
+        document?.edit(undoManager) { selection in
+            .headerFooter(section: selection?.focus.target.section ?? 0, footer: footer, pageNumber: pageNumber)
+        }
+    }
 }
 
 /// 표 만들기: row and column counts.

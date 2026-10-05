@@ -229,6 +229,11 @@ struct DocumentTests {
         await document.settle()
         #expect(try await document.pageSetup(section: 0) == page)
         #expect(document.pages[0].size.width > document.pages[0].size.height)
+        let revision = document.reply.revision
+        viewer.headerFooter(footer: false, pageNumber: .center)
+        viewer.headerFooter(footer: true, pageNumber: nil)
+        await document.settle()
+        #expect(document.reply.revision == revision + 2)
     }
 
     @Test func styleChosenAtTheCaretAppliesToTheNextText() async throws {
