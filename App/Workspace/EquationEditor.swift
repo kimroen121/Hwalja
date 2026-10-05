@@ -16,8 +16,6 @@ struct EquationEdit: Identifiable {
 }
 
 extension Viewer {
-    private var document: HwpDocument? { canvas.editor.model }
-    private var undoManager: UndoManager? { canvas.editor.undoManager }
 
     /// Opens 수식 편집기 for a new equation in the caret's text size.
     func newEquation() {
@@ -245,6 +243,20 @@ struct EquationEditor: View {
     }
 
     var body: some View {
+        DialogFrame("수식 편집기", confirmTitle: edit.object == nil ? "넣기" : "확인", canConfirm: valid) {
+            editor
+        } confirm: {
+            viewer.commit(edit)
+            dismiss()
+        }
+        .task(id: "\(edit.fontSize) \(edit.color) \(edit.script)") {
+            let size = UInt32((min(max(edit.fontSize, 1), 127) * 100).rounded())
+            // The previous preview stays until the new one is ready, so typing never blinks.
+            if let display = await renderer.display(edit.script, size: size, color: edit.color) { preview = display }
+        }
+    }
+
+    private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 1) {
                 ForEach(EquationPalette.templates, id: \.title) { palette in
@@ -272,7 +284,7 @@ struct EquationEditor: View {
             ScrollView([.horizontal, .vertical]) {
                 EquationGlyph(display: preview, zoom: 1.5)
                     .padding(16)
-                    .frame(minWidth: 680, minHeight: 150)
+                    .frame(minWidth: 648, minHeight: 138)
             }
             .frame(height: 170)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 6))
@@ -281,24 +293,8 @@ struct EquationEditor: View {
             ScriptView(text: $edit.script, proxy: script)
                 .frame(height: 120)
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
-            HStack {
-                Spacer()
-                Button("취소", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(edit.object == nil ? "넣기" : "확인") {
-                    viewer.commit(edit)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!valid)
-            }
         }
-        .padding(20)
-        .frame(width: 720)
-        .task(id: "\(edit.fontSize) \(edit.color) \(edit.script)") {
-            let size = UInt32((min(max(edit.fontSize, 1), 127) * 100).rounded())
-            // The previous preview stays until the new one is ready, so typing never blinks.
-            if let display = await renderer.display(edit.script, size: size, color: edit.color) { preview = display }
-        }
+        .frame(width: 680)
     }
 
     /// 0x00bbggrr and `#rrggbb`.

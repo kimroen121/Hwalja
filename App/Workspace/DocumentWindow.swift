@@ -164,8 +164,8 @@ final class Viewer: ObservableObject {
     @Published private(set) var currentMatch: Int?
     private var searchedRevision: UInt64?
 
-    private var document: HwpDocument? { canvas.editor.model }
-    private var undoManager: UndoManager? { canvas.editor.undoManager }
+    var document: HwpDocument? { canvas.editor.model }
+    var undoManager: UndoManager? { canvas.editor.undoManager }
 
     init() {
         canvas.onViewChange = { [weak self] in

@@ -9,6 +9,11 @@ struct ToolRow: View {
 
     var body: some View {
         let context = document.context
+        // A narrow window scrolls the row instead of squeezing it.
+        ScrollView(.horizontal, showsIndicators: false) { tiles(context) }
+    }
+
+    @ViewBuilder private func tiles(_ context: EditingContext) -> some View {
         HStack(spacing: 2) {
             ToolTile("저장하기", Icon.save) { send(#selector(NSDocument.save(_:))) }
             RowDivider()
@@ -24,10 +29,10 @@ struct ToolRow: View {
             ToolTile("찾기", Icon.find, action: { viewer.showFind(replace: false) },
                      choices: { MenuItems.findChoices(viewer) })
             RowDivider()
+            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
+                .disabled(!context.inBody)
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true },
                      panel: AnyView(TableGrid(viewer: viewer)))
-                .disabled(!context.inBody)
-            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
                 .disabled(!context.inBody)
             ToolTile("수식", Icon.equation) { viewer.newEquation() }
                 .disabled(!context.inBody)
@@ -46,8 +51,14 @@ struct ToolRow: View {
                 ToolTile("문단 모양", Icon.paraShape) { viewer.editingParaShape = true }
             }
             .disabled(!context.canFormat)
+            RowDivider()
             ToolTile("개체 속성", Icon.objectProps) { viewer.showObjectProperties() }
                 .disabled(context.object == nil && !context.inTable)
+            RowDivider()
+            ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
+            ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
+            MarkTiles(viewer: viewer)
+            // The selected picture's tools, last so the row never shifts.
             if context.object == .picture {
                 RowDivider()
                 ToolTile("색조 조정", Icon.pictureEffect, choices: { MenuItems.pictureEffects(viewer) })
@@ -55,14 +66,20 @@ struct ToolRow: View {
                 ToolTile("대비", Icon.contrast, choices: { MenuItems.contrast(viewer) })
                 ToolTile("원래 그림으로", Icon.originalPicture) { MenuItems.restorePicture(viewer) }
             }
-            RowDivider()
-            ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
-            ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .padding(.top, 7)
         .padding(.bottom, 4)
+    }
+}
+
+/// 조판 부호, 문단 부호 and 격자 보기, lit while shown. Apart so only they follow the viewer.
+private struct MarkTiles: View {
+    @ObservedObject var viewer: Viewer
+    var body: some View {
+        ToolTile("조판 부호", Icon.controlCodes, on: viewer.showsControlCodes) { viewer.showsControlCodes.toggle() }
+        ToolTile("문단 부호", Icon.paragraphMarks, on: viewer.showsParagraphMarks) { viewer.showsParagraphMarks.toggle() }
+        ToolTile("격자 보기", Icon.grid, on: viewer.showsGrid) { viewer.showsGrid.toggle() }
     }
 }
 
@@ -79,6 +96,8 @@ enum Icon {
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
+    static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"
+    static let grid = "grid"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static func placement(_ placement: Placement?) -> String {
         switch placement {
@@ -111,11 +130,13 @@ struct ToolTile: View {
     var action: (() -> Void)?
     var choices: (() -> [Choice?])?
     var panel: AnyView?
+    /// Lit, for tiles that turn something on.
+    var on = false
     @State private var anchor = Anchor()
     @State private var showsPanel = false
 
-    init(_ title: String, _ symbol: String, action: @escaping () -> Void) {
-        (self.title, self.symbol, self.action) = (title, symbol, action)
+    init(_ title: String, _ symbol: String, on: Bool = false, action: @escaping () -> Void) {
+        (self.title, self.symbol, self.on, self.action) = (title, symbol, on, action)
     }
     init(_ title: String, _ symbol: String, action: (() -> Void)? = nil,
          choices: (() -> [Choice?])? = nil, panel: AnyView? = nil) {
@@ -129,7 +150,7 @@ struct ToolTile: View {
                 VStack(spacing: 3) { icon; VStack(spacing: 0) { name; arrow.hidden() } }
                     .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
             }
-            .buttonStyle(ToolButtonStyle())
+            .buttonStyle(ToolButtonStyle(on: on))
         } else if let action {
             VStack(spacing: 0) {
                 Button(action: action) { icon.frame(minWidth: 52).padding(.top, 3).padding(.bottom, 3) }

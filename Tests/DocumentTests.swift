@@ -494,7 +494,9 @@ struct DocumentTests {
                 ToolRow(document: document, viewer: viewer)
                 Divider()
                 FormatRow(document: document, editor: viewer.canvas.editor)
-            }.frame(width: 1100))),
+            }.frame(width: 1400))),
+            ("table", AnyView(TableSheet(viewer: viewer))),
+            ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("char", AnyView(CharShapeSheet(style: format.text, viewer: viewer))),
             ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),

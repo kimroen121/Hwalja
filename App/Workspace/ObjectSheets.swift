@@ -2,17 +2,6 @@ import SwiftUI
 
 // Objects (pictures, equations, tables): their commands and 개체 속성.
 
-/// HWPUNIT (1/7200 inch) and millimeters, as dialogs show lengths.
-enum Units {
-    static let perMillimeter = 7200 / 25.4
-    static func millimeters<T: BinaryInteger>(_ units: T) -> Double {
-        (Double(units) / perMillimeter * 10).rounded() / 10
-    }
-    static func units<T: BinaryInteger>(_ millimeters: Double) -> T {
-        T(clamping: Int((millimeters * perMillimeter).rounded()))
-    }
-}
-
 /// 개체 속성 as opened: the object with its properties, and for a table the cell
 /// holding the caret with its own.
 struct ObjectSheetState: Identifiable {
@@ -23,8 +12,6 @@ struct ObjectSheetState: Identifiable {
 }
 
 extension Viewer {
-    private var document: HwpDocument? { canvas.editor.model }
-    private var undoManager: UndoManager? { canvas.editor.undoManager }
 
     /// 개체 속성 of the selected object, or 표/셀 속성 of the table holding the caret.
     func showObjectProperties() {
@@ -93,7 +80,7 @@ struct ObjectSheet: View {
     private var kind: ObjectKind { state.object.kind }
 
     var body: some View {
-        DialogFrame {
+        DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성") {
             TabView {
                 basic.tab("기본")
                 margins.tab("여백/캡션")
@@ -103,7 +90,7 @@ struct ObjectSheet: View {
                     cellTab.tab("셀")
                 }
             }
-            .frame(width: 470)
+            .dialogTabs()
         } confirm: {
             viewer.setObject(state.object, props.changes(from: state.props))
             if let original = state.cell { viewer.setCell(original.target, cell.changes(from: original.props)) }
