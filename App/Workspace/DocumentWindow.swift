@@ -54,6 +54,7 @@ struct DocumentWindow: View {
             Button("취소", role: .cancel) {}
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
         .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingCharShape) {
@@ -144,6 +145,7 @@ final class Viewer: ObservableObject {
     }
     @Published var goingToPage = false
     @Published var insertingTable = false
+    @Published var splittingCells = false
     /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
     @Published var equation: EquationEdit?
     @Published var objectSheet: ObjectSheetState?
@@ -174,6 +176,17 @@ final class Viewer: ObservableObject {
         }
         canvas.editor.onPresent = { [weak self] in self?.documentPresented() }
         canvas.editor.onOpenObject = { [weak self] in self?.open($0) }
+        canvas.editor.onCellBlockKey = { [weak self] key in
+            guard let self else { return false }
+            switch key {
+            case "m": editCells { .mergeCells($0) }
+            case "s": splittingCells = true
+            case "h": editCells { .equalizeCells($0, height: true) }
+            case "w": editCells { .equalizeCells($0, height: false) }
+            default: return false
+            }
+            return true
+        }
     }
 
     /// Keeps the find bar's matches and count current as the document changes.

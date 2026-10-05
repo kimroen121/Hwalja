@@ -146,6 +146,11 @@ pub(super) fn check(
             return check_inserted_equation(before, after, &position.target)
         }
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
+        EditCommand::MergeCells { selection }
+        | EditCommand::SplitCells { selection, .. }
+        | EditCommand::EqualizeCells { selection, .. } => {
+            return check_table(before, after, &selection.anchor.target)
+        }
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }

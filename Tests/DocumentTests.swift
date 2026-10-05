@@ -330,6 +330,17 @@ struct DocumentTests {
         viewer.editTable(.insertRowBelow)
         await document.settle()
         #expect(viewer.inTable)
+        var corner = try #require(document.selection?.focus)
+        corner.target.cell?.cell = 0
+        var far = corner
+        far.target.cell?.cell = 3
+        document.select { _ in EditSelection(anchor: corner, focus: far) }
+        await document.settle()
+        #expect(document.context.cellBlock && !document.context.hasRange)
+        #expect(document.presentation.highlight.count == 4 && document.presentation.caret != nil)
+        viewer.editCells { .mergeCells($0) }
+        await document.settle()
+        #expect(viewer.inTable && !document.context.cellBlock)
         document.selection = .caret(EditPosition(target: EditTarget(section: 0, paragraph: 1, cell: nil), scalar: 0))
         viewer.insertBreak(column: false)
         await document.settle()

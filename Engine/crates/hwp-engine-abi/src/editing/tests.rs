@@ -1563,3 +1563,98 @@ fn marks_show_on_pages_but_not_in_the_pdf() {
     s.show_marks(false, false).unwrap();
     assert_eq!(s.core.render_page_svg_native(0).unwrap(), plain);
 }
+#[test]
+fn cell_blocks_merge_split_and_equalize() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 3,
+            columns: 3,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let host = caret.target.paragraph as usize;
+        let at = |s: &EditSession, row: u16, col: u16| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            let cell = t
+                .cells
+                .iter()
+                .position(|c| (c.row, c.col) == (row, col))
+                .unwrap();
+            let mut target = caret.target.clone();
+            target.cell.as_mut().unwrap().cell = cell as u32;
+            point(target, 0)
+        };
+        let block = |s: &EditSession, from: (u16, u16), to: (u16, u16)| EditSelection {
+            anchor: at(s, from.0, from.1),
+            focus: at(s, to.0, to.1),
+        };
+
+        let square = block(&s, (1, 1), (0, 0));
+        assert_eq!(s.selection_rects(s.revision, &square).unwrap().len(), 4);
+        let merge = EditCommand::MergeCells { selection: square };
+        run(&mut s, merge).unwrap();
+        assert_eq!(table_shape(&s, host), (3, 3, 6));
+        // A block cutting the merged cell grows to cover it.
+        let cut = block(&s, (0, 0), (2, 0));
+        assert_eq!(s.block(&cut).unwrap().cols, (0, 1));
+        let split = EditCommand::SplitCells {
+            selection: EditSelection::caret(at(&s, 0, 0)),
+            rows: 2,
+            columns: 2,
+            equal_height: true,
+            merge_first: false,
+        };
+        run(&mut s, split).unwrap();
+        assert_eq!(table_shape(&s, host), (3, 3, 9));
+
+        let widen = CellProps {
+            width: Some(20_000),
+            ..Default::default()
+        };
+        let first = at(&s, 0, 0).target;
+        for row in 0..3 {
+            let cell = at(&s, row, 0).target;
+            run(
+                &mut s,
+                EditCommand::SetCell {
+                    cell,
+                    props: widen.clone(),
+                },
+            )
+            .unwrap();
+        }
+        let widths = |s: &EditSession| {
+            let t = commands::table(s.core.document(), &first).unwrap();
+            (0..3)
+                .map(|col| {
+                    t.cells
+                        .iter()
+                        .find(|c| (c.row, c.col) == (0, col))
+                        .unwrap()
+                        .width
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(widths(&s)[0], widths(&s)[1]);
+        let even = EditCommand::EqualizeCells {
+            selection: block(&s, (0, 0), (2, 2)),
+            height: false,
+        };
+        run(&mut s, even).unwrap();
+        let w = widths(&s);
+        assert!(w.iter().all(|x| x.abs_diff(w[0]) <= 1), "{w:?}");
+        let pages = s.export(if format == "hwp" {
+            SaveFormat::Hwp
+        } else {
+            SaveFormat::Hwpx
+        });
+        assert!(pages.is_ok());
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_ne!(widths(&s)[0], widths(&s)[1]);
+        let one = EditCommand::MergeCells {
+            selection: EditSelection::caret(at(&s, 0, 0)),
+        };
+        assert_eq!(run(&mut s, one).unwrap_err(), EditError::InvalidInput);
+    }
+}

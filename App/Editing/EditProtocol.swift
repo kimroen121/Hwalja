@@ -55,6 +55,11 @@ enum EditCommand: Encodable, Sendable {
     case deleteObject(ObjectRef)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
+    /// 셀 합치기, 셀 나누기, and 셀 높이를 같게 or 셀 너비를 같게, over the cells the
+    /// selection covers (its cell, or the block between cells of one table).
+    case mergeCells(EditSelection)
+    case splitCells(EditSelection, rows: Int, columns: Int, equalHeight: Bool, mergeFirst: Bool)
+    case equalizeCells(EditSelection, height: Bool)
     case setPage(section: UInt32, PageSetup)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
@@ -64,7 +69,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -129,6 +134,20 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(footer, forKey: .footer)
             try c.encode(pageNumber, forKey: .pageNumber)
+        case let .mergeCells(selection):
+            try c.encode("mergeCells", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+        case let .splitCells(selection, rows, columns, equalHeight, mergeFirst):
+            try c.encode("splitCells", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(rows, forKey: .rows)
+            try c.encode(columns, forKey: .columns)
+            try c.encode(equalHeight, forKey: .equalHeight)
+            try c.encode(mergeFirst, forKey: .mergeFirst)
+        case let .equalizeCells(selection, height):
+            try c.encode("equalizeCells", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(height, forKey: .height)
         case let .setObject(object, props):
             try c.encode("setObject", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -275,6 +294,15 @@ struct EditReply: Decodable, Sendable {
 /// Fields are compared and merged by their JSON names, so new fields need no code here.
 protocol PartialFormat: Codable, Hashable, Sendable {
     init()
+}
+
+extension EditSelection {
+    /// Whether the ends are in two cells of one table: a block of cells.
+    var isCellBlock: Bool {
+        guard let a = anchor.target.cell, let b = focus.target.cell else { return false }
+        return (anchor.target.section, anchor.target.paragraph, a.control) == (focus.target.section, focus.target.paragraph, b.control)
+            && a.cell != b.cell
+    }
 }
 
 extension PartialFormat {

@@ -104,8 +104,8 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | 표/셀 속성…: 쪽 경계에서 나눔, 제목 줄 자동 반복, 모든 셀의 안 여백, 셀 간격, 셀 크기·안 여백·세로 정렬·제목 셀·셀 보호 | SetObject, SetCell | 완료(테두리/배경 제외) |
 | | 줄/칸 추가하기: 위·아래 줄, 왼쪽·오른쪽 칸 | 같음 | `insert_table_row/column_native` | 완료 |
 | | 줄/칸 지우기 | 같음 | `delete_table_row/column_native` | 완료 |
-| | 셀 나누기, 셀 합치기 | 같음 | `split/merge_table_cell(s)_native` | |
-| | 셀 높이를 같게, 셀 너비를 같게 | | `resize_table_cell_native` | |
+| | 셀 나누기, 셀 합치기 | 같음. 셀 블록(끌기·Shift-클릭으로 두 셀 사이)에서 M·S 키도 | `merge_table_cells_native`, `split_table_cell_into_native`, `split_table_cells_in_range_native` | 완료 |
+| | 셀 높이를 같게, 셀 너비를 같게 | 같음. 셀 블록에서 H·W 키도 | EqualizeCells(셀 크기 속성) | 완료 |
 | | 블록 계산식(합계·평균·곱), 자릿점 넣기/빼기 | | `table_calc` | |
 | 검토 | 변경 내용 추적(켜기, 적용·취소 후 다음, 다음·이전, 보기 방식) | | | 2차 |
 | 도구 | 빠른 교정(둥근 따옴표), 접근성 | 맞춤법·대치는 macOS 텍스트 서비스로 | | 2차 |

@@ -1,3 +1,4 @@
+mod cells;
 mod commands;
 mod display;
 pub mod ffi;
@@ -216,6 +217,9 @@ impl EditSession {
             | EditCommand::FormatParagraphs { selection, .. } => {
                 Some(commands::ordered(selection).0.clone())
             }
+            EditCommand::MergeCells { selection }
+            | EditCommand::SplitCells { selection, .. }
+            | EditCommand::EqualizeCells { selection, .. } => Some(selection.anchor.clone()),
             EditCommand::Split { position }
             | EditCommand::MergePrevious { position }
             | EditCommand::Break { position, .. }

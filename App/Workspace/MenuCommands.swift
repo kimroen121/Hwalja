@@ -260,8 +260,16 @@ struct MenuItems {
                 Divider()
                 Button("칸 지우기") { viewer?.editTable(.deleteColumn) }
             } label: { Label("줄/칸 지우기", systemImage: Icon.deleteRow) }
+            Divider()
+            item("셀 나누기…", Icon.splitCells) { viewer?.splittingCells = true }
         }
         .disabled(!context.inTable)
+        Group {
+            item("셀 합치기", Icon.mergeCells) { viewer?.editCells { .mergeCells($0) } }
+            Button("셀 높이를 같게") { viewer?.editCells { .equalizeCells($0, height: true) } }
+            Button("셀 너비를 같게") { viewer?.editCells { .equalizeCells($0, height: false) } }
+        }
+        .disabled(!context.cellBlock)
     }
 }
 

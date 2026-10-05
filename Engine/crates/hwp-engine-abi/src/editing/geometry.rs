@@ -174,6 +174,9 @@ impl EditSession {
         selection: &EditSelection,
     ) -> Result<Vec<PageRect>, EditError> {
         self.check_revision(revision)?;
+        if cells::is_block(selection) {
+            return self.block_rects(revision, selection);
+        }
         let (a, b) = (&selection.anchor, &selection.focus);
         if a.target.section != b.target.section
             || a.target.cell.as_ref().map(|c| (c.control, c.cell))

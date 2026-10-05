@@ -123,6 +123,26 @@ pub enum EditCommand {
         cell: EditTarget,
         change: TableChange,
     },
+    /// 셀 합치기: one cell from the block `selection` covers.
+    MergeCells {
+        selection: EditSelection,
+    },
+    /// 셀 나누기: each cell `selection` covers into `rows` × `columns`, or, with
+    /// `merge_first`, the block merged into one cell first.
+    SplitCells {
+        selection: EditSelection,
+        rows: u16,
+        columns: u16,
+        #[serde(rename = "equalHeight")]
+        equal_height: bool,
+        #[serde(rename = "mergeFirst")]
+        merge_first: bool,
+    },
+    /// 셀 높이를 같게 (or 셀 너비를 같게) over the block `selection` covers.
+    EqualizeCells {
+        selection: EditSelection,
+        height: bool,
+    },
     /// Paper and margins of one section.
     SetPage {
         section: u32,

@@ -379,6 +379,9 @@ impl EditSession {
             }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
             EditCommand::SetObject { object, props } => self.validate_object(object, props),
+            EditCommand::MergeCells { .. }
+            | EditCommand::SplitCells { .. }
+            | EditCommand::EqualizeCells { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
                 self.validate_object(object, &ObjectProps::default())
@@ -511,30 +514,7 @@ impl EditSession {
                     .delete_table_column_native(s, host, control, col)?;
             }
         }
-        let t = table(self.core.document(), target).ok_or(EditError::RenderFailed)?;
-        let (row, col) = (
-            row.min(t.row_count.saturating_sub(1)),
-            col.min(t.col_count.saturating_sub(1)),
-        );
-        let cell = t
-            .cells
-            .iter()
-            .position(|x| {
-                (x.row..x.row + x.row_span.max(1)).contains(&row)
-                    && (x.col..x.col + x.col_span.max(1)).contains(&col)
-            })
-            .unwrap_or(0);
-        Ok(EditSelection::caret(EditPosition {
-            target: EditTarget {
-                cell: Some(CellTarget {
-                    control: c.control,
-                    cell: cell as u32,
-                    paragraph: 0,
-                }),
-                ..target.clone()
-            },
-            scalar: 0,
-        }))
+        self.caret_in_cell(target, row, col)
     }
     fn length(&self, t: &EditTarget) -> Result<u32, EditError> {
         Ok(get(self.core.document(), t)?.text.chars().count() as u32)
@@ -902,6 +882,9 @@ impl EditSession {
                 self.header_footer(*section, *footer, *page_number)?;
                 Ok(self.kept(*section))
             }
+            EditCommand::MergeCells { .. }
+            | EditCommand::SplitCells { .. }
+            | EditCommand::EqualizeCells { .. } => self.edit_cells(command),
             EditCommand::SetObject { object, props } => {
                 self.set_object(object, props)?;
                 Ok(self.kept(object.section))

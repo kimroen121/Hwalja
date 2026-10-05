@@ -79,6 +79,7 @@ enum Icon {
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
+    static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static func placement(_ placement: Placement?) -> String {
         switch placement {
         case nil: "rectangle"

@@ -44,6 +44,14 @@ extension Viewer {
         }
     }
 
+    /// Runs a cell command over the cells the selection covers.
+    func editCells(_ make: @escaping (EditSelection) -> EditCommand) {
+        document?.edit(undoManager) { selection in
+            guard let selection, selection.focus.target.cell != nil else { return nil }
+            return make(selection)
+        }
+    }
+
     /// Opens 편집 용지 for the section holding the caret.
     func showPageSetup() {
         guard let document else { return }
@@ -79,6 +87,34 @@ struct TableSheet: View {
             }
         } confirm: {
             viewer.insertTable(rows: Int(rows), columns: Int(columns))
+            dismiss()
+        }
+    }
+}
+
+/// 셀 나누기: rows and columns for each covered cell.
+struct SplitCellSheet: View {
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var rows = 2.0
+    @State private var columns = 1.0
+    @State private var equalHeight = true
+    @State private var mergeFirst = false
+
+    var body: some View {
+        DialogFrame {
+            VStack(alignment: .leading, spacing: 12) {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow { FieldLabel("줄 개수"); SpinField(value: $rows, unit: "", range: 1...256) }
+                    GridRow { FieldLabel("칸 개수"); SpinField(value: $columns, unit: "", range: 1...256) }
+                }
+                Toggle("줄 높이를 같게 나누기", isOn: $equalHeight)
+                Toggle("셀을 합친 후 나누기", isOn: $mergeFirst)
+                    .disabled(viewer.canvas.editor.model?.context.cellBlock != true)
+            }
+        } confirm: {
+            let (rows, columns, equalHeight, mergeFirst) = (Int(rows), Int(columns), equalHeight, mergeFirst)
+            viewer.editCells { .splitCells($0, rows: rows, columns: columns, equalHeight: equalHeight, mergeFirst: mergeFirst) }
             dismiss()
         }
     }

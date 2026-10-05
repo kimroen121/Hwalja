@@ -42,6 +42,8 @@ struct EditingContext: Equatable {
     var pageCount = 0
     var canUndo = false
     var canRedo = false
+    /// The selection is a block of table cells.
+    var cellBlock = false
     /// The kind of the selected object.
     var object: ObjectKind?
     /// The caret is in the body text, where objects and breaks go.
@@ -429,10 +431,12 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         presentation = next
         presented.send()
         if format != self.format { self.format = format }
-        let context = EditingContext(hasSelection: selection != nil, hasRange: selection.map { $0.anchor != $0.focus } ?? false,
+        let block = selection?.isCellBlock ?? false
+        let context = EditingContext(hasSelection: selection != nil,
+                              hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil, inNote: selection?.focus.target.note != nil,
                               pageCount: pages.count,
-                              canUndo: reply.canUndo, canRedo: reply.canRedo, object: object?.object.kind)
+                              canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }
     }
