@@ -229,7 +229,7 @@ private struct ShapeMenu: View {
     var body: some View {
         Button {
             let shapes: [Choice?] = LineShapes.names.indices.map { index in
-                Choice(title: LineShapes.names[index], image: LineShapes.images[index]) { pick(shape(index)) }
+                Choice(title: "", image: LineShapes.images[index]) { pick(shape(index)) }
             }
             let colors: [Choice?] = FormatChoices.colors.map { color in
                 Choice(title: color.name, image: FormatChoices.swatch(color.hex)) { pick(self.color(color.hex)) }

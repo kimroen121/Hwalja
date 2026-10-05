@@ -333,8 +333,7 @@ struct CharShapeSheet: View {
                     FieldLabel("모양")
                     Picker("모양", selection: value(shape, 0)) {
                         ForEach(LineShapes.names.indices, id: \.self) { index in
-                            Label { Text(LineShapes.names[index]) } icon: { Image(nsImage: LineShapes.images[index]) }
-                                .tag(index)
+                            Image(nsImage: LineShapes.images[index]).accessibilityLabel(LineShapes.names[index]).tag(index)
                         }
                     }
                     .labelsHidden()
@@ -503,11 +502,11 @@ struct DialogFrame<Content: View>: View {
     }
 }
 
-/// A group's name, in the accent color.
+/// A group's name.
 struct GroupTitle: View {
     let title: String
     init(_ title: String) { self.title = title }
-    var body: some View { Text(title).font(.callout.weight(.semibold)).foregroundStyle(.tint) }
+    var body: some View { Text(title).font(.callout.weight(.semibold)) }
 }
 
 /// A field's name in a grid.
