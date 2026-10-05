@@ -258,6 +258,35 @@ fn check_inserted_picture(
     }
     let mut a = before.clone();
     let mut b = after.clone();
+    if target.cell.is_some() {
+        // In a cell the picture floats beside the table: the host paragraph gains one
+        // control after its own.
+        let at = (target.section as usize, target.paragraph as usize);
+        let (x, y) = (
+            a.sections[at.0].paragraphs.get(at.1),
+            b.sections[at.0].paragraphs.get(at.1),
+        );
+        let (Some(x), Some(y)) = (x, y) else {
+            return Err(EditError::PreservationFailed);
+        };
+        if y.controls.len() != x.controls.len() + 1
+            || format!("{:?}", x.controls) != format!("{:?}", &y.controls[..x.controls.len()])
+            || !matches!(y.controls.last(), Some(Control::Picture(_)))
+        {
+            return Err(EditError::PreservationFailed);
+        }
+        for doc in [&mut a, &mut b] {
+            doc.sections[at.0].paragraphs.remove(at.1);
+        }
+        b.bin_data_content.truncate(a.bin_data_content.len());
+        b.doc_info
+            .bin_data_list
+            .truncate(a.doc_info.bin_data_list.len());
+        for doc in [&mut a, &mut b] {
+            doc.doc_info.raw_stream = None;
+        }
+        return same_rest(&mut a, &mut b, target.section);
+    }
     let old = remove(&mut a, target, commands::index(target), 1)?;
     let new = remove(&mut b, target, commands::index(target), 1)?;
     let pictures = new

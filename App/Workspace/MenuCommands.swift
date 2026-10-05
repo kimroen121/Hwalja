@@ -224,13 +224,15 @@ struct MenuItems {
     }
 
     @ViewBuilder var insert: some View {
+        Menu {
+            ForEach(Self.shapes, id: \.shape) { item in
+                self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
+            }
+        } label: { Label("도형", systemImage: Icon.shape) }
+            .disabled(!context.inBody)
+        item("그림…", Icon.picture) { viewer?.insertPicture() }
+            .disabled(!context.canPicture)
         Group {
-            Menu {
-                ForEach(Self.shapes, id: \.shape) { item in
-                    self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
-                }
-            } label: { Label("도형", systemImage: Icon.shape) }
-            item("그림…", Icon.picture) { viewer?.insertPicture() }
             item("표…", Icon.table) { viewer?.insertingTable = true }
             item("글상자", Icon.textbox) { viewer?.draw("textbox") }
             item("수식…", Icon.equation) { viewer?.newEquation() }

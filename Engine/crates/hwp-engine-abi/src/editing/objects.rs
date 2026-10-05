@@ -164,6 +164,7 @@ impl EditSession {
                     section: index(c, "secIdx")?,
                     paragraph: index(c, "paraIdx")?,
                     control: index(c, "controlIdx")?,
+                    cell: None,
                 };
                 self.control(&object).ok()?;
                 Some(PlacedObject {

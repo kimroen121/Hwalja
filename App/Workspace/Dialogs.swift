@@ -184,11 +184,11 @@ struct PageSetupSheet: View {
 }
 
 extension HwpDocument {
-    /// Puts an image at the caret in the body, at its own size up to the text width, in
+    /// Puts an image at the caret in the body or a table cell (beside the table, floating), at its own size up to the text width, in
     /// the line like a character. PNG and JPEG go in as they are; other images as PNG, or
     /// as JPEG when they would not fit the engine's 5 MB.
     func insertPicture(_ data: Data, name: String, _ undoManager: UndoManager?) {
-        guard let position = selection?.ordered.start, position.target.cell == nil, position.target.note == nil,
+        guard let position = selection?.ordered.start, position.target.note == nil,
               let picture = Picture(data)
         else { return NSSound.beep() }
         Task {

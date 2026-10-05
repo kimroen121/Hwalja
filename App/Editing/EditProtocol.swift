@@ -334,7 +334,7 @@ struct EditReply: Decodable, Sendable {
     var canRedo: Bool
     var dirty: Bool
     /// The document cannot be edited.
-    var locked = false
+    var locked: Bool?
 }
 
 /// A format whose fields are all optional: as a change, unset fields stay as they are.

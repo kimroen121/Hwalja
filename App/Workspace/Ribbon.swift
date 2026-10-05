@@ -69,12 +69,12 @@ struct ToolRow: View {
         RowDivider()
         find
         RowDivider()
-        Group {
-            ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
-            ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-        }
-        .disabled(!context.inBody)
+        ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
+            .disabled(!context.inBody)
+        ToolTile("그림", Icon.picture) { viewer.insertPicture() }
+            .disabled(!context.canPicture)
+        ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
+            .disabled(!context.inBody)
         RowDivider()
         shapes(context)
     }
@@ -118,9 +118,11 @@ struct ToolRow: View {
     }
 
     @ViewBuilder private func insert(_ context: EditingContext) -> some View {
+        ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
+            .disabled(!context.inBody)
+        ToolTile("그림", Icon.picture) { viewer.insertPicture() }
+            .disabled(!context.canPicture)
         Group {
-            ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
             ToolTile("글상자", Icon.textbox) { viewer.draw("textbox") }
             ToolTile("수식", Icon.equation) { viewer.newEquation() }

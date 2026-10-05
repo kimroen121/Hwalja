@@ -715,6 +715,7 @@ fn objects_are_found_changed_and_deleted() {
         section: 0,
         paragraph: 2,
         control: 0,
+        cell: None,
     };
     let change = ObjectProps {
         repeat_header: Some(true),
@@ -2136,4 +2137,37 @@ fn text_boxes_take_text() {
             "{format:?}"
         );
     }
+}
+
+#[test]
+fn picture_in_a_table_cell_floats_beside_the_table() {
+    use base64::Engine;
+    let png = base64::engine::general_purpose::STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        .unwrap();
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertTable {
+        position: point(body(), 0),
+        rows: 2,
+        columns: 2,
+    };
+    let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+    let picture = EditCommand::InsertPicture {
+        position: caret.clone(),
+        data: base64::engine::general_purpose::STANDARD.encode(&png),
+        width: 7_500,
+        height: 7_500,
+        natural_width: 1,
+        natural_height: 1,
+        extension: "png".into(),
+        description: "cell.png".into(),
+    };
+    run(&mut s, picture).unwrap();
+    let host = caret.target.paragraph;
+    let placed = s.placed(0).unwrap();
+    assert!(placed
+        .iter()
+        .any(|o| o.object.kind == ObjectKind::Picture && o.object.paragraph == host));
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert!(s.placed(0).unwrap().is_empty());
 }

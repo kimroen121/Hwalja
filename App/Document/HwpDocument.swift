@@ -56,6 +56,8 @@ struct EditingContext: Equatable {
     var canFormat: Bool { hasSelection && !inNote && !locked }
     /// The document is read-only (배포용 문서); editing commands are off.
     var locked = false
+    /// A picture can be put at the caret: in the body or in a table cell.
+    var canPicture: Bool { (inBody || inTable) && !locked }
     /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
     var canCaption: Bool { object == .picture || object == .table || (inTable && object == nil) }
 }
@@ -487,11 +489,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil && format?.textBox != true,
                               inNote: selection?.focus.target.note != nil,
-                              inBody: !reply.locked && (selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false),
+                              inBody: reply.locked != true && (selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false),
                               inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind,
-                              locked: reply.locked)
+                              locked: reply.locked == true)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }
     }

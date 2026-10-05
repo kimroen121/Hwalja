@@ -355,7 +355,7 @@ impl EditSession {
                 extension,
                 description,
             } => {
-                body_only(&position.target)?;
+                not_in_note(&position.target)?;
                 self.validate_position(position)?;
                 if data.len() > 7 * 1024 * 1024 {
                     return Err(EditError::ResourceLimit);
@@ -828,11 +828,17 @@ impl EditSession {
                     .decode(data)
                     .map_err(|_| EditError::InvalidInput)?;
                 let t = &position.target;
+                // In a cell rhwp floats the picture beside its table, as Hancom does.
+                let path: Vec<(usize, usize, usize)> = t
+                    .cell
+                    .iter()
+                    .map(|c| (c.control as usize, c.cell as usize, c.paragraph as usize))
+                    .collect();
                 let inserted = self.core.insert_picture_native(
                     t.section as usize,
                     t.paragraph as usize,
                     position.scalar as usize,
-                    &[],
+                    &path,
                     &bytes,
                     *width,
                     *height,
@@ -845,16 +851,19 @@ impl EditSession {
                 )?;
                 // rhwp floats a new picture at the paper's corner; Hancom places it in
                 // the line, like a character.
-                let control = serde_json::from_str::<Value>(&inserted)
-                    .ok()
-                    .and_then(|v| v["controlIdx"].as_u64())
-                    .ok_or(EditError::RenderFailed)?;
-                self.core.set_picture_properties_native(
-                    t.section as usize,
-                    t.paragraph as usize,
-                    control as usize,
-                    r#"{"treatAsChar":true}"#,
-                )?;
+                let inserted = serde_json::from_str::<Value>(&inserted)
+                    .map_err(|_| EditError::RenderFailed)?;
+                if path.is_empty() {
+                    let control = inserted["controlIdx"]
+                        .as_u64()
+                        .ok_or(EditError::RenderFailed)?;
+                    self.core.set_picture_properties_native(
+                        t.section as usize,
+                        t.paragraph as usize,
+                        control as usize,
+                        r#"{"treatAsChar":true}"#,
+                    )?;
+                }
                 Ok(EditSelection::caret(position.clone()))
             }
             EditCommand::InsertEquation {

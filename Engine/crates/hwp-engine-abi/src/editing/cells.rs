@@ -346,6 +346,7 @@ impl EditSession {
                 section,
                 paragraph,
                 control,
+                cell: None,
             };
             for c in t["cells"].as_array().into_iter().flatten() {
                 let span = |k| index(c, k).unwrap_or(1).max(1) as u16;

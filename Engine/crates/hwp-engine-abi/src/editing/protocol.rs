@@ -205,7 +205,8 @@ pub enum ObjectKind {
     /// A drawing object: 가로 글상자, 직사각형, 타원, 직선 or 호.
     Shape,
 }
-/// Control `control` of a body paragraph.
+/// Control `control` of a body paragraph, or of the paragraph `cell` names in a table cell
+/// of body paragraph `paragraph`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObjectRef {
@@ -213,6 +214,8 @@ pub struct ObjectRef {
     pub section: u32,
     pub paragraph: u32,
     pub control: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell: Option<CellTarget>,
 }
 /// A stretch of a table border on a page that can be dragged: the right border of
 /// column `line` (or the bottom of row `line`) at `at`, running `from`–`to` the other
