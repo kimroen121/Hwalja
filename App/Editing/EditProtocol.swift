@@ -7,10 +7,13 @@ enum EditProtocolVersion {
 }
 // Offsets (`scalar`) count Unicode scalars, not UTF-16 units.
 
+/// A paragraph of a table cell, of a 글상자 (cell 0 of its shape), or of a caption (cell 0
+/// of its picture, cell `caption` of its table).
 struct CellTarget: Codable, Hashable, Sendable {
     var control: UInt32
     var cell: UInt32
     var paragraph: UInt32
+    static let caption: UInt32 = 65_534
 }
 
 /// A paragraph of the 각주 or 미주 that is control `control` of the body paragraph.

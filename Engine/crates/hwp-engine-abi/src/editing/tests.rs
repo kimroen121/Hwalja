@@ -1656,7 +1656,7 @@ fn notes_are_inserted_and_edited() {
             // The body keeps its text; the caret and a click find the note again.
             assert_eq!(
                 s.paragraph(&body()).unwrap().text,
-                "가👨‍👩‍👧‍👦e\u{301} 끝",
+                "가\u{FFFC}👨‍👩‍👧‍👦e\u{301} 끝",
                 "{label}"
             );
             let rect = s.caret(s.revision, &point(note.clone(), 3)).unwrap();
@@ -2140,7 +2140,7 @@ fn text_boxes_take_text() {
 }
 
 #[test]
-fn picture_in_a_table_cell_floats_beside_the_table() {
+fn pictures_and_equations_go_into_a_table_cell() {
     use base64::Engine;
     let png = base64::engine::general_purpose::STANDARD
         .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
@@ -2162,13 +2162,34 @@ fn picture_in_a_table_cell_floats_beside_the_table() {
         extension: "png".into(),
         description: "cell.png".into(),
     };
-    run(&mut s, picture).unwrap();
-    let host = caret.target.paragraph;
-    let placed = s.placed(0).unwrap();
-    assert!(placed
-        .iter()
-        .any(|o| o.object.kind == ObjectKind::Picture && o.object.paragraph == host));
-    run(&mut s, EditCommand::Undo).unwrap();
+    let after = run(&mut s, picture).unwrap().selection.unwrap().focus;
+    assert_eq!(after, point(caret.target.clone(), 1));
+    let equation = EditCommand::InsertEquation {
+        position: after,
+        script: "x^2".into(),
+        font_size: 1000,
+        color: 0,
+    };
+    let after = run(&mut s, equation).unwrap().selection.unwrap().focus;
+    assert_eq!(after, point(caret.target.clone(), 2));
+    assert_eq!(s.paragraph(&caret.target).unwrap().text, "\u{FFFC}\u{FFFC}");
+    let placed: Vec<_> = s.placed(0).unwrap().into_iter().map(|o| o.object).collect();
+    assert_eq!(placed.len(), 2);
+    assert!(placed.iter().all(|o| o.cell == caret.target.cell));
+    // Typing after both objects stays after them.
+    replace(&mut s, caret.target.clone(), 2, 2, "끝").unwrap();
+    assert_eq!(
+        s.paragraph(&caret.target).unwrap().text,
+        "\u{FFFC}\u{FFFC}끝"
+    );
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+    assert_eq!(
+        reopened.paragraph(&caret.target).unwrap().text,
+        "\u{FFFC}\u{FFFC}끝"
+    );
+    for _ in 0..3 {
+        run(&mut s, EditCommand::Undo).unwrap();
+    }
     assert!(s.placed(0).unwrap().is_empty());
 }
 
@@ -2272,10 +2293,334 @@ fn an_equation_in_a_table_cell_is_an_object() {
     let delete = EditCommand::DeleteObject {
         object: object.clone(),
     };
-    assert_eq!(
-        run(&mut s, delete).err(),
-        Some(EditError::UnsupportedTarget)
-    );
+    run(&mut s, delete).unwrap();
+    assert!(s.placed(0).unwrap().is_empty());
+    run(&mut s, EditCommand::Undo).unwrap();
     run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(s.object_props(&object).unwrap().font_size, Some(1000));
+}
+
+/// A 1×1 PNG put in at `position`, 100 px square.
+fn picture_at(position: EditPosition) -> EditCommand {
+    EditCommand::InsertPicture {
+        position,
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            .into(),
+        width: 7_500,
+        height: 7_500,
+        natural_width: 1,
+        natural_height: 1,
+        extension: "png".into(),
+        description: "p.png".into(),
+    }
+}
+fn second() -> EditTarget {
+    commands::at_index(&body(), 2)
+}
+
+#[test]
+fn objects_in_the_line_are_positions_of_their_own() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        // 보존 문단, with 존 문단 bold.
+        let bold = EditCommand::FormatText {
+            selection: EditSelection {
+                anchor: point(second(), 1),
+                focus: point(second(), 5),
+            },
+            style: CharStyle {
+                bold: Some(true),
+                ..Default::default()
+            },
+        };
+        run(&mut s, bold).unwrap();
+        let shape = |s: &EditSession, text: usize| {
+            commands::get(s.core.document(), &second())
+                .unwrap()
+                .char_shape_id_at(text)
+        };
+        let bold_shape = shape(&s, 1);
+        let caret = run(&mut s, picture_at(point(second(), 1)))
+            .unwrap()
+            .selection
+            .unwrap()
+            .focus;
+        assert_eq!(caret, point(second(), 2), "{format}");
+        assert_eq!(s.paragraph(&second()).unwrap().text, "보\u{FFFC}존 문단");
+        // The caret before and after the picture are its two sides, and a click on
+        // either side finds them.
+        // (The generated hwp lays the picture out on a later page.)
+        let r = (0..s.core.page_count())
+            .find_map(|page| s.placed(page).unwrap().first().map(|o| o.rect.clone()))
+            .unwrap();
+        let (before, after) = (
+            s.caret(s.revision, &point(second(), 1)).unwrap(),
+            s.caret(s.revision, &point(second(), 2)).unwrap(),
+        );
+        assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
+        let y = r.y + r.height - 2.0;
+        let hit = |x| s.hit_test(s.revision, r.page, x, y).unwrap().scalar;
+        assert_eq!(
+            (hit(r.x - 2.0), hit(r.x + r.width + 2.0)),
+            (1, 2),
+            "{format}"
+        );
+        // Typing on each side stays on that side.
+        replace(&mut s, second(), 2, 2, "뒤").unwrap();
+        replace(&mut s, second(), 1, 1, "앞").unwrap();
+        assert_eq!(
+            s.paragraph(&second()).unwrap().text,
+            "보앞\u{FFFC}뒤존 문단"
+        );
+        let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+        assert_eq!(
+            reopened.paragraph(&second()).unwrap().text,
+            "보앞\u{FFFC}뒤존 문단"
+        );
+        // Deleting over the picture takes it out; the text after keeps its shape.
+        replace(&mut s, second(), 1, 4, "").unwrap();
+        assert_eq!(s.paragraph(&second()).unwrap().text, "보존 문단");
+        assert!(commands::get(s.core.document(), &second())
+            .unwrap()
+            .controls
+            .is_empty());
+        assert_eq!(shape(&s, 1), bold_shape, "{format}");
+        for _ in 0..4 {
+            run(&mut s, EditCommand::Undo).unwrap();
+        }
+        assert_eq!(s.paragraph(&second()).unwrap().text, "보존 문단");
+    }
+}
+
+#[test]
+fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let pictures = |s: &EditSession| s.core.document().bin_data_content.len();
+    run(&mut s, picture_at(point(body(), 1))).unwrap();
+    let stored = pictures(&s);
+    let object = s.placed(0).unwrap()[0].object.clone();
+    // 가[그림]👨‍👩‍👧‍👦é 끝 → before 끝.
+    let to = run(
+        &mut s,
+        EditCommand::MoveObject {
+            object,
+            to: point(body(), 12),
+        },
+    )
+    .unwrap()
+    .selection
+    .unwrap()
+    .focus;
+    assert_eq!(to, point(body(), 12));
+    assert_eq!(
+        s.paragraph(&body()).unwrap().text,
+        "가👨‍👩‍👧‍👦e\u{301} \u{FFFC}끝"
+    );
+    // Into the table's first cell, after 표.
+    let cell = EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 0,
+            paragraph: 0,
+        }),
+        note: None,
+    };
+    let object = s.placed(0).unwrap()[0].object.clone();
+    run(
+        &mut s,
+        EditCommand::MoveObject {
+            object,
+            to: point(cell.clone(), 1),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&cell).unwrap().text, "표\u{FFFC} 내용");
+    assert_eq!(s.paragraph(&body()).unwrap().text, "가👨‍👩‍👧‍👦e\u{301} 끝");
+    assert_eq!(s.placed(0).unwrap()[0].object.cell, cell.cell);
+    // The picture keeps its one copy of the image.
+    assert_eq!(pictures(&s), stored);
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
+    assert_eq!(reopened.paragraph(&cell).unwrap().text, "표\u{FFFC} 내용");
+    run(&mut s, EditCommand::Undo).unwrap();
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(
+        s.paragraph(&body()).unwrap().text,
+        "가\u{FFFC}👨‍👩‍👧‍👦e\u{301} 끝"
+    );
+}
+
+#[test]
+fn captions_are_written_and_edited() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    run(&mut s, picture_at(point(second(), 0))).unwrap();
+    let object = s.placed(0).unwrap()[0].object.clone();
+    let props = ObjectProps {
+        caption: Some("Bottom".into()),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: object.clone(),
+            props,
+        },
+    )
+    .unwrap();
+    // The caption is cell 0 of its picture, written 그림 and a number.
+    let caption = EditTarget {
+        cell: Some(CellTarget {
+            control: object.control,
+            cell: 0,
+            paragraph: 0,
+        }),
+        ..second()
+    };
+    assert_eq!(s.paragraph(&caption).unwrap().text, "그림  ");
+    replace(&mut s, caption.clone(), 4, 4, "꽃").unwrap();
+    assert_eq!(s.paragraph(&caption).unwrap().text, "그림  꽃");
+    // A click on it reaches it.
+    let r = s.placed(0).unwrap()[0].rect.clone();
+    let rect = s.caret(s.revision, &point(caption.clone(), 4)).unwrap();
+    assert!(rect.y > r.y + r.height);
+    let hit = s
+        .hit_test(s.revision, 0, rect.x + 1.0, rect.y + rect.height / 2.0)
+        .unwrap();
+    assert_eq!(hit.target, caption);
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
+    assert_eq!(reopened.paragraph(&caption).unwrap().text, "그림  꽃");
+
+    // A table's caption is its cell `CAPTION`.
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let table = ObjectRef {
+        kind: ObjectKind::Table,
+        section: 0,
+        paragraph: 2,
+        control: 0,
+        cell: None,
+    };
+    let props = ObjectProps {
+        caption: Some("Top".into()),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: table,
+            props,
+        },
+    )
+    .unwrap();
+    let caption = EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: commands::CAPTION,
+            paragraph: 0,
+        }),
+        note: None,
+    };
+    let end = s.paragraph(&caption).unwrap().text.chars().count() as u32;
+    replace(&mut s, caption.clone(), end, end, "목록").unwrap();
+    assert!(s.paragraph(&caption).unwrap().text.ends_with("목록"));
+}
+
+#[test]
+fn matches_after_an_object_are_found_where_they_are() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    run(&mut s, picture_at(point(second(), 1))).unwrap();
+    let found = s.find("존", true).unwrap();
+    assert_eq!(
+        found[0],
+        EditSelection {
+            anchor: point(second(), 2),
+            focus: point(second(), 3),
+        }
+    );
+}
+
+#[test]
+fn every_line_after_an_object_keeps_its_positions() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let long = "가나다라마바사아자차카타파하 ".repeat(12);
+    replace(&mut s, second(), 0, 5, &long).unwrap();
+    let equation = EditCommand::InsertEquation {
+        position: point(second(), 2),
+        script: "x^2".into(),
+        font_size: 1000,
+        color: 0,
+    };
+    run(&mut s, equation).unwrap();
+    let length = s.paragraph(&second()).unwrap().text.chars().count() as u32;
+    let mut lines = std::collections::BTreeSet::new();
+    for at in 0..=length {
+        let r = s.caret(s.revision, &point(second(), at)).unwrap();
+        lines.insert((r.y * 10.0) as i64);
+        let hit = s
+            .hit_test(s.revision, r.page, r.x + 0.3, r.y + r.height / 2.0)
+            .unwrap();
+        assert_eq!(hit, point(second(), at));
+    }
+    assert!(lines.len() >= 3);
+    // A selection on a later line is highlighted where its text is.
+    let (a, b) = (length - 10, length - 5);
+    let rects = s
+        .selection_rects(
+            s.revision,
+            &EditSelection {
+                anchor: point(second(), a),
+                focus: point(second(), b),
+            },
+        )
+        .unwrap();
+    let (ca, cb) = (
+        s.caret(s.revision, &point(second(), a)).unwrap(),
+        s.caret(s.revision, &point(second(), b)).unwrap(),
+    );
+    assert_eq!(rects.len(), 1);
+    assert!((rects[0].x - ca.x).abs() < 0.5 && (rects[0].x + rects[0].width - cb.x).abs() < 0.5);
+    // Line start and end stay on the caret's line.
+    let middle = point(second(), length - 7);
+    let start = s
+        .navigate(s.revision, &middle, Motion::LineStart, None)
+        .unwrap();
+    let end = s
+        .navigate(s.revision, &middle, Motion::LineEnd, None)
+        .unwrap();
+    let here = s.caret(s.revision, &middle).unwrap();
+    assert_eq!((start.caret.y, end.caret.y), (here.y, here.y));
+    assert!(start.position.scalar < middle.scalar && middle.scalar < end.position.scalar);
+}
+
+#[test]
+fn the_caret_passes_an_equation_in_a_cell() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 0,
+            paragraph: 0,
+        }),
+        note: None,
+    };
+    let equation = EditCommand::InsertEquation {
+        position: point(cell.clone(), 1),
+        script: "x^2".into(),
+        font_size: 1000,
+        color: 0,
+    };
+    run(&mut s, equation).unwrap();
+    let r = s.placed(0).unwrap()[0].rect.clone();
+    let before = s.caret(s.revision, &point(cell.clone(), 1)).unwrap();
+    let after = s.caret(s.revision, &point(cell.clone(), 2)).unwrap();
+    assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
+    let y = r.y + r.height / 2.0;
+    assert_eq!(
+        s.hit_test(s.revision, 0, r.x + r.width + 1.0, y).unwrap(),
+        point(cell, 2)
+    );
 }

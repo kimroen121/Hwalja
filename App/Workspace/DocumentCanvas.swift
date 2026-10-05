@@ -177,6 +177,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var shown = Presentation()
     /// A thin bar, one screen point wide at any zoom.
     private let caret = NSView()
+    /// Where the object in the line being dragged would land, shown as a faint caret.
+    private let dropCaret = NSView()
+    private var pendingDrop: NSPoint?
+    private var findingDrop = false
     /// Called after each presentation is applied.
     var onPresent: (() -> Void)?
     /// Called to open the properties of an object (double-click or Return).
@@ -205,6 +209,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         caret.layer?.backgroundColor = NSColor.black.cgColor
         caret.isHidden = true
         addSubview(caret)
+        dropCaret.wantsLayer = true
+        dropCaret.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        dropCaret.isHidden = true
+        addSubview(dropCaret)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -709,11 +717,12 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 (change.width, change.height) = (UInt32(max(1, hwp(rect.width))), UInt32(max(1, hwp(rect.height))))
             }
             let inline = props.treatAsChar == true || placed.object.kind == .equation
+            // An object in the line moves to the place in the text it is dropped on.
             if inline, rect.origin != from.origin, rect.size == from.size {
-                guard placed.object.kind == .equation, placed.object.cell == nil,
-                      let drop, let hit = enginePoint(drop) else { return }
-                let target = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
-                guard let target, target.target.cell == nil, target.target.note == nil else { return NSSound.beep() }
+                guard let drop, let hit = enginePoint(drop) else { return }
+                guard let target = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y) else {
+                    return NSSound.beep()
+                }
                 model.edit(undoManager) { _ in .moveObject(placed.object, to: target) }
                 return
             }
@@ -740,6 +749,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if let current = drag {
             drag = nil
             setRubber(nil)
+            (pendingDrop, dropCaret.isHidden) = (nil, true)
             defer { updateCursor(at: point) }
             switch current {
             case let .resize(handle, from):
@@ -782,6 +792,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             drag = .move(start: start, from: from, moved: true, click: click)
             NSCursor.closedHand.set()
             let rect = from.offsetBy(dx: point.x - start.x, dy: point.y - start.y)
+            if shown.objectInLine {
+                pendingDrop = point
+                showDrop()
+            }
             return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
         case let .border(line, page, extent, start, moved, click):
             guard moved || hypot(point.x - start.x, point.y - start.y) > 2 else { return }
@@ -796,6 +810,25 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         autoscroll(with: event)
         pendingDrag = point
         extendToDrag()
+    }
+    /// Moves the drop caret to the latest drag point, one hit test at a time.
+    private func showDrop() {
+        guard let model, !findingDrop, let point = pendingDrop, let hit = enginePoint(point) else { return }
+        pendingDrop = nil
+        findingDrop = true
+        Task { @MainActor [weak self] in
+            let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            let rect = if let position { try? await model.caret(at: position) } else { PageRect?.none }
+            guard let self else { return }
+            findingDrop = false
+            guard case .move = drag else { return }
+            if let rect = rect.flatMap(viewRect) {
+                let width = 1.5 / (enclosingScrollView?.magnification ?? 1)
+                dropCaret.frame = NSRect(x: rect.minX - width / 2, y: rect.minY, width: width, height: rect.height)
+                dropCaret.isHidden = false
+            }
+            showDrop()
+        }
     }
     /// Extends the selection to the latest drag point, one hit test at a time, so a fast
     /// drag never queues stale points.

@@ -4,12 +4,14 @@ mod display;
 pub mod ffi;
 mod format;
 mod geometry;
+mod logical;
 mod navigation;
 mod objects;
 #[cfg(test)]
 mod preservation;
 mod protocol;
 mod save;
+mod stops;
 mod styles;
 pub use protocol::*;
 use rhwp::DocumentCore;
@@ -51,6 +53,8 @@ pub struct EditSession {
     redo: Vec<State>,
     state: u64,
     next_state: u64,
+    /// Page layouts the caret stops are read from, for the current revision.
+    layouts: std::cell::RefCell<stops::Layouts>,
     #[cfg(test)]
     fail_render: bool,
 }
@@ -90,6 +94,7 @@ impl EditSession {
             redo: Vec::new(),
             state: 0,
             next_state: 1,
+            layouts: Default::default(),
             #[cfg(test)]
             fail_render: false,
         };

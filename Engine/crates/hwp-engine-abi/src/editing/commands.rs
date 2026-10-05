@@ -5,7 +5,7 @@ use rhwp::model::{
     document::Document,
     header_footer::HeaderFooterApply,
     paragraph::Paragraph,
-    shape::{ShapeObject, TextBox},
+    shape::{Caption, ShapeObject, TextBox},
     table::Table,
 };
 use serde_json::Value;
@@ -28,6 +28,14 @@ pub(super) fn paragraphs<'a>(
             .get(t.paragraph as usize)
             .ok_or(EditError::InvalidInput)?;
         let table = match host.controls.get(c.control as usize) {
+            // Captions are cell 0 of their picture and cell `CAPTION` of their table, as
+            // rhwp addresses them.
+            Some(Control::Table(table)) if c.cell == CAPTION => {
+                return caption(table.caption.as_ref())
+            }
+            Some(Control::Picture(picture)) if c.cell == 0 => {
+                return caption(picture.caption.as_ref())
+            }
             Some(Control::Table(table)) => table,
             // A 글상자 is addressed as cell 0 of its shape, as rhwp does.
             Some(Control::Shape(shape)) if c.cell == 0 => {
@@ -58,6 +66,12 @@ pub(super) fn paragraphs<'a>(
     } else {
         Ok(&section.paragraphs)
     }
+}
+/// The cell number rhwp gives a table's caption.
+pub(super) const CAPTION: u32 = 65_534;
+fn caption(c: Option<&Caption>) -> Result<&[Paragraph], EditError> {
+    c.map(|c| c.paragraphs.as_slice())
+        .ok_or(EditError::UnsupportedTarget)
 }
 /// The 글상자 a drawing object holds, if any.
 pub(super) fn text_box(shape: &ShapeObject) -> Option<&TextBox> {
@@ -172,31 +186,6 @@ pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> 
         _ => None,
     }
 }
-/// The offset rhwp's paragraph split takes for the text offset `scalar`: it counts each
-/// object in the text flow (table, picture, note, number…) as one position.
-fn split_offset(p: &Paragraph, scalar: u32) -> usize {
-    let scalar = scalar as usize;
-    let objects = p
-        .controls
-        .iter()
-        .zip(p.control_text_positions())
-        .filter(|(c, at)| {
-            *at < scalar
-                && matches!(
-                    c,
-                    Control::Shape(_)
-                        | Control::Table(_)
-                        | Control::Picture(_)
-                        | Control::Equation(_)
-                        | Control::Footnote(_)
-                        | Control::Endnote(_)
-                        | Control::AutoNumber(_)
-                        | Control::CharOverlap(_)
-                )
-        })
-        .count();
-    scalar + objects
-}
 /// Formatting inside notes is not supported yet.
 pub(super) fn not_in_note(t: &EditTarget) -> Result<(), EditError> {
     if t.note.is_some() {
@@ -254,7 +243,7 @@ impl EditSession {
         Ok(ParagraphInfo {
             target: target.clone(),
             count: paragraphs(self.core.document(), target)?.len() as u32,
-            text: get(self.core.document(), target)?.text.clone(),
+            text: logical::text(get(self.core.document(), target)?),
         })
     }
     pub(super) fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {
@@ -262,7 +251,7 @@ impl EditSession {
         if !editable(para) {
             return Err(EditError::UnsupportedTarget);
         }
-        boundary(&para.text, p.scalar)
+        boundary(&logical::text(para), p.scalar)
     }
     /// Both ends valid, in one container, with only editable paragraphs between them.
     pub(super) fn validate_range(&self, selection: &EditSelection) -> Result<(), EditError> {
@@ -390,7 +379,7 @@ impl EditSession {
                 font_size,
                 color,
             } => {
-                body_only(&position.target)?;
+                not_in_note(&position.target)?;
                 self.validate_position(position)?;
                 if !objects::is_script(script)
                     || !(400..=7_200).contains(font_size)
@@ -422,17 +411,12 @@ impl EditSession {
             | EditCommand::EqualizeCells { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
-                // rhwp deletes only a picture from a cell.
-                if object.cell.is_some() && object.kind != ObjectKind::Picture {
+                if object.cell.is_some() && object.kind == ObjectKind::Table {
                     return Err(EditError::UnsupportedTarget);
                 }
                 self.validate_object(object, &ObjectProps::default())
             }
-            EditCommand::MoveObject { object, to } => {
-                body_only(&to.target)?;
-                self.validate_position(to)?;
-                self.validate_move(object)
-            }
+            EditCommand::MoveObject { object, to } => self.validate_move(object, to),
             EditCommand::ResizeTable { .. } => self.validate_resize(command),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
@@ -565,7 +549,70 @@ impl EditSession {
         self.caret_in_cell(target, row, col)
     }
     fn length(&self, t: &EditTarget) -> Result<u32, EditError> {
-        Ok(get(self.core.document(), t)?.text.chars().count() as u32)
+        Ok(logical::length(get(self.core.document(), t)?))
+    }
+    /// Where `p` falls in rhwp's text.
+    fn spot(&self, p: &EditPosition) -> Result<logical::Spot, EditError> {
+        Ok(logical::spot(
+            get(self.core.document(), &p.target)?,
+            p.scalar,
+        ))
+    }
+    pub(super) fn control_index_of(reply: &str) -> Result<usize, EditError> {
+        serde_json::from_str::<Value>(reply)
+            .ok()
+            .and_then(|v| v["controlIdx"].as_u64())
+            .map(|v| v as usize)
+            .ok_or(EditError::RenderFailed)
+    }
+    /// Puts a new object in the line at `p` and returns the position after it. `insert`
+    /// makes it in a body paragraph (section, paragraph, character offset) and returns its
+    /// control index: `p` itself in the body; for a cell, 글상자 or caption, the end of the
+    /// body paragraph holding it, from where it moves in. That paragraph is left as it was.
+    fn place_object(
+        &mut self,
+        p: &EditPosition,
+        insert: impl FnOnce(&mut DocumentCore, usize, usize, usize) -> Result<usize, EditError>,
+    ) -> Result<EditPosition, EditError> {
+        let host = EditTarget {
+            cell: None,
+            ..p.target.clone()
+        };
+        let para = get(self.core.document(), &host)?;
+        let at = match p.target.cell {
+            None => self.spot(p)?.text,
+            Some(_) => para.text.chars().count(),
+        };
+        // What rhwp's insertion leaves behind in the holding paragraph.
+        let kept = (
+            para.control_mask,
+            para.ctrl_data_records.clone(),
+            para.raw_header_extra.clone(),
+        );
+        let control = insert(
+            &mut self.core,
+            host.section as usize,
+            host.paragraph as usize,
+            at,
+        )?;
+        let placed = logical::object_position(get(self.core.document(), &host)?, control);
+        if host == p.target && placed == Some(p.scalar) {
+            return Ok(EditPosition {
+                target: p.target.clone(),
+                scalar: p.scalar + 1,
+            });
+        }
+        let after = self.transplant(&host, control, p)?;
+        if host != p.target {
+            let para = &mut self.core.document_mut().sections[host.section as usize].paragraphs
+                [host.paragraph as usize];
+            (
+                para.control_mask,
+                para.ctrl_data_records,
+                para.raw_header_extra,
+            ) = kept;
+        }
+        Ok(after)
     }
     /// Joins the paragraph at `t` onto the previous one.
     fn merge(&mut self, t: &EditTarget) -> Result<(), EditError> {
@@ -625,13 +672,17 @@ impl EditSession {
     }
     fn insert(&mut self, p: &EditPosition, text: &str) -> Result<(), EditError> {
         let t = &p.target;
+        let spot = self.spot(p)?;
+        let at = spot.text;
+        let skip = spot.skip(get(self.core.document(), t)?);
+        self.core.set_insert_skip(skip);
         if let Some(n) = &t.note {
             self.core.insert_text_in_footnote_native(
                 t.section as usize,
                 t.paragraph as usize,
                 n.control as usize,
                 n.paragraph as usize,
-                p.scalar as usize,
+                at,
                 text,
             )?;
         } else if let Some(c) = &t.cell {
@@ -641,28 +692,34 @@ impl EditSession {
                 c.control as usize,
                 c.cell as usize,
                 c.paragraph as usize,
-                p.scalar as usize,
+                at,
                 text,
             )?;
         } else {
-            self.core.insert_text_native(
-                t.section as usize,
-                t.paragraph as usize,
-                p.scalar as usize,
-                text,
-            )?;
+            self.core
+                .insert_text_native(t.section as usize, t.paragraph as usize, at, text)?;
         }
         Ok(())
     }
+    /// Deletes `count` positions from `p`: the objects among them, then the characters.
     fn delete(&mut self, p: &EditPosition, count: u32) -> Result<(), EditError> {
         let t = &p.target;
+        let objects = logical::objects(get(self.core.document(), t)?, p.scalar, p.scalar + count);
+        for &control in objects.iter().rev() {
+            self.delete_control(t, control)?;
+        }
+        let count = (count as usize - objects.len()) as u32;
+        if count == 0 {
+            return Ok(());
+        }
+        let at = self.spot(p)?.text;
         if let Some(n) = &t.note {
             self.core.delete_text_in_footnote_native(
                 t.section as usize,
                 t.paragraph as usize,
                 n.control as usize,
                 n.paragraph as usize,
-                p.scalar as usize,
+                at,
                 count as usize,
             )?;
         } else if let Some(c) = &t.cell {
@@ -672,14 +729,14 @@ impl EditSession {
                 c.control as usize,
                 c.cell as usize,
                 c.paragraph as usize,
-                p.scalar as usize,
+                at,
                 count as usize,
             )?;
         } else {
             self.core.delete_text_native(
                 t.section as usize,
                 t.paragraph as usize,
-                p.scalar as usize,
+                at,
                 count as usize,
             )?;
         }
@@ -687,7 +744,7 @@ impl EditSession {
     }
     fn split(&mut self, p: &EditPosition) -> Result<EditPosition, EditError> {
         let t = &p.target;
-        let at = split_offset(get(self.core.document(), t)?, p.scalar);
+        let at = self.spot(p)?.split(get(self.core.document(), t)?);
         if let Some(n) = &t.note {
             self.core.split_paragraph_in_footnote_native(
                 t.section as usize,
@@ -723,7 +780,11 @@ impl EditSession {
                 let (start, end) = ordered(selection);
                 self.delete_range(start, end)?;
                 let mut p = start.clone();
-                let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+                // Objects come only from the document.
+                let normalized = text
+                    .replace("\r\n", "\n")
+                    .replace('\r', "\n")
+                    .replace(logical::OBJECT, "");
                 for (i, part) in normalized.split('\n').enumerate() {
                     if i > 0 {
                         p = self.split(&p)?;
@@ -782,7 +843,7 @@ impl EditSession {
                 let (s, p, o) = (
                     t.section as usize,
                     t.paragraph as usize,
-                    split_offset(get(self.core.document(), t)?, position.scalar),
+                    self.spot(position)?.split(get(self.core.document(), t)?),
                 );
                 if *column {
                     self.core.insert_column_break_native(s, p, o)?;
@@ -803,7 +864,7 @@ impl EditSession {
                 let json = self.core.create_table_native(
                     t.section as usize,
                     t.paragraph as usize,
-                    position.scalar as usize,
+                    self.spot(position)?.text,
                     *rows,
                     *columns,
                 )?;
@@ -842,44 +903,28 @@ impl EditSession {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(data)
                     .map_err(|_| EditError::InvalidInput)?;
-                let t = &position.target;
-                // In a cell rhwp floats the picture beside its table, as Hancom does.
-                let path: Vec<(usize, usize, usize)> = t
-                    .cell
-                    .iter()
-                    .map(|c| (c.control as usize, c.cell as usize, c.paragraph as usize))
-                    .collect();
-                let inserted = self.core.insert_picture_native(
-                    t.section as usize,
-                    t.paragraph as usize,
-                    position.scalar as usize,
-                    &path,
-                    &bytes,
-                    *width,
-                    *height,
-                    *natural_width,
-                    *natural_height,
-                    extension,
-                    description,
-                    None,
-                    None,
-                )?;
-                // rhwp floats a new picture at the paper's corner; Hancom places it in
-                // the line, like a character.
-                let inserted = serde_json::from_str::<Value>(&inserted)
-                    .map_err(|_| EditError::RenderFailed)?;
-                if path.is_empty() {
-                    let control = inserted["controlIdx"]
-                        .as_u64()
-                        .ok_or(EditError::RenderFailed)?;
-                    self.core.set_picture_properties_native(
-                        t.section as usize,
-                        t.paragraph as usize,
-                        control as usize,
-                        r#"{"treatAsChar":true}"#,
-                    )?;
-                }
-                Ok(EditSelection::caret(position.clone()))
+                let after = self.place_object(position, |core, s, p, at| {
+                    let control = Self::control_index_of(&core.insert_picture_native(
+                        s,
+                        p,
+                        at,
+                        &[],
+                        &bytes,
+                        *width,
+                        *height,
+                        *natural_width,
+                        *natural_height,
+                        extension,
+                        description,
+                        None,
+                        None,
+                    )?)?;
+                    // rhwp floats a new picture at the paper's corner; Hancom places it
+                    // in the line, like a character.
+                    core.set_picture_properties_native(s, p, control, r#"{"treatAsChar":true}"#)?;
+                    Ok(control)
+                })?;
+                Ok(EditSelection::caret(after))
             }
             EditCommand::InsertEquation {
                 position,
@@ -887,23 +932,19 @@ impl EditSession {
                 font_size,
                 color,
             } => {
-                let target = &position.target;
-                self.core.insert_equation_native(
-                    target.section as usize,
-                    target.paragraph as usize,
-                    position.scalar as usize,
-                    script,
-                    *font_size,
-                    *color,
-                )?;
-                Ok(EditSelection::caret(position.clone()))
+                let after = self.place_object(position, |core, s, p, at| {
+                    Self::control_index_of(
+                        &core.insert_equation_native(s, p, at, script, *font_size, *color)?,
+                    )
+                })?;
+                Ok(EditSelection::caret(after))
             }
             EditCommand::InsertNote { position, endnote } => {
                 let t = &position.target;
                 let (s, p, o) = (
                     t.section as usize,
                     t.paragraph as usize,
-                    position.scalar as usize,
+                    self.spot(position)?.text,
                 );
                 let json = if *endnote {
                     self.core.insert_endnote_native(s, p, o)?
@@ -953,8 +994,7 @@ impl EditSession {
                 Ok(self.kept(cell.section))
             }
             EditCommand::MoveObject { object, to } => {
-                self.move_object(object, to)?;
-                Ok(self.kept(object.section))
+                Ok(EditSelection::caret(self.move_object(object, to)?))
             }
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;

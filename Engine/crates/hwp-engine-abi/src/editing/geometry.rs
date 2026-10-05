@@ -75,10 +75,27 @@ impl EditSession {
             Some(_) => return Err(EditError::UnsupportedTarget),
         };
         commands::get(self.core.document(), &target)?;
-        Ok(EditPosition {
+        let rhwp = EditPosition {
             target,
             scalar: field(&hit, "charOffset")?,
-        })
+        };
+        // A line of objects alone is the objects' paragraph, wherever rhwp's answer went.
+        let target = match self.object_line(page, x, y) {
+            Some(line) if line != rhwp.target => {
+                let at = self.rhwp_caret(&rhwp)?;
+                if at.page == page && (at.y..=at.y + at.height).contains(&y) {
+                    rhwp.target
+                } else {
+                    line
+                }
+            }
+            _ => rhwp.target,
+        };
+        let scalar = match self.stops(&target, page..=page) {
+            Some(stops) => stops::nearest(&stops, page, x, y).ok_or(EditError::RenderFailed)?,
+            None => rhwp.scalar,
+        };
+        Ok(EditPosition { target, scalar })
     }
     /// A position in the 각주 area at the foot of the page, if the point falls there.
     fn hit_test_footnote(
@@ -136,6 +153,16 @@ impl EditSession {
     /// Caret rectangle (96 dpi, top-left origin) for a position at the current revision.
     pub fn caret(&self, revision: u64, p: &EditPosition) -> Result<PageRect, EditError> {
         self.check_revision(revision)?;
+        if let Some(stop) = self
+            .paragraph_stops(&p.target)
+            .and_then(|stops| stops.get(&p.scalar).copied())
+        {
+            return Ok(stop.rect());
+        }
+        self.rhwp_caret(p)
+    }
+    /// rhwp's caret rectangle for `p`.
+    pub(super) fn rhwp_caret(&self, p: &EditPosition) -> Result<PageRect, EditError> {
         commands::get(self.core.document(), &p.target)?;
         let t = &p.target;
         if let Some(n) = &t.note {
@@ -190,6 +217,10 @@ impl EditSession {
         commands::get(self.core.document(), &start.target)?;
         commands::get(self.core.document(), &end.target)?;
         let t = &start.target;
+        let (s, e) = (commands::index(&start.target), commands::index(&end.target));
+        if t.note.is_none() && (s..=e).any(|i| self.has_stops(&commands::at_index(t, i))) {
+            return self.rects_by_paragraph(revision, start, end);
+        }
         let json = parse(if t.note.is_some() {
             let page = self.caret(revision, start)?.page;
             self.core.get_selection_rects_in_footnote_native(
@@ -225,5 +256,47 @@ impl EditSession {
                 Ok(rect)
             })
             .collect()
+    }
+    /// Highlight rectangles one paragraph at a time, from the stops of those that have them.
+    fn rects_by_paragraph(
+        &self,
+        revision: u64,
+        start: &EditPosition,
+        end: &EditPosition,
+    ) -> Result<Vec<PageRect>, EditError> {
+        let (s, e) = (commands::index(&start.target), commands::index(&end.target));
+        let mut rects = Vec::new();
+        for i in s..=e {
+            let target = commands::at_index(&start.target, i);
+            let from = if i == s { start.scalar } else { 0 };
+            let to = if i == e {
+                end.scalar
+            } else {
+                logical::length(commands::get(self.core.document(), &target)?)
+            };
+            match self.paragraph_stops(&target) {
+                Some(stops) => rects.extend(stops::spans(&stops, from, to).into_iter().map(
+                    |(first, last)| PageRect {
+                        width: last.x - first.x,
+                        ..first.rect()
+                    },
+                )),
+                None if from < to => {
+                    let at = |scalar| EditPosition {
+                        target: target.clone(),
+                        scalar,
+                    };
+                    rects.extend(self.selection_rects(
+                        revision,
+                        &EditSelection {
+                            anchor: at(from),
+                            focus: at(to),
+                        },
+                    )?);
+                }
+                None => {}
+            }
+        }
+        Ok(rects)
     }
 }

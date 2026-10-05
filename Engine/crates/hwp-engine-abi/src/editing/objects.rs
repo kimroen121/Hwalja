@@ -39,6 +39,14 @@ fn number(json: &Value, key: &str) -> Option<f64> {
 fn index(json: &Value, key: &str) -> Option<u32> {
     json.get(key).and_then(Value::as_u64).map(|v| v as u32)
 }
+/// rhwp's path from a body paragraph to the cell, 글상자 or caption paragraph `t` names;
+/// empty in the body.
+fn path(t: &EditTarget) -> Vec<(usize, usize, usize)> {
+    t.cell
+        .iter()
+        .map(|c| (c.control as usize, c.cell as usize, c.paragraph as usize))
+        .collect()
+}
 /// rhwp's path to the paragraph of table cell or 글상자 `c`.
 fn cell_path(c: &CellTarget) -> String {
     format!(
@@ -486,52 +494,96 @@ impl EditSession {
         )?;
         Ok(())
     }
-    pub(super) fn validate_move(&self, o: &ObjectRef) -> Result<(), EditError> {
-        // Only an equation, which sits in the text like a character, is moved this way.
-        if o.kind != ObjectKind::Equation || o.cell.is_some() {
+    /// The paragraph that holds `o`.
+    fn host(o: &ObjectRef) -> EditTarget {
+        EditTarget {
+            section: o.section,
+            paragraph: o.paragraph,
+            cell: o.cell.clone(),
+            note: None,
+        }
+    }
+    /// An object in the line (글자처럼 취급) moves to another place in the text.
+    pub(super) fn validate_move(&self, o: &ObjectRef, to: &EditPosition) -> Result<(), EditError> {
+        if !self.control(o)?.is_treat_as_char_object() || o.kind == ObjectKind::Table {
             return Err(EditError::UnsupportedTarget);
         }
-        self.control(o).map(|_| ())
+        let t = &to.target;
+        // Not into a note, nor into the object's own caption.
+        let inside = o.cell.is_none()
+            && t.paragraph == o.paragraph
+            && t.cell.as_ref().is_some_and(|c| c.control == o.control);
+        if t.note.is_some() || inside {
+            return Err(EditError::UnsupportedTarget);
+        }
+        self.validate_position(to)
     }
-    /// Takes an equation out of its paragraph and puts it into the text at `to`.
     pub(super) fn move_object(
         &mut self,
         o: &ObjectRef,
         to: &EditPosition,
-    ) -> Result<(), EditError> {
-        let props = self.object_props(o)?;
-        let (script, font_size, color) = (
-            props.script.clone().ok_or(EditError::RenderFailed)?,
-            props.font_size.ok_or(EditError::RenderFailed)?,
-            props.color.unwrap_or(0),
-        );
-        self.delete_object(o)?;
+    ) -> Result<EditPosition, EditError> {
+        self.transplant(&Self::host(o), o.control as usize, to)
+    }
+    /// Moves control `control` of the paragraph at `from` into the text at `to` by way of
+    /// rhwp's clipboard, which keeps its binary data, and returns the position after it.
+    pub(super) fn transplant(
+        &mut self,
+        from: &EditTarget,
+        control: usize,
+        to: &EditPosition,
+    ) -> Result<EditPosition, EditError> {
+        let (s, p) = (from.section as usize, from.paragraph as usize);
+        self.core.copy_control_native(s, p, &path(from), control)?;
+        // Where `to` is once the control has left its place.
+        let mut to = to.clone();
+        if *from == to.target {
+            let at = logical::object_position(commands::get(self.core.document(), from)?, control);
+            if at.is_some_and(|at| at < to.scalar) {
+                to.scalar -= 1;
+            }
+        }
+        self.delete_control(from, control)?;
         let t = &to.target;
-        let inserted = self.core.insert_equation_native(
-            t.section as usize,
-            t.paragraph as usize,
-            to.scalar as usize,
-            &script,
-            font_size,
-            color,
-        )?;
-        let moved = ObjectRef {
-            control: parse::<Value>(Ok(inserted))?["controlIdx"]
-                .as_u64()
-                .ok_or(EditError::RenderFailed)? as u32,
-            section: t.section,
-            paragraph: t.paragraph,
-            ..o.clone()
-        };
-        self.set_object(&moved, &props)
+        let para = commands::get(self.core.document(), t)?;
+        let offset = logical::spot(para, to.scalar).split(para);
+        let (s, p) = (t.section as usize, t.paragraph as usize);
+        match t.cell {
+            None => self.core.paste_internal_native(s, p, offset),
+            Some(_) => self
+                .core
+                .paste_internal_in_cell_by_path_native(s, p, &path(t), offset),
+        }?;
+        to.scalar += 1;
+        Ok(to)
+    }
+    /// Deletes control `control` of the paragraph at `t`, closing its place in the text.
+    pub(super) fn delete_control(
+        &mut self,
+        t: &EditTarget,
+        control: usize,
+    ) -> Result<(), EditError> {
+        let (s, p) = (t.section as usize, t.paragraph as usize);
+        let held = commands::get(self.core.document(), t)?
+            .controls
+            .get(control)
+            .ok_or(EditError::InvalidInput)?;
+        match (&t.cell, &t.note, held) {
+            (None, None, Control::Footnote(_) | Control::Endnote(_)) => {
+                self.core.delete_footnote_native(s, p, control)
+            }
+            (None, None, _) => self.core.delete_control_native(s, p, control),
+            (Some(c), None, Control::Picture(_) | Control::Equation(_) | Control::Shape(_)) => self
+                .core
+                .delete_cell_picture_control_by_path_native(s, p, &cell_path(c), control),
+            _ => return Err(EditError::UnsupportedTarget),
+        }?;
+        Ok(())
     }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         match (o.kind, &o.cell) {
-            (ObjectKind::Picture, Some(cell)) => self
-                .core
-                .delete_cell_picture_control_by_path_native(s, p, &cell_path(cell), c),
-            (_, Some(_)) => return Err(EditError::UnsupportedTarget),
+            (_, Some(_)) => return self.delete_control(&Self::host(o), c),
             (ObjectKind::Picture, None) => self.core.delete_picture_control_native(s, p, c),
             (ObjectKind::Equation, None) => self.core.delete_equation_control_native(s, p, c),
             (ObjectKind::Table, None) => self.core.delete_table_control_native(s, p, c),
@@ -584,10 +636,11 @@ impl EditSession {
             return Err(EditError::UnsupportedTarget);
         };
         let t = &position.target;
+        let at = logical::spot(commands::get(self.core.document(), t)?, position.scalar).text;
         self.core.create_shape_control_native(
             t.section as usize,
             t.paragraph as usize,
-            position.scalar as usize,
+            at,
             *width,
             *height,
             *x as u32,

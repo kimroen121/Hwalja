@@ -358,10 +358,18 @@ struct DocumentTests {
         await drag(NSPoint(x: rect.maxX, y: rect.maxY), NSPoint(x: rect.maxX + 20, y: rect.maxY + 20))
         let grown = PageGeometry.viewRect(try #require(document.object).rect, in: page)
         #expect(abs(grown.width - (rect.width + 20)) < 2)
-        await drag(NSPoint(x: grown.midX, y: grown.midY), NSPoint(x: grown.midX + 100, y: grown.midY + 120))
-        let dropped = PageGeometry.viewRect(try #require(document.object).rect, in: page)
-        #expect(abs(dropped.minX - grown.minX) < 2 && abs(dropped.minY - grown.minY) < 2)
-        #expect(try await document.objectProps(inline.object).treatAsChar == true)
+        // Dropped on the start of the text, it moves there, still in the line.
+        let start = PageGeometry.viewRect(try await document.caret(at: EditPosition(target: body, scalar: 0)), in: page)
+        await drag(NSPoint(x: grown.midX, y: grown.midY), NSPoint(x: start.minX + 1, y: start.midY))
+        #expect(try await document.paragraph(body).text.unicodeScalars.first == "\u{FFFC}")
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 1)))
+        picture = nil
+        for y in stride(from: 0.0, to: 1000, by: 5) where picture == nil {
+            for x in stride(from: 0.0, to: 800, by: 10) where picture == nil {
+                if let found = try await document.objectAt(page: 0, x: x, y: y), found.object.kind == .picture { picture = found }
+            }
+        }
+        #expect(try await document.objectProps(try #require(picture).object).treatAsChar == true)
     }
 
     /// Changing an object leaves the text caret where it was.

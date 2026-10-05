@@ -473,6 +473,10 @@ impl EditSession {
         props: &str,
     ) -> Result<(), EditError> {
         let para = get(self.core.document(), t)?;
+        let (from, to) = (
+            logical::spot(para, from).text as u32,
+            logical::spot(para, to).text as u32,
+        );
         let mut runs: Vec<(u32, u32)> = Vec::new();
         for offset in from..to {
             let id = para.char_shape_id_at(offset as usize);
@@ -556,10 +560,10 @@ impl EditSession {
         if revision != self.revision {
             return Err(EditError::StaleRevision);
         }
-        get(self.core.document(), &p.target)?;
+        let para = get(self.core.document(), &p.target)?;
         super::commands::not_in_note(&p.target)?;
         let t = &p.target;
-        let offset = p.scalar.saturating_sub(1) as usize;
+        let offset = logical::spot(para, p.scalar).text.saturating_sub(1);
         let parse = |text: Result<String, rhwp::error::HwpError>| -> Result<Value, EditError> {
             serde_json::from_str(&text?).map_err(|_| EditError::RenderFailed)
         };

@@ -37,7 +37,7 @@ impl EditSession {
         goal_x: Option<f64>,
     ) -> Result<Navigation, EditError> {
         let doc = self.core.document();
-        let text = &get(doc, &from.target)?.text;
+        let text = &logical::text(get(doc, &from.target)?);
         let len = text.chars().count() as u32;
         let i = index(&from.target);
         let count = paragraphs(doc, &from.target)?.len();
@@ -46,7 +46,7 @@ impl EditSession {
             scalar,
         };
         let length = |i: usize| -> Result<u32, EditError> {
-            Ok(get(doc, &at_index(&from.target, i))?.text.chars().count() as u32)
+            Ok(logical::length(get(doc, &at_index(&from.target, i))?))
         };
         let previous_end = || -> Result<EditPosition, EditError> {
             Ok(if i > 0 {
@@ -110,6 +110,21 @@ impl EditSession {
                 let next = next_start();
                 let end = length(index(&next.target))?;
                 at(index(&next.target), s.min(end))
+            }
+            Motion::LineStart | Motion::LineEnd if self.has_stops(&from.target) => {
+                let stops = self.paragraph_stops(&from.target);
+                let (first, last) = stops
+                    .as_ref()
+                    .and_then(|stops| stops::line(stops, s))
+                    .unwrap_or((s, s));
+                at(
+                    i,
+                    if motion == Motion::LineStart {
+                        first
+                    } else {
+                        last
+                    },
+                )
             }
             Motion::LineStart | Motion::LineEnd => {
                 let line = self.line(from)?;
@@ -187,6 +202,51 @@ impl EditSession {
     /// One line up or down, crossing paragraphs, pages and cell edges. Positions the editor
     /// cannot address (text boxes, nested tables) keep the caret where it is.
     fn vertical(
+        &self,
+        p: &EditPosition,
+        down: bool,
+        goal_x: Option<f64>,
+    ) -> Result<(EditPosition, f64), EditError> {
+        // A paragraph with stops moves between its own lines, and leaves from its first
+        // (or last) position, which rhwp's line queries place right.
+        let mut from = p.clone();
+        if let Some(stops) = self.paragraph_stops(&p.target) {
+            if let Some((first, last)) = stops::line(&stops, p.scalar) {
+                let x = goal_x.unwrap_or(stops[&p.scalar].x);
+                let beyond = if down {
+                    stops.range(last + 1..).next()
+                } else {
+                    stops.range(..first).next_back()
+                };
+                if let Some((&at, _)) = beyond {
+                    let (first, last) = stops::line(&stops, at).ok_or(EditError::RenderFailed)?;
+                    let scalar = stops
+                        .range(first..=last)
+                        .min_by(|a, b| (a.1.x - x).abs().total_cmp(&(b.1.x - x).abs()))
+                        .map(|(k, _)| *k)
+                        .ok_or(EditError::RenderFailed)?;
+                    let target = p.target.clone();
+                    return Ok((EditPosition { target, scalar }, x));
+                }
+                from.scalar = if down {
+                    logical::length(get(self.core.document(), &p.target)?)
+                } else {
+                    0
+                };
+            }
+        }
+        let (moved, x) = self.rhwp_vertical(&from, down, goal_x)?;
+        // Arriving in a paragraph with stops, the column is found among them.
+        if let Some(stops) = self.paragraph_stops(&moved.target) {
+            let line = self.rhwp_caret(&moved)?;
+            if let Some(scalar) = stops::nearest(&stops, line.page, x, line.y + line.height / 2.0) {
+                let target = moved.target;
+                return Ok((EditPosition { target, scalar }, x));
+            }
+        }
+        Ok((moved, x))
+    }
+    fn rhwp_vertical(
         &self,
         p: &EditPosition,
         down: bool,
@@ -281,15 +341,16 @@ impl EditSession {
                     note: None,
                 };
                 // Drops text boxes, which share the cell coordinates.
-                get(doc, &target).ok()?;
-                let start = field(hit, "charOffset")?;
+                let para = get(doc, &target).ok()?;
+                let start = field(hit, "charOffset")? as usize;
+                let end = start + field(hit, "length")? as usize;
                 let at = |scalar| EditPosition {
                     target: target.clone(),
                     scalar,
                 };
                 Some(EditSelection {
-                    anchor: at(start),
-                    focus: at(start + field(hit, "length")?),
+                    anchor: at(logical::position(para, start, true)),
+                    focus: at(logical::position(para, end, false)),
                 })
             })
             .collect())

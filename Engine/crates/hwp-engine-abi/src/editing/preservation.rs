@@ -90,13 +90,28 @@ fn edited_paragraphs<'a>(
             .get_mut(t.paragraph as usize)
             .and_then(|p| p.controls.get_mut(c.control as usize))
         {
-            Some(Control::Table(table)) => {
-                table.text_reflowed_after_edit = false;
-                &mut table
-                    .cells
-                    .get_mut(c.cell as usize)
+            Some(Control::Picture(picture)) => {
+                &mut picture
+                    .caption
+                    .as_mut()
                     .ok_or(EditError::PreservationFailed)?
                     .paragraphs
+            }
+            Some(Control::Table(table)) => {
+                table.text_reflowed_after_edit = false;
+                if c.cell == commands::CAPTION {
+                    &mut table
+                        .caption
+                        .as_mut()
+                        .ok_or(EditError::PreservationFailed)?
+                        .paragraphs
+                } else {
+                    &mut table
+                        .cells
+                        .get_mut(c.cell as usize)
+                        .ok_or(EditError::PreservationFailed)?
+                        .paragraphs
+                }
             }
             Some(Control::Shape(shape)) => {
                 &mut text_box_mut(shape)
@@ -212,7 +227,22 @@ pub(super) fn check(
     };
     let mut a = before.clone();
     let mut b = after.clone();
-    let old_controls = remove(&mut a, target, start, old_count)?;
+    // A replacement removes the objects it covers, and with a note the numbers of the
+    // notes after it.
+    let deleted = match command {
+        EditCommand::Replace { selection, .. } => covered(before, selection)?,
+        _ => Vec::new(),
+    };
+    if !deleted.is_empty() {
+        for doc in [&mut a, &mut b] {
+            clear_note_numbers(doc);
+        }
+    }
+    let mut old_controls = remove(&mut a, target, start, old_count)?;
+    for &i in deleted.iter().rev() {
+        old_controls.0.remove(i);
+        old_controls.1.remove(i);
+    }
     let new_controls = remove(&mut b, target, start, new_count)?;
     if format!("{old_controls:?}") != format!("{new_controls:?}") {
         return Err(EditError::PreservationFailed);
@@ -242,6 +272,47 @@ pub(super) fn check(
     }
 }
 
+/// The controls a replacement removes, as indexes into the controls of the paragraphs it
+/// spans, taken in order.
+fn covered(doc: &Document, selection: &EditSelection) -> Result<Vec<usize>, EditError> {
+    let (start, end) = commands::ordered(selection);
+    let (s, e) = (commands::index(&start.target), commands::index(&end.target));
+    let mut taken = Vec::new();
+    let mut before = 0;
+    for i in s..=e {
+        let p = commands::get(doc, &commands::at_index(&start.target, i))?;
+        let from = if i == s { start.scalar } else { 0 };
+        let to = if i == e {
+            end.scalar
+        } else {
+            logical::length(p)
+        };
+        taken.extend(
+            logical::objects(p, from, to)
+                .into_iter()
+                .map(|c| before + c),
+        );
+        before += p.controls.len();
+    }
+    Ok(taken)
+}
+/// Clears the numbers of every 각주 and 미주, which rhwp renumbers when one goes.
+fn clear_note_numbers(doc: &mut Document) {
+    fn clear(paragraphs: &mut [Paragraph]) {
+        for p in paragraphs {
+            for c in &mut p.controls {
+                match c {
+                    Control::Footnote(n) => n.number = 0,
+                    Control::Endnote(n) => n.number = 0,
+                    _ => {}
+                }
+            }
+        }
+    }
+    for s in &mut doc.sections {
+        clear(&mut s.paragraphs);
+    }
+}
 /// A picture insertion may add one picture and its one binary-data record; the rest of
 /// the document, including every previous binary payload, must remain unchanged.
 fn check_inserted_picture(
@@ -266,35 +337,6 @@ fn check_inserted_picture(
     }
     let mut a = before.clone();
     let mut b = after.clone();
-    if target.cell.is_some() {
-        // In a cell the picture floats beside the table: the host paragraph gains one
-        // control after its own.
-        let at = (target.section as usize, target.paragraph as usize);
-        let (x, y) = (
-            a.sections[at.0].paragraphs.get(at.1),
-            b.sections[at.0].paragraphs.get(at.1),
-        );
-        let (Some(x), Some(y)) = (x, y) else {
-            return Err(EditError::PreservationFailed);
-        };
-        if y.controls.len() != x.controls.len() + 1
-            || format!("{:?}", x.controls) != format!("{:?}", &y.controls[..x.controls.len()])
-            || !matches!(y.controls.last(), Some(Control::Picture(_)))
-        {
-            return Err(EditError::PreservationFailed);
-        }
-        for doc in [&mut a, &mut b] {
-            doc.sections[at.0].paragraphs.remove(at.1);
-        }
-        b.bin_data_content.truncate(a.bin_data_content.len());
-        b.doc_info
-            .bin_data_list
-            .truncate(a.doc_info.bin_data_list.len());
-        for doc in [&mut a, &mut b] {
-            doc.doc_info.raw_stream = None;
-        }
-        return same_rest(&mut a, &mut b, target.section);
-    }
     let old = remove(&mut a, target, commands::index(target), 1)?;
     let new = remove(&mut b, target, commands::index(target), 1)?;
     let pictures = new

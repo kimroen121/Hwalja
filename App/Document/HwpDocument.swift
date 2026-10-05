@@ -29,6 +29,8 @@ struct Presentation: Equatable {
     var object: PageRect?
     /// The selected object's size is protected (크기 고정).
     var objectLocked = false
+    /// The selected object sits in the line (글자처럼 취급): dragging it moves it in the text.
+    var objectInLine = false
 }
 
 /// What menus and bars depend on. It changes far less often than the caret, so SwiftUI
@@ -390,7 +392,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             let upper = index == end.target.index ? end.scalar : UInt32(text.unicodeScalars.count)
             lines.append(text.scalars(lower..<max(lower, upper)))
         }
-        return lines.joined(separator: "\n")
+        // Objects in the line stand in the text as U+FFFC; copied text leaves them out.
+        return lines.joined(separator: "\n").replacingOccurrences(of: "\u{FFFC}", with: "")
     }
 
     // MARK: Running
@@ -466,12 +469,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 format?.text = text
             }
         }
-        var locked = false
+        var (locked, inLine) = (false, object?.object.kind == .equation)
         if let placed = object, [.picture, .shape].contains(placed.object.kind) {
-            locked = (try? await session.objectProps(placed.object))?.sizeProtect == true
+            let props = try? await session.objectProps(placed.object)
+            (locked, inLine) = (props?.sizeProtect == true, props?.treatAsChar == true)
         }
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect,
-                                objectLocked: locked)
+                                objectLocked: locked, objectInLine: inLine)
         for output in staged {
             let count = pages.count
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {

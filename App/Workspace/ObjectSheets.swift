@@ -68,11 +68,23 @@ extension Viewer {
     /// 캡션 넣기: for the selected object, or the table holding the caret.
     func insertCaption(_ position: String) {
         guard let document else { return }
+        let object: ObjectRef
         if let placed = document.object {
-            setObject(placed.object, ObjectProps(caption: position))
+            object = placed.object
         } else if let target = document.selection?.focus.target, let cell = target.cell {
-            let table = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
-            setObject(table, ObjectProps(caption: position))
+            object = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
+        } else {
+            return
+        }
+        setObject(object, ObjectProps(caption: position))
+        // As in Hancom, the caret goes to the end of the caption, to write it.
+        guard position != "None", object.cell == nil, [.picture, .table].contains(object.kind) else { return }
+        let caption = EditTarget(section: object.section, paragraph: object.paragraph,
+                                 cell: CellTarget(control: object.control, cell: object.kind == .table ? CellTarget.caption : 0,
+                                                  paragraph: 0))
+        document.select { document in
+            let end = try await document.paragraph(caption).text.unicodeScalars.count
+            return .caret(EditPosition(target: caption, scalar: UInt32(end)))
         }
     }
     /// Starts drawing a 그리기 개체 with the next drag on a page.

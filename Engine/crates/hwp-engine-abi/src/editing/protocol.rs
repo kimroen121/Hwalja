@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u32 = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CellTarget {
     pub control: u32,
@@ -10,13 +10,13 @@ pub struct CellTarget {
     pub paragraph: u32,
 }
 /// A paragraph inside the 각주 or 미주 that is control `control` of the body paragraph.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NoteTarget {
     pub control: u32,
     pub paragraph: u32,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditTarget {
     pub section: u32,

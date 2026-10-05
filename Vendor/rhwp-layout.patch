@@ -11,6 +11,345 @@ index 1d6474f..3317b8d 100644
  default-members = [".", "crates/*"]
  resolver = "2"
  
+diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
+index 3aef940..fcfe070 100644
+--- a/src/document_core/commands/document.rs
++++ b/src/document_core/commands/document.rs
+@@ -269,6 +269,7 @@ impl DocumentCore {
+             hidden_header_footer: std::collections::HashSet::new(),
+             file_name: String::new(),
+             active_field: None,
++            insert_skip: 0,
+             para_offset: Vec::new(),
+             source_format,
+             hml_metadata,
+diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
+index 763b020..a7a7e9c 100644
+--- a/src/document_core/commands/footnote_ops.rs
++++ b/src/document_core/commands/footnote_ops.rs
+@@ -521,9 +521,10 @@ impl DocumentCore {
+         text: &str,
+     ) -> Result<String, HwpError> {
+         let new_chars_count = text.chars().count();
++        let skip = std::mem::take(&mut self.insert_skip);
+         let fn_para =
+             self.get_footnote_paragraph_mut(section_idx, para_idx, control_idx, fn_para_idx)?;
+-        fn_para.insert_text_at(char_offset, text);
++        fn_para.insert_text_after_controls(char_offset, skip, text);
+ 
+         self.reflow_footnote_paragraph(section_idx, para_idx, control_idx, fn_para_idx);
+ 
+diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_core/commands/object_ops/equation.rs
+index a52e940..51de19e 100644
+--- a/src/document_core/commands/object_ops/equation.rs
++++ b/src/document_core/commands/object_ops/equation.rs
+@@ -355,6 +355,12 @@ impl DocumentCore {
+                     *offset -= 8;
+                 }
+             }
++            // HwpStudio: character shapes after the control move back with the text.
++            for shape in para.char_shapes.iter_mut() {
++                if shape.start_pos >= threshold {
++                    shape.start_pos -= 8;
++                }
++            }
+         }
+ 
+         para.controls.remove(control_idx);
+diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_core/commands/object_ops/picture.rs
+index 7209499..081d20a 100644
+--- a/src/document_core/commands/object_ops/picture.rs
++++ b/src/document_core/commands/object_ops/picture.rs
+@@ -1236,16 +1236,22 @@ impl DocumentCore {
+                         number_type: crate::model::control::AutoNumberType::Picture,
+                         ..Default::default()
+                     };
+-                    cap.paragraphs
+-                        .push(crate::model::paragraph::Paragraph::default());
++                    // HwpStudio: "그림 " + number + " ", as Hancom writes it and as the
++                    // table and drawing-object captions are made.
++                    let mut para = crate::model::paragraph::Paragraph::new_empty();
++                    para.text = "그림  ".to_string();
++                    para.char_count = 13;
++                    para.char_count_msb = true;
++                    para.control_mask = 1u32 << 0x12;
++                    para.char_offsets = vec![0, 1, 2, 11];
++                    para.controls
++                        .push(crate::model::control::Control::AutoNumber(an));
++                    para.ctrl_data_records.push(None);
++                    cap.paragraphs.push(para);
+                     // 캡션 텍스트 최대 폭 = 개체 폭
+                     cap.max_width = pic.common.width;
+                     pic.caption = Some(cap);
+                     caption_created = true;
+-                    // 번호 할당을 위해 컨트롤을 임시로 캡션에 추가
+-                    pic.caption.as_mut().unwrap().paragraphs[0]
+-                        .controls
+-                        .push(crate::model::control::Control::AutoNumber(an));
+                     // attr bit 29: 캡션 존재 플래그 (한컴 호환성)
+                     pic.common.attr |= 1 << 29;
+                 }
+@@ -1366,6 +1372,12 @@ impl DocumentCore {
+                     *offset -= 8;
+                 }
+             }
++            // HwpStudio: character shapes after the control move back with the text.
++            for shape in para.char_shapes.iter_mut() {
++                if shape.start_pos >= threshold {
++                    shape.start_pos -= 8;
++                }
++            }
+         }
+ 
+         // 컨트롤 및 ctrl_data_record 제거
+diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
+index 354a416..6ef3628 100644
+--- a/src/document_core/commands/object_ops/shape.rs
++++ b/src/document_core/commands/object_ops/shape.rs
+@@ -1063,6 +1063,12 @@ impl DocumentCore {
+                     *offset -= 8;
+                 }
+             }
++            // HwpStudio: character shapes after the control move back with the text.
++            for shape in para.char_shapes.iter_mut() {
++                if shape.start_pos >= threshold {
++                    shape.start_pos -= 8;
++                }
++            }
+         }
+ 
+         para.controls.remove(control_idx);
+@@ -2184,6 +2190,12 @@ impl DocumentCore {
+                         *offset -= 8;
+                     }
+                 }
++                // HwpStudio: character shapes after the control move back with the text.
++                for shape in para.char_shapes.iter_mut() {
++                    if shape.start_pos >= threshold {
++                        shape.start_pos -= 8;
++                    }
++                }
+             }
+ 
+             para.controls.remove(ci);
+diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/commands/object_ops/table.rs
+index ba59acd..2df1ff2 100644
+--- a/src/document_core/commands/object_ops/table.rs
++++ b/src/document_core/commands/object_ops/table.rs
+@@ -1431,7 +1431,11 @@ impl DocumentCore {
+                     inner_control_idx
+                 )));
+             }
+-            if !matches!(&para.controls[inner_control_idx], Control::Picture(_)) {
++            // HwpStudio: an equation or drawing object is taken out the same way.
++            if !matches!(
++                &para.controls[inner_control_idx],
++                Control::Picture(_) | Control::Equation(_) | Control::Shape(_)
++            ) {
+                 return Err(HwpError::RenderError(
+                     "지정된 셀 내 컨트롤이 그림이 아닙니다".to_string(),
+                 ));
+@@ -1482,6 +1486,12 @@ impl DocumentCore {
+                         *offset -= 8;
+                     }
+                 }
++                // HwpStudio: character shapes after the control move back with the text.
++                for shape in para.char_shapes.iter_mut() {
++                    if shape.start_pos >= threshold {
++                        shape.start_pos -= 8;
++                    }
++                }
+             }
+ 
+             para.controls.remove(inner_control_idx);
+diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
+index 53228b1..242d8cf 100644
+--- a/src/document_core/commands/table_ops.rs
++++ b/src/document_core/commands/table_ops.rs
+@@ -1259,7 +1259,7 @@ impl DocumentCore {
+         Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
+     }
+ 
+-    pub(crate) fn get_cell_properties_native(
++    pub fn get_cell_properties_native(
+         &self,
+         section_idx: usize,
+         parent_para_idx: usize,
+@@ -2783,7 +2783,7 @@ impl DocumentCore {
+     }
+ 
+     /// 표 속성을 조회한다 (네이티브).
+-    pub(crate) fn get_table_properties_native(
++    pub fn get_table_properties_native(
+         &self,
+         section_idx: usize,
+         parent_para_idx: usize,
+@@ -2823,34 +2823,34 @@ impl DocumentCore {
+         let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
+             u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
+         } else {
+-            0
++            table.common.width
+         };
+         let table_height = if rd.len() >= common_obj_offsets::HEIGHT.end {
+             u32::from_le_bytes(rd[common_obj_offsets::HEIGHT].try_into().unwrap())
+         } else {
+-            0
++            table.common.height
+         };
+         // outer_margin: [24..32] (parse_common_obj_attr 정합)
+         // [20..24]=z_order, [24..26]=left, [26..28]=right, [28..30]=top, [30..32]=bottom
+         let outer_left = if rd.len() >= common_obj_offsets::MARGIN_LEFT.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_LEFT].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.left
+         };
+         let outer_right = if rd.len() >= common_obj_offsets::MARGIN_RIGHT.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_RIGHT].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.right
+         };
+         let outer_top = if rd.len() >= common_obj_offsets::MARGIN_TOP.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_TOP].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.top
+         };
+         let outer_bottom = if rd.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
+             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_BOTTOM].try_into().unwrap())
+         } else {
+-            0
++            table.common.margin.bottom
+         };
+ 
+         // 캡션 정보
+@@ -2911,12 +2911,12 @@ impl DocumentCore {
+         let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
+             i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
+         } else {
+-            0
++            table.common.vertical_offset as i32
+         };
+         let horz_offset = if rd.len() >= common_obj_offsets::H_OFFSET.end {
+             i32::from_le_bytes(rd[common_obj_offsets::H_OFFSET].try_into().unwrap())
+         } else {
+-            0
++            table.common.horizontal_offset as i32
+         };
+         let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
+         let allow_overlap = (table.attr >> 14) & 0x01 != 0;
+@@ -3155,6 +3155,16 @@ impl DocumentCore {
+         }
+ 
+         // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
++        for (key, margin) in [
++            ("outerLeft", &mut table.common.margin.left),
++            ("outerRight", &mut table.common.margin.right),
++            ("outerTop", &mut table.common.margin.top),
++            ("outerBottom", &mut table.common.margin.bottom),
++        ] {
++            if let Some(v) = json_i16(json, key) {
++                *margin = v;
++            }
++        }
+         if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
+             if let Some(v) = json_i16(json, "outerLeft") {
+                 table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
+@@ -3666,6 +3676,12 @@ impl DocumentCore {
+                         *offset -= 8;
+                     }
+                 }
++                // HwpStudio: character shapes after the control move back with the text.
++                for shape in para.char_shapes.iter_mut() {
++                    if shape.start_pos >= threshold {
++                        shape.start_pos -= 8;
++                    }
++                }
+             }
+ 
+             // 컨트롤 및 대응하는 ctrl_data_record 제거
+diff --git a/src/document_core/commands/text_editing.rs b/src/document_core/commands/text_editing.rs
+index 0f61fa9..891d1e3 100644
+--- a/src/document_core/commands/text_editing.rs
++++ b/src/document_core/commands/text_editing.rs
+@@ -1424,8 +1424,9 @@ impl DocumentCore {
+             None,
+             char_offset,
+         );
++        let skip = std::mem::take(&mut self.insert_skip);
+         let apply_insert = |para: &mut Paragraph| {
+-            para.insert_text_at(char_offset, text);
++            para.insert_text_after_controls(char_offset, skip, text);
+             keep_inactive_field_start_outside(para, &before_insertions, new_chars_count);
+             keep_inactive_field_end_outside(para, &outside_insertions, new_chars_count);
+             if has_clickhere_field_range(para) {
+@@ -1801,6 +1802,7 @@ impl DocumentCore {
+         paginate_immediately: bool,
+     ) -> Result<String, HwpError> {
+         let new_chars_count = text.chars().count();
++        let skip = std::mem::take(&mut self.insert_skip);
+         let focused_target_is_table_cell = !paginate_immediately
+             && is_focused_table_cell_target(
+                 &self.document,
+@@ -1868,7 +1870,7 @@ impl DocumentCore {
+             char_offset,
+         );
+         if new_chars_count > 0 {
+-            cell_para.insert_text_at(char_offset, text);
++            cell_para.insert_text_after_controls(char_offset, skip, text);
+             keep_inactive_field_start_outside(cell_para, &before_insertions, new_chars_count);
+             keep_inactive_field_end_outside(cell_para, &outside_insertions, new_chars_count);
+             if has_clickhere_field_range(cell_para) {
+diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
+index 0639884..5db4eea 100644
+--- a/src/document_core/mod.rs
++++ b/src/document_core/mod.rs
+@@ -169,11 +169,11 @@ pub struct DocumentCore {
+     /// 새 컨트롤 복사 시 0 으로 리셋, 붙여넣기마다 +1 하여 위치 오프셋 누적(한컴 정합).
+     pub(crate) paste_cascade_count: u32,
+     /// 문단부호(¶) 표시 여부
+-    pub(crate) show_paragraph_marks: bool,
++    pub show_paragraph_marks: bool,
+     /// [#4709] SVG 출력에 배치 메트릭 face 주석(data-metric-font) 부착 여부 (옵트인)
+     pub(crate) annotate_metric_font: bool,
+     /// 조판부호 표시 여부 (개체 마커 [표]/[그림] 등, 문단부호 포함)
+-    pub(crate) show_control_codes: bool,
++    pub show_control_codes: bool,
+     /// 투명선 표시 여부
+     pub(crate) show_transparent_borders: bool,
+     /// 잘림 보기 (body/셀 클리핑 활성화 여부)
+@@ -256,6 +256,8 @@ pub struct DocumentCore {
+     /// 현재 활성 필드 위치 (커서가 진입한 누름틀 — 안내문 렌더링 스킵용)
+     /// (section_idx, para_idx, field_control_idx)
+     pub(crate) active_field: Option<ActiveFieldInfo>,
++    /// Controls the next text insertion goes after (HwpStudio, `set_insert_skip`).
++    pub(crate) insert_skip: usize,
+     /// 구역별 문단 인덱스 오프셋 (삽입=+N, 삭제=-N, 페이지네이션 수렴 감지용)
+     /// paginate() 후 리셋.
+     pub(crate) para_offset: Vec<i32>,
+@@ -447,6 +449,12 @@ impl DocumentCore {
+     }
+ 
+     /// 빈 문서를 생성한다 (테스트/미리보기용).
++    /// Makes the next text insertion go after the first `skip` controls standing at its
++    /// offset instead of before them (HwpStudio).
++    pub fn set_insert_skip(&mut self, skip: usize) {
++        self.insert_skip = skip;
++    }
++
+     pub fn new_empty() -> Self {
+         DocumentCore {
+             document: Document::default(),
+@@ -493,6 +501,7 @@ impl DocumentCore {
+             hidden_header_footer: std::collections::HashSet::new(),
+             file_name: String::new(),
+             active_field: None,
++            insert_skip: 0,
+             para_offset: Vec::new(),
+             source_format: crate::parser::FileFormat::Hwp,
+             hml_metadata: None,
 diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries/cursor_nav.rs
 index 9352fff..0df9b4d 100644
 --- a/src/document_core/queries/cursor_nav.rs
@@ -51,6 +390,53 @@ index 9352fff..0df9b4d 100644
          &self,
          section_idx: usize,
          start_para_idx: usize,
+diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
+index 7bfcef5..e71604d 100644
+--- a/src/model/paragraph.rs
++++ b/src/model/paragraph.rs
+@@ -848,6 +848,17 @@ impl Paragraph {
+     /// 다를 수 있으므로, 삽입 뒤 위치를 알려야 하는 호출부는 요청 값이 아니라 이 값을
+     /// 기준으로 삼는다 (Task #3216).
+     pub fn insert_text_at(&mut self, char_offset: usize, new_text: &str) -> usize {
++        self.insert_text_after_controls(char_offset, 0, new_text)
++    }
++
++    /// `insert_text_at`, but after the first `skip` controls standing at `char_offset`
++    /// (HwpStudio: typing right after an inline picture or equation).
++    pub fn insert_text_after_controls(
++        &mut self,
++        char_offset: usize,
++        skip: usize,
++        new_text: &str,
++    ) -> usize {
+         if new_text.is_empty() {
+             return char_offset.min(self.text.chars().count());
+         }
+@@ -863,7 +874,8 @@ impl Paragraph {
+         // 마지막 문자 + 후행 컨트롤 갭을 포함한 값으로 계산
+         let effective_char_offset = char_offset.min(text_len);
+         let control_positions = self.control_text_positions();
+-        let inserts_before_inline_control = char_offset <= text_len
++        let inserts_before_inline_control = skip == 0
++            && char_offset <= text_len
+             && self
+                 .controls
+                 .iter()
+@@ -897,6 +909,14 @@ impl Paragraph {
+             // 후행 컨트롤 수 = char_offset - text_len
+             let trailing_ctrl_count = (char_offset - text_len) as u32;
+             last_char_end + trailing_ctrl_count * 8
++        } else if skip > 0 {
++            let gap_start = match effective_char_offset.checked_sub(1) {
++                Some(prev_idx) if prev_idx < self.char_offsets.len() => {
++                    self.char_offsets[prev_idx] + Self::char_stream_len(text_chars[prev_idx])
++                }
++                _ => 0,
++            };
++            gap_start + skip as u32 * 8
+         } else if inserts_before_inline_control {
+             if effective_char_offset == 0 {
+                 0
 diff --git a/src/renderer/composer.rs b/src/renderer/composer.rs
 index c455a55..aa4e690 100644
 --- a/src/renderer/composer.rs
@@ -417,114 +803,3 @@ index 3989968..e268160 100644
  
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
-diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
---- a/src/document_core/commands/table_ops.rs
-+++ b/src/document_core/commands/table_ops.rs
-@@ -1259,7 +1259,7 @@
-         Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
-     }
- 
--    pub(crate) fn get_cell_properties_native(
-+    pub fn get_cell_properties_native(
-         &self,
-         section_idx: usize,
-         parent_para_idx: usize,
-@@ -2783,7 +2783,7 @@
-     }
- 
-     /// 표 속성을 조회한다 (네이티브).
--    pub(crate) fn get_table_properties_native(
-+    pub fn get_table_properties_native(
-         &self,
-         section_idx: usize,
-         parent_para_idx: usize,
-@@ -2823,34 +2823,34 @@
-         let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
-             u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
-         } else {
--            0
-+            table.common.width
-         };
-         let table_height = if rd.len() >= common_obj_offsets::HEIGHT.end {
-             u32::from_le_bytes(rd[common_obj_offsets::HEIGHT].try_into().unwrap())
-         } else {
--            0
-+            table.common.height
-         };
-         // outer_margin: [24..32] (parse_common_obj_attr 정합)
-         // [20..24]=z_order, [24..26]=left, [26..28]=right, [28..30]=top, [30..32]=bottom
-         let outer_left = if rd.len() >= common_obj_offsets::MARGIN_LEFT.end {
-             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_LEFT].try_into().unwrap())
-         } else {
--            0
-+            table.common.margin.left
-         };
-         let outer_right = if rd.len() >= common_obj_offsets::MARGIN_RIGHT.end {
-             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_RIGHT].try_into().unwrap())
-         } else {
--            0
-+            table.common.margin.right
-         };
-         let outer_top = if rd.len() >= common_obj_offsets::MARGIN_TOP.end {
-             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_TOP].try_into().unwrap())
-         } else {
--            0
-+            table.common.margin.top
-         };
-         let outer_bottom = if rd.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
-             i16::from_le_bytes(rd[common_obj_offsets::MARGIN_BOTTOM].try_into().unwrap())
-         } else {
--            0
-+            table.common.margin.bottom
-         };
- 
-         // 캡션 정보
-@@ -2911,12 +2911,12 @@
-         let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
-             i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
-         } else {
--            0
-+            table.common.vertical_offset as i32
-         };
-         let horz_offset = if rd.len() >= common_obj_offsets::H_OFFSET.end {
-             i32::from_le_bytes(rd[common_obj_offsets::H_OFFSET].try_into().unwrap())
-         } else {
--            0
-+            table.common.horizontal_offset as i32
-         };
-         let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
-         let allow_overlap = (table.attr >> 14) & 0x01 != 0;
-@@ -3155,6 +3155,16 @@
-         }
- 
-         // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
-+        for (key, margin) in [
-+            ("outerLeft", &mut table.common.margin.left),
-+            ("outerRight", &mut table.common.margin.right),
-+            ("outerTop", &mut table.common.margin.top),
-+            ("outerBottom", &mut table.common.margin.bottom),
-+        ] {
-+            if let Some(v) = json_i16(json, key) {
-+                *margin = v;
-+            }
-+        }
-         if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
-             if let Some(v) = json_i16(json, "outerLeft") {
-                 table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
-diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
---- a/src/document_core/mod.rs
-+++ b/src/document_core/mod.rs
-@@ -169,11 +169,11 @@
-     /// 새 컨트롤 복사 시 0 으로 리셋, 붙여넣기마다 +1 하여 위치 오프셋 누적(한컴 정합).
-     pub(crate) paste_cascade_count: u32,
-     /// 문단부호(¶) 표시 여부
--    pub(crate) show_paragraph_marks: bool,
-+    pub show_paragraph_marks: bool,
-     /// [#4709] SVG 출력에 배치 메트릭 face 주석(data-metric-font) 부착 여부 (옵트인)
-     pub(crate) annotate_metric_font: bool,
-     /// 조판부호 표시 여부 (개체 마커 [표]/[그림] 등, 문단부호 포함)
--    pub(crate) show_control_codes: bool,
-+    pub show_control_codes: bool,
-     /// 투명선 표시 여부
-     pub(crate) show_transparent_borders: bool,
-     /// 잘림 보기 (body/셀 클리핑 활성화 여부)
