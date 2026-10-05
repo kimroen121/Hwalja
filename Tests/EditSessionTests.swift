@@ -7,6 +7,14 @@ func fixture(_ ext: String) throws -> Data {
 }
 
 struct EditSessionTests {
+    @Test func rejectsMalformedRenderingPayloads() {
+        let json = Data(#"{"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
+        // Old raw PDF payload, unknown discriminator and a truncated display.
+        for data in [Data("%PDF-1.7".utf8), Data([2]), Data([1])] {
+            #expect(throws: EditError.renderFailed) { try EditSession.Output((json, data)) }
+        }
+    }
+
     @Test(arguments: ["hwp", "hwpx"])
     func editGeometryAndUndoRoundTrip(ext: String) async throws {
         let (session, opened) = try EditSession.open(fixture(ext))

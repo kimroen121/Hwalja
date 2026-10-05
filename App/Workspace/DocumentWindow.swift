@@ -9,6 +9,23 @@ struct DocumentWindow: View {
     @State private var pageField = ""
 
     var body: some View {
+        if let message = document.creationError {
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle").font(.largeTitle)
+                Text(message).multilineTextAlignment(.center)
+                HStack {
+                    Button("다시 시도") { NSDocumentController.shared.newDocument(nil) }
+                    Button("다른 문서 열기…") { NSDocumentController.shared.openDocument(nil) }
+                }
+            }
+            .padding(32)
+            .frame(minWidth: 480, minHeight: 300)
+        } else {
+            editor
+        }
+    }
+
+    private var editor: some View {
         VStack(spacing: 0) {
             if viewer.showsTools {
                 ToolRow(document: document, viewer: viewer)

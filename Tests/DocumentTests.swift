@@ -7,6 +7,28 @@ import SwiftUI
 
 @MainActor
 struct DocumentTests {
+    @Test func blankFailureIsRecoverableAndCannotSave() throws {
+        let document = HwpDocument(blankUsing: { _ in throw EditError.renderFailed })
+        #expect(document.creationError != nil)
+        #expect(document.pages.isEmpty)
+        #expect(!document.context.hasSelection)
+        #expect(throws: EditError.self) { try document.snapshot(contentType: .hwpx) }
+    }
+
+    @Test func corruptExistingDocumentStillThrows() {
+        #expect(throws: EditError.self) { try HwpDocument(data: Data([0, 1, 2])) }
+    }
+
+    @Test func newBlankDocumentRendersAndSaves() throws {
+        let document = HwpDocument()
+        #expect(document.creationError == nil)
+        #expect(!document.pages.isEmpty)
+        let saved = try document.snapshot(contentType: .hwpx)
+        let reopened = try HwpDocument(data: saved)
+        #expect(reopened.creationError == nil)
+        #expect(!reopened.pages.isEmpty)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

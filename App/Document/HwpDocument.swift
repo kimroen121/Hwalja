@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 
 extension UTType {
     static let hwp = UTType(importedAs: "app.hwpstudio.hwp")
@@ -56,7 +57,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Undo depth kept by the engine (`HISTORY_LIMIT`).
     static let undoLimit = 20
 
-    private let session: EditSession
+    private let sessionResult: Result<EditSession, Error>
+    private nonisolated var session: EditSession { get throws { try sessionResult.get() } }
+    let creationError: String?
     /// Rendered pages as shown, replaced only when a presentation is published.
     private(set) var pages: [RenderedPage]
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
@@ -90,9 +93,27 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// The latest queued work while it is an unstarted, uncommitted composition update.
     private var composing: (work: Int, text: Typed)?
 
-    /// A blank document; failing to make one is an engine bug.
+    /// New-document failures remain a recovery window, never a process trap.
     nonisolated convenience init() {
-        try! self.init(data: nil)
+        self.init(blankUsing: EditSession.open)
+    }
+    nonisolated init(blankUsing open: (Data?) throws -> (EditSession, EditSession.Output)) {
+        do {
+            let (session, output) = try open(nil)
+            sessionResult = .success(session)
+            creationError = nil
+            pages = output.pages
+            reply = output.reply
+            thumbnails = output.pages
+            context.pageCount = output.pages.count
+        } catch {
+            sessionResult = .failure(error)
+            creationError = "새 문서를 만들지 못했습니다. 다시 시도하거나 다른 문서를 열어 주세요."
+            pages = []
+            reply = EditReply(revision: 0, pageCount: 0, changedPages: [], canUndo: false, canRedo: false, dirty: false)
+            // EditError contains only a category, never document text or bytes.
+            Logger(subsystem: "app.hwpstudio.mac", category: "Document").error("Blank document creation failed: \(String(describing: error), privacy: .public)")
+        }
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
@@ -100,7 +121,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     nonisolated init(data: Data?) throws {
         let (session, output) = try EditSession.open(data)
-        self.session = session
+        self.sessionResult = .success(session)
+        self.creationError = nil
         pages = output.pages
         reply = output.reply
         thumbnails = output.pages

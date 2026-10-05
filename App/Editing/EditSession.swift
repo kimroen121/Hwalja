@@ -1,6 +1,9 @@
 import CHwpEngine
 import Foundation
 import PDFKit
+import OSLog
+
+private let renderLog = Logger(subsystem: "app.hwpstudio.mac", category: "Rendering")
 
 /// Owns one engine edit session. Every call to the raw handle runs on `queue`,
 /// so the handle is never touched concurrently; callers only see owned values.
@@ -27,8 +30,13 @@ final class EditSession: @unchecked Sendable {
         } else {
             hwp_edit_open(nil, 0, &raw)
         }
+        // The engine may succeed but Swift may reject its rendering payload.
+        // In that case ownership has not transferred to an EditSession yet.
+        var transferred = false
+        defer { if !transferred { hwp_edit_close(raw) } }
         let output = try Output(take(result))
         guard let raw else { throw EditError.invalidInput }
+        transferred = true
         return (EditSession(handle: raw), output)
     }
 
@@ -91,7 +99,7 @@ final class EditSession: @unchecked Sendable {
     }
 
     /// Owned copies of a successful result's JSON and bytes.
-    fileprivate typealias Payload = (json: Data, data: Data)
+    typealias Payload = (json: Data, data: Data)
 
     /// Copies out and frees an engine result, turning failures into `EditError`.
     private static func take(_ result: OpaquePointer?) throws -> Payload {
@@ -100,7 +108,9 @@ final class EditSession: @unchecked Sendable {
         let json = Data(bytes: text, count: strlen(text))
         guard hwp_edit_result_status(result) == 0 else {
             struct Failure: Decodable { var error: EditError }
-            throw (try? JSONDecoder().decode(Failure.self, from: json))?.error ?? EditError.invalidInput
+            let error = (try? JSONDecoder().decode(Failure.self, from: json))?.error ?? EditError.invalidInput
+            renderLog.error("Engine request failed: \(error.rawValue, privacy: .public)")
+            throw error
         }
         let data = hwp_edit_result_data(result).map { Data(bytes: $0, count: hwp_edit_result_length(result)) }
         return (json, data ?? Data())
@@ -110,14 +120,34 @@ final class EditSession: @unchecked Sendable {
 private func decode<T: Decodable>(_ payload: EditSession.Payload) throws -> T {
     try JSONDecoder().decode(T.self, from: payload.json)
 }
-private extension EditSession.Output {
+extension EditSession.Output {
     /// The data holds per changed page a byte, 1 and its display list or 0 for a page in
     /// the PDF that follows them (`EditSession::rendering` in the engine).
     init(_ payload: EditSession.Payload) throws {
         let reply: EditReply = try decode(payload)
         var reader = ByteReader(payload.data)
-        let displays = try reply.changedPages.map { _ in try reader.u8() == 1 ? PageDisplay(&reader) : nil }
-        let pdf = displays.contains { $0 == nil } ? PDFDocument(data: reader.remaining) : nil
+        let displays: [PageDisplay?]
+        do {
+            displays = try reply.changedPages.map { _ in
+                switch try reader.u8() {
+                case 0: return nil
+                case 1: return try PageDisplay(&reader)
+                default: throw EditError.renderFailed
+                }
+            }
+        } catch {
+            let legacyPDF = payload.data.starts(with: Data("%PDF-".utf8))
+            renderLog.error("Display-list decode failed: revision=\(reply.revision) changedPages=\(reply.changedPages.count) payloadBytes=\(payload.data.count) legacyPDFPayload=\(legacyPDF). Rebuild the engine and app together if the payload is from an older engine.")
+            throw error
+        }
+        let pdfBytes = reader.remaining
+        let fallbackCount = displays.filter { $0 == nil }.count
+        let pdf = fallbackCount > 0 ? PDFDocument(data: pdfBytes) : nil
+        if fallbackCount > 0 && pdf?.pageCount != fallbackCount {
+            let hasHeader = pdfBytes.starts(with: Data("%PDF-".utf8))
+            renderLog.error("PDFKit decode failed: revision=\(reply.revision) expectedPages=\(fallbackCount) decodedPages=\(pdf?.pageCount ?? -1) pdfBytes=\(pdfBytes.count) hasPDFHeader=\(hasHeader)")
+            throw EditError.renderFailed
+        }
         var next = 0
         let pages = try displays.map { display -> RenderedPage in
             if let display { return .display(display) }
