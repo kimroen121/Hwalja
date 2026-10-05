@@ -52,6 +52,11 @@ enum Request {
         x: f64,
         y: f64,
     },
+    /// The table borders on `page` that can be dragged.
+    TableLines {
+        revision: u64,
+        page: u32,
+    },
     /// Where an object is laid out, looking from `page` outward.
     Place {
         revision: u64,
@@ -159,6 +164,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             x,
             y,
         } => HwpEditResult::ok(session.object_at(revision, page, x, y)?, Vec::new()),
+        Request::TableLines { revision, page } => {
+            HwpEditResult::ok(session.table_lines(revision, page)?, Vec::new())
+        }
         Request::Place {
             revision,
             object,

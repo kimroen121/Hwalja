@@ -237,17 +237,17 @@ impl EditSession {
                     scalar: 0,
                 })
             }
-            EditCommand::SetObject { object, .. } | EditCommand::DeleteObject { object } => {
-                Some(EditPosition {
-                    target: EditTarget {
-                        section: object.section,
-                        paragraph: object.paragraph,
-                        cell: None,
-                        note: None,
-                    },
-                    scalar: 0,
-                })
-            }
+            EditCommand::SetObject { object, .. }
+            | EditCommand::DeleteObject { object }
+            | EditCommand::ResizeTable { table: object, .. } => Some(EditPosition {
+                target: EditTarget {
+                    section: object.section,
+                    paragraph: object.paragraph,
+                    cell: None,
+                    note: None,
+                },
+                scalar: 0,
+            }),
             EditCommand::SetPage { .. }
             | EditCommand::HeaderFooter { .. }
             | EditCommand::Undo

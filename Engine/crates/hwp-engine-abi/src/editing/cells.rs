@@ -1,6 +1,7 @@
 //! Blocks of table cells: a selection whose ends are in two cells of one table covers
 //! every cell of the rectangle between them, as in Hancom's cell blocks.
 use super::*;
+use rhwp::model::table::{Cell, Table};
 use serde_json::Value;
 
 /// Rows and columns (inclusive) of one table, grown to cover the merged cells they cut.
@@ -307,6 +308,163 @@ impl EditSession {
                     &format!(r#"{{"{key}":{new}}}"#),
                 )?;
             }
+        }
+        Ok(())
+    }
+
+    /// The draggable table borders on `page`: each cell's right and bottom edges, for
+    /// cells spanning one column (row). Tables in cells, notes and headers are left out.
+    pub fn table_lines(&self, revision: u64, page: u32) -> Result<Vec<TableLine>, EditError> {
+        self.check_revision(revision)?;
+        let layout: Value = serde_json::from_str(
+            &self
+                .core
+                .get_page_control_layout_native(page)
+                .map_err(|_| EditError::RenderFailed)?,
+        )
+        .map_err(|_| EditError::RenderFailed)?;
+        let index = |v: &Value, k: &str| v.get(k).and_then(Value::as_u64).map(|n| n as u32);
+        let number = |v: &Value, k: &str| v.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+        let mut lines = Vec::new();
+        for t in layout["controls"].as_array().into_iter().flatten() {
+            if t["type"] != "table"
+                || ["cellIdx", "cellPath", "noteRef", "headerFooter"]
+                    .iter()
+                    .any(|k| t.get(k).is_some())
+            {
+                continue;
+            }
+            let (Some(section), Some(paragraph), Some(control)) = (
+                index(t, "secIdx"),
+                index(t, "paraIdx"),
+                index(t, "controlIdx"),
+            ) else {
+                continue;
+            };
+            let table = ObjectRef {
+                kind: ObjectKind::Table,
+                section,
+                paragraph,
+                control,
+            };
+            for c in t["cells"].as_array().into_iter().flatten() {
+                let span = |k| index(c, k).unwrap_or(1).max(1) as u16;
+                let (x, y, w, h) = (
+                    number(c, "x"),
+                    number(c, "y"),
+                    number(c, "w"),
+                    number(c, "h"),
+                );
+                if span("colSpan") == 1 {
+                    lines.push(TableLine {
+                        table: table.clone(),
+                        row: false,
+                        line: index(c, "col").unwrap_or(0) as u16,
+                        at: x + w,
+                        start: x,
+                        from: y,
+                        to: y + h,
+                    });
+                }
+                if span("rowSpan") == 1 {
+                    lines.push(TableLine {
+                        table: table.clone(),
+                        row: true,
+                        line: index(c, "row").unwrap_or(0) as u16,
+                        at: y + h,
+                        start: y,
+                        from: x,
+                        to: x + w,
+                    });
+                }
+            }
+        }
+        Ok(lines)
+    }
+    fn table_of(&self, o: &ObjectRef) -> Result<&Table, EditError> {
+        let target = EditTarget {
+            section: o.section,
+            paragraph: o.paragraph,
+            cell: Some(CellTarget {
+                control: o.control,
+                cell: 0,
+                paragraph: 0,
+            }),
+            note: None,
+        };
+        if o.kind != ObjectKind::Table {
+            return Err(EditError::UnsupportedTarget);
+        }
+        commands::table(self.core.document(), &target).ok_or(EditError::UnsupportedTarget)
+    }
+    /// The cells a border drag changes, with their new width (or height): the cells
+    /// ending at the border take the change, and for an inner column border the cells
+    /// starting after it give it back.
+    fn resized_cells(&self, command: &EditCommand) -> Result<Vec<(usize, u32)>, EditError> {
+        const MIN: i64 = 200;
+        let EditCommand::ResizeTable {
+            table,
+            row,
+            line,
+            size,
+        } = command
+        else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let t = self.table_of(table)?;
+        let count = if *row { t.row_count } else { t.col_count };
+        if *line >= count || (*size as i64) < MIN || *size > 1_000_000 {
+            return Err(EditError::InvalidInput);
+        }
+        let sizes = if *row {
+            t.get_row_heights()
+        } else {
+            t.get_column_widths()
+        };
+        let delta = *size as i64 - sizes[*line as usize] as i64;
+        let measure = |c: &Cell| {
+            if *row {
+                (c.row, c.row_span.max(1), c.height as i64)
+            } else {
+                (c.col, c.col_span.max(1), c.width as i64)
+            }
+        };
+        let mut changes = Vec::new();
+        for (i, c) in t.cells.iter().enumerate() {
+            let (start, span, length) = measure(c);
+            let new = if start + span - 1 == *line {
+                length + delta
+            } else if !*row && start == *line + 1 {
+                length - delta
+            } else {
+                continue;
+            };
+            if new < MIN {
+                return Err(EditError::InvalidInput);
+            }
+            if new != length {
+                changes.push((i, new as u32));
+            }
+        }
+        Ok(changes)
+    }
+    pub(super) fn validate_resize(&self, command: &EditCommand) -> Result<(), EditError> {
+        self.resized_cells(command).map(|_| ())
+    }
+    pub(super) fn resize_table(&mut self, command: &EditCommand) -> Result<(), EditError> {
+        let EditCommand::ResizeTable { table, row, .. } = command else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let key = if *row { "height" } else { "width" };
+        // ponytail: one re-layout per cell, as in `equalize`.
+        for (index, value) in self.resized_cells(command)? {
+            self.core.set_cell_properties_native(
+                table.section as usize,
+                table.paragraph as usize,
+                table.control as usize,
+                index,
+                &format!(r#"{{"{key}":{value}}}"#),
+            )?;
         }
         Ok(())
     }

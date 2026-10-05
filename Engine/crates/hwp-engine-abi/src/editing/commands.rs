@@ -418,6 +418,7 @@ impl EditSession {
             EditCommand::DeleteObject { object } => {
                 self.validate_object(object, &ObjectProps::default())
             }
+            EditCommand::ResizeTable { .. } => self.validate_resize(command),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
     }
@@ -930,6 +931,10 @@ impl EditSession {
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;
                 Ok(self.kept(object.section))
+            }
+            EditCommand::ResizeTable { table, .. } => {
+                self.resize_table(command)?;
+                Ok(self.kept(table.section))
             }
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }

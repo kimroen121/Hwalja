@@ -94,9 +94,11 @@ struct ObjectSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var props: ObjectProps
     @State private var cell: CellProps
+    @State private var tab: String
 
-    init(state: ObjectSheetState, viewer: Viewer) {
+    init(state: ObjectSheetState, viewer: Viewer, tab: String = "기본") {
         (self.state, self.viewer) = (state, viewer)
+        _tab = State(initialValue: tab)
         _props = State(initialValue: state.props)
         _cell = State(initialValue: state.cell?.props ?? CellProps())
     }
@@ -105,7 +107,7 @@ struct ObjectSheet: View {
 
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성") {
-            TabView {
+            TabView(selection: $tab) {
                 basic.tab("기본")
                 margins.tab("여백/캡션")
                 if kind == .picture { picture.tab("그림") }
@@ -115,7 +117,7 @@ struct ObjectSheet: View {
                 }
             }
             .dialogTabs()
-            .frame(height: 400)
+            .frame(height: 420)
         } confirm: {
             viewer.setObject(state.object, props.changes(from: state.props))
             if let original = state.cell { viewer.setCell(original.target, cell.changes(from: original.props)) }
@@ -131,10 +133,8 @@ struct ObjectSheet: View {
                 GroupTitle("크기")
                 VStack(alignment: .leading, spacing: 8) {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            length("너비", \.width, range: 1...10_000)
-                            length("높이", \.height, range: 1...10_000)
-                        }
+                        GridRow { length("너비", \.width, range: 1...10_000) }
+                        GridRow { length("높이", \.height, range: 1...10_000) }
                     }
                     Toggle("크기 고정", isOn: flag(\.sizeProtect))
                 }
@@ -144,22 +144,16 @@ struct ObjectSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("글자처럼 취급", isOn: flag(\.treatAsChar))
                 Group {
-                    LabeledField("본문과의 배치") {
-                        Picker("본문과의 배치", selection: text(\.textWrap, "Square")) {
-                            Text("어울림").tag("Square")
-                            Text("자리 차지").tag("TopAndBottom")
-                            Text("글 뒤로").tag("BehindText")
-                            Text("글 앞으로").tag("InFrontOfText")
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("본문과의 배치")
+                        IconTiles(selection: text(\.textWrap, "Square"), options: [
+                            ("Square", "어울림"), ("TopAndBottom", "자리 차지"), ("BehindText", "글 뒤로"), ("InFrontOfText", "글 앞으로"),
+                        ]) { Pictogram.wrap($0) }
                     }
-                    Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 8) {
+                    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
                         GridRow {
                             FieldLabel("가로")
                             choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
-                            Text("의")
                             choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
                             Text("기준")
                             SpinField(value: millimeters(\.horzOffset), unit: "mm", range: -1000...1000)
@@ -167,13 +161,12 @@ struct ObjectSheet: View {
                         GridRow {
                             FieldLabel("세로")
                             choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
-                            Text("의")
-                            choice(\.vertAlign, "Top", [("Top", "위"), ("Center", "가운데"), ("Bottom", "아래")])
+                            choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
                             Text("기준")
                             SpinField(value: millimeters(\.vertOffset), unit: "mm", range: -1000...1000)
                         }
                     }
-                    HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Toggle("쪽 영역 안으로 제한", isOn: flag(\.restrictInPage))
                         Toggle("서로 겹침 허용", isOn: flag(\.allowOverlap))
                     }
@@ -182,13 +175,6 @@ struct ObjectSheet: View {
                 .disabled(props.treatAsChar == true)
             }
             .padding(.leading, 12)
-            if kind == .picture || kind == .shape {
-                GroupTitle("개체 회전")
-                LabeledField("회전각") {
-                    SpinField(value: number(\.rotationAngle), unit: "°", range: -360...360)
-                }
-                .padding(.leading, 12)
-            }
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -200,7 +186,7 @@ struct ObjectSheet: View {
             sides(\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom)
             if kind == .picture || kind == .table {
                 GroupTitle("캡션")
-                ChoiceField(text(\.caption, "None"), Captions.all.map { ($0.value, $0.title) }, minWidth: 90)
+                CaptionGrid(selection: text(\.caption, "None"))
                     .padding(.leading, 12)
             }
             Spacer(minLength: 0)
@@ -238,20 +224,14 @@ struct ObjectSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("여러 쪽 지원")
             VStack(alignment: .leading, spacing: 8) {
-                LabeledField("쪽 경계에서") {
-                    ChoiceField(Binding { props.pageBreak ?? 0 } set: { props.pageBreak = $0 },
-                                [(UInt8(1), "나눔"), (2, "셀 단위로 나눔"), (0, "나누지 않음")])
-                }
+                Text("쪽 경계에서")
+                IconTiles(selection: Binding { props.pageBreak ?? 0 } set: { props.pageBreak = $0 },
+                          options: [(UInt8(2), "셀 단위로 나눔"), (1, "나눔"), (0, "나누지 않음")]) { Pictogram.pageBreak($0) }
                 Toggle("제목 줄 자동 반복", isOn: flag(\.repeatHeader))
             }
             .padding(.leading, 12)
             GroupTitle("모든 셀의 안 여백")
             sides(\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom)
-            GroupTitle("테두리")
-            LabeledField("셀 간격") {
-                SpinField(value: millimeters(\.cellSpacing), unit: "mm", range: 0...100)
-            }
-            .padding(.leading, 12)
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -326,12 +306,12 @@ struct ObjectSheet: View {
         SpinField(value: Binding { Units.millimeters(cell[keyPath: key] ?? 0) } set: { cell[keyPath: key] = Units.units($0) },
                   unit: "mm", range: 0...1000)
     }
-    /// 왼쪽·오른쪽·위쪽·아래쪽 lengths, as Hancom's dialogs order them.
+    /// 왼쪽·오른쪽 down the first column and 위쪽·아래쪽 down the second, as the web dialogs.
     private func sides(_ left: WritableKeyPath<ObjectProps, Int32?>, _ right: WritableKeyPath<ObjectProps, Int32?>,
                        _ top: WritableKeyPath<ObjectProps, Int32?>, _ bottom: WritableKeyPath<ObjectProps, Int32?>) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-            GridRow { length("왼쪽", left); length("오른쪽", right) }
-            GridRow { length("위쪽", top); length("아래쪽", bottom) }
+            GridRow { length("왼쪽", left); length("위쪽", top) }
+            GridRow { length("오른쪽", right); length("아래쪽", bottom) }
         }
         .padding(.leading, 12)
     }
@@ -339,6 +319,125 @@ struct ObjectSheet: View {
 
 private extension View {
     func tab(_ title: String) -> some View {
-        frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text(title) }
+        frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text(title) }.tag(title)
+    }
+}
+
+/// Choices shown as pictures in a row, as the web dialogs show 본문과의 배치 and 쪽 경계에서.
+private struct IconTiles<Value: Hashable, Picture: View>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: String)]
+    @ViewBuilder let picture: (Value) -> Picture
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(options, id: \.value) { option in
+                Button { selection = option.value } label: {
+                    picture(option.value).frame(width: 30, height: 30).padding(4)
+                }
+                .buttonStyle(ToolButtonStyle(on: selection == option.value))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                .help(option.title)
+                .accessibilityLabel(option.title)
+            }
+        }
+    }
+}
+
+/// 캡션: the nine places around the object, drawn as the web dialog draws them; the
+/// middle is no caption.
+private struct CaptionGrid: View {
+    @Binding var selection: String
+    private static let places = [["LeftTop", "Top", "RightTop"], ["LeftCenter", "None", "RightCenter"],
+                                 ["LeftBottom", "Bottom", "RightBottom"]]
+    var body: some View {
+        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+            ForEach(Self.places, id: \.self) { row in
+                GridRow {
+                    ForEach(row, id: \.self) { place in
+                        Button { selection = place } label: { Pictogram.caption(place).frame(width: 40, height: 34).padding(3) }
+                            .buttonStyle(ToolButtonStyle(on: selection == place))
+                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                            .help(Captions.all.first { $0.value == place }?.title ?? "")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Small drawings for the picture choices: text as gray lines, the object as a blue box.
+private enum Pictogram {
+    static let ink = Color.accentColor
+    static func wrap(_ value: String) -> some View {
+        Canvas { context, size in
+            let c = context
+            let box = CGRect(x: size.width * 0.3, y: size.height * 0.3, width: size.width * 0.4, height: size.height * 0.4)
+            let lines = stride(from: 3.0, to: size.height, by: 5).map { CGRect(x: 1, y: $0, width: size.width - 2, height: 1.2) }
+            let text = { (rects: [CGRect]) in for r in rects { c.fill(Path(r), with: .color(.secondary)) } }
+            let object = { (opacity: Double) in
+                c.fill(Path(box), with: .color(ink.opacity(opacity)))
+                c.stroke(Path(box), with: .color(ink), lineWidth: 1)
+            }
+            switch value {
+            case "Square":
+                text(lines.flatMap { r in
+                    r.intersects(box) ? [CGRect(x: r.minX, y: r.minY, width: box.minX - 2 - r.minX, height: r.height),
+                                         CGRect(x: box.maxX + 2, y: r.minY, width: r.maxX - box.maxX - 2, height: r.height)] : [r]
+                })
+                object(0.35)
+            case "TopAndBottom":
+                text(lines.filter { !$0.insetBy(dx: 0, dy: -2).intersects(box) })
+                object(0.35)
+            case "BehindText":
+                object(0.2)
+                text(lines)
+            default:
+                text(lines)
+                object(0.6)
+            }
+        }
+    }
+    /// 셀 단위로 나눔 (2), 나눔 (1), 나누지 않음 (0): a table across a page boundary.
+    static func pageBreak(_ value: UInt8) -> some View {
+        Canvas { context, size in
+            let c = context
+            let cut = size.height / 2
+            c.stroke(Path { $0.move(to: CGPoint(x: 0, y: cut)); $0.addLine(to: CGPoint(x: size.width, y: cut)) },
+                     with: .color(.secondary), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            let row = { (y: CGFloat, h: CGFloat) in
+                let r = CGRect(x: 4, y: y, width: size.width - 8, height: h)
+                c.stroke(Path(r), with: .color(ink), lineWidth: 1)
+                c.stroke(Path { $0.move(to: CGPoint(x: r.midX, y: r.minY)); $0.addLine(to: CGPoint(x: r.midX, y: r.maxY)) },
+                         with: .color(ink), lineWidth: 1)
+            }
+            switch value {
+            case 2:
+                row(3, cut - 6); row(cut + 3, cut - 6)
+            case 1:
+                row(6, cut - 6); row(cut, cut - 9)
+            default:
+                row(cut + 3, cut - 6)
+            }
+        }
+    }
+    static func caption(_ place: String) -> some View {
+        Canvas { context, size in
+            let c = context
+            guard place != "None" else {
+                let box = CGRect(x: size.width / 2 - 8, y: size.height / 2 - 8, width: 16, height: 16)
+                c.fill(Path(box), with: .color(ink.opacity(0.35)))
+                c.stroke(Path(box), with: .color(ink), lineWidth: 1)
+                return
+            }
+            let box = CGRect(x: size.width / 2 - 7, y: size.height / 2 - 7, width: 14, height: 14)
+            var label = CGPoint(x: size.width / 2, y: size.height / 2)
+            if place.hasPrefix("Left") { label.x = box.minX - 8 } else if place.hasPrefix("Right") { label.x = box.maxX + 8 }
+            if place == "Top" { label.y = box.minY - 6 } else if place == "Bottom" { label.y = box.maxY + 6 }
+            if place.hasSuffix("Top") && place != "Top" { label.y = box.minY + 4 }
+            if place.hasSuffix("Bottom") && place != "Bottom" { label.y = box.maxY - 4 }
+            c.fill(Path(box), with: .color(ink.opacity(0.3)))
+            c.stroke(Path(box), with: .color(ink), lineWidth: 1)
+            c.draw(Text("#1").font(.system(size: 8)).foregroundStyle(ink), at: label)
+        }
     }
 }

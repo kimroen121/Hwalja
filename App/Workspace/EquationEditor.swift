@@ -165,6 +165,50 @@ private struct Sample: View {
     }
 }
 
+/// A palette's samples, opened from its button. Each column is as wide as its widest
+/// sample, so the cells hug what they show.
+struct PaletteGrid: View {
+    let items: [EquationItem]
+    let renderer: EquationRenderer
+    let symbols: Bool
+    let pick: (EquationItem) -> Void
+
+    var body: some View {
+        let columns = symbols ? 10 : min(4, items.count)
+        Grid(horizontalSpacing: 1, verticalSpacing: 1) {
+            ForEach(Array(stride(from: 0, to: items.count, by: columns)), id: \.self) { start in
+                GridRow {
+                    ForEach(items[start..<min(start + columns, items.count)], id: \.self) { item in
+                        Button { pick(item) } label: {
+                            PaletteFace(item: item, renderer: renderer, symbols: symbols)
+                                .padding(.horizontal, symbols ? 4 : 6)
+                                .padding(.vertical, symbols ? 2 : 4)
+                                .frame(minWidth: symbols ? 22 : 30, minHeight: symbols ? 22 : 30)
+                        }
+                        .buttonStyle(ToolButtonStyle())
+                        .help(item.script)
+                    }
+                }
+            }
+        }
+        .padding(5)
+    }
+}
+
+/// A sample: a symbol's glyph as text, a template rendered.
+private struct PaletteFace: View {
+    let item: EquationItem
+    let renderer: EquationRenderer
+    let symbols: Bool
+    var body: some View {
+        if symbols {
+            Text(item.sample).font(.custom("Times New Roman", size: 16))
+        } else {
+            Sample(script: item.sample, renderer: renderer, zoom: 1.1)
+        }
+    }
+}
+
 /// One palette in the editor's tool row: its first sample, opening a grid of all of them.
 private struct PaletteButton: View {
     /// The button's sample; the first item's when nil.
@@ -178,42 +222,28 @@ private struct PaletteButton: View {
 
     var body: some View {
         Button { open = true } label: {
-            HStack(spacing: 0) {
+            HStack(spacing: 2) {
                 Group {
-                    if let face { Sample(script: face, renderer: renderer) } else { self.face(items[0]) }
+                    if let face { Sample(script: face, renderer: renderer, zoom: 1.1) } else { self.face(items[0]) }
                 }
-                .frame(minWidth: 18, minHeight: 20)
-                Chevron().frame(width: 10)
+                .frame(minWidth: 22, minHeight: 22)
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold))
             }
-            .padding(.leading, 3)
-            .frame(height: 26)
+            .padding(.horizontal, 4)
+            .frame(height: 30)
         }
         .buttonStyle(ToolButtonStyle(on: open))
         .help(face ?? items[0].script)
         .popover(isPresented: $open, arrowEdge: .bottom) {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(symbols ? 24 : 58), spacing: 0),
-                                     count: symbols ? 10 : min(4, items.count)), spacing: 0) {
-                ForEach(items, id: \.self) { item in
-                    Button {
-                        open = false
-                        pick(item)
-                    } label: {
-                        face(item).frame(width: symbols ? 24 : 58, height: symbols ? 24 : 40)
-                    }
-                    .buttonStyle(ToolButtonStyle())
-                    .help(item.script)
-                }
+            PaletteGrid(items: items, renderer: renderer, symbols: symbols) {
+                open = false
+                pick($0)
             }
-            .padding(4)
         }
     }
 
-    @ViewBuilder private func face(_ item: EquationItem) -> some View {
-        if symbols {
-            Text(item.sample).font(.custom("Times New Roman", size: 15))
-        } else {
-            Sample(script: item.sample, renderer: renderer)
-        }
+    private func face(_ item: EquationItem) -> some View {
+        PaletteFace(item: item, renderer: renderer, symbols: symbols)
     }
 }
 
@@ -252,14 +282,14 @@ struct EquationEditor: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 0) {
+            HStack(spacing: 1) {
                 ForEach(EquationPalette.templates, id: \.face) { palette in
                     PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: false) {
                         script.insert($0.script)
                     }
                 }
             }
-            HStack(spacing: 0) {
+            HStack(spacing: 1) {
                 ForEach(EquationPalette.symbols, id: \.self) { items in
                     PaletteButton(items: items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
@@ -281,14 +311,14 @@ struct EquationEditor: View {
             ScrollView([.horizontal, .vertical]) {
                 EquationGlyph(display: preview, zoom: 1.5)
                     .padding(14)
-                    .frame(minWidth: 588, minHeight: 112, alignment: .center)
+                    .frame(minWidth: 648, minHeight: 112, alignment: .center)
             }
             .frame(height: 140)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
             .environment(\.colorScheme, .light)
         }
-        .frame(width: 620)
+        .frame(width: 680)
     }
 
     /// 0x00bbggrr and `#rrggbb`.

@@ -92,6 +92,9 @@ final class EditSession: @unchecked Sendable {
     func objectAt(revision: UInt64, page: UInt32, x: Double, y: Double) async throws -> PlacedObject? {
         try await decode(send(.objectAt(revision: revision, page: page, x: x, y: y)))
     }
+    func tableLines(revision: UInt64, page: UInt32) async throws -> [TableLine] {
+        try await decode(send(.tableLines(revision: revision, page: page)))
+    }
     /// Where `object` is laid out, looking from `page` outward.
     func place(revision: UInt64, _ object: ObjectRef, page: UInt32) async throws -> PlacedObject {
         try await decode(send(.place(revision: revision, object, page: page)))

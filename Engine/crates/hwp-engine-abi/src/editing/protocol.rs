@@ -132,6 +132,15 @@ pub enum EditCommand {
     DeleteObject {
         object: ObjectRef,
     },
+    /// Moves a border of a table: column `line`'s right border (or, with `row`, row
+    /// `line`'s bottom border) so the column is `size` wide (or the row `size` high).
+    /// An inner column border keeps the table's width; a row border grows the table.
+    ResizeTable {
+        table: ObjectRef,
+        row: bool,
+        line: u16,
+        size: u32,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,
@@ -202,6 +211,19 @@ pub struct ObjectRef {
     pub section: u32,
     pub paragraph: u32,
     pub control: u32,
+}
+/// A stretch of a table border on a page that can be dragged: the right border of
+/// column `line` (or the bottom of row `line`) at `at`, running `from`–`to` the other
+/// way, the column (row) starting at `start`. Page pixels.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TableLine {
+    pub table: ObjectRef,
+    pub row: bool,
+    pub line: u16,
+    pub at: f64,
+    pub start: f64,
+    pub from: f64,
+    pub to: f64,
 }
 /// An object as laid out on a page.
 #[derive(Debug, Clone, PartialEq, Serialize)]

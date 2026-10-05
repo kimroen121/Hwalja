@@ -183,7 +183,9 @@ pub(super) fn check(
                 position.target.paragraph,
             )
         }
-        EditCommand::SetObject { object, .. } | EditCommand::DeleteObject { object } => {
+        EditCommand::SetObject { object, .. }
+        | EditCommand::DeleteObject { object }
+        | EditCommand::ResizeTable { table: object, .. } => {
             return check_host(before, after, object.section, object.paragraph)
         }
         EditCommand::SetCell { cell, .. } => {

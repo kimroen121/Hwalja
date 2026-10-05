@@ -58,6 +58,8 @@ enum EditCommand: Encodable, Sendable {
     /// Changes the properties set in `props` of the cell holding `target`.
     case setCell(EditTarget, CellProps)
     case deleteObject(ObjectRef)
+    /// Moves a table border: column `line` becomes `size` wide (or, with `row`, row `line` that high).
+    case resizeTable(ObjectRef, row: Bool, line: UInt16, size: UInt32)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
     /// 셀 합치기, 셀 나누기, and 셀 높이를 같게 or 셀 너비를 같게, over the cells the
@@ -74,7 +76,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -177,6 +179,12 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .resizeTable(table, row, line, size):
+            try c.encode("resizeTable", forKey: .kind)
+            try c.encode(table, forKey: .table)
+            try c.encode(row, forKey: .row)
+            try c.encode(line, forKey: .line)
+            try c.encode(size, forKey: .size)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
@@ -199,6 +207,18 @@ struct ObjectRef: Codable, Hashable, Sendable {
     var section: UInt32
     var paragraph: UInt32
     var control: UInt32
+}
+
+/// A table border on a page that can be dragged: the right border of column `line` (or
+/// the bottom of row `line`) at `at`, running `from`–`to`, the column (row) starting at `start`.
+struct TableLine: Decodable, Hashable, Sendable {
+    var table: ObjectRef
+    var row: Bool
+    var line: UInt16
+    var at: Double
+    var start: Double
+    var from: Double
+    var to: Double
 }
 
 /// An object as laid out on a page.
@@ -496,6 +516,7 @@ enum EngineRequest: Encodable, Sendable {
     case pageSetup(section: UInt32)
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case place(revision: UInt64, ObjectRef, page: UInt32)
+    case tableLines(revision: UInt64, page: UInt32)
     case objectProps(ObjectRef)
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
@@ -554,6 +575,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(page, forKey: .page)
             try c.encode(x, forKey: .x)
             try c.encode(y, forKey: .y)
+        case let .tableLines(revision, page):
+            try c.encode("tableLines", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(page, forKey: .page)
         case let .place(revision, object, page):
             try c.encode("place", forKey: .op)
             try c.encode(revision, forKey: .revision)

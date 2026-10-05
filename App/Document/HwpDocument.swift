@@ -346,6 +346,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func objectAt(page: Int, x: Double, y: Double) async throws -> PlacedObject? {
         try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
     }
+    /// The table borders on a page that can be dragged.
+    func tableLines(page: Int) async throws -> [TableLine] {
+        try await session.tableLines(revision: revision, page: UInt32(page))
+    }
     func objectProps(_ object: ObjectRef) async throws -> ObjectProps {
         try await session.objectProps(object)
     }

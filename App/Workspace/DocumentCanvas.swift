@@ -221,8 +221,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// next drag on a page draws it. Esc stops.
     var drawingShape: String? {
         didSet {
-            window?.invalidateCursorRects(for: self)
             if drawingShape == nil { setRubber(nil) }
+            updateCursor()
         }
     }
     /// The drag drawing a shape, in view points.
@@ -313,7 +313,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         if let rubber {
             let band = NSBezierPath()
-            if drawingShape == "line" {
+            if drawingShape == "line" || { if case .border = drag { true } else { false } }() {
                 band.move(to: rubber.start)
                 band.line(to: rubber.end)
             } else if drawingShape == "ellipse" {
@@ -358,34 +358,38 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
-    override func resetCursorRects() {
-        pageFrames.forEach { addCursorRect($0, cursor: drawingShape == nil ? .iBeam : .crosshair) }
-        guard drawingShape == nil, let rect = objectRect, resizable else { return }
-        addCursorRect(rect, cursor: .arrow)
-        let reach = 5 / (enclosingScrollView?.magnification ?? 1)
-        for x in -1...1 {
-            for y in -1...1 where x != 0 || y != 0 {
-                let center = NSPoint(x: rect.midX + CGFloat(x) * rect.width / 2, y: rect.midY + CGFloat(y) * rect.height / 2)
-                addCursorRect(NSRect(x: center.x - reach, y: center.y - reach, width: reach * 2, height: reach * 2),
-                              cursor: Self.resizeCursor(x, y))
-            }
-        }
+    // MARK: Cursor
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
     }
-    private static func resizeCursor(_ x: Int, _ y: Int) -> NSCursor {
-        if #available(macOS 15, *) {
-            let position: NSCursor.FrameResizePosition = switch (x, y) {
-            case (-1, -1): .topLeft
-            case (1, -1): .topRight
-            case (-1, 1): .bottomLeft
-            case (1, 1): .bottomRight
-            case (_, -1): .top
-            case (_, 1): .bottom
-            case (-1, _): .left
-            default: .right
-            }
-            return .frameResize(position: position, directions: .all)
+    override func cursorUpdate(with event: NSEvent) { updateCursor(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { updateCursor(at: convert(event.locationInWindow, from: nil)) }
+    /// Points at what a press would do here: draw, size or move the selected object, move a
+    /// table border, or place the caret.
+    private func updateCursor(at point: NSPoint? = nil) {
+        guard drag == nil, let point = point ?? window.map({ convert($0.mouseLocationOutsideOfEventStream, from: nil) })
+        else { return }
+        let cursor: NSCursor
+        if drawingShape != nil {
+            cursor = .crosshair
+        } else if let rect = objectRect, let handle = handle(at: point, of: rect) {
+            cursor = Self.resizeCursor(handle.x, handle.y)
+        } else if let rect = objectRect, movable, rect.contains(point) {
+            cursor = .arrow
+        } else if let line = border(at: point) {
+            cursor = Self.borderCursor(row: line.line.row)
+        } else {
+            cursor = pageFrames.contains { $0.contains(point) } ? .iBeam : .arrow
         }
-        return y == 0 ? .resizeLeftRight : x == 0 ? .resizeUpDown : .crosshair
+        cursor.set()
+    }
+    private static func borderCursor(row: Bool) -> NSCursor {
+        if #available(macOS 15, *) { return row ? .rowResize : .columnResize }
+        return row ? .resizeUpDown : .resizeLeftRight
     }
 
     // MARK: Presentation
@@ -411,7 +415,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             shown.changedPages.forEach { index in frame(ofPage: index).map { setNeedsDisplay($0) } }
         }
         (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
-        if oldObject != objectRect { window?.invalidateCursorRects(for: self) }
+        if shown.reflowed || !shown.changedPages.isEmpty { tableLines = [:] }
+        if oldObject != objectRect { updateCursor() }
         placeCaret()
         if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
         onPresent?()
@@ -475,19 +480,28 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) { return rightMouseDown(with: event) }
-        if drawingShape != nil {
-            let point = convert(event.locationInWindow, from: nil)
-            return setRubber((point, point))
-        }
         let point = convert(event.locationInWindow, from: nil)
-        if let rect = objectRect, let handle = handle(at: point, of: rect) {
-            resizing = (handle, rect)
-            return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
-        }
+        if drawingShape != nil { return setRubber((point, point)) }
         guard let model, let hit = enginePoint(point) else { return }
         window?.makeFirstResponder(self)
         commitComposition()
-        click(model, hit, clicks: event.clickCount, extend: event.modifierFlags.contains(.shift))
+        let clicks = event.clickCount, extend = event.modifierFlags.contains(.shift)
+        if clicks == 1, !extend {
+            if let rect = objectRect, let handle = handle(at: point, of: rect) {
+                drag = .resize(handle: handle, from: rect)
+                return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+            }
+            if let rect = objectRect, movable, rect.contains(point) {
+                // Moves once dragged; a plain click still clicks (into a 글상자's text).
+                drag = .move(start: point, from: rect, moved: false, click: hit)
+                return
+            }
+            if let found = border(at: point) {
+                drag = .border(found.line, page: found.page, extent: found.extent, start: point, moved: false, click: hit)
+                return
+            }
+        }
+        click(model, hit, clicks: clicks, extend: extend, pressedAt: point)
     }
 
     /// A right click selects what is under it, unless it is inside the selection, then
@@ -507,7 +521,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
-    private func click(_ model: HwpDocument, _ hit: (page: Int, point: CGPoint), clicks: Int, extend: Bool) {
+    private func click(_ model: HwpDocument, _ hit: (page: Int, point: CGPoint), clicks: Int, extend: Bool,
+                       pressedAt point: NSPoint? = nil) {
         model.select { [weak self] model in
             let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
             // A click on an object selects it, except inside a 글상자, away from its edge,
@@ -516,6 +531,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                !(Self.inside(object.rect, hit.point) && position.map { Self.holds(object.object, $0) } == true) {
                 model.object = object
                 if clicks == 2 { self?.onOpenObject?(object) }
+                // Still pressed: the drag that follows moves it.
+                if clicks == 1, let self, let point, drag == nil, NSEvent.pressedMouseButtons & 1 == 1,
+                   [.picture, .shape, .equation].contains(object.object.kind), let rect = viewRect(object.rect) {
+                    drag = .move(start: point, from: rect, moved: false, click: nil)
+                }
                 return nil
             }
             guard let position else { throw EditError.unsupportedTarget }
@@ -547,13 +567,26 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             && point.y > rect.y + edge && point.y < rect.y + rect.height - edge
     }
 
-    // MARK: Resizing
+    // MARK: Dragging objects and table borders
 
-    /// The handle being dragged (-1, 0 or 1 across and down) and the object's frame before.
-    private var resizing: (handle: (x: Int, y: Int), from: NSRect)?
+    /// A press on the selected object's handle (-1, 0 or 1 across and down), on the
+    /// object itself, or on a table border, until the mouse goes up.
+    private enum Drag {
+        case resize(handle: (x: Int, y: Int), from: NSRect)
+        /// `click` is where to click if it never moves.
+        case move(start: NSPoint, from: NSRect, moved: Bool, click: (page: Int, point: CGPoint)?)
+        /// `extent` is the table's span along the border, in view points.
+        case border(TableLine, page: Int, extent: ClosedRange<CGFloat>, start: NSPoint, moved: Bool,
+                    click: (page: Int, point: CGPoint))
+    }
+    private var drag: Drag?
+    /// Table borders by page, loaded when the pointer first comes near; cleared on each change.
+    private var tableLines: [Int: [TableLine]] = [:]
+    private var loadingLines: Set<Int> = []
 
     /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
     private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) }
+    private var movable: Bool { [.picture, .shape, .equation].contains(model?.object?.object.kind) }
 
     private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
         guard resizable else { return nil }
@@ -566,9 +599,72 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         return nil
     }
+    private static func resizeCursor(_ x: Int, _ y: Int) -> NSCursor {
+        if #available(macOS 15, *) {
+            let position: NSCursor.FrameResizePosition = switch (x, y) {
+            case (-1, -1): .topLeft
+            case (1, -1): .topRight
+            case (-1, 1): .bottomLeft
+            case (1, 1): .bottomRight
+            case (_, -1): .top
+            case (_, 1): .bottom
+            case (-1, _): .left
+            default: .right
+            }
+            return .frameResize(position: position, directions: .all)
+        }
+        return y == 0 ? .resizeLeftRight : x == 0 ? .resizeUpDown : .crosshair
+    }
+
+    /// The table border under a point, with the table's span along it. Loads the page's
+    /// borders the first time and answers nil until they arrive.
+    private func border(at point: NSPoint) -> (line: TableLine, page: Int, extent: ClosedRange<CGFloat>)? {
+        guard !pageFrames.isEmpty else { return nil }
+        let page = page(near: point), frame = pageFrames[page]
+        guard frame.contains(point) else { return nil }
+        guard let lines = tableLines[page] else {
+            loadLines(page)
+            return nil
+        }
+        let scale = PageGeometry.pointsPerPixel
+        let reach = 3 / (enclosingScrollView?.magnification ?? 1)
+        let (x, y) = (point.x - frame.minX, point.y - frame.minY)
+        guard let line = lines.first(where: { line in
+            let (across, along) = line.row ? (y, x) : (x, y)
+            return abs(across - line.at * scale) <= reach && along >= line.from * scale && along <= line.to * scale
+        }) else { return nil }
+        let same = lines.filter { $0.table == line.table && $0.row == line.row && $0.line == line.line }
+        let origin = line.row ? frame.minX : frame.minY
+        let extent = origin + same.map(\.from).min()! * scale...origin + same.map(\.to).max()! * scale
+        return (line, page, extent)
+    }
+    private func loadLines(_ page: Int) {
+        guard let model, !loadingLines.contains(page) else { return }
+        loadingLines.insert(page)
+        Task { [weak self] in
+            let lines = (try? await model.tableLines(page: page)) ?? []
+            guard let self else { return }
+            loadingLines.remove(page)
+            tableLines[page] = lines
+            updateCursor()
+        }
+    }
+    /// The guide drawn while a border is dragged: the border at `at` (page pixels).
+    private func guide(_ line: TableLine, page: Int, at: Double, extent: ClosedRange<CGFloat>) -> (start: NSPoint, end: NSPoint) {
+        let frame = pageFrames[page], value = at * PageGeometry.pointsPerPixel
+        return line.row
+            ? (NSPoint(x: extent.lowerBound, y: frame.minY + value), NSPoint(x: extent.upperBound, y: frame.minY + value))
+            : (NSPoint(x: frame.minX + value, y: extent.lowerBound), NSPoint(x: frame.minX + value, y: extent.upperBound))
+    }
+    /// Where a dragged border sits for a pointer: page pixels, at least 2 mm into its column (row).
+    private func borderPosition(_ line: TableLine, page: Int, _ point: NSPoint) -> Double {
+        let frame = pageFrames[page]
+        let value = (line.row ? point.y - frame.minY : point.x - frame.minX) / PageGeometry.pointsPerPixel
+        return max(value, line.start + 8)
+    }
+
     /// The frame a handle drag gives: the opposite side stays; Shift on a corner keeps the ratio.
-    private func resized(to point: NSPoint, keepRatio: Bool) -> NSRect? {
-        guard let (handle, from) = resizing else { return nil }
+    private func resized(_ handle: (x: Int, y: Int), from: NSRect, to point: NSPoint, keepRatio: Bool) -> NSRect {
         var (minX, maxX, minY, maxY) = (from.minX, from.maxX, from.minY, from.maxY)
         if handle.x < 0 { minX = min(point.x, maxX - 1) } else if handle.x > 0 { maxX = max(point.x, minX + 1) }
         if handle.y < 0 { minY = min(point.y, maxY - 1) } else if handle.y > 0 { maxY = max(point.y, minY + 1) }
@@ -581,23 +677,37 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         return rect
     }
-    /// Sets the new size; a floating object anchored left or top also moves so its
-    /// opposite side stays put.
-    private func commitResize(_ rect: NSRect) {
-        guard let (_, from) = resizing, let model, let placed = model.object, rect != from else { return }
+    /// Gives the selected object the frame `rect` (view points) it was dragged or sized to.
+    /// A floating object placed from the left (top) moves by its offset; one placed
+    /// otherwise, or a 글자처럼 취급 one, is placed on the paper where it was dropped.
+    private func place(_ rect: NSRect, from: NSRect) {
+        guard let model, let placed = model.object, rect != from,
+              let frame = frame(ofPage: Int(placed.rect.page)) else { return }
         // View points are 1/72 inch; HWPUNIT is 1/7200 inch.
         let hwp = { (v: CGFloat) in Int32((v * 100).rounded()) }
         let undoManager = undoManager
         Task {
             guard let props = try? await model.objectProps(placed.object) else { return NSSound.beep() }
             var change = ObjectProps()
-            (change.width, change.height) = (UInt32(max(1, hwp(rect.width))), UInt32(max(1, hwp(rect.height))))
-            if props.treatAsChar != true {
-                if rect.minX != from.minX, (props.horzAlign ?? "Left") == "Left" {
+            if rect.size != from.size {
+                (change.width, change.height) = (UInt32(max(1, hwp(rect.width))), UInt32(max(1, hwp(rect.height))))
+            }
+            let inline = props.treatAsChar == true
+            if inline, rect.origin != from.origin {
+                (change.treatAsChar, change.textWrap) = (false, "TopAndBottom")
+            }
+            if rect.minX != from.minX {
+                if !inline, (props.horzAlign ?? "Left") == "Left" {
                     change.horzOffset = (props.horzOffset ?? 0) + hwp(rect.minX - from.minX)
+                } else {
+                    (change.horzRelTo, change.horzAlign, change.horzOffset) = ("Paper", "Left", hwp(rect.minX - frame.minX))
                 }
-                if rect.minY != from.minY, (props.vertAlign ?? "Top") == "Top" {
+            }
+            if rect.minY != from.minY {
+                if !inline, (props.vertAlign ?? "Top") == "Top" {
                     change.vertOffset = (props.vertOffset ?? 0) + hwp(rect.minY - from.minY)
+                } else {
+                    (change.vertRelTo, change.vertAlign, change.vertOffset) = ("Paper", "Top", hwp(rect.minY - frame.minY))
                 }
             }
             model.edit(undoManager) { _ in .setObject(placed.object, change) }
@@ -605,10 +715,25 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseUp(with event: NSEvent) {
-        if resizing != nil {
-            defer { (resizing, rubber) = (nil, nil); needsDisplay = true }
-            if let rect = resized(to: convert(event.locationInWindow, from: nil), keepRatio: event.modifierFlags.contains(.shift)) {
-                commitResize(rect)
+        let point = convert(event.locationInWindow, from: nil)
+        if let current = drag {
+            drag = nil
+            setRubber(nil)
+            defer { updateCursor(at: point) }
+            switch current {
+            case let .resize(handle, from):
+                place(resized(handle, from: from, to: point, keepRatio: event.modifierFlags.contains(.shift)), from: from)
+            case let .move(start, from, moved, click):
+                if moved {
+                    place(from.offsetBy(dx: point.x - start.x, dy: point.y - start.y), from: from)
+                } else if let click, let model {
+                    self.click(model, click, clicks: 1, extend: false)
+                }
+            case let .border(line, page, _, _, moved, click):
+                guard let model else { return }
+                guard moved else { return self.click(model, click, clicks: 1, extend: false) }
+                let size = (borderPosition(line, page: page, point) - line.start) * 75
+                model.edit(undoManager) { _ in .resizeTable(line.table, row: line.row, line: line.line, size: UInt32(size.rounded())) }
             }
             return
         }
@@ -626,18 +751,29 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseDragged(with event: NSEvent) {
-        if resizing != nil {
-            let point = convert(event.locationInWindow, from: nil)
-            if let rect = resized(to: point, keepRatio: event.modifierFlags.contains(.shift)) {
-                setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
-            }
-            return
+        let point = convert(event.locationInWindow, from: nil)
+        switch drag {
+        case let .resize(handle, from):
+            let rect = resized(handle, from: from, to: point, keepRatio: event.modifierFlags.contains(.shift))
+            return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+        case let .move(start, from, moved, click):
+            guard moved || hypot(point.x - start.x, point.y - start.y) > 3 else { return }
+            drag = .move(start: start, from: from, moved: true, click: click)
+            NSCursor.closedHand.set()
+            let rect = from.offsetBy(dx: point.x - start.x, dy: point.y - start.y)
+            return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+        case let .border(line, page, extent, start, moved, click):
+            guard moved || hypot(point.x - start.x, point.y - start.y) > 2 else { return }
+            drag = .border(line, page: page, extent: extent, start: start, moved: true, click: click)
+            return setRubber(guide(line, page: page, at: borderPosition(line, page: page, point), extent: extent))
+        case nil:
+            break
         }
         if let band = rubber {
-            return setRubber((band.start, convert(event.locationInWindow, from: nil)))
+            return setRubber((band.start, point))
         }
         autoscroll(with: event)
-        pendingDrag = convert(event.locationInWindow, from: nil)
+        pendingDrag = point
         extendToDrag()
     }
     /// Extends the selection to the latest drag point, one hit test at a time, so a fast
@@ -651,7 +787,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 self?.hitTesting = false
                 self?.extendToDrag()
             }
-            guard let anchor = model.selection?.anchor else { return nil }
+            // A press that selected an object drags the object, never the text.
+            guard model.object == nil, let anchor = model.selection?.anchor else { return nil }
             let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
             return EditSelection(anchor: anchor, focus: position)
         }

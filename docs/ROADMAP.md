@@ -80,7 +80,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 문서 창: 눈금자 | 눈금자 보기 | | |
 | | 메모: 모든 메모 표시, 메모 안내선 표시 | | | 2차 |
 | 입력 | 도형(가로 글상자, 직사각형, 타원, 직선, 호), 글상자 | 입력 › 도형 ▸·글상자, 도구 상자 도형 ▾. 쪽 위에서 끌어 그리기(클릭만 하면 30×20 mm), Esc로 취소. 그린 개체는 선택되고 개체 속성·지우기 가능 | InsertShape (`create_shape_control_native`), 글상자 글자는 셀과 같은 경로(셀 0) | 완료(글상자 안 글자 입력 포함. 선/채우기 속성 제외) |
-| | 그림 | 모든 그림 파일(PNG·JPEG 외는 변환), 붙이기, 글자처럼 취급으로 본문 폭 안에 삽입. 클릭으로 선택, 핸들을 끌어 크기 조절(Shift: 비율 유지), Delete로 지우기, 그림 ▾: 색조 조정·밝기·대비·원래 그림으로 | `insert_picture_native`, SetObject, DeleteObject | 완료(끌어 놓기 제외) |
+| | 그림 | 모든 그림 파일(PNG·JPEG 외는 변환), 붙이기, 글자처럼 취급으로 본문 폭 안에 삽입. 클릭으로 선택, 핸들을 끌어 크기 조절(Shift: 비율 유지), 끌어서 옮기기(글자처럼 취급이면 종이 기준 자리 차지로 바뀜), Delete로 지우기, 그림 ▾: 색조 조정·밝기·대비·원래 그림으로 | `insert_picture_native`, SetObject, DeleteObject | 완료(끌어 놓기 제외) |
 | | 표 | 표… (줄·칸 개수) | `create_table_native` | 완료(본문) |
 | | 차트, 웹 동영상 | | `set_chart_data_native` | 2차 |
 | | 수식 | 수식 편집기: 첨자·장식 기호·분수·근호·합·적분·극한·괄호·경우·세로 쌓기·행렬 틀, 그리스 문자·기호 7묶음, 글자 크기·색, 페이지와 같은 렌더러로 그리는 실시간 미리 보기. 더블클릭으로 고치기 | `insert_equation_native`, `render_equation_preview_native` | 완료(여러 줄 수식 미리 보기 제외) |
@@ -102,7 +102,8 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 쪽 나누기 (Ctrl+Return), 단 나누기 (Ctrl+Shift+Return) | 쪽 나누기 (⌘↩), 단 나누기 (⇧⌘↩) | `insert_page_break_native`, `insert_column_break_native` | 완료(본문) |
 | | 단: 하나·둘·셋·왼쪽·오른쪽, 다단 설정 나누기 | | `set_column_def_native` | |
 | 표 | 표 만들기 | 표 만들기… | `create_table_native` | 완료 |
-| | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | 표/셀 속성…: 쪽 경계에서 나눔, 제목 줄 자동 반복, 모든 셀의 안 여백, 셀 간격, 셀 크기·안 여백·세로 정렬·제목 셀·셀 보호 | SetObject, SetCell | 완료(테두리/배경 제외) |
+| | 표 테두리 끌기 | 칸 오른쪽·줄 아래 테두리를 끌어 너비·높이 조절(안쪽 테두리는 표 너비 유지) | ResizeTable (`set_cell_properties_native`) | 완료(바깥 왼쪽·위 테두리, 셀 안의 표 제외) |
+| | 표/셀 속성, 셀 테두리/배경(각 셀마다, 하나의 셀처럼) | 표/셀 속성…: 쪽 경계에서 나눔, 제목 줄 자동 반복, 모든 셀의 안 여백, 셀 크기·안 여백·세로 정렬·제목 셀·셀 보호 | SetObject, SetCell | 완료(테두리/배경 제외) |
 | | 줄/칸 추가하기: 위·아래 줄, 왼쪽·오른쪽 칸 | 같음 | `insert_table_row/column_native` | 완료 |
 | | 줄/칸 지우기 | 같음 | `delete_table_row/column_native` | 완료 |
 | | 셀 나누기, 셀 합치기 | 같음. 셀 블록(끌기·Shift-클릭으로 두 셀 사이)에서 M·S 키도 | `merge_table_cells_native`, `split_table_cell_into_native`, `split_table_cells_in_range_native` | 완료 |

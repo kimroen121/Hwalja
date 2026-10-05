@@ -173,6 +173,89 @@ struct DocumentTests {
         #expect(document.object == nil)
     }
 
+    /// Dragging with the mouse sizes and moves the selected shape, and moves a table border.
+    @Test func objectsAndTableBordersAreDragged() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 900, height: 900))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        canvas.setZoom(1)
+        canvas.tile()
+        let editor = canvas.editor
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.insertShape("rectangle", page: 0, from: CGPoint(x: 200, y: 300), to: CGPoint(x: 320, y: 380), undo)
+        await document.settle()
+        let page = try #require(editor.frame(ofPage: 0))
+        func drag(_ from: NSPoint, _ to: NSPoint) async {
+            let event = { (type: NSEvent.EventType, point: NSPoint) in
+                NSEvent.mouseEvent(with: type, location: editor.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            editor.mouseDown(with: event(.leftMouseDown, from))
+            editor.mouseDragged(with: event(.leftMouseDragged, NSPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)))
+            editor.mouseDragged(with: event(.leftMouseDragged, to))
+            editor.mouseUp(with: event(.leftMouseUp, to))
+            for _ in 0..<20 {
+                try? await Task.sleep(for: .milliseconds(20))
+                await document.settle()
+            }
+        }
+        var rect = PageGeometry.viewRect(try #require(document.object).rect, in: page)
+        await drag(NSPoint(x: rect.maxX, y: rect.maxY), NSPoint(x: rect.maxX + 30, y: rect.maxY + 15))
+        let sized = PageGeometry.viewRect(try #require(document.object).rect, in: page)
+        #expect(abs(sized.width - (rect.width + 30)) < 2 && abs(sized.height - (rect.height + 15)) < 2)
+        #expect(abs(sized.minX - rect.minX) < 2)
+        rect = sized
+        await drag(NSPoint(x: rect.midX, y: rect.midY), NSPoint(x: rect.midX + 40, y: rect.midY + 20))
+        let moved = PageGeometry.viewRect(try #require(document.object).rect, in: page)
+        #expect(abs(moved.minX - (rect.minX + 40)) < 2 && abs(moved.minY - (rect.minY + 20)) < 2)
+        #expect(abs(moved.width - rect.width) < 2)
+
+        document.deselectObject()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(undo) { $0.map { .insertTable($0.focus, rows: 2, columns: 3) } }
+        await document.settle()
+        let line = try #require(try await document.tableLines(page: 0).first { !$0.row && $0.line == 0 })
+        let y = page.minY + (line.from + line.to) / 2 * PageGeometry.pointsPerPixel
+        let x = page.minX + line.at * PageGeometry.pointsPerPixel
+        _ = editor.frame(ofPage: 0)
+        editor.mouseMoved(with: NSEvent.mouseEvent(with: .mouseMoved, location: editor.convert(NSPoint(x: x, y: y), to: nil),
+                                                   modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                   context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!)
+        try await Task.sleep(for: .milliseconds(100))
+        await drag(NSPoint(x: x, y: y), NSPoint(x: x + 30, y: y))
+        let after = try #require(try await document.tableLines(page: 0).first { !$0.row && $0.line == 0 && $0.table == line.table })
+        #expect(abs((after.at - line.at) * PageGeometry.pointsPerPixel - 30) < 2)
+
+        // A picture set in the text: clicked, sized, then dragged off its line.
+        document.deselectObject()
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
+        let end = try await document.paragraph(body).text.unicodeScalars.count
+        document.edit(undo) { _ in .insertPicture(EditPosition(target: self.body, scalar: UInt32(end)), data: png, width: 7_500,
+                                                   height: 7_500, naturalWidth: 1, naturalHeight: 1, extension: "png",
+                                                   description: "p.png") }
+        await document.settle()
+        var picture: PlacedObject?
+        for y in stride(from: 0.0, to: 1000, by: 5) where picture == nil {
+            for x in stride(from: 0.0, to: 800, by: 10) where picture == nil {
+                if let found = try await document.objectAt(page: 0, x: x, y: y), found.object.kind == .picture { picture = found }
+            }
+        }
+        let inline = try #require(picture)
+        rect = PageGeometry.viewRect(inline.rect, in: page)
+        await drag(NSPoint(x: rect.midX, y: rect.midY), NSPoint(x: rect.midX, y: rect.midY))
+        #expect(document.object?.object == inline.object)
+        await drag(NSPoint(x: rect.maxX, y: rect.maxY), NSPoint(x: rect.maxX + 20, y: rect.maxY + 20))
+        let grown = PageGeometry.viewRect(try #require(document.object).rect, in: page)
+        #expect(abs(grown.width - (rect.width + 20)) < 2)
+        await drag(NSPoint(x: grown.midX, y: grown.midY), NSPoint(x: grown.midX + 100, y: grown.midY + 120))
+        let dropped = PageGeometry.viewRect(try #require(document.object).rect, in: page)
+        #expect(abs(dropped.minX - (grown.minX + 100)) < 2 && abs(dropped.minY - (grown.minY + 120)) < 2)
+        #expect(try await document.objectProps(inline.object).treatAsChar == false)
+    }
+
     /// Text typed after a click inside a 글상자 lands in the box; table commands stay off.
     @Test func textBoxesTakeTypedText() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
@@ -573,10 +656,20 @@ struct DocumentTests {
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),
+            ("symbols", AnyView(PaletteGrid(items: EquationPalette.symbols[4], renderer: EquationRenderer(document: document),
+                                            symbols: true) { _ in })),
+            ("templates", AnyView(PaletteGrid(items: EquationPalette.templates[1].items,
+                                              renderer: EquationRenderer(document: document), symbols: false) { _ in })),
             ("object", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                                                                    props: ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
                                                                                       textWrap: "Square", caption: "None")),
                                            viewer: viewer))),
+            ("margins", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
+                                                                    props: ObjectProps(caption: "Bottom")),
+                                            viewer: viewer, tab: "여백/캡션"))),
+            ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
+                                                                     props: ObjectProps(pageBreak: 2, repeatHeader: true)),
+                                             viewer: viewer, tab: "표"))),
         ]
         for (name, view) in views {
             let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))

@@ -1660,6 +1660,58 @@ fn cell_blocks_merge_split_and_equalize() {
 }
 
 #[test]
+fn table_borders_are_found_and_dragged() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 2,
+            columns: 3,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let lines = s.table_lines(s.revision, 0).unwrap();
+        let column = lines.iter().find(|l| !l.row && l.line == 0).unwrap();
+        assert!(column.at > column.start && lines.iter().any(|l| l.row && l.line == 1));
+        let table = column.table.clone();
+        let sizes = |s: &EditSession| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            (t.get_column_widths(), t.get_row_heights())
+        };
+        let (widths, heights) = sizes(&s);
+        let wider = EditCommand::ResizeTable {
+            table: table.clone(),
+            row: false,
+            line: 0,
+            size: widths[0] + 2_000,
+        };
+        run(&mut s, wider).unwrap();
+        let (w, _) = sizes(&s);
+        // An inner border keeps the table's width.
+        assert_eq!(
+            (w[0], w[1], w[2]),
+            (widths[0] + 2_000, widths[1] - 2_000, widths[2])
+        );
+        let taller = EditCommand::ResizeTable {
+            table: table.clone(),
+            row: true,
+            line: 1,
+            size: heights[1] + 3_000,
+        };
+        run(&mut s, taller).unwrap();
+        assert_eq!(sizes(&s).1[1], heights[1] + 3_000);
+        let crush = EditCommand::ResizeTable {
+            table,
+            row: false,
+            line: 0,
+            size: widths[0] + widths[1],
+        };
+        assert_eq!(run(&mut s, crush).unwrap_err(), EditError::InvalidInput);
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(sizes(&s).0[0], widths[0] + 2_000);
+    }
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {
