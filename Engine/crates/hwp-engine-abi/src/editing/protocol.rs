@@ -280,8 +280,6 @@ pub struct ParagraphInfo {
     /// Paragraphs in the same container (body or cell).
     pub count: u32,
     pub text: String,
-    pub editable: bool,
-    pub reason: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum EditError {

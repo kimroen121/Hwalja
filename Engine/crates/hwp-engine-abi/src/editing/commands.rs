@@ -220,18 +220,10 @@ pub(super) fn boundary(text: &str, scalar: u32) -> Result<(), EditError> {
 }
 impl EditSession {
     pub fn paragraph(&self, target: &EditTarget) -> Result<ParagraphInfo, EditError> {
-        let p = get(self.core.document(), target)?;
-        let allowed = editable(p);
         Ok(ParagraphInfo {
             target: target.clone(),
             count: paragraphs(self.core.document(), target)?.len() as u32,
-            text: p.text.clone(),
-            editable: allowed,
-            reason: if allowed {
-                String::new()
-            } else {
-                "필드가 포함된 문단은 아직 편집할 수 없습니다.".into()
-            },
+            text: get(self.core.document(), target)?.text.clone(),
         })
     }
     fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {

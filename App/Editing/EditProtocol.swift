@@ -141,7 +141,6 @@ struct EditReply: Decodable, Sendable {
     var canUndo: Bool
     var canRedo: Bool
     var dirty: Bool
-    var locked: Bool
 }
 
 /// A format whose fields are all optional: as a change, unset fields stay as they are.
@@ -261,8 +260,6 @@ struct ParagraphInfo: Decodable, Sendable {
     /// Paragraphs in the same container (body or cell).
     var count: UInt32
     var text: String
-    var editable: Bool
-    var reason: String
 }
 
 /// 96 dpi, top-left origin within `page`.

@@ -90,20 +90,15 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// The latest queued work while it is an unstarted, uncommitted composition update.
     private var composing: (work: Int, text: Typed)?
 
-    nonisolated init() {
-        // ponytail: blank-document failure is unrecoverable (engine bug), so it traps.
-        let (session, output) = try! EditSession.open(nil)
-        self.session = session
-        pages = output.pages
-        reply = output.reply
-        thumbnails = output.pages
-        context.pageCount = output.pages.count
+    /// A blank document; failing to make one is an engine bug.
+    nonisolated convenience init() {
+        try! self.init(data: nil)
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
         try self.init(data: data)
     }
-    nonisolated init(data: Data) throws {
+    nonisolated init(data: Data?) throws {
         let (session, output) = try EditSession.open(data)
         self.session = session
         pages = output.pages

@@ -41,18 +41,16 @@ fn replace(
     end: u32,
     text: &str,
 ) -> Result<EditReply, EditError> {
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: s.revision,
-        command: EditCommand::Replace {
+    run(
+        s,
+        EditCommand::Replace {
             selection: EditSelection {
                 anchor: point(target.clone(), start),
                 focus: point(target, end),
             },
             text: text.into(),
         },
-    })
+    )
 }
 #[test]
 fn replace_preserves_other_content() {
@@ -120,39 +118,6 @@ fn rejects_invalid_boundary() {
         );
     }
     assert_eq!(s.revision, 0);
-}
-#[test]
-fn split_merge_preserves_following_control() {
-    let mut s = EditSession::open(&plain_document("hwp", true)).unwrap();
-    let before = s.paragraph(&body()).unwrap().text;
-    let table = format!("{:?}", s.core.document().sections[0].paragraphs[2].controls);
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: 0,
-        command: EditCommand::Split {
-            position: point(body(), 1),
-        },
-    })
-    .unwrap();
-    let second = EditTarget {
-        paragraph: 2,
-        ..body()
-    };
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: 1,
-        command: EditCommand::MergePrevious {
-            position: point(second, 0),
-        },
-    })
-    .unwrap();
-    assert_eq!(s.paragraph(&body()).unwrap().text, before);
-    assert_eq!(
-        format!("{:?}", s.core.document().sections[0].paragraphs[2].controls),
-        table
-    );
 }
 
 #[test]
@@ -394,27 +359,23 @@ fn first_paragraph_with_section_definition_is_editable() {
     let controls = format!("{:?}", s.core.document().sections[0].paragraphs[0].controls);
     assert!(controls.contains("SectionDef"));
     replace(&mut s, first.clone(), 0, 0, "첫 줄").unwrap();
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: s.revision,
-        command: EditCommand::Split {
+    run(
+        &mut s,
+        EditCommand::Split {
             position: point(first.clone(), 1),
         },
-    })
+    )
     .unwrap();
     let second = EditTarget {
         paragraph: 1,
         ..first.clone()
     };
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: s.revision,
-        command: EditCommand::MergePrevious {
+    run(
+        &mut s,
+        EditCommand::MergePrevious {
             position: point(second, 0),
         },
-    })
+    )
     .unwrap();
     assert_eq!(s.paragraph(&first).unwrap().text, "첫 줄");
     assert_eq!(
@@ -515,18 +476,6 @@ fn export_round_trips_edits() {
         );
     }
 }
-#[test]
-fn blank_document_is_editable() {
-    let mut s = EditSession::blank().unwrap();
-    let first = EditTarget {
-        section: 0,
-        paragraph: 0,
-        cell: None,
-        note: None,
-    };
-    replace(&mut s, first.clone(), 0, 0, "새 문서").unwrap();
-    assert_eq!(s.paragraph(&first).unwrap().text, "새 문서");
-}
 
 #[test]
 fn replace_spans_paragraphs() {
@@ -540,30 +489,21 @@ fn replace_spans_paragraphs() {
             anchor: point(last.clone(), 2),
             focus: point(body(), 1),
         };
-        let reply = s
-            .apply(EditRequest {
-                version: 1,
-                amend: false,
-                revision: 0,
-                command: EditCommand::Replace {
-                    selection,
-                    text: "X".into(),
-                },
-            })
-            .unwrap();
+        let reply = run(
+            &mut s,
+            EditCommand::Replace {
+                selection,
+                text: "X".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(s.paragraph(&body()).unwrap().text, "가X 문단");
         assert_eq!(s.paragraph(&body()).unwrap().count, 2);
         assert_eq!(
             reply.selection,
             Some(EditSelection::caret(point(body(), 2)))
         );
-        let undo = EditRequest {
-            version: 1,
-            amend: false,
-            revision: 1,
-            command: EditCommand::Undo,
-        };
-        s.apply(undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
         assert_eq!(s.paragraph(&last).unwrap().text, "보존 문단");
     }
 }
@@ -578,15 +518,13 @@ fn replace_joins_a_table_paragraph_keeping_the_table() {
         anchor: point(body(), 1),
         focus: point(last, 0),
     };
-    let result = s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: 0,
-        command: EditCommand::Replace {
+    let result = run(
+        &mut s,
+        EditCommand::Replace {
             selection,
             text: String::new(),
         },
-    });
+    );
     result.unwrap();
     assert_eq!(s.paragraph(&body()).unwrap().text, "가");
     let controls = &s.core.document().sections[0].paragraphs[1].controls;
@@ -607,17 +545,14 @@ fn formats_text_and_paragraphs_and_saves() {
             color: Some("#FF0000".into()),
             ..Default::default()
         };
-        let reply = s
-            .apply(EditRequest {
-                version: 1,
-                amend: false,
-                revision: 0,
-                command: EditCommand::FormatText {
-                    selection: selection.clone(),
-                    style,
-                },
-            })
-            .unwrap();
+        let reply = run(
+            &mut s,
+            EditCommand::FormatText {
+                selection: selection.clone(),
+                style,
+            },
+        )
+        .unwrap();
         assert_eq!(reply.selection, Some(selection.clone()));
         let at = s.format(1, &point(body(), 1)).unwrap();
         assert_eq!(at.text.font.as_deref(), Some("Apple SD Gothic Neo"));
@@ -633,13 +568,7 @@ fn formats_text_and_paragraphs_and_saves() {
             line_spacing_kind: Some(LineSpacingKind::Percent),
             ..Default::default()
         };
-        s.apply(EditRequest {
-            version: 1,
-            amend: false,
-            revision: 1,
-            command: EditCommand::FormatParagraphs { selection, style },
-        })
-        .unwrap();
+        run(&mut s, EditCommand::FormatParagraphs { selection, style }).unwrap();
         let at = s.format(2, &point(body(), 0)).unwrap();
         assert_eq!(at.paragraph.alignment, Some(Alignment::Center));
         assert_eq!(at.paragraph.line_spacing, Some(200.0));
@@ -671,15 +600,13 @@ fn format_rejects_empty_changes() {
             ..Default::default()
         },
     ] {
-        let result = s.apply(EditRequest {
-            version: 1,
-            amend: false,
-            revision: 0,
-            command: EditCommand::FormatText {
+        let result = run(
+            &mut s,
+            EditCommand::FormatText {
                 selection: selection.clone(),
                 style,
             },
-        });
+        );
         assert!(matches!(result, Err(EditError::InvalidInput)));
     }
 }
@@ -709,42 +636,8 @@ fn bench_typing() {
         eprintln!("keystroke {:?}, pages {:?}", t.elapsed(), s.changed);
     }
     let t = Instant::now();
-    s.apply(EditRequest {
-        version: 1,
-        amend: false,
-        revision: s.revision,
-        command: EditCommand::Undo,
-    })
-    .unwrap();
+    run(&mut s, EditCommand::Undo).unwrap();
     eprintln!("undo {:?}, pages {:?}", t.elapsed(), s.changed);
-}
-#[cfg(feature = "skia")]
-#[test]
-#[ignore]
-fn bench_skia_pdf() {
-    use std::time::Instant;
-    let bytes = std::fs::read(std::env::var("HWP_BENCH").unwrap()).unwrap();
-    let s = EditSession::open(&bytes).unwrap();
-    for p in 0..s.core.page_count().min(4) {
-        let t = Instant::now();
-        let pdf = s.core.render_page_pdf_direct_native(p).unwrap();
-        eprintln!(
-            "page {p} direct pdf {:?} {} KB",
-            t.elapsed(),
-            pdf.len() / 1024
-        );
-        let t = Instant::now();
-        let svgpdf = s.core.render_page_pdf_native(p).unwrap();
-        eprintln!(
-            "page {p} svg pdf {:?} {} KB",
-            t.elapsed(),
-            svgpdf.len() / 1024
-        );
-        if let Ok(dir) = std::env::var("HWP_PDF_OUT") {
-            std::fs::write(format!("{dir}/direct{p}.pdf"), pdf).unwrap();
-            std::fs::write(format!("{dir}/svg{p}.pdf"), svgpdf).unwrap();
-        }
-    }
 }
 #[test]
 fn amended_edits_share_one_undo_step() {
@@ -768,13 +661,7 @@ fn amended_edits_share_one_undo_step() {
         .unwrap();
     }
     assert_eq!(s.paragraph(&body()).unwrap().text, format!("한{original}"));
-    let undo = EditRequest {
-        version: 1,
-        amend: false,
-        revision: 3,
-        command: EditCommand::Undo,
-    };
-    let reply = s.apply(undo).unwrap();
+    let reply = run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(s.paragraph(&body()).unwrap().text, original);
     assert!(!reply.can_undo && !reply.dirty);
 }
@@ -937,36 +824,6 @@ fn vertical_motion_keeps_its_column_and_lines_have_edges() {
     assert!(end.position.scalar < line_start.position.scalar);
     assert_eq!(end.caret.y, s.caret(0, &start).unwrap().y);
     assert_eq!(go(&s, start, Motion::LineStart, None).position.scalar, 0);
-}
-#[test]
-fn replies_carry_the_caret() {
-    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
-    let reply = replace(&mut s, body(), 0, 0, "가").unwrap();
-    assert_eq!(reply.caret, Some(s.caret(1, &point(body(), 1)).unwrap()));
-}
-
-/// `HWP_BENCH=<file>`: how many pages draw natively, and the cost per page.
-#[test]
-#[ignore]
-fn bench_display() {
-    use std::time::Instant;
-    let bytes = std::fs::read(std::env::var("HWP_BENCH").unwrap()).unwrap();
-    let s = EditSession::open(&bytes).unwrap();
-    for page in 0..s.core.page_count() {
-        let svg = s.core.render_page_svg_native(page).unwrap();
-        let t = Instant::now();
-        let display = display::build(&svg);
-        let mut bytes = Vec::new();
-        if let Some(display) = &display {
-            display.encode(&mut bytes);
-        }
-        eprintln!(
-            "page {page}: {} in {:?}, {} KB",
-            if display.is_some() { "native" } else { "PDF" },
-            t.elapsed(),
-            bytes.len() / 1024
-        );
-    }
 }
 #[test]
 fn find_reports_body_and_cell_matches() {

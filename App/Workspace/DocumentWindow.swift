@@ -133,8 +133,6 @@ final class Viewer: ObservableObject {
     private var document: HwpDocument? { canvas.editor.model }
     private var undoManager: UndoManager? { canvas.editor.undoManager }
 
-    var zoomPercent: Int { position.zoomPercent }
-
     init() {
         canvas.onViewChange = { [weak self] in
             guard let self else { return }

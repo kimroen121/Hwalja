@@ -308,32 +308,6 @@ struct DocumentTests {
         canvas.zoomToFit(nil)
         #expect(canvas.zoom < 1)
     }
-
-    /// Opt-in: `HWP_BENCH=<file> swift test -c release --filter benchKeystroke`.
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_BENCH"] != nil))
-    func benchKeystroke() async throws {
-        let url = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_BENCH"]!)
-        let document = try HwpDocument(data: Data(contentsOf: url))
-        let undo = UndoManager()
-        let target = try await document.hitTest(page: 0, x: 300, y: 300)
-        document.selection = .caret(target)
-        for _ in 0..<5 {
-            let start = ContinuousClock.now
-            document.type("가", undo)
-            await document.settle()
-            print("BENCH keystroke", ContinuousClock.now - start)
-        }
-        let page = document.pages[0]
-        let context = try #require(bitmap(page.size, scale: 2))
-        page.draw(in: context, rect: CGRect(origin: .zero, size: page.size))  // loads the fonts
-        document.type("가", undo)
-        await document.settle()
-        let next = document.pages[0]
-        let start = ContinuousClock.now
-        next.draw(in: context, rect: CGRect(origin: .zero, size: page.size))
-        print("BENCH draw of the new page", ContinuousClock.now - start)
-    }
-
     /// Opt-in: types fast into a real window and reports how far the screen falls behind.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_BENCH"] != nil))
     func benchHostedTyping() async throws {

@@ -156,7 +156,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
   - 쪽 하나: SVG 4ms + 표시 목록 4ms(대부분 XML 파싱), 이진 47KB. 이전 SVG→PDF는 27ms(svg2pdf 패치 전 56ms)였다.
   - 시도 후 버린 것: rhwp Skia 직접 PDF(라틴 글꼴 대체가 달라짐, Skia 내려받기 필요), `NSImage` SVG 그리기(쪽당 120ms), PDF를 백그라운드에서 미리 그려 두기(표시 목록으로 대체).
 - [ ] 남은 엔진 시간(약 20ms): 편집 쪽과 다음 쪽의 SVG(레이아웃 포함), 표시 목록의 XML 파싱. 보존 검사와 배치 점검은 편집 경로에서 뺐다(약 4ms). 다음 후보는 rhwp 렌더 트리에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략).
-- [ ] 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchKeystroke`.
+- [ ] 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchHostedTyping`, 화면 확인 `HWP_SNAPSHOT_DIR=<폴더> swift test --filter snapshots`.
 
 ### 3. 웹 한글 기능
 - [x] 글자·문단 서식 1차(선택 영역 글자 서식, 정렬, 줄 간격), 서식 메뉴와 서식 도구 상자.
@@ -166,7 +166,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 - [ ] 읽기 전용 대상 줄이기: 머리말·꼬리말 안의 글자 편집, 주석 안 서식, 본문에서 주석 지우기.
 
 ### 4. 조판 동등성
-- [ ] 비교 도구: 한컴 뷰어에서 PDF로 인쇄한 결과와 쪽마다 픽셀 비교한다(`layout_probe` 확장).
+- [ ] 비교 도구: 한컴 뷰어에서 PDF로 인쇄한 결과와 쪽마다 픽셀 비교한다.
 - [ ] 글꼴 대응: 함초롬·HY 계열을 설치된 글꼴로 대응시킨다. 한컴 글꼴이 시스템에 있으면 그 글꼴을 쓴다(번들·재배포는 하지 않음).
 
 ### 5. 로컬 한글 수준
