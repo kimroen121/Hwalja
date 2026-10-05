@@ -282,7 +282,6 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         guard force || frames != pageFrames || size != frame.size else { return }
         pageFrames = frames
         setFrameSize(size)
-        window?.invalidateCursorRects(for: self)
         placeCaret()
         needsDisplay = true
     }
@@ -301,7 +300,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             frame.fill()
             NSGraphicsContext.restoreGraphicsState()
             if pages.indices.contains(index) { pages[index].draw(in: context, rect: frame) }
-            if showsGrid { drawGrid(in: frame) }
+            if showsGrid { drawGrid(in: frame, dirty: dirtyRect) }
         }
         let active = window?.isKeyWindow == true && window?.firstResponder === self
         (active ? NSColor.selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor).setFill()
@@ -326,13 +325,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             band.stroke()
         }
     }
-    private func drawGrid(in frame: NSRect) {
+    private func drawGrid(in frame: NSRect, dirty: NSRect) {
         // ponytail: fixed 5 mm spacing; make it a setting when 격자 설정 is added.
         let step = 5 / 25.4 * 72
         let dot = 1.2 / (enclosingScrollView?.magnification ?? 1)
         let dots = NSBezierPath()
-        for x in stride(from: frame.minX + step, to: frame.maxX, by: step) {
-            for y in stride(from: frame.minY + step, to: frame.maxY, by: step) {
+        // Only the dots in the dirty area, so typing redraws a few, not the whole page.
+        let first = { (lower: CGFloat, origin: CGFloat) in origin + max(1, ((lower - origin) / step).rounded(.down)) * step }
+        for x in stride(from: first(dirty.minX, frame.minX), to: min(frame.maxX, dirty.maxX + step), by: step) {
+            for y in stride(from: first(dirty.minY, frame.minY), to: min(frame.maxY, dirty.maxY + step), by: step) {
                 dots.appendRect(NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot))
             }
         }
@@ -415,7 +416,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             shown.changedPages.forEach { index in frame(ofPage: index).map { setNeedsDisplay($0) } }
         }
         (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
-        if shown.reflowed || !shown.changedPages.isEmpty { tableLines = [:] }
+        if shown.reflowed || !shown.changedPages.isEmpty {
+            (tableLines, loadingLines) = ([:], [])
+            linesGeneration += 1
+        }
         if oldObject != objectRect { updateCursor() }
         placeCaret()
         if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
@@ -583,6 +587,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// Table borders by page, loaded when the pointer first comes near; cleared on each change.
     private var tableLines: [Int: [TableLine]] = [:]
     private var loadingLines: Set<Int> = []
+    /// Bumped when the borders are cleared, so a load started before then is dropped.
+    private var linesGeneration = 0
 
     /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
     private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) }
@@ -641,9 +647,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private func loadLines(_ page: Int) {
         guard let model, !loadingLines.contains(page) else { return }
         loadingLines.insert(page)
+        let generation = linesGeneration
         Task { [weak self] in
             let lines = (try? await model.tableLines(page: page)) ?? []
-            guard let self else { return }
+            // Borders read before an edit landed would drag the wrong place.
+            guard let self, generation == linesGeneration else { return }
             loadingLines.remove(page)
             tableLines[page] = lines
             updateCursor()

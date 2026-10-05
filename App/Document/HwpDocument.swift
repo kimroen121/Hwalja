@@ -39,6 +39,10 @@ struct EditingContext: Equatable {
     var inTable = false
     /// The caret is in a 각주 or 미주.
     var inNote = false
+    /// The caret is in the body text (not a cell, 글상자 or note), where objects and breaks go.
+    var inBody = false
+    /// The paragraph at the caret is a 글머리표, 문단 번호 or 개요 item.
+    var inList = false
     var pageCount = 0
     var canUndo = false
     var canRedo = false
@@ -46,10 +50,10 @@ struct EditingContext: Equatable {
     var cellBlock = false
     /// The kind of the selected object.
     var object: ObjectKind?
-    /// The caret is in the body text, where objects and breaks go.
-    var inBody: Bool { hasSelection && !inTable && !inNote }
     /// Formats can be read and changed here (not yet inside notes).
     var canFormat: Bool { hasSelection && !inNote }
+    /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
+    var canCaption: Bool { object == .picture || object == .table || (inTable && object == nil) }
 }
 
 /// One open HWP/HWPX document: the engine session plus the state views render.
@@ -464,6 +468,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil && format?.textBox != true,
                               inNote: selection?.focus.target.note != nil,
+                              inBody: selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false,
+                              inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind)
         if context != self.context { self.context = context }

@@ -68,9 +68,9 @@ struct FormatRow: View {
     var body: some View {
         let text = document.format?.text, paragraph = document.format?.paragraph, context = document.context
         HStack(spacing: 3) {
-            ToolIcon("되돌리기", symbol: "arrow.uturn.backward") { send(Selector(("undo:"))) }
+            ToolIcon("되돌리기", symbol: Icon.undo) { send(Selector(("undo:"))) }
                 .disabled(!context.canUndo)
-            ToolIcon("다시 실행", symbol: "arrow.uturn.forward") { send(Selector(("redo:"))) }
+            ToolIcon("다시 실행", symbol: Icon.redo) { send(Selector(("redo:"))) }
                 .disabled(!context.canRedo)
             RowDivider()
             Group {
@@ -127,10 +127,10 @@ struct FormatRow: View {
                     }
                 }
                 Group {
-                    ToolIcon("한 수준 증가", symbol: "increase.indent") { editor.stepLevel(by: 1) }
-                    ToolIcon("한 수준 감소", symbol: "decrease.indent") { editor.stepLevel(by: -1) }
+                    ToolIcon("한 수준 증가", symbol: Icon.levelUp) { editor.stepLevel(by: 1) }
+                    ToolIcon("한 수준 감소", symbol: Icon.levelDown) { editor.stepLevel(by: -1) }
                 }
-                .disabled(head == nil || head == "None")
+                .disabled(!context.inList)
             }
             .disabled(!context.canFormat)
             Spacer(minLength: 0)

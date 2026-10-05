@@ -6,11 +6,6 @@ import UniformTypeIdentifiers
 // Structure commands (breaks, tables, page setup) and the sheets that ask for their values.
 
 extension Viewer {
-    /// Whether the caret is in body text, where breaks and tables go.
-    var inBody: Bool { document?.selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false }
-    /// Whether the caret is in a table cell.
-    var inTable: Bool { document?.context.inTable ?? false }
-
     func insertBreak(column: Bool) {
         document?.edit(undoManager) { $0.map { .pageBreak($0.ordered.start, column: column) } }
     }

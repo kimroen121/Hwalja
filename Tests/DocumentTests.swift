@@ -269,7 +269,7 @@ struct DocumentTests {
         document.type("상자 글", nil)
         await document.settle()
         #expect(try await document.paragraph(inside.target).text == "상자 글")
-        #expect(!document.context.inTable && document.format?.textBox == true)
+        #expect(!document.context.inTable && !document.context.inBody && document.format?.textBox == true)
     }
 
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
@@ -476,14 +476,15 @@ struct DocumentTests {
         let document = HwpDocument()
         let viewer = Viewer()
         viewer.canvas.bind(document)
-        document.selection = .caret(EditPosition(target: body, scalar: 0))
-        #expect(viewer.inBody && !viewer.inTable)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        #expect(document.context.inBody && !document.context.inTable)
         viewer.insertTable(rows: 2, columns: 2)
         await document.settle()
-        #expect(viewer.inTable)
+        #expect(document.context.inTable)
         viewer.editTable(.insertRowBelow)
         await document.settle()
-        #expect(viewer.inTable)
+        #expect(document.context.inTable)
         var corner = try #require(document.selection?.focus)
         corner.target.cell?.cell = 0
         var far = corner
@@ -494,7 +495,7 @@ struct DocumentTests {
         #expect(document.presentation.highlight.count == 4 && document.presentation.caret != nil)
         viewer.editCells { .mergeCells($0) }
         await document.settle()
-        #expect(viewer.inTable && !document.context.cellBlock)
+        #expect(document.context.inTable && !document.context.cellBlock)
         document.selection = .caret(EditPosition(target: EditTarget(section: 0, paragraph: 1, cell: nil), scalar: 0))
         viewer.insertBreak(column: false)
         await document.settle()

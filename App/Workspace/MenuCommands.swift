@@ -135,7 +135,7 @@ struct MenuItems {
                 ]),
             ]
         }
-        if context.object == .picture || context.object == .table || (context.inTable && context.object == nil) {
+        if context.canCaption {
             items += [
                 nil,
                 Choice(title: "캡션 넣기", symbol: Icon.caption) { viewer.insertCaption("Bottom") },
@@ -252,7 +252,7 @@ struct MenuItems {
                     Button(caption.title) { viewer?.insertCaption(caption.value) }
                 }
             } label: { Label("캡션 넣기", systemImage: Icon.caption) }
-                .disabled(context.object != .picture && !context.inTable)
+                .disabled(!context.canCaption)
         }
     }
 
@@ -268,7 +268,7 @@ struct MenuItems {
             Button("한 수준 증가") { editor?.stepLevel(by: 1) }
             Button("한 수준 감소") { editor?.stepLevel(by: -1) }
         }
-        .disabled(!context.canFormat || !["Number", "Bullet", "Outline"].contains(document?.format?.paragraph.head ?? ""))
+        .disabled(!context.canFormat || !context.inList)
         Divider()
         item("개체 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(context.object == nil && !context.inTable)

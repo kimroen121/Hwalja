@@ -139,7 +139,7 @@ struct ToolRow: View {
         ToolTile("캡션 넣기", Icon.caption, choices: {
             Captions.all.map { caption in Choice(title: caption.title) { viewer.insertCaption(caption.value) } }
         })
-        .disabled(context.object != .picture && !context.inTable)
+        .disabled(!context.canCaption)
     }
 
     @ViewBuilder private func format(_ context: EditingContext) -> some View {
@@ -149,7 +149,7 @@ struct ToolRow: View {
             ToolTile("한 수준 증가", Icon.levelUp) { viewer.canvas.editor.stepLevel(by: 1) }
             ToolTile("한 수준 감소", Icon.levelDown) { viewer.canvas.editor.stepLevel(by: -1) }
         }
-        .disabled(!context.canFormat || !["Number", "Bullet", "Outline"].contains(document.format?.paragraph.head ?? ""))
+        .disabled(!context.canFormat || !context.inList)
         RowDivider()
         objectProperties(context)
     }
