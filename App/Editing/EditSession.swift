@@ -1,13 +1,15 @@
-import Foundation
 import CHwpEngine
+import Foundation
+import PDFKit
 
 /// Owns one engine edit session. Every call to the raw handle runs on `queue`,
 /// so the handle is never touched concurrently; callers only see owned values.
 final class EditSession: @unchecked Sendable {
-    /// Engine state with the PDF of the pages it re-rendered (`reply.changedPages`).
+    /// Engine state with the pages it re-rendered (`reply.changedPages`), decoded off the
+    /// main actor.
     struct Output: Sendable {
         var reply: EditReply
-        var pdf: Data
+        var pages: [RenderedPage]
     }
 
     private let queue = DispatchQueue(label: "app.hwpstudio.edit-session")
@@ -41,7 +43,7 @@ final class EditSession: @unchecked Sendable {
 
     /// `amend` folds the edit into the latest undo step (IME composition).
     func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false) async throws -> Output {
-        try await Output(send(.apply(revision: revision, command, amend: amend)))
+        try await send(.apply(revision: revision, command, amend: amend), Output.init)
     }
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await decode(send(.paragraph(target)))
@@ -63,8 +65,12 @@ final class EditSession: @unchecked Sendable {
     }
 
     private func send(_ request: EngineRequest) async throws -> Payload {
+        try await send(request) { $0 }
+    }
+    /// Runs `request` and `transform`s its result on `queue`.
+    private func send<T: Sendable>(_ request: EngineRequest, _ transform: @escaping @Sendable (Payload) throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
-            queue.async { continuation.resume(with: Result { try self.request(request) }) }
+            queue.async { continuation.resume(with: Result { try transform(self.request(request)) }) }
         }
     }
     /// Must run on `queue`.
@@ -96,7 +102,21 @@ private func decode<T: Decodable>(_ payload: EditSession.Payload) throws -> T {
     try JSONDecoder().decode(T.self, from: payload.json)
 }
 private extension EditSession.Output {
+    /// The data holds per changed page a byte, 1 and its display list or 0 for a page in
+    /// the PDF that follows them (`EditSession::rendering` in the engine).
     init(_ payload: EditSession.Payload) throws {
-        self.init(reply: try decode(payload), pdf: payload.data)
+        let reply: EditReply = try decode(payload)
+        var reader = ByteReader(payload.data)
+        let displays = try reply.changedPages.map { _ in try reader.u8() == 1 ? PageDisplay(&reader) : nil }
+        let pdf = displays.contains { $0 == nil } ? PDFDocument(data: reader.remaining) : nil
+        var next = 0
+        let pages = try displays.map { display -> RenderedPage in
+            if let display { return .display(display) }
+            defer { next += 1 }
+            guard let page = pdf?.page(at: next) else { throw EditError.renderFailed }
+            return .pdf(page)
+        }
+        guard pages.count == reply.changedPages.count else { throw EditError.renderFailed }
+        self.init(reply: reply, pages: pages)
     }
 }

@@ -1,4 +1,5 @@
 mod commands;
+mod display;
 pub mod ffi;
 mod format;
 mod geometry;
@@ -26,10 +27,12 @@ struct Page {
     hash: u64,
     suspect: bool,
 }
-/// Pages after a render, and the PDF of the ones that changed.
+/// Pages after a render, and how to draw the ones that changed: a display list each, or,
+/// for pages it cannot express, a page in `pdf` (in order).
 struct Rendered {
     pages: Vec<Page>,
     changed: Vec<u32>,
+    displays: Vec<Option<display::Display>>,
     pdf: Vec<u8>,
 }
 
@@ -38,8 +41,9 @@ pub struct EditSession {
     original: Vec<u8>,
     revision: u64,
     pages: Vec<Page>,
-    /// Pages re-rendered by the latest revision, in order, and their PDF.
+    /// Pages re-rendered by the latest revision, in order, and how to draw them.
     changed: Vec<u32>,
+    displays: Vec<Option<display::Display>>,
     pdf: Vec<u8>,
     selection: Option<EditSelection>,
     locked: bool,
@@ -78,6 +82,7 @@ impl EditSession {
             revision: 0,
             pages: Vec::new(),
             changed: Vec::new(),
+            displays: Vec::new(),
             pdf: Vec::new(),
             selection: None,
             locked: false,
@@ -91,13 +96,25 @@ impl EditSession {
         let Rendered {
             pages,
             changed,
+            displays,
             pdf,
         } = session.render(0, u32::MAX)?;
-        (session.pages, session.changed, session.pdf) = (pages, changed, pdf);
+        (session.pages, session.changed) = (pages, changed);
+        (session.displays, session.pdf) = (displays, pdf);
         Ok(session)
     }
-    pub fn pdf(&self) -> &[u8] {
-        &self.pdf
+    /// The re-rendered pages: per changed page a byte, 1 and its encoded display list or 0
+    /// for a page in the PDF that follows them.
+    pub fn rendering(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        for display in &self.displays {
+            data.push(display.is_some() as u8);
+            if let Some(display) = display {
+                display.encode(&mut data);
+            }
+        }
+        data.extend(&self.pdf);
+        data
     }
     pub fn original(&self) -> &[u8] {
         &self.original
@@ -145,7 +162,7 @@ impl EditSession {
                 suspect: false,
             },
         );
-        let (mut changed, mut svgs) = (Vec::new(), Vec::new());
+        let (mut changed, mut displays, mut svgs) = (Vec::new(), Vec::new(), Vec::new());
         for page in if same_count { from } else { 0 }..count {
             let failed = |_| EditError::RenderFailed;
             let svg = self.core.render_page_svg_native(page).map_err(failed)?;
@@ -165,7 +182,11 @@ impl EditSession {
             let suspect = crate::layout_audit::is_suspect_page(&self.core, page).map_err(failed)?;
             pages[page as usize] = Page { hash, suspect };
             changed.push(page);
-            svgs.push(svg);
+            let display = display::build(&svg);
+            if display.is_none() {
+                svgs.push(svg);
+            }
+            displays.push(display);
         }
         let pdf = if svgs.is_empty() {
             Vec::new()
@@ -176,6 +197,7 @@ impl EditSession {
         Ok(Rendered {
             pages,
             changed,
+            displays,
             pdf,
         })
     }
@@ -298,6 +320,7 @@ impl EditSession {
     fn publish(&mut self, rendered: Rendered, selection: Option<EditSelection>) {
         self.pages = rendered.pages;
         self.changed = rendered.changed;
+        self.displays = rendered.displays;
         self.pdf = rendered.pdf;
         self.selection = selection;
         self.revision += 1;

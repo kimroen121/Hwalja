@@ -245,7 +245,7 @@ fn undo_redo_restores_text_and_selection() {
 fn failed_render_rolls_back_edits_and_undo() {
     let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
     replace(&mut s, body(), 0, 1, "나").unwrap();
-    let (text, pdf) = (s.paragraph(&body()).unwrap().text, s.pdf.clone());
+    let (text, rendering) = (s.paragraph(&body()).unwrap().text, s.rendering());
     s.fail_render = true;
     assert_eq!(
         replace(&mut s, body(), 0, 0, "x").unwrap_err(),
@@ -256,8 +256,12 @@ fn failed_render_rolls_back_edits_and_undo() {
         EditError::RenderFailed
     );
     assert_eq!(
-        (s.paragraph(&body()).unwrap().text, &s.pdf, s.revision),
-        (text, &pdf, 1)
+        (
+            s.paragraph(&body()).unwrap().text,
+            s.rendering(),
+            s.revision
+        ),
+        (text, rendering, 1)
     );
     assert!(s.reply().can_undo && !s.locked);
     s.fail_render = false;
@@ -304,11 +308,12 @@ fn ffi_round_trip_owns_results() {
         };
         let opened = hwp_edit_open(bytes.as_ptr(), bytes.len(), &mut session);
         assert_eq!(hwp_edit_result_status(opened), 0, "{}", json(opened));
-        assert!(std::slice::from_raw_parts(
+        let data = std::slice::from_raw_parts(
             hwp_edit_result_data(opened),
-            hwp_edit_result_length(opened)
-        )
-        .starts_with(b"%PDF-"));
+            hwp_edit_result_length(opened),
+        );
+        assert_eq!(data[0], 1);
+        assert!(!data.windows(5).any(|w| w == b"%PDF-"));
         hwp_edit_result_free(opened);
         let request = br#"{"op":"apply","request":{"version":1,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
         let applied = hwp_edit_request(session, request.as_ptr(), request.len());
@@ -396,7 +401,7 @@ fn open_rejects_empty_oversized_and_classifies_failures() {
 }
 /// `HWP_WRITE_FIXTURES=1` regenerates Tests/Fixtures/generated.{hwp,hwpx}.
 #[test]
-fn generated_fixtures_open_as_pdf() {
+fn generated_fixtures_open_as_display_lists() {
     let mut source = DocumentCore::new_empty();
     source.create_blank_document_native().unwrap();
     source
@@ -407,7 +412,12 @@ fn generated_fixtures_open_as_pdf() {
         ("hwpx", source.export_hwpx_native().unwrap()),
     ] {
         let session = EditSession::open(&bytes).unwrap();
-        assert!(session.pdf().starts_with(b"%PDF-"));
+        let display = session.displays[0].as_ref().unwrap();
+        assert!(session.pdf.is_empty() && !display.fonts.is_empty());
+        assert!(display
+            .ops
+            .iter()
+            .any(|op| matches!(op, display::Op::Text { runs, .. } if runs[0].1 == "한")));
         assert!(session.reply().suspect_pages.is_empty() && session.reply().page_count > 0);
         if std::env::var_os("HWP_WRITE_FIXTURES").is_some() {
             let folder =
@@ -873,4 +883,28 @@ fn replies_carry_the_caret() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let reply = replace(&mut s, body(), 0, 0, "가").unwrap();
     assert_eq!(reply.caret, Some(s.caret(1, &point(body(), 1)).unwrap()));
+}
+
+/// `HWP_BENCH=<file>`: how many pages draw natively, and the cost per page.
+#[test]
+#[ignore]
+fn bench_display() {
+    use std::time::Instant;
+    let bytes = std::fs::read(std::env::var("HWP_BENCH").unwrap()).unwrap();
+    let s = EditSession::open(&bytes).unwrap();
+    for page in 0..s.core.page_count() {
+        let svg = s.core.render_page_svg_native(page).unwrap();
+        let t = Instant::now();
+        let display = display::build(&svg);
+        let mut bytes = Vec::new();
+        if let Some(display) = &display {
+            display.encode(&mut bytes);
+        }
+        eprintln!(
+            "page {page}: {} in {:?}, {} KB",
+            if display.is_some() { "native" } else { "PDF" },
+            t.elapsed(),
+            bytes.len() / 1024
+        );
+    }
 }

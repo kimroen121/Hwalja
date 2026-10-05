@@ -26,7 +26,11 @@ fn take_bytes(doc: &mut Document) -> Vec<Option<Vec<u8>>> {
         bytes.push(Some(std::mem::take(&mut image.data)));
     }
     bytes.extend(doc.sections.iter_mut().map(|s| s.raw_stream.take()));
-    for (_, data) in doc.extra_streams.iter_mut().chain(&mut doc.hwpx_aux_entries) {
+    for (_, data) in doc
+        .extra_streams
+        .iter_mut()
+        .chain(&mut doc.hwpx_aux_entries)
+    {
         bytes.push(Some(std::mem::take(data)));
     }
     bytes

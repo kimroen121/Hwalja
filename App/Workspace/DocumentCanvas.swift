@@ -112,11 +112,17 @@ final class DocumentCanvas: NSScrollView {
 
     // MARK: File menu
 
+    /// Prints the PDF the engine exports, which embeds the same fonts the pages are drawn with.
     @objc func printDocument(_ sender: Any?) {
-        guard let window, let pages = editor.model?.pages,
-              let operation = pages.printOperation(for: .shared, scalingMode: .pageScaleNone, autoRotate: true)
-        else { return }
-        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+        guard let window, let model = editor.model else { return }
+        Task {
+            do {
+                guard let pages = PDFDocument(data: try await model.pdf()),
+                      let operation = pages.printOperation(for: .shared, scalingMode: .pageScaleNone, autoRotate: true)
+                else { return NSSound.beep() }
+                operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+            } catch { NSApp.presentError(error) }
+        }
     }
 
     @objc func exportAsPDF(_ sender: Any?) {
@@ -206,7 +212,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// whole stack, so the layout never depends on the viewport.
     func layoutPages(force: Bool = false) {
         guard let pages = model?.pages else { return }
-        let sizes = (0..<pages.pageCount).map { pages.page(at: $0)?.bounds(for: .mediaBox).size ?? .zero }
+        let sizes = pages.map(\.size)
         let width = (sizes.map(\.width).max() ?? 0) + Self.margin * 2
         var y = Self.margin
         let frames = sizes.map { size in
@@ -225,7 +231,6 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     override func draw(_ dirtyRect: NSRect) {
         guard let model, let context = NSGraphicsContext.current?.cgContext else { return }
         let pages = model.pages
-        model.drawScale = min(8, max(1, abs(context.userSpaceToDeviceSpaceTransform.a)))
         let shadow = NSShadow()
         shadow.shadowColor = .black.withAlphaComponent(0.25)
         shadow.shadowBlurRadius = 3
@@ -236,14 +241,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             NSColor.white.setFill()
             frame.fill()
             NSGraphicsContext.restoreGraphicsState()
-            guard let page = pages.page(at: index) else { continue }
-            let box = page.bounds(for: .mediaBox)
-            context.saveGState()
-            context.translateBy(x: frame.minX, y: frame.maxY)
-            context.scaleBy(x: frame.width / box.width, y: -frame.height / box.height)
-            context.translateBy(x: -box.minX, y: -box.minY)
-            page.draw(with: .mediaBox, to: context)
-            context.restoreGState()
+            if pages.indices.contains(index) { pages[index].draw(in: context, rect: frame) }
         }
         let active = window?.isKeyWindow == true && window?.firstResponder === self
         (active ? NSColor.selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor).setFill()

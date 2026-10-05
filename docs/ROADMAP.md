@@ -32,7 +32,7 @@ rhwp에 저장 API가 있으므로 저장도 마지막까지 미루지 않았다
   - 안전장치: 문자소(grapheme) 경계 검증, 보존 검사, 실패 시 롤백.
   - 조회: hit-test, 커서·선택 영역 좌표, 캐럿 위치 서식과 글꼴 대체 순서.
   - 저장: 검증을 거친 HWP/HWPX 저장.
-- 렌더링: 편집마다 바뀐 쪽만 PDF로 만들어 화면의 쪽을 제자리에서 교체한다. 4쪽 보고서에서 키 입력 한 번이 엔진 43ms, 앱 왕복 45ms다(이전 78ms, 처음 1.7–2.2초).
+- 렌더링: 편집마다 바뀐 쪽만 표시 목록(display list)으로 만들어 Core Graphics/Core Text로 바로 그린다. 표시 목록이 다루지 못하는 쪽만 PDF로 받는다. 4쪽 보고서에서 키 입력 한 번이 앱 왕복 24ms, 새 쪽 그리기 3ms다(이전 PDF 경로 45ms + 그리기, 처음 1.7–2.2초). 프린트·PDF 내보내기는 엔진이 전체 PDF를 새로 만든다.
 - 앱과 엔진 경계: `hwp_edit_*` C ABI 하나. 문서 열기도 편집 세션으로 한다.
 - 배포: SwiftPM, `make dist`로 서명·공증.
 
@@ -104,11 +104,14 @@ rhwp에 저장 API가 있으므로 저장도 마지막까지 미루지 않았다
 - [x] 앞 편집이 끝나기 전에 친 글자는 한 편집으로 묶는다.
 - [x] svg2pdf 패치(`Vendor/svg2pdf.patch`): `<text>`마다 모든 글꼴을 복제하던 것과 변환마다 글꼴 파일 전체(10MB대)를 복사하던 것을 없앴다. rhwp 패치: 같은 글꼴 지정의 글꼴 선택을 기억한다. 쪽 PDF 56ms → 27ms.
 - [x] 보존 검사는 바이트 덩어리(미리보기 그림, 원본 스트림)를 `==`로 비교하고 나머지만 `Debug` 문자열로 비교한다(키 입력당 약 7ms 절약).
-- [x] 새 쪽은 백그라운드에서 PDF를 읽고 화면 배율로 한 번 그려 둔다. 메인 스레드의 새 쪽 그리기 29ms → 5ms. 썸네일은 입력이 멈춘 뒤 백그라운드에서 그린다(메인 스레드 20ms 절약).
-- [ ] 쪽 한 장의 SVG→PDF 변환(약 27ms)이 남은 병목이다. rhwp SVG는 글자마다 `<text>` 하나(쪽당 1천여 개)를 내고, usvg가 그때마다 글꼴 조회·셰이핑 면 생성을 한다.
-  - rhwp의 Skia 직접 PDF(`--features skia`, `bench_skia_pdf`)는 쪽당 10–14ms지만 라틴 글자의 글꼴 대체가 달라(명조 → 고딕) 화면이 바뀌고, 미리 빌드된 Skia를 내려받아야 한다. 채택하지 않았다.
-  - macOS 기본 SVG 그리기(`NSImage`)는 쪽당 120ms로 더 느리다.
-  - 다음 후보: 레이어 트리 JSON(rhwp `paint`)을 Core Graphics/Core Text로 직접 재생하는 렌더러. 범위가 커서 별도 단계로 한다.
+- [x] 썸네일은 입력이 멈춘 뒤 백그라운드에서 그린다.
+- [x] 화면 렌더러: 엔진(`editing/display.rs`)이 PDF로 바꿀 쪽 SVG를 그대로 읽어 이진 표시 목록으로 만들고, 앱(`PageDisplay.swift`)이 Core Graphics/Core Text로 그린다. SVG 의미를 그대로 따르므로 rhwp 레이아웃이 바뀌어도 화면과 PDF가 갈라지지 않는다.
+  - 글꼴은 usvg와 같은 글꼴 DB·같은 질의·같은 대체 규칙으로 엔진이 고르고 글꼴 파일 경로를 넘긴다. 앱은 그 파일을 Core Text로 연다.
+  - 다루는 SVG: `text`(textLength, 장평 transform, 굵기·기울임, 가운데 정렬), `rect`, `line`(점선), `path`, `circle`/`ellipse`, PNG/JPEG `image`, 중첩 `svg`, `g`(transform, 사각 clip). 그 밖의 요소·속성이 하나라도 있으면 그 쪽만 PDF로 그린다. 문서 25개 201쪽 중 199쪽이 표시 목록으로 그려진다(나머지는 화살표 marker).
+  - 검증: `nativePagesMatchThePDF`가 표시 목록과 내보낸 PDF를 같은 크기로 래스터화해 비교한다. 위 문서들에서 다른 픽셀이 최대 0.02%.
+  - 쪽 하나: SVG 4ms + 표시 목록 4ms(대부분 XML 파싱), 이진 47KB. 이전 SVG→PDF는 27ms(svg2pdf 패치 전 56ms)였다.
+  - 시도 후 버린 것: rhwp Skia 직접 PDF(라틴 글꼴 대체가 달라짐, Skia 내려받기 필요), `NSImage` SVG 그리기(쪽당 120ms), PDF를 백그라운드에서 미리 그려 두기(표시 목록으로 대체).
+- [ ] 남은 엔진 시간(약 20ms): 편집 쪽과 다음 쪽의 SVG(레이아웃 포함), 표시 목록의 XML 파싱, 보존 검사, 배치 점검. 다음 후보는 rhwp 렌더 트리에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략).
 - [ ] 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchKeystroke`.
 
 ### 3. 웹 한글 기능

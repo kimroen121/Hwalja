@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AppKit
+import PDFKit
 @testable import HwpStudio
 
 @MainActor
@@ -115,16 +116,16 @@ struct DocumentTests {
 
     @Test func pagesArePatchedInPlace() async throws {
         let document = HwpDocument()
-        let pages = document.pages
+        let first = document.pages[0].id
         let undo = UndoManager()
         document.selection = .caret(EditPosition(target: body, scalar: 0))
         document.edit(undo) { $0.map { .replace($0, text: String(repeating: "줄\n", count: 120)) } }
         await document.settle()
-        #expect(document.pages === pages && document.reply.pageCount > 1)
-        #expect(pages.pageCount == Int(document.reply.pageCount))
+        #expect(document.reply.pageCount > 1 && document.pages.count == Int(document.reply.pageCount))
+        #expect(document.pages[0].id != first)
         undo.undo()
         await document.settle()
-        #expect(pages.pageCount == 1 && document.reply.pageCount == 1)
+        #expect(document.pages.count == 1 && document.reply.pageCount == 1)
     }
 
     @Test func selectedTextSpansParagraphs() async throws {
@@ -213,14 +214,65 @@ struct DocumentTests {
             await document.settle()
             print("BENCH keystroke", ContinuousClock.now - start)
         }
-        let page = try #require(document.pages.page(at: 0))
-        let box = page.bounds(for: .mediaBox)
-        let context = try #require(CGContext(data: nil, width: Int(box.width * 2), height: Int(box.height * 2), bitsPerComponent: 8,
-                                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.scaleBy(x: 2, y: 2)
+        let page = document.pages[0]
+        let context = try #require(bitmap(page.size, scale: 2))
+        page.draw(in: context, rect: CGRect(origin: .zero, size: page.size))  // loads the fonts
+        document.type("가", undo)
+        await document.settle()
+        let next = document.pages[0]
         let start = ContinuousClock.now
-        page.draw(with: .mediaBox, to: context)
+        next.draw(in: context, rect: CGRect(origin: .zero, size: page.size))
         print("BENCH draw of the new page", ContinuousClock.now - start)
     }
+
+    /// Native pages draw what the exported PDF shows: the same faces at the same places.
+    @Test func nativePagesMatchThePDF() async throws {
+        let paths = ProcessInfo.processInfo.environment["HWP_BENCH"].map { [URL(fileURLWithPath: $0)] } ?? []
+        for data in try [fixture("hwpx"), fixture("hwp")] + paths.map({ try Data(contentsOf: $0) }) {
+            let document = try HwpDocument(data: data)
+            let pdf = try #require(PDFDocument(data: try await document.pdf()))
+            for (index, page) in document.pages.enumerated() {
+                guard case .display = page, let reference = pdf.page(at: index) else { continue }
+                let native = try #require(raster(page)), exported = try #require(raster(.pdf(reference)))
+                let differing = zip(native, exported).filter { abs(Int($0) - Int($1)) > 96 }.count
+                let ratio = Double(differing) / Double(native.count)
+                print("page \(index): \(String(format: "%.4f", ratio * 100))% of pixels differ, \(native.filter { $0 < 128 }.count) dark")
+                if let folder = ProcessInfo.processInfo.environment["HWP_SNAPSHOT_DIR"] {
+                    for (name, pixels) in [("native", native), ("pdf", exported)] {
+                        let size = page.size
+                        let provider = CGDataProvider(data: Data(pixels) as CFData)!
+                        let image = CGImage(width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bitsPerPixel: 8,
+                                            bytesPerRow: Int(size.width), space: CGColorSpaceCreateDeviceGray(), bitmapInfo: [],
+                                            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+                        let rep = NSBitmapImageRep(cgImage: image)
+                        try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(folder)/\(index)-\(name).png"))
+                    }
+                }
+                #expect(ratio < 0.002)
+            }
+        }
+    }
+}
+
+/// White page bitmap whose y axis points down, `scale` pixels per point.
+private func bitmap(_ size: CGSize, scale: CGFloat) -> CGContext? {
+    let context = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8,
+                            bytesPerRow: Int(size.width * scale), space: CGColorSpaceCreateDeviceGray(),
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue)
+    context?.setFillColor(gray: 1, alpha: 1)
+    context?.fill(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+    context?.translateBy(x: 0, y: size.height * scale)
+    context?.scaleBy(x: scale, y: -scale)
+    return context
+}
+/// Gray pixels of a page drawn at 2× and blurred by downsampling to 1×, so sub-pixel
+/// antialiasing differences between Core Text and PDF glyphs do not count.
+private func raster(_ page: RenderedPage) -> [UInt8]? {
+    guard let context = bitmap(page.size, scale: 2) else { return nil }
+    page.draw(in: context, rect: CGRect(origin: .zero, size: page.size))
+    guard let image = context.makeImage(), let small = bitmap(page.size, scale: 1) else { return nil }
+    small.interpolationQuality = .high
+    small.draw(image, in: CGRect(origin: .zero, size: page.size))
+    guard let bytes = small.data else { return nil }
+    return Array(UnsafeBufferPointer(start: bytes.assumingMemoryBound(to: UInt8.self), count: small.bytesPerRow * small.height))
 }

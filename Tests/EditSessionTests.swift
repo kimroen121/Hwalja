@@ -11,7 +11,9 @@ struct EditSessionTests {
     func editGeometryAndUndoRoundTrip(ext: String) async throws {
         let (session, opened) = try EditSession.open(fixture(ext))
         #expect(opened.reply.revision == 0 && !opened.reply.dirty)
-        #expect(opened.pdf.starts(with: Data("%PDF-".utf8)) && opened.reply.changedPages == [0])
+        #expect(opened.pages.count == 1 && opened.reply.changedPages == [0])
+        guard case .display(let display) = opened.pages[0] else { Issue.record("page 0 is not drawn natively"); return }
+        #expect(display.ops.contains { if case .text = $0 { true } else { false } })
 
         let body = EditTarget(section: 0, paragraph: 0, cell: nil)
         let original = try await session.paragraph(body).text

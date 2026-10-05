@@ -88,11 +88,12 @@ private struct PageThumbnails: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(0..<pages.pageCount, id: \.self) { index in
-                        if let page = pages.page(at: index) {
-                            Button { viewer.canvas.go(to: index) } label: {
+                    ForEach(pages.indices, id: \.self) { index in
+                        let page = pages[index]
+                        Button { viewer.canvas.go(to: index) } label: {
                                 VStack(spacing: 4) {
                                     Thumbnail(page: page)
+                                        .id(page.id)
                                         .padding(3)
                                         .background(RoundedRectangle(cornerRadius: 4)
                                             .fill(index == viewer.page ? Color.accentColor.opacity(0.35) : .clear))
@@ -101,7 +102,6 @@ private struct PageThumbnails: View {
                             }
                             .buttonStyle(.plain)
                             .id(index)
-                        }
                     }
                 }
                 .padding(.vertical, 12)
@@ -114,25 +114,43 @@ private struct PageThumbnails: View {
 /// Draws off the main actor once a page has stopped changing, keeping the previous image
 /// meanwhile, so typing never waits for a thumbnail.
 private struct Thumbnail: View {
-    let page: PDFPage
-    @State private var image: NSImage?
+    let page: RenderedPage
+    @State private var image: CGImage?
 
     var body: some View {
+        let size = Self.size(of: page)
         Group {
-            if let image { Image(nsImage: image) } else { Color.white.frame(width: 106, height: 150) }
+            if let image { Image(decorative: image, scale: 2) } else { Color.white }
         }
+        .frame(width: size.width, height: size.height)
         .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
-        .task(id: ObjectIdentifier(page)) {
+        .task(id: page.id) {
             if image != nil { try? await Task.sleep(for: .milliseconds(400)) }
             guard !Task.isCancelled else { return }
-            nonisolated(unsafe) let page = page
-            let drawn = await Task.detached(priority: .utility) { Drawn(page.thumbnail(of: NSSize(width: 110, height: 150), for: .mediaBox)) }.value
+            let page = page
+            let drawn = await Task.detached(priority: .utility) { Drawn(Self.render(page, size: size)) }.value
             if !Task.isCancelled { image = drawn.image }
         }
+    }
+
+    nonisolated private static func size(of page: RenderedPage) -> CGSize {
+        let scale = min(110 / page.size.width, 150 / page.size.height)
+        return CGSize(width: (page.size.width * scale).rounded(), height: (page.size.height * scale).rounded())
+    }
+    nonisolated private static func render(_ page: RenderedPage, size: CGSize) -> CGImage? {
+        guard let context = CGContext(data: nil, width: Int(size.width * 2), height: Int(size.height * 2), bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(.white)
+        context.fill(CGRect(x: 0, y: 0, width: size.width * 2, height: size.height * 2))
+        context.translateBy(x: 0, y: size.height * 2)
+        context.scaleBy(x: 2, y: -2)
+        page.draw(in: context, rect: CGRect(origin: .zero, size: size))
+        return context.makeImage()
     }
 }
 
 private struct Drawn: @unchecked Sendable {
-    let image: NSImage
-    init(_ image: NSImage) { self.image = image }
+    let image: CGImage?
+    init(_ image: CGImage?) { self.image = image }
 }

@@ -712,8 +712,11 @@ name = "hwp-engine-abi"
 version = "0.1.0"
 dependencies = [
  "rhwp",
+ "roxmltree 0.20.0",
  "serde",
  "serde_json",
+ "svgtypes 0.15.3",
+ "ttf-parser",
  "unicode-segmentation",
 ]
 

@@ -1,5 +1,4 @@
 import AppKit
-import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -38,10 +37,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     static let undoLimit = 20
 
     private let session: EditSession
-    /// Rendered pages, shown and printed as is. Built on the main actor from the opening PDF
-    /// and patched only when a presentation is published.
-    private(set) lazy var pages = PDFDocument(data: openingPDF) ?? PDFDocument()
-    private let openingPDF: Data
+    /// Rendered pages as shown, replaced only when a presentation is published.
+    private(set) var pages: [RenderedPage]
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
     private(set) var reply: EditReply { willSet { objectWillChange.send() } }
     var selection: EditSelection? { willSet { objectWillChange.send() } }
@@ -55,9 +52,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Number of works ever queued; identifies the latest one.
     private var queued = 0
     /// Re-rendered pages waiting for the next presentation.
-    private var staged: [(reply: EditReply, patch: Patch)] = []
-    /// Device pixels per page point the canvas last drew at; new pages are pre-drawn at it.
-    var drawScale: CGFloat = 2
+    private var staged: [EditSession.Output] = []
     /// Column that consecutive up/down moves keep.
     private var goalX: Double?
     /// The latest queued work while it is unstarted typing, with the text it will insert.
@@ -70,7 +65,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         // ponytail: blank-document failure is unrecoverable (engine bug), so it traps.
         let (session, output) = try! EditSession.open(nil)
         self.session = session
-        openingPDF = output.pdf
+        pages = output.pages
         reply = output.reply
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {
@@ -80,7 +75,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     nonisolated init(data: Data) throws {
         let (session, output) = try EditSession.open(data)
         self.session = session
-        openingPDF = output.pdf
+        pages = output.pages
         reply = output.reply
     }
 
@@ -257,14 +252,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
     private func run(_ command: EditCommand, amend: Bool = false) async throws {
-        var output = try await session.apply(command, at: revision, amend: amend)
-        var patch = await Patch.prepare(output.pdf, scale: drawScale)
-        if patch.document?.pageCount ?? 0 != output.reply.changedPages.count {
-            // The engine skipped a page it could not convert; show the whole document instead.
-            patch = await Patch.prepare(try await session.pdf(), scale: drawScale)
-            output.reply.changedPages = Array(0..<output.reply.pageCount)
-        }
-        staged.append((output.reply, patch))
+        let output = try await session.apply(command, at: revision, amend: amend)
+        staged.append(output)
         reply = output.reply
         if let selection = output.reply.selection { self.selection = selection }
     }
@@ -282,10 +271,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight)
         for output in staged {
-            let count = pages.pageCount
-            pages.replace(output.reply.changedPages, with: output.patch.document, pageCount: output.reply.pageCount)
+            let count = pages.count
+            for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {
+                if index < pages.count { pages[index] = page } else { pages.append(page) }
+            }
+            pages.removeLast(max(0, pages.count - Int(output.reply.pageCount)))
             next.changedPages.formUnion(IndexSet(output.reply.changedPages.map(Int.init)))
-            next.reflowed = next.reflowed || pages.pageCount != count
+            next.reflowed = next.reflowed || pages.count != count
         }
         staged = []
         if format != self.format { self.format = format }
@@ -302,41 +294,5 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             document.registerHistory(step == .undo ? .redo : .undo, undoManager)
             document.enqueue { try await $0.run(step == .undo ? .undo : .redo) }
         }
-    }
-}
-
-/// Re-rendered pages, parsed and pre-drawn off the main actor so that drawing them there
-/// finds their fonts loaded and glyphs rasterized.
-private struct Patch: @unchecked Sendable {
-    let document: PDFDocument?
-
-    static func prepare(_ pdf: Data, scale: CGFloat) async -> Patch {
-        await Task.detached(priority: .userInitiated) {
-            let document = PDFDocument(data: pdf)
-            // ponytail: pre-draws the first two pages only; a long reflow draws the rest cold.
-            for index in 0..<min(2, document?.pageCount ?? 0) {
-                guard let page = document?.page(at: index) else { continue }
-                let box = page.bounds(for: .mediaBox)
-                guard let context = CGContext(data: nil, width: Int(box.width * scale), height: Int(box.height * scale),
-                                              bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
-                context.scaleBy(x: scale, y: scale)
-                page.draw(with: .mediaBox, to: context)
-            }
-            return Patch(document: document)
-        }.value
-    }
-}
-
-private extension PDFDocument {
-    /// Swaps in re-rendered pages and drops pages past `pageCount`.
-    func replace(_ indices: [UInt32], with patch: PDFDocument?, pageCount count: UInt32) {
-        guard let patch = patch ?? (indices.isEmpty ? PDFDocument() : nil) else { return }
-        for (offset, index) in indices.map(Int.init).enumerated() {
-            guard let page = patch.page(at: offset), index <= pageCount else { return }
-            if index < pageCount { removePage(at: index) }
-            insert(page, at: index)
-        }
-        while pageCount > Int(count) { removePage(at: pageCount - 1) }
     }
 }

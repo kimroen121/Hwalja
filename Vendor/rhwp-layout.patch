@@ -338,13 +338,23 @@ index 9d37742..216735e 100644
      }
      if let Some(base) = base_family_without_weight_suffix(primary) {
 diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
-index 3989968..5c42669 100644
+index 3989968..e268160 100644
 --- a/src/renderer/pdf.rs
 +++ b/src/renderer/pdf.rs
-@@ -509,6 +509,46 @@ fn default_mono_family() -> &'static str {
+@@ -509,6 +509,56 @@ fn default_mono_family() -> &'static str {
      "Noto Sans Mono CJK KR"
  }
  
++/// usvg's font database types, for backends that must pick the faces PDF export picks.
++#[cfg(not(target_arch = "wasm32"))]
++pub use usvg::fontdb;
++
++/// The font database PDF export uses with default options.
++#[cfg(not(target_arch = "wasm32"))]
++pub fn default_fontdb() -> std::sync::Arc<usvg::fontdb::Database> {
++    cached_fontdb(&PdfExportOptions::default()).0
++}
++
 +/// Font picks per font specification, valid for one database.
 +#[cfg(not(target_arch = "wasm32"))]
 +type FontPicks = std::sync::Arc<
@@ -388,7 +398,7 @@ index 3989968..5c42669 100644
  /// 폰트 데이터베이스를 초기화 (시스템 폰트 + 프로젝트 폰트 로드)
  #[cfg(not(target_arch = "wasm32"))]
  fn create_fontdb(options: &PdfExportOptions) -> usvg::fontdb::Database {
-@@ -993,9 +1033,16 @@ where
+@@ -993,9 +1043,16 @@ where
      use pdf_writer::{Finish, Pdf, Ref};
      use std::collections::HashMap;
  

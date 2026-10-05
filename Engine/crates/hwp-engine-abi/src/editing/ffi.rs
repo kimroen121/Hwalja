@@ -76,7 +76,7 @@ impl HwpEditResult {
 }
 
 fn state(session: &EditSession) -> *mut HwpEditResult {
-    HwpEditResult::ok(session.reply(), session.pdf().to_vec())
+    HwpEditResult::ok(session.reply(), session.rendering())
 }
 fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditResult, EditError> {
     Ok(match request {
