@@ -70,9 +70,11 @@ enum Icon {
 struct Choice {
     let title: String
     var symbol: String?
+    var image: NSImage?
     var key = ""
     var modifiers: NSEvent.ModifierFlags = .command
     var enabled = true
+    var on = false
     let action: () -> Void
 }
 
@@ -97,12 +99,14 @@ struct ToolTile: View {
     var body: some View {
         if choices == nil, panel == nil {
             Button(action: { action?() }) {
-                VStack(spacing: 3) { icon; name }.frame(minWidth: 52).padding(.vertical, 3).padding(.horizontal, 2)
+                // The arrow's room stays empty, so every name sits on one line.
+                VStack(spacing: 3) { icon; VStack(spacing: 0) { name; arrow.hidden() } }
+                    .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
             }
             .buttonStyle(ToolButtonStyle())
         } else if let action {
             VStack(spacing: 0) {
-                Button(action: action) { icon.frame(minWidth: 52).padding(.top, 3) }
+                Button(action: action) { icon.frame(minWidth: 52).padding(.top, 3).padding(.bottom, 3) }
                     .buttonStyle(ToolButtonStyle())
                 Button(action: open) { VStack(spacing: 0) { name; arrow }.frame(minWidth: 52) }
                     .buttonStyle(ToolButtonStyle())
@@ -135,7 +139,7 @@ struct ToolTile: View {
 final class Anchor {
     weak var view: NSView?
 }
-private struct AnchorView: NSViewRepresentable {
+struct AnchorView: NSViewRepresentable {
     let anchor: Anchor
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -162,7 +166,8 @@ enum DropDown {
             (item.target, item.representedObject) = (handler, handler)
             item.keyEquivalentModifierMask = choice.modifiers
             item.isEnabled = choice.enabled
-            item.image = choice.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            item.state = choice.on ? .on : .off
+            item.image = choice.image ?? choice.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
             menu.addItem(item)
         }
         let y = view.isFlipped ? view.bounds.maxY + 2 : -2

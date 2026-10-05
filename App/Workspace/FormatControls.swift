@@ -61,9 +61,9 @@ struct FormatRow: View {
                 .disabled(!context.canRedo)
             RowDivider()
             Group {
-                Menu { FontList(editor: editor) } label: { Text(text?.font ?? "글꼴").lineLimit(1) }
-                    .frame(width: 150)
-                    .help("글꼴")
+                FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(text?.font, editor) }) {
+                    Text(text?.font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
+                }
                 SizeField(size: text?.size, editor: editor)
                 RowDivider()
                 ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
@@ -86,17 +86,7 @@ struct FormatRow: View {
                     ToolIcon(label.title, symbol: label.symbol, on: paragraph?.alignment == alignment) { editor.setAlignment(alignment) }
                 }
                 RowDivider()
-                Menu {
-                    ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
-                        Button("\(Int(percent)) %") { editor.setLineSpacing(percent) }
-                    }
-                } label: {
-                    Label(Self.spacing(paragraph), systemImage: "arrow.up.and.down.text.horizontal")
-                        .labelStyle(.titleAndIcon)
-                        .monospacedDigit()
-                }
-                .fixedSize()
-                .help("줄 간격")
+                SpacingField(paragraph: paragraph, editor: editor)
             }
             .disabled(!context.hasSelection)
             Spacer(minLength: 0)
@@ -106,10 +96,11 @@ struct FormatRow: View {
         .frame(height: 30)
     }
 
-    private static func spacing(_ paragraph: ParaStyle?) -> String {
-        guard let value = paragraph?.lineSpacing else { return "줄 간격" }
-        let number = value.rounded() == value ? "\(Int(value))" : String(format: "%.1f", value)
-        return paragraph?.lineSpacingKind == .percent ? "\(number) %" : "\(number) pt"
+    /// Every installed family, built only when the menu opens.
+    private static func fonts(_ current: String?, _ editor: PageEditor) -> [Choice?] {
+        FormatChoices.families.map { font in
+            Choice(title: font.name, on: font.name == current || font.family == current) { editor.setFont(font.family) }
+        }
     }
 }
 
@@ -120,25 +111,21 @@ private struct SizeField: View {
     @State private var text = ""
 
     var body: some View {
-        HStack(spacing: 0) {
-            TextField("크기", text: $text)
-                .frame(width: 40)
-                .multilineTextAlignment(.trailing)
-                .monospacedDigit()
-                .onSubmit { Double(text).map { editor.setFontSize(min(max($0, 1), 4096)) } }
-            Text(" pt").foregroundStyle(.secondary)
-            Stepper("크기", onIncrement: { editor.stepFontSize(by: 1) }, onDecrement: { editor.stepFontSize(by: -1) })
-                .labelsHidden()
-            Menu {
-                ForEach(FormatChoices.sizes, id: \.self) { size in
-                    Button(FormatChoices.points(size)) { editor.setFontSize(size) }
+        FieldBox(title: "글자 크기", choices: {
+            FormatChoices.sizes.map { value in
+                Choice(title: FormatChoices.points(value), on: value == size) { editor.setFontSize(value) }
+            }
+        }) {
+            HStack(spacing: 2) {
+                NumberField(text: $text) { Double($0).map { editor.setFontSize(min(max($0, 1), 4096)) } }
+                    .frame(width: 34)
+                Text("pt").foregroundStyle(.secondary)
+                VStack(spacing: 0) {
+                    StepArrow(symbol: "chevron.up") { editor.stepFontSize(by: 1) }
+                    StepArrow(symbol: "chevron.down") { editor.stepFontSize(by: -1) }
                 }
-            } label: { Chevron() }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+            }
         }
-        .help("글자 크기")
         .onAppear { text = Self.label(size) }
         .onChange(of: size) { text = Self.label(size) }
     }
@@ -147,19 +134,101 @@ private struct SizeField: View {
     }
 }
 
+/// 줄 간격: the value of the caret's paragraph, typed or picked as a percentage.
+private struct SpacingField: View {
+    let paragraph: ParaStyle?
+    let editor: PageEditor
+    @State private var text = ""
+
+    var body: some View {
+        FieldBox(title: "줄 간격", choices: {
+            FormatChoices.lineSpacings.map { percent in
+                Choice(title: "\(Int(percent)) %", on: paragraph?.lineSpacingKind == .percent && paragraph?.lineSpacing == percent) {
+                    editor.setLineSpacing(percent)
+                }
+            }
+        }) {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.up.and.down.text.horizontal").font(.system(size: 12, weight: .light))
+                NumberField(text: $text) { Double($0).map { editor.setLineSpacing(min(max($0, 1), 500)) } }
+                    .frame(width: 30)
+                Text(paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt").foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { text = Self.label(paragraph) }
+        .onChange(of: paragraph?.lineSpacing) { text = Self.label(paragraph) }
+    }
+    private static func label(_ paragraph: ParaStyle?) -> String {
+        guard let value = paragraph?.lineSpacing else { return "" }
+        return value.rounded() == value ? "\(Int(value))" : String(format: "%.1f", value)
+    }
+}
+
+/// A borderless number field for a `FieldBox`.
+private struct NumberField: View {
+    @Binding var text: String
+    let submit: (String) -> Void
+    var body: some View {
+        TextField("", text: $text)
+            .textFieldStyle(.plain)
+            .multilineTextAlignment(.trailing)
+            .monospacedDigit()
+            .onSubmit { submit(text) }
+    }
+}
+
+/// A small arrow of a size stepper.
+private struct StepArrow: View {
+    let symbol: String, action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 6, weight: .semibold)).frame(width: 12, height: 9)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(ToolButtonStyle())
+    }
+}
+
+/// A value in a rounded box with a ▾ that opens its choices, shared by 글꼴, 글자 크기
+/// and 줄 간격 so they read as one family. `opensWhenClicked` makes the whole box open them.
+private struct FieldBox<Content: View>: View {
+    let title: String
+    var opensWhenClicked = false
+    let choices: () -> [Choice?]
+    @ViewBuilder let content: Content
+    @State private var anchor = Anchor()
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if opensWhenClicked {
+                Button(action: open) { HStack(spacing: 0) { content.padding(.leading, 7); Chevron() }.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+            } else {
+                content.padding(.leading, 5)
+                Button(action: open) { Chevron().contentShape(Rectangle()) }.buttonStyle(.plain)
+            }
+        }
+        .frame(height: 22)
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+        .background(AnchorView(anchor: anchor))
+        .help(title)
+    }
+    private func open() { DropDown.show(choices(), below: anchor.view) }
+}
+
 /// Line shapes for underline or strikethrough.
 private struct ShapeMenu: View {
     let title: String
     let pick: (Int) -> Void
+    @State private var anchor = Anchor()
     var body: some View {
-        Menu {
-            ForEach(LineShapes.names.indices, id: \.self) { index in
-                Button(LineShapes.names[index]) { pick(index) }
-            }
+        Button {
+            DropDown.show(LineShapes.names.indices.map { index in Choice(title: LineShapes.names[index]) { pick(index) } },
+                          below: anchor.view)
         } label: { Chevron() }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            .buttonStyle(ToolButtonStyle())
+            .background(AnchorView(anchor: anchor))
             .help(title)
     }
 }
@@ -167,7 +236,7 @@ private struct ShapeMenu: View {
 /// The small arrow that opens a button's choices.
 private struct Chevron: View {
     var body: some View {
-        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(width: 10, height: 22)
+        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(width: 14, height: 22)
     }
 }
 
@@ -176,37 +245,25 @@ private struct ColorMenu: View {
     let title: String, symbol: String, current: String
     let colors: [(name: String, hex: String)]
     let pick: (String) -> Void
+    @State private var anchor = Anchor()
     var body: some View {
-        Menu {
-            ForEach(colors, id: \.hex) { color in
-                Button { pick(color.hex) } label: {
-                    Label { Text(color.name) } icon: { Image(nsImage: FormatChoices.swatch(color.hex)) }
-                }
-            }
+        Button {
+            DropDown.show(colors.map { color in
+                Choice(title: color.name, image: FormatChoices.swatch(color.hex), on: color.hex == current) { pick(color.hex) }
+            }, below: anchor.view)
         } label: {
-            HStack(spacing: 2) {
+            HStack(spacing: 0) {
                 VStack(spacing: 1) {
                     Image(systemName: symbol).font(.system(size: 12, weight: .light))
                     Rectangle().fill(HexColor.color(current)).frame(width: 14, height: 3)
                 }
+                .frame(width: 20)
                 Chevron()
             }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(ToolButtonStyle())
+        .background(AnchorView(anchor: anchor))
         .help(title)
-    }
-}
-
-/// Every installed font family. A separate view with no changing inputs, so SwiftUI
-/// builds its long list once instead of on every format change.
-private struct FontList: View {
-    let editor: PageEditor
-    var body: some View {
-        ForEach(FormatChoices.families, id: \.family) { font in
-            Button(font.name) { editor.setFont(font.family) }
-        }
     }
 }
 
