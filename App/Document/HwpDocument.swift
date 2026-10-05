@@ -62,8 +62,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Sent after each new `presentation`, for the canvas and the find bar.
     let presented = PassthroughSubject<Void, Never>()
 
-    /// Format at the caret (or at the end of the selection).
+    /// Format at the caret (or at the end of the selection), with any pending style.
     private(set) var format: Format? { willSet { objectWillChange.send() } }
+    /// A character format chosen at a caret, for the next text typed there.
+    private var pendingStyle: (at: EditPosition, style: CharStyle)?
     private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
     /// Pages for the thumbnails, updated once typing pauses.
     private(set) var thumbnails: [RenderedPage] = [] { willSet { objectWillChange.send() } }
@@ -191,11 +193,19 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
 
-    /// Applies a character format to the selected text; does nothing without a selection.
+    /// Applies a character format to the selected text. At a caret, it applies to the
+    /// next text typed there, as part of that edit.
     func formatText(_ style: CharStyle, _ undoManager: UndoManager?) {
-        edit(undoManager) { selection in
-            guard let selection, selection.anchor != selection.focus else { return nil }
-            return .formatText(selection, style)
+        enqueue { document in
+            guard let selection = document.selection else { return }
+            if selection.anchor == selection.focus {
+                let earlier = document.pendingStyle.flatMap { $0.at == selection.focus ? $0.style : nil }
+                document.pendingStyle = (selection.focus, (earlier ?? CharStyle()).merging(style))
+                return
+            }
+            document.goalX = nil
+            try await document.run(.formatText(selection, style))
+            document.registerHistory(.undo, undoManager)
         }
     }
     /// Applies a paragraph format to every paragraph the selection touches.
@@ -258,6 +268,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func find(_ query: String) async throws -> [EditSelection] {
         try await session.find(query)
     }
+    /// Format at `position` in the current revision.
+    func session(formatAt position: EditPosition) async throws -> Format {
+        try await session.format(revision: revision, at: position)
+    }
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }
@@ -301,6 +315,17 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
     private func run(_ command: EditCommand, amend: Bool = false) async throws {
+        try await apply(command, amend: amend)
+        // Text typed (or composed) where a style is pending takes that style.
+        if case let .replace(range, text) = command, let pending = pendingStyle, range.ordered.start == pending.at,
+           !text.isEmpty, !text.contains(where: \.isNewline) {
+            let start = pending.at
+            let end = EditPosition(target: start.target, scalar: start.scalar + UInt32(text.unicodeScalars.count))
+            try await apply(.formatText(EditSelection(anchor: start, focus: end), pending.style), amend: true)
+            selection = .caret(end)
+        }
+    }
+    private func apply(_ command: EditCommand, amend: Bool) async throws {
         let output = try await session.apply(command, at: revision, amend: amend)
         staged.append(output)
         reply = output.reply
@@ -317,6 +342,15 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 highlight = (try? await session.selectionRects(revision: revision, for: selection)) ?? []
             }
             format = try? await session.format(revision: revision, at: selection.ordered.end)
+        }
+        // A pending style lasts while the caret stays put or composition continues there.
+        if let pending = pendingStyle {
+            if marked == nil && selection != .caret(pending.at) {
+                pendingStyle = nil
+            } else {
+                let text = format?.text.merging(pending.style) ?? pending.style
+                format?.text = text
+            }
         }
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight)
         for output in staged {

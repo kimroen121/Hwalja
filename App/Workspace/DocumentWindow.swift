@@ -1,8 +1,8 @@
 import PDFKit
 import SwiftUI
 
-/// One document window, laid out like Hancom Office Web: the menu row, the 기본 and 서식
-/// tool rows, then page thumbnails beside the pages, and a status bar.
+/// One document window, laid out like Hancom Office Web below the macOS menu bar: the
+/// 기본 and 서식 tool rows, then page thumbnails beside the pages, and a status bar.
 struct DocumentWindow: View {
     let document: HwpDocument
     @StateObject private var viewer = Viewer()
@@ -10,8 +10,6 @@ struct DocumentWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MenuRow(document: document, viewer: viewer)
-            Divider()
             if viewer.showsTools {
                 ToolRow(document: document, viewer: viewer)
                 Divider()
@@ -39,6 +37,12 @@ struct DocumentWindow: View {
             Button("취소", role: .cancel) {}
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.editingCharShape) {
+            CharShapeSheet(style: document.format?.text ?? CharStyle(), viewer: viewer)
+        }
+        .sheet(isPresented: $viewer.editingParaShape) {
+            ParaShapeSheet(style: document.format?.paragraph ?? ParaStyle(), viewer: viewer)
+        }
         .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
             if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
         }
@@ -58,12 +62,12 @@ private struct StatusBar: View {
             Text("\(position.page + 1) / \(document.context.pageCount)쪽")
                 .monospacedDigit()
             Spacer()
-            ToolIcon("축소", "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
+            ToolIcon("축소", symbol: "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
             Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
                 .menuStyle(.borderlessButton)
                 .monospacedDigit()
                 .fixedSize()
-            ToolIcon("확대", "plus.magnifyingglass") { viewer.canvas.zoomIn(nil) }
+            ToolIcon("확대", symbol: "plus.magnifyingglass") { viewer.canvas.zoomIn(nil) }
         }
         .font(.callout)
         .foregroundStyle(.secondary)
@@ -111,6 +115,8 @@ final class Viewer: ObservableObject {
     @Published var showsThumbnails = true
     @Published var goingToPage = false
     @Published var insertingTable = false
+    @Published var editingCharShape = false
+    @Published var editingParaShape = false
     /// The section and paper 편집 용지 is showing.
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
 

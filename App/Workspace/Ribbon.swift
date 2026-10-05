@@ -1,36 +1,7 @@
 import SwiftUI
 
-/// The window's menu row (파일·편집·보기·입력·서식·쪽·표), as in Hancom Office Web.
-struct MenuRow: View {
-    @ObservedObject var document: HwpDocument
-    @ObservedObject var viewer: Viewer
-
-    var body: some View {
-        let items = MenuItems(document: document, viewer: viewer, shortcuts: false)
-        HStack(spacing: 2) {
-            menu("파일") { items.fileMenu }
-            menu("편집") { items.editMenu }
-            menu("보기") { items.viewMenu }
-            menu("입력") { items.insert }
-            menu("서식") { items.format }
-            menu("쪽") { items.page }
-            menu("표") { items.table }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-    }
-
-    private func menu(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
-        Menu(title, content: content)
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .padding(.horizontal, 8)
-    }
-}
-
-/// 기본 도구 상자: the most used commands as large labeled icons.
+/// 기본 도구 상자: the most used commands as large labeled icons, in Hancom Office Web's
+/// order. Commands that do not work yet are left out.
 struct ToolRow: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
@@ -44,23 +15,24 @@ struct ToolRow: View {
                 .disabled(!context.hasRange)
             ToolTile("복사하기", "doc.on.doc") { send(#selector(NSText.copy(_:))) }
                 .disabled(!context.hasRange)
-            ToolTile("붙이기", "doc.on.clipboard") { send(#selector(NSText.paste(_:))) }
+            ToolTile("붙이기", "clipboard") { send(#selector(NSText.paste(_:))) }
                 .disabled(!context.hasSelection)
             ToolTile("모양 복사", "paintbrush") { viewer.paintFormat() }
                 .disabled(!context.hasSelection)
             RowDivider()
             ToolTile("찾기", "magnifyingglass") { viewer.showFind(replace: false) }
             RowDivider()
-            Group {
-                ToolTile("표", "tablecells") { viewer.insertingTable = true }
-                ToolTile("쪽 나누기", "rectangle.split.1x2") { viewer.insertBreak(column: false) }
-            }
-            .disabled(!context.hasSelection || context.inTable)
+            ToolTile("표", "tablecells") { viewer.insertingTable = true }
+                .disabled(!context.hasSelection || context.inTable)
+            RowDivider()
             ToolTile("문자표", "character.book.closed") { NSApp.orderFrontCharacterPalette(nil) }
                 .disabled(!context.hasSelection)
             RowDivider()
-            ToolTile("편집 용지", "doc.text") { viewer.showPageSetup() }
-            ToolTile("프린트", "printer") { send(#selector(DocumentCanvas.printDocument(_:))) }
+            Group {
+                ToolTile("글자 모양", "textformat") { viewer.editingCharShape = true }
+                ToolTile("문단 모양", "text.alignleft") { viewer.editingParaShape = true }
+            }
+            .disabled(!context.hasSelection)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
@@ -68,7 +40,7 @@ struct ToolRow: View {
     }
 }
 
-/// A large icon over its name.
+/// A large thin icon over its name.
 struct ToolTile: View {
     let title: String, symbol: String, action: () -> Void
     init(_ title: String, _ symbol: String, action: @escaping () -> Void) {
@@ -78,7 +50,7 @@ struct ToolTile: View {
         Button(action: action) {
             VStack(spacing: 3) {
                 Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .light))
+                    .font(.system(size: 19, weight: .ultraLight))
                     .frame(height: 22)
                 Text(title).font(.system(size: 11))
             }

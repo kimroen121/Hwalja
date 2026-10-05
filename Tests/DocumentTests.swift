@@ -231,6 +231,31 @@ struct DocumentTests {
         #expect(document.pages[0].size.width > document.pages[0].size.height)
     }
 
+    @Test func styleChosenAtTheCaretAppliesToTheNextText() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.formatText(CharStyle(bold: true), undo)
+        await document.settle()
+        #expect(document.format?.text.bold == true)
+        document.type("굵", undo)
+        await document.settle()
+        let typed = try await document.session(formatAt: EditPosition(target: body, scalar: 1))
+        #expect(typed.text.bold == true)
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 1)))
+        // Composition keeps the pending style through every update.
+        document.formatText(CharStyle(italic: true), undo)
+        for (text, commit) in [("ㄱ", false), ("기", false), ("기", true)] { document.compose(text, commit: commit, undo) }
+        await document.settle()
+        let composed = try await document.session(formatAt: EditPosition(target: body, scalar: 2))
+        #expect(composed.text.italic == true)
+        undo.undo()
+        await document.settle()
+        undo.undo()
+        await document.settle()
+        #expect(try await document.paragraph(body).text.hasPrefix("굵") == false)
+    }
+
     @Test func spreadsLayPagesSideBySide() async throws {
         let document = HwpDocument()
         document.selection = .caret(EditPosition(target: body, scalar: 0))
@@ -345,8 +370,6 @@ struct DocumentTests {
         let viewer = Viewer()
         viewer.canvas.bind(document)
         let rows = VStack(spacing: 0) {
-            MenuRow(document: document, viewer: viewer)
-            Divider()
             ToolRow(document: document, viewer: viewer)
             Divider()
             FormatRow(document: document, editor: viewer.canvas.editor)

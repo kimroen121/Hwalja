@@ -1,8 +1,7 @@
 import SwiftUI
 
-// Menus follow Hancom Office Web's menus in order (파일·편집·보기·입력·서식·쪽·표) and list
-// only commands that work (docs/ROADMAP.md has the full list). The same items fill the
-// macOS menu bar and the window's menu row; only the menu bar carries key equivalents.
+// The macOS menu bar follows Hancom Office Web's menus in order (파일·편집·보기·입력·서식·
+// 쪽·표) and lists only commands that work (docs/ROADMAP.md has the full list).
 
 /// Sends an action to the focused document through the responder chain.
 @MainActor func send(_ action: Selector) {
@@ -36,16 +35,6 @@ struct MenuItems {
         Button("프린트…") { send(#selector(DocumentCanvas.printDocument(_:))) }
             .keyboardShortcut(key("p"))
     }
-    /// The whole File menu for the window's menu row.
-    @ViewBuilder var fileMenu: some View {
-        Button("새 문서") { NSDocumentController.shared.newDocument(nil) }
-        Button("열기…") { NSDocumentController.shared.openDocument(nil) }
-        Divider()
-        Button("저장하기") { send(#selector(NSDocument.save(_:))) }
-        Button("다른 이름으로 저장하기…") { send(#selector(NSDocument.saveAs(_:))) }
-        Divider()
-        file
-    }
 
     @ViewBuilder var styleCopy: some View {
         Button("모양 복사") { editor?.copyFont(nil) }
@@ -72,25 +61,6 @@ struct MenuItems {
         }
         .disabled(viewer == nil)
     }
-    /// The whole Edit menu for the window's menu row.
-    @ViewBuilder var editMenu: some View {
-        Button("되돌리기") { send(Selector(("undo:"))) }.disabled(!context.canUndo)
-        Button("다시 실행") { send(Selector(("redo:"))) }.disabled(!context.canRedo)
-        Divider()
-        Group {
-            Button("오려 두기") { send(#selector(NSText.cut(_:))) }
-            Button("복사하기") { send(#selector(NSText.copy(_:))) }
-        }
-        .disabled(!context.hasRange)
-        Button("붙이기") { send(#selector(NSText.paste(_:))) }.disabled(!context.hasSelection)
-        Button("지우기") { send(#selector(NSText.delete(_:))) }.disabled(!context.hasRange)
-        Divider()
-        styleCopy
-        Divider()
-        Button("모두 선택") { send(#selector(NSText.selectAll(_:))) }.disabled(!context.hasSelection)
-        Divider()
-        find
-    }
 
     @ViewBuilder var view: some View {
         if let viewer {
@@ -107,14 +77,6 @@ struct MenuItems {
             toggle("쪽 미리 보기", viewer.showsThumbnails) { viewer.showsThumbnails.toggle() }
         }
     }
-    /// The whole View menu for the window's menu row.
-    @ViewBuilder var viewMenu: some View {
-        Button("실제 크기") { send(#selector(DocumentCanvas.zoomToActualSize(_:))) }
-        Button("확대") { send(#selector(DocumentCanvas.zoomIn(_:))) }
-        Button("축소") { send(#selector(DocumentCanvas.zoomOut(_:))) }
-        Divider()
-        view
-    }
 
     @ViewBuilder var insert: some View {
         Button("표…") { viewer?.insertingTable = true }
@@ -126,6 +88,12 @@ struct MenuItems {
     @ViewBuilder var format: some View {
         let text = document?.format?.text
         Group {
+            Button("글자 모양…") { viewer?.editingCharShape = true }.keyboardShortcut(key("l"))
+            Button("문단 모양…") { viewer?.editingParaShape = true }.keyboardShortcut(key("t"))
+        }
+        .disabled(!context.hasSelection)
+        Divider()
+        Group {
             toggle("굵게", text?.bold == true) { editor?.toggleBold() }.keyboardShortcut(key("b"))
             toggle("기울임꼴", text?.italic == true) { editor?.toggleItalic() }.keyboardShortcut(key("i"))
             toggle("밑줄", text?.underline == true) { editor?.toggleUnderline() }.keyboardShortcut(key("u"))
@@ -135,7 +103,7 @@ struct MenuItems {
             Button("글자 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(key(".", [.command, .shift]))
             Button("글자 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(key(",", [.command, .shift]))
         }
-        .disabled(!context.hasRange)
+        .disabled(!context.hasSelection)
         Divider()
         Group {
             ForEach(Alignment.allCases, id: \.self) { alignment in

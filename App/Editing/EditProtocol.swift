@@ -131,16 +131,83 @@ struct CharStyle: Codable, Hashable, Sendable {
     var strikethrough: Bool?
     /// `#rrggbb`.
     var color: String?
+    /// Line shapes (0 solid, 1 dash, 2 dot, …, 11 wave, 12 double wave).
+    var underlineShape: Int?
+    var strikeShape: Int?
+    /// Shade behind the text (`#rrggbb`, white is none); also serves 형광펜.
+    var shade: String?
+    /// 장평 (50–200%) and 자간 (−50–50%).
+    var ratio: Double?
+    var spacing: Double?
+    var superscript: Bool?
+    var `subscript`: Bool?
+    var outline: Bool?
+    var shadow: Bool?
+    var emboss: Bool?
+    var engrave: Bool?
+
+    /// The fields of `self` that differ from `old`.
+    func changes(from old: CharStyle) -> CharStyle {
+        var change = CharStyle()
+        func keep<T: Equatable>(_ key: WritableKeyPath<CharStyle, T?>) {
+            if self[keyPath: key] != old[keyPath: key] { change[keyPath: key] = self[keyPath: key] }
+        }
+        keep(\.font); keep(\.size); keep(\.bold); keep(\.italic); keep(\.underline); keep(\.strikethrough)
+        keep(\.color); keep(\.underlineShape); keep(\.strikeShape); keep(\.shade); keep(\.ratio); keep(\.spacing)
+        keep(\.superscript); keep(\.`subscript`); keep(\.outline); keep(\.shadow); keep(\.emboss); keep(\.engrave)
+        return change
+    }
+    /// `self` with the fields `other` sets.
+    func merging(_ other: CharStyle) -> CharStyle {
+        var merged = self
+        func take<T>(_ key: WritableKeyPath<CharStyle, T?>) {
+            if let value = other[keyPath: key] { merged[keyPath: key] = value }
+        }
+        take(\.font); take(\.size); take(\.bold); take(\.italic); take(\.underline); take(\.strikethrough)
+        take(\.color); take(\.underlineShape); take(\.strikeShape); take(\.shade); take(\.ratio); take(\.spacing)
+        take(\.superscript); take(\.`subscript`); take(\.outline); take(\.shadow); take(\.emboss); take(\.engrave)
+        return merged
+    }
 }
 
 enum Alignment: String, Codable, CaseIterable, Sendable {
     case justify, left, center, right, distribute, split
 }
 
+enum LineSpacingKind: String, Codable, CaseIterable, Sendable {
+    case percent, fixed, spaceOnly, minimum
+}
+
+/// Paragraph format; lengths are points. As a query result every field is set.
 struct ParaStyle: Codable, Hashable, Sendable {
     var alignment: Alignment?
-    /// Percent; nil when the paragraph uses another spacing kind.
+    /// Percent for `.percent`, otherwise points; sent together with `lineSpacingKind`.
     var lineSpacing: Double?
+    var lineSpacingKind: LineSpacingKind?
+    var marginLeft: Double?
+    var marginRight: Double?
+    /// First-line indent; negative hangs (내어쓰기).
+    var indent: Double?
+    var spacingBefore: Double?
+    var spacingAfter: Double?
+    var keepWithNext: Bool?
+    var keepLines: Bool?
+    var widowOrphan: Bool?
+    var pageBreakBefore: Bool?
+
+    /// The fields of `self` that differ from `old`; line spacing goes with its kind.
+    func changes(from old: ParaStyle) -> ParaStyle {
+        var change = ParaStyle()
+        func keep<T: Equatable>(_ key: WritableKeyPath<ParaStyle, T?>) {
+            if self[keyPath: key] != old[keyPath: key] { change[keyPath: key] = self[keyPath: key] }
+        }
+        keep(\.alignment); keep(\.marginLeft); keep(\.marginRight); keep(\.indent); keep(\.spacingBefore)
+        keep(\.spacingAfter); keep(\.keepWithNext); keep(\.keepLines); keep(\.widowOrphan); keep(\.pageBreakBefore)
+        if lineSpacing != old.lineSpacing || lineSpacingKind != old.lineSpacingKind {
+            (change.lineSpacing, change.lineSpacingKind) = (lineSpacing, lineSpacingKind)
+        }
+        return change
+    }
 }
 
 /// A caret motion, resolved against the engine's line layout.
