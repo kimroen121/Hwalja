@@ -418,7 +418,7 @@ fn generated_fixtures_open_as_display_lists() {
             .ops
             .iter()
             .any(|op| matches!(op, display::Op::Text { runs, .. } if runs[0].1 == "한")));
-        assert!(session.reply().suspect_pages.is_empty() && session.reply().page_count > 0);
+        assert!(session.reply().page_count > 0);
         if std::env::var_os("HWP_WRITE_FIXTURES").is_some() {
             let folder =
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../Tests/Fixtures");

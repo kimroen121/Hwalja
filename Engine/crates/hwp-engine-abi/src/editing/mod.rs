@@ -4,6 +4,7 @@ pub mod ffi;
 mod format;
 mod geometry;
 mod navigation;
+#[cfg(test)]
 mod preservation;
 mod protocol;
 mod save;
@@ -21,16 +22,10 @@ struct State {
     id: u64,
 }
 
-/// What the session remembers about one rendered page.
-#[derive(Clone, Copy, PartialEq)]
-struct Page {
-    hash: u64,
-    suspect: bool,
-}
-/// Pages after a render, and how to draw the ones that changed: a display list each, or,
-/// for pages it cannot express, a page in `pdf` (in order).
+/// Pages after a render (the hash of each page's SVG), and how to draw the ones that
+/// changed: a display list each, or, for pages it cannot express, a page in `pdf` (in order).
 struct Rendered {
-    pages: Vec<Page>,
+    pages: Vec<u64>,
     changed: Vec<u32>,
     displays: Vec<Option<display::Display>>,
     pdf: Vec<u8>,
@@ -40,7 +35,8 @@ pub struct EditSession {
     core: DocumentCore,
     original: Vec<u8>,
     revision: u64,
-    pages: Vec<Page>,
+    /// Hash of each page's SVG as last rendered.
+    pages: Vec<u64>,
     /// Pages re-rendered by the latest revision, in order, and how to draw them.
     changed: Vec<u32>,
     displays: Vec<Option<display::Display>>,
@@ -130,9 +126,6 @@ impl EditSession {
                 .and_then(|s| self.caret(self.revision, &s.focus).ok()),
             page_count: self.core.page_count(),
             changed_pages: self.changed.clone(),
-            suspect_pages: (0..self.pages.len() as u32)
-                .filter(|&p| self.pages[p as usize].suspect)
-                .collect(),
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
             dirty: self.state != 0,
@@ -155,13 +148,7 @@ impl EditSession {
         }
         let same_count = count as usize == self.pages.len();
         let mut pages = self.pages.clone();
-        pages.resize(
-            count as usize,
-            Page {
-                hash: 0,
-                suspect: false,
-            },
-        );
+        pages.resize(count as usize, 0);
         let (mut changed, mut displays, mut svgs) = (Vec::new(), Vec::new(), Vec::new());
         for page in if same_count { from } else { 0 }..count {
             let failed = |_| EditError::RenderFailed;
@@ -169,18 +156,13 @@ impl EditSession {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             svg.hash(&mut hasher);
             let hash = hasher.finish();
-            if self
-                .pages
-                .get(page as usize)
-                .is_some_and(|p| p.hash == hash)
-            {
+            if self.pages.get(page as usize) == Some(&hash) {
                 if same_count && page > settle {
                     break;
                 }
                 continue;
             }
-            let suspect = crate::layout_audit::is_suspect_page(&self.core, page).map_err(failed)?;
-            pages[page as usize] = Page { hash, suspect };
+            pages[page as usize] = hash;
             changed.push(page);
             let display = display::build(&svg);
             if display.is_none() {
@@ -223,6 +205,9 @@ impl EditSession {
             _ => {}
         }
         self.validate_command(&request.command)?;
+        // Tests check that every command changes only what it should; the editor skips it,
+        // as it costs a document copy per keystroke.
+        #[cfg(test)]
         let before = self.core.document().clone();
         let start = match &request.command {
             EditCommand::Replace { selection, .. }
@@ -247,6 +232,7 @@ impl EditSession {
         let snapshot = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {
             let selection = self.execute(&request.command)?;
+            #[cfg(test)]
             preservation::check(&before, self.core.document(), &request.command)?;
             let (_, end) = commands::ordered(&selection);
             let settle = self.page_of(end).unwrap_or(u32::MAX);

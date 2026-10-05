@@ -114,8 +114,6 @@ struct EditReply: Decodable, Sendable {
     var pageCount: UInt32
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     var changedPages: [UInt32]
-    /// Zero-based pages with suspected overlap or text outside the page.
-    var suspectPages: [UInt32]
     var canUndo: Bool
     var canRedo: Bool
     var dirty: Bool

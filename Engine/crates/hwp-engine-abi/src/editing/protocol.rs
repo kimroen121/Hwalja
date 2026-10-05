@@ -128,7 +128,6 @@ pub struct EditReply {
     pub page_count: u32,
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     pub changed_pages: Vec<u32>,
-    pub suspect_pages: Vec<u32>,
     pub can_undo: bool,
     pub can_redo: bool,
     pub dirty: bool,
