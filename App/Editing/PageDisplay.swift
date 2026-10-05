@@ -194,6 +194,18 @@ final class PageDisplay: @unchecked Sendable {
         }
     }
 
+    /// Combining marks, joiners, Hangul jamo and Arabic script take their glyphs from context.
+    private static func needsShaping(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0600...0x08FF, 0x1100...0x11FF, 0xA960...0xA97F, 0xD7B0...0xD7FF: return true
+        default:
+            switch scalar.properties.generalCategory {
+            case .nonspacingMark, .spacingMark, .enclosingMark, .format: return true
+            default: return false
+            }
+        }
+    }
+
     /// One SVG `<text>`: glyphs at their natural advances from the origin, stretched to
     /// `length` when given, the way usvg lays out a single text chunk.
     private static func draw(_ text: Op.Text, fonts: [CTFontDescriptor?], in context: CGContext) {
@@ -205,7 +217,8 @@ final class PageDisplay: @unchecked Sendable {
             let font = FontFiles.shared.font(descriptor, size: text.size)
             let units = Array(run.text.utf16)
             var found = [CGGlyph](repeating: 0, count: units.count)
-            if run.text.unicodeScalars.count == units.count, CTFontGetGlyphsForCharacters(font, units, &found, units.count) {
+            if run.text.unicodeScalars.count == units.count, !run.text.unicodeScalars.contains(where: Self.needsShaping),
+               CTFontGetGlyphsForCharacters(font, units, &found, units.count) {
                 var advances = [CGSize](repeating: .zero, count: found.count)
                 CTFontGetAdvancesForGlyphs(font, .horizontal, found, &advances, found.count)
                 let start = glyphs.count

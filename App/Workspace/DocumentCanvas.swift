@@ -948,7 +948,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             guard let text = try? await model.text(of: selection) else { return NSSound.beep() }
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
-            if cut { replaceSelection(with: "") }
+            // The selection may have moved while the text was read; never cut another range.
+            if cut, model.selection == selection { replaceSelection(with: "") }
         }
     }
 

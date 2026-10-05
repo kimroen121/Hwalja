@@ -255,6 +255,17 @@ impl EditSession {
         props: &ObjectProps,
     ) -> Result<(), EditError> {
         self.control(o)?;
+        // A size-protected object keeps its size unless the same change lifts the protection.
+        if props.width.is_some() || props.height.is_some() {
+            let current = self.object_props(o)?;
+            if current.size_protect == Some(true)
+                && props.size_protect != Some(false)
+                && (props.width.is_some_and(|w| Some(w) != current.width)
+                    || props.height.is_some_and(|h| Some(h) != current.height))
+            {
+                return Err(EditError::InvalidInput);
+            }
+        }
         let length = |v: Option<i32>| v.is_none_or(|v| v.abs() <= 1_000_000);
         let percent = |v: Option<i32>| v.is_none_or(|v| (-100..=100).contains(&v));
         let one_of =

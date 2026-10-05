@@ -160,6 +160,8 @@ final class Viewer: ObservableObject {
     @Published var query = ""
     @Published var replacement = ""
     /// Matches of `query` in the latest searched revision, and the selected one.
+    /// Bumped by every request to find, so the bar takes the keyboard even when already shown.
+    @Published private(set) var findRequests = 0
     @Published private(set) var matches: [EditSelection] = []
     @Published private(set) var currentMatch: Int?
     private var searchedRevision: UInt64?
@@ -221,6 +223,7 @@ extension Viewer {
     func showFind(replace: Bool) {
         replacing = replace || (finding && replacing)
         finding = true
+        findRequests += 1
     }
     func closeFind() {
         finding = false
@@ -236,7 +239,11 @@ extension Viewer {
     }
     func search() async {
         searchedRevision = document?.revision
-        matches = query.isEmpty ? [] : (try? await document?.find(query)) ?? []
+        let asked = query
+        let found = asked.isEmpty ? [] : (try? await document?.find(asked)) ?? []
+        // A newer query started meanwhile owns the result.
+        guard asked == query else { return }
+        matches = found
         currentMatch = document?.selection.flatMap { matches.firstIndex(of: $0) }
     }
 
@@ -325,7 +332,7 @@ private struct FindBar: View {
         .padding(.vertical, 6)
         .overlay(alignment: .bottom) { Divider() }
         .onAppear { focused = true }
-        .onChange(of: viewer.finding) { if viewer.finding { focused = true } }
+        .onChange(of: viewer.findRequests) { focused = true }
         .task(id: viewer.query) { await viewer.search() }
     }
 }
