@@ -105,6 +105,19 @@ struct DocumentTests {
         #expect(try await document.objectProps(equation).script == "a over b")
     }
 
+    /// 문단 부호 and 조판 부호 redraw the pages without touching the document or undo.
+    @Test func marksRedrawPagesOnly() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        let before = document.pages.map(\.id)
+        viewer.showsParagraphMarks = true
+        await document.settle()
+        #expect(document.pages.map(\.id) != before)
+        #expect(document.pages.allSatisfy { if case .display = $0 { true } else { false } })
+        #expect(!document.reply.dirty && !document.reply.canUndo)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])
@@ -493,6 +506,15 @@ struct DocumentTests {
             host.cacheDisplay(in: host.bounds, to: rep)
             try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "\(name).png"))
         }
+        viewer.showsControlCodes = true
+        viewer.showsGrid = true
+        await document.settle()
+        let editor = viewer.canvas.editor
+        editor.layoutPages(force: true)
+        let page = try #require(editor.frame(ofPage: 0))
+        let rep = try #require(editor.bitmapImageRepForCachingDisplay(in: page))
+        editor.cacheDisplay(in: page, to: rep)
+        try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "marks.png"))
     }
 
     private static func findCanvas(_ window: NSWindow) -> DocumentCanvas? {

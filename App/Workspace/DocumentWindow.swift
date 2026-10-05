@@ -132,6 +132,16 @@ final class Viewer: ObservableObject {
     @Published var showsTools = true
     @Published var showsFormat = true
     @Published var showsThumbnails = true
+    /// 표시/숨기기.
+    @Published var showsControlCodes = false {
+        didSet { showMarks() }
+    }
+    @Published var showsParagraphMarks = false {
+        didSet { showMarks() }
+    }
+    @Published var showsGrid = false {
+        didSet { canvas.editor.showsGrid = showsGrid }
+    }
     @Published var goingToPage = false
     @Published var insertingTable = false
     /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
@@ -175,6 +185,10 @@ final class Viewer: ObservableObject {
             let current = document.selection.flatMap { matches.firstIndex(of: $0) }
             if current != currentMatch { currentMatch = current }
         }
+    }
+
+    private func showMarks() {
+        document?.showMarks(paragraph: showsParagraphMarks, control: showsControlCodes)
     }
 
     /// 모양 복사 in one button: applies the copied format to selected text, otherwise

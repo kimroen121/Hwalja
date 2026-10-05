@@ -71,6 +71,11 @@ enum Request {
         font_size: u32,
         color: u32,
     },
+    /// Shows or hides 문단 부호 and 조판 부호.
+    ShowMarks {
+        paragraph: bool,
+        control: bool,
+    },
     /// Paper and margins of a section.
     PageSetup {
         section: u32,
@@ -173,6 +178,10 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
                 serde_json::json!({ "width": display.width, "height": display.height }),
                 data,
             )
+        }
+        Request::ShowMarks { paragraph, control } => {
+            session.show_marks(paragraph, control)?;
+            state(session)
         }
         Request::PageSetup { section } => {
             HwpEditResult::ok(session.page_setup(section)?, Vec::new())

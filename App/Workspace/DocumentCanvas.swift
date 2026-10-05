@@ -212,6 +212,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     // MARK: Pages
 
+    /// 격자 보기: a 5 mm grid over the pages.
+    var showsGrid = false {
+        didSet { needsDisplay = true }
+    }
     /// Pages per row.
     var columns = 1 {
         didSet { layoutPages() }
@@ -276,6 +280,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             frame.fill()
             NSGraphicsContext.restoreGraphicsState()
             if pages.indices.contains(index) { pages[index].draw(in: context, rect: frame) }
+            if showsGrid { drawGrid(in: frame) }
         }
         let active = window?.isKeyWindow == true && window?.firstResponder === self
         (active ? NSColor.selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor).setFill()
@@ -285,6 +290,22 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if let rect = objectRect, rect.insetBy(dx: -4, dy: -4).intersects(dirtyRect) {
             drawHandles(around: rect)
         }
+    }
+    private func drawGrid(in frame: NSRect) {
+        // ponytail: fixed 5 mm spacing; make it a setting when 격자 설정 is added.
+        let step = 5 / 25.4 * 72
+        let path = NSBezierPath()
+        for x in stride(from: frame.minX + step, to: frame.maxX, by: step) {
+            path.move(to: NSPoint(x: x, y: frame.minY))
+            path.line(to: NSPoint(x: x, y: frame.maxY))
+        }
+        for y in stride(from: frame.minY + step, to: frame.maxY, by: step) {
+            path.move(to: NSPoint(x: frame.minX, y: y))
+            path.line(to: NSPoint(x: frame.maxX, y: y))
+        }
+        path.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
+        NSColor.systemBlue.withAlphaComponent(0.12).setStroke()
+        path.stroke()
     }
     /// The frame and eight sizing handles of a selected object, one screen point thick.
     private func drawHandles(around rect: NSRect) {

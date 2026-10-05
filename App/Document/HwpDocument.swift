@@ -278,6 +278,14 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func deselectObject() {
         enqueue { $0.object = nil }
     }
+    /// Shows or hides 문단 부호 and 조판 부호 on the pages, after queued edits.
+    func showMarks(paragraph: Bool, control: Bool) {
+        enqueue { document in
+            let output = try await document.session.showMarks(paragraph: paragraph, control: control)
+            document.staged.append(output)
+            document.reply = output.reply
+        }
+    }
     /// Waits for queued edits and moves.
     func settle() async { await queue?.value }
 

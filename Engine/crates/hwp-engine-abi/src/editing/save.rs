@@ -26,16 +26,19 @@ fn outline(doc: &Document) -> Vec<String> {
 impl EditSession {
     /// Serializes the current document and verifies that HWP/HWPX bytes parse back to the
     /// same text and control structure. Nothing is written to disk.
-    pub fn export(&self, format: SaveFormat) -> Result<Vec<u8>, EditError> {
+    pub fn export(&mut self, format: SaveFormat) -> Result<Vec<u8>, EditError> {
         if self.locked {
             return Err(EditError::Locked);
         }
         let bytes = match format {
             SaveFormat::Pdf => {
-                return self
-                    .core
-                    .render_document_pdf_native()
-                    .map_err(|_| EditError::RenderFailed)
+                // Marks shown on screen stay off paper.
+                let core = &mut self.core;
+                let marks = (core.show_paragraph_marks, core.show_control_codes);
+                (core.show_paragraph_marks, core.show_control_codes) = (false, false);
+                let pdf = core.render_document_pdf_native();
+                (core.show_paragraph_marks, core.show_control_codes) = marks;
+                return pdf.map_err(|_| EditError::RenderFailed);
             }
             SaveFormat::Hwp => self.core.export_hwp_native(),
             SaveFormat::Hwpx => self.core.export_hwpx_native(),

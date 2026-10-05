@@ -511,3 +511,20 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
              if let Some(v) = json_i16(json, "outerLeft") {
                  table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
+diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
+--- a/src/document_core/mod.rs
++++ b/src/document_core/mod.rs
+@@ -169,11 +169,11 @@
+     /// 새 컨트롤 복사 시 0 으로 리셋, 붙여넣기마다 +1 하여 위치 오프셋 누적(한컴 정합).
+     pub(crate) paste_cascade_count: u32,
+     /// 문단부호(¶) 표시 여부
+-    pub(crate) show_paragraph_marks: bool,
++    pub show_paragraph_marks: bool,
+     /// [#4709] SVG 출력에 배치 메트릭 face 주석(data-metric-font) 부착 여부 (옵트인)
+     pub(crate) annotate_metric_font: bool,
+     /// 조판부호 표시 여부 (개체 마커 [표]/[그림] 등, 문단부호 포함)
+-    pub(crate) show_control_codes: bool,
++    pub show_control_codes: bool,
+     /// 투명선 표시 여부
+     pub(crate) show_transparent_borders: bool,
+     /// 잘림 보기 (body/셀 클리핑 활성화 여부)

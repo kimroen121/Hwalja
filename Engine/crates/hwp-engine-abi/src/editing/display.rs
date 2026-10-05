@@ -521,7 +521,9 @@ impl<'a> Builder<'a> {
         if text.is_empty() {
             return Some(());
         }
-        let base = pick(&self.db, n.attribute("font-family")?, weight, style)?;
+        // usvg's family when the SVG names none (editing marks).
+        let family = n.attribute("font-family").unwrap_or("Times New Roman");
+        let base = pick(&self.db, family, weight, style)?;
         let mut runs: Vec<(u16, String)> = Vec::new();
         for (id, c) in faces(&self.db, base, &text) {
             let font = self.font(id)?;

@@ -435,11 +435,12 @@ enum EngineRequest: Encodable, Sendable {
     case objectProps(ObjectRef)
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
+    case showMarks(paragraph: Bool, control: Bool)
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
-             object, cell, script, fontSize, color
+             object, cell, script, fontSize, color, paragraph, control
     }
     private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
     func encode(to encoder: Encoder) throws {
@@ -504,6 +505,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(script, forKey: .script)
             try c.encode(fontSize, forKey: .fontSize)
             try c.encode(color, forKey: .color)
+        case let .showMarks(paragraph, control):
+            try c.encode("showMarks", forKey: .op)
+            try c.encode(paragraph, forKey: .paragraph)
+            try c.encode(control, forKey: .control)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)

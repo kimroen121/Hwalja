@@ -285,6 +285,18 @@ impl EditSession {
             Err(error) => Err(self.roll_back(snapshot, error)),
         }
     }
+    /// Shows or hides 문단 부호 and 조판 부호 on the pages. Neither is printed or
+    /// exported, saved, or undone.
+    pub fn show_marks(&mut self, paragraph: bool, control: bool) -> Result<EditReply, EditError> {
+        if self.locked {
+            return Err(EditError::Locked);
+        }
+        self.core.show_paragraph_marks = paragraph;
+        self.core.show_control_codes = control;
+        let rendered = self.render(0, u32::MAX)?;
+        self.publish(rendered, self.selection.clone());
+        Ok(self.reply())
+    }
     /// Moves one state back (undo) or forward (redo), keeping the current state on the other stack.
     fn travel(&mut self, back: bool) -> Result<EditReply, EditError> {
         let target = if back {

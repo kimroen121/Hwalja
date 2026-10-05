@@ -1546,3 +1546,20 @@ fn notes_are_inserted_and_edited() {
         }
     }
 }
+
+#[test]
+fn marks_show_on_pages_but_not_in_the_pdf() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let plain = s.core.render_page_svg_native(0).unwrap();
+    let pdf = s.export(SaveFormat::Pdf).unwrap();
+    let reply = s.show_marks(true, true).unwrap();
+    assert_eq!(reply.changed_pages, [0]);
+    assert!(!reply.dirty && !reply.can_undo);
+    let marked = s.core.render_page_svg_native(0).unwrap();
+    assert_ne!(marked, plain);
+    assert!(display::build(&marked).is_some(), "{marked}");
+    assert_eq!(s.export(SaveFormat::Pdf).unwrap().len(), pdf.len());
+    assert!(s.core.show_paragraph_marks);
+    s.show_marks(false, false).unwrap();
+    assert_eq!(s.core.render_page_svg_native(0).unwrap(), plain);
+}

@@ -131,6 +131,11 @@ struct MenuItems {
                     toggle(title, viewer.columns == count) { viewer.columns = count }
                 }
             } label: { Label("쪽 모양", systemImage: "rectangle.split.2x1") }
+            Menu {
+                toggle("조판 부호", viewer.showsControlCodes) { viewer.showsControlCodes.toggle() }
+                toggle("문단 부호", viewer.showsParagraphMarks) { viewer.showsParagraphMarks.toggle() }
+                toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
+            } label: { Label("표시/숨기기", systemImage: "paragraphsign") }
             Divider()
             Menu {
                 toggle("기본", viewer.showsTools) { viewer.showsTools.toggle() }
