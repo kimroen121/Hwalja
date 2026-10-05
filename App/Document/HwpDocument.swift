@@ -35,7 +35,7 @@ struct EditingContext: Equatable {
     var hasSelection = false
     /// The selection covers text.
     var hasRange = false
-    /// The caret is in a table cell.
+    /// The caret is in a table cell (not a 글상자).
     var inTable = false
     /// The caret is in a 각주 or 미주.
     var inNote = false
@@ -458,7 +458,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         let block = selection?.isCellBlock ?? false
         let context = EditingContext(hasSelection: selection != nil,
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
-                              inTable: selection?.focus.target.cell != nil, inNote: selection?.focus.target.note != nil,
+                              inTable: selection?.focus.target.cell != nil && format?.textBox != true,
+                              inNote: selection?.focus.target.note != nil,
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind)
         if context != self.context { self.context = context }

@@ -462,6 +462,8 @@ pub struct Format {
     pub paragraph: ParaStyle,
     /// The paragraph's 스타일.
     pub style: u32,
+    /// The caret is in a 글상자 (addressed like a table cell).
+    pub text_box: bool,
     pub fonts: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize)]

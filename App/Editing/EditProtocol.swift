@@ -436,6 +436,8 @@ struct Format: Decodable, Hashable, Sendable {
     var paragraph: ParaStyle
     /// The paragraph's 스타일.
     var style: UInt32
+    /// The caret is in a 글상자, addressed like a table cell.
+    var textBox: Bool
     var fonts: [String]
 }
 

@@ -1867,3 +1867,68 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
     };
     assert_eq!(run(&mut s, bad).unwrap_err(), EditError::InvalidInput);
 }
+#[test]
+fn text_boxes_take_text() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertShape {
+        position: point(body(), 0),
+        shape: "textbox".into(),
+        x: 10_000,
+        y: 30_000,
+        width: 20_000,
+        height: 8_000,
+        flip: false,
+    };
+    run(&mut s, insert).unwrap();
+    let placed = s.placed(0).unwrap().remove(0);
+    let inside = EditTarget {
+        section: 0,
+        paragraph: placed.object.paragraph,
+        cell: Some(CellTarget {
+            control: placed.object.control,
+            cell: 0,
+            paragraph: 0,
+        }),
+        note: None,
+    };
+    let r = &placed.rect;
+    let hit = s.hit_test(s.revision, 0, r.x + 10.0, r.y + 10.0).unwrap();
+    assert_eq!(hit.target, inside);
+    replace(&mut s, inside.clone(), 0, 0, "글상자").unwrap();
+    run(
+        &mut s,
+        EditCommand::Split {
+            position: point(inside.clone(), 3),
+        },
+    )
+    .unwrap();
+    let second = commands::at_index(&inside, 1);
+    replace(&mut s, second.clone(), 0, 0, "둘째 줄").unwrap();
+    assert_eq!(s.paragraph(&inside).unwrap().text, "글상자");
+    assert_eq!(s.paragraph(&second).unwrap().text, "둘째 줄");
+    let caret = s.caret(s.revision, &point(second.clone(), 2)).unwrap();
+    assert!(
+        caret.y > r.y && caret.y < r.y + r.height,
+        "{caret:?} in {r:?}"
+    );
+    let format = s.format(s.revision, &point(second.clone(), 1)).unwrap();
+    assert!(format.text_box);
+    let rects = s
+        .selection_rects(
+            s.revision,
+            &EditSelection {
+                anchor: point(inside.clone(), 0),
+                focus: point(inside.clone(), 3),
+            },
+        )
+        .unwrap();
+    assert_eq!(rects.len(), 1);
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(
+            reopened.paragraph(&second).unwrap().text,
+            "둘째 줄",
+            "{format:?}"
+        );
+    }
+}

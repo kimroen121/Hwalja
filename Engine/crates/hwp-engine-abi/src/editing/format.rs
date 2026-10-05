@@ -473,6 +473,7 @@ impl EditSession {
         let style = get(self.core.document(), t)?.style_id as u32;
         Ok(Format {
             style,
+            text_box: super::commands::in_text_box(self.core.document(), t),
             text: CharStyle {
                 font: Some(font),
                 size: text

@@ -54,9 +54,6 @@ impl EditSession {
             return Ok(position);
         }
         let hit = parse(self.core.hit_test_native(page, x, y))?;
-        if hit.get("isTextBox").is_some() {
-            return Err(EditError::UnsupportedTarget);
-        }
         let section = field(&hit, "sectionIndex")?;
         let target = match hit.get("cellPath").and_then(Value::as_array) {
             None => EditTarget {

@@ -457,12 +457,16 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let extend = event.modifierFlags.contains(.shift)
         let clicks = event.clickCount
         model.select { [weak self] model in
-            if !extend, let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y) {
+            let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            // A click on an object selects it, except inside a 글상자, away from its edge,
+            // where it places the caret in the box's text.
+            if !extend, let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y),
+               !(Self.inside(object.rect, hit.point) && position.map { Self.holds(object.object, $0) } == true) {
                 model.object = object
                 if clicks == 2 { self?.onOpenObject?(object) }
                 return nil
             }
-            let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            guard let position else { throw EditError.unsupportedTarget }
             switch clicks {
             case 2:
                 let start = try await model.navigate(from: position, .wordStart).position
@@ -477,6 +481,18 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 return EditSelection(anchor: anchor, focus: position)
             }
         }
+    }
+
+    /// Whether `position` is in the text of the 글상자 `object`.
+    private static func holds(_ object: ObjectRef, _ position: EditPosition) -> Bool {
+        object.kind == .shape && position.target.paragraph == object.paragraph
+            && position.target.cell?.control == object.control
+    }
+    /// Whether a point is inside a frame, away from its edge.
+    private static func inside(_ rect: PageRect, _ point: CGPoint) -> Bool {
+        let edge = 6.0
+        return point.x > rect.x + edge && point.x < rect.x + rect.width - edge
+            && point.y > rect.y + edge && point.y < rect.y + rect.height - edge
     }
 
     override func mouseUp(with event: NSEvent) {

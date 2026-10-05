@@ -162,6 +162,22 @@ struct DocumentTests {
         #expect(document.object == nil)
     }
 
+    /// Text typed after a click inside a 글상자 lands in the box; table commands stay off.
+    @Test func textBoxesTakeTypedText() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.insertShape("textbox", page: 0, from: CGPoint(x: 200, y: 300), to: CGPoint(x: 400, y: 380), nil)
+        await document.settle()
+        let box = try #require(document.object)
+        let inside = try await document.hitTest(page: 0, x: box.rect.x + 20, y: box.rect.y + 20)
+        #expect(inside.target.cell?.control == box.object.control)
+        document.select { _ in .caret(inside) }
+        document.type("상자 글", nil)
+        await document.settle()
+        #expect(try await document.paragraph(inside.target).text == "상자 글")
+        #expect(!document.context.inTable && document.format?.textBox == true)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

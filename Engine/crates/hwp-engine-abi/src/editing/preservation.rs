@@ -63,7 +63,19 @@ fn remove(
     }
     Ok(held)
 }
-/// The paragraph list (body or cell) that `t` addresses.
+fn text_box_mut(
+    shape: &mut rhwp::model::shape::ShapeObject,
+) -> Option<&mut rhwp::model::shape::TextBox> {
+    use rhwp::model::shape::ShapeObject;
+    match shape {
+        ShapeObject::Rectangle(s) => s.drawing.text_box.as_mut(),
+        ShapeObject::Ellipse(s) => s.drawing.text_box.as_mut(),
+        ShapeObject::Polygon(s) => s.drawing.text_box.as_mut(),
+        ShapeObject::Curve(s) => s.drawing.text_box.as_mut(),
+        _ => None,
+    }
+}
+/// The paragraph list (body, cell or 글상자) that `t` addresses.
 fn edited_paragraphs<'a>(
     doc: &'a mut Document,
     t: &EditTarget,
@@ -73,19 +85,26 @@ fn edited_paragraphs<'a>(
         .get_mut(t.section as usize)
         .ok_or(EditError::PreservationFailed)?;
     Ok(if let Some(c) = &t.cell {
-        let Some(Control::Table(table)) = section
+        match section
             .paragraphs
             .get_mut(t.paragraph as usize)
             .and_then(|p| p.controls.get_mut(c.control as usize))
-        else {
-            return Err(EditError::PreservationFailed);
-        };
-        table.text_reflowed_after_edit = false;
-        &mut table
-            .cells
-            .get_mut(c.cell as usize)
-            .ok_or(EditError::PreservationFailed)?
-            .paragraphs
+        {
+            Some(Control::Table(table)) => {
+                table.text_reflowed_after_edit = false;
+                &mut table
+                    .cells
+                    .get_mut(c.cell as usize)
+                    .ok_or(EditError::PreservationFailed)?
+                    .paragraphs
+            }
+            Some(Control::Shape(shape)) => {
+                &mut text_box_mut(shape)
+                    .ok_or(EditError::PreservationFailed)?
+                    .paragraphs
+            }
+            _ => return Err(EditError::PreservationFailed),
+        }
     } else if let Some(n) = &t.note {
         match section
             .paragraphs

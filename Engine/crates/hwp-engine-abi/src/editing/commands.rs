@@ -5,6 +5,7 @@ use rhwp::model::{
     document::Document,
     header_footer::HeaderFooterApply,
     paragraph::Paragraph,
+    shape::{ShapeObject, TextBox},
     table::Table,
 };
 use serde_json::Value;
@@ -26,8 +27,15 @@ pub(super) fn paragraphs<'a>(
             .paragraphs
             .get(t.paragraph as usize)
             .ok_or(EditError::InvalidInput)?;
-        let Some(Control::Table(table)) = host.controls.get(c.control as usize) else {
-            return Err(EditError::UnsupportedTarget);
+        let table = match host.controls.get(c.control as usize) {
+            Some(Control::Table(table)) => table,
+            // A 글상자 is addressed as cell 0 of its shape, as rhwp does.
+            Some(Control::Shape(shape)) if c.cell == 0 => {
+                return text_box(shape)
+                    .map(|b| b.paragraphs.as_slice())
+                    .ok_or(EditError::UnsupportedTarget)
+            }
+            _ => return Err(EditError::UnsupportedTarget),
         };
         let cell = table
             .cells
@@ -50,6 +58,28 @@ pub(super) fn paragraphs<'a>(
     } else {
         Ok(&section.paragraphs)
     }
+}
+/// The 글상자 a drawing object holds, if any.
+pub(super) fn text_box(shape: &ShapeObject) -> Option<&TextBox> {
+    match shape {
+        ShapeObject::Rectangle(s) => s.drawing.text_box.as_ref(),
+        ShapeObject::Ellipse(s) => s.drawing.text_box.as_ref(),
+        ShapeObject::Polygon(s) => s.drawing.text_box.as_ref(),
+        ShapeObject::Curve(s) => s.drawing.text_box.as_ref(),
+        _ => None,
+    }
+}
+/// Whether `t` is in a 글상자 rather than a table cell.
+pub(super) fn in_text_box(doc: &Document, t: &EditTarget) -> bool {
+    t.cell.as_ref().is_some_and(|c| {
+        matches!(
+            doc.sections
+                .get(t.section as usize)
+                .and_then(|s| s.paragraphs.get(t.paragraph as usize))
+                .and_then(|p| p.controls.get(c.control as usize)),
+            Some(Control::Shape(_))
+        )
+    })
 }
 pub(super) fn index(t: &EditTarget) -> usize {
     (match (&t.cell, &t.note) {
