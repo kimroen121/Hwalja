@@ -139,6 +139,9 @@ pub(super) fn check(
                 grown,
             );
         }
+        EditCommand::InsertPicture { position, .. } => {
+            return check_inserted_picture(before, after, &position.target)
+        }
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
@@ -185,6 +188,55 @@ pub(super) fn check(
     } else {
         Err(EditError::PreservationFailed)
     }
+}
+
+/// A picture insertion may add one picture and its one binary-data record; the rest of
+/// the document, including every previous binary payload, must remain unchanged.
+fn check_inserted_picture(
+    before: &Document,
+    after: &Document,
+    target: &EditTarget,
+) -> Result<(), EditError> {
+    if after.bin_data_content.len() != before.bin_data_content.len() + 1
+        || after.doc_info.bin_data_list.len() != before.doc_info.bin_data_list.len() + 1
+        || format!("{:?}", before.bin_data_content)
+            != format!(
+                "{:?}",
+                &after.bin_data_content[..before.bin_data_content.len()]
+            )
+        || format!("{:?}", before.doc_info.bin_data_list)
+            != format!(
+                "{:?}",
+                &after.doc_info.bin_data_list[..before.doc_info.bin_data_list.len()]
+            )
+    {
+        return Err(EditError::PreservationFailed);
+    }
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let old = remove(&mut a, target, commands::index(target), 1)?;
+    let new = remove(&mut b, target, commands::index(target), 1)?;
+    let pictures = new
+        .0
+        .iter()
+        .filter(|c| matches!(c, Control::Picture(_)))
+        .count();
+    let old_pictures = old
+        .0
+        .iter()
+        .filter(|c| matches!(c, Control::Picture(_)))
+        .count();
+    if pictures != old_pictures + 1 {
+        return Err(EditError::PreservationFailed);
+    }
+    b.bin_data_content.truncate(a.bin_data_content.len());
+    b.doc_info
+        .bin_data_list
+        .truncate(a.doc_info.bin_data_list.len());
+    for doc in [&mut a, &mut b] {
+        doc.doc_info.raw_stream = None;
+    }
+    same_rest(&mut a, &mut b, target.section)
 }
 
 /// DocInfo may only gain entries (shapes, fonts, border fills) at the end of its lists;

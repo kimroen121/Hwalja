@@ -77,6 +77,20 @@ pub enum EditCommand {
         rows: u16,
         columns: u16,
     },
+    /// An embedded PNG or JPEG, placed in body text at `position`.
+    InsertPicture {
+        position: EditPosition,
+        /// Base64 is used only at the JSON boundary; decoded input is limited to 5 MiB.
+        data: String,
+        width: u32,
+        height: u32,
+        #[serde(rename = "naturalWidth")]
+        natural_width: u32,
+        #[serde(rename = "naturalHeight")]
+        natural_height: u32,
+        extension: String,
+        description: String,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,

@@ -29,6 +29,28 @@ struct DocumentTests {
         #expect(!reopened.pages.isEmpty)
     }
 
+    @Test func insertsPictureSavesAndUndoes() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        let position = EditPosition(target: body, scalar: 0)
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
+        document.selection = .caret(position)
+        document.edit(undo) { _ in .insertPicture(position, data: png, width: 7_500, height: 7_500,
+                                                   naturalWidth: 1, naturalHeight: 1,
+                                                   extension: "png", description: "test.png") }
+        await document.settle()
+        #expect(document.revision == 1)
+        #expect(document.pages.contains { page in
+            if case .display(let display) = page { return display.ops.contains { if case .image = $0 { true } else { false } } }
+            return false
+        })
+        let reopened = try HwpDocument(data: document.snapshot(contentType: .hwpx))
+        #expect(!reopened.pages.isEmpty)
+        undo.undo()
+        await document.settle()
+        #expect(document.revision == 2 && !document.reply.dirty)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

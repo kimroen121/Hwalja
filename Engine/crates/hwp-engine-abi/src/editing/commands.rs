@@ -1,4 +1,5 @@
 use super::*;
+use base64::Engine;
 use rhwp::model::{
     control::{AutoNumber, AutoNumberType, Control},
     document::Document,
@@ -310,6 +311,39 @@ impl EditSession {
                     Ok(())
                 } else {
                     Err(EditError::InvalidInput)
+                }
+            }
+            EditCommand::InsertPicture {
+                position,
+                data,
+                width,
+                height,
+                natural_width,
+                natural_height,
+                extension,
+                description,
+            } => {
+                body_only(&position.target)?;
+                self.validate_position(position)?;
+                if data.len() > 7 * 1024 * 1024 {
+                    return Err(EditError::ResourceLimit);
+                }
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|_| EditError::InvalidInput)?;
+                if decoded.is_empty()
+                    || decoded.len() > 5 * 1024 * 1024
+                    || !matches!(extension.as_str(), "png" | "jpg" | "jpeg")
+                    || !(1..=1_000_000).contains(width)
+                    || !(1..=1_000_000).contains(height)
+                    || !(1..=20_000).contains(natural_width)
+                    || !(1..=20_000).contains(natural_height)
+                    || *natural_width as u64 * *natural_height as u64 > 100_000_000
+                    || description.len() > 1024
+                {
+                    Err(EditError::InvalidInput)
+                } else {
+                    Ok(())
                 }
             }
             EditCommand::EditTable { cell, change } => {
@@ -742,6 +776,37 @@ impl EditSession {
                     },
                     scalar: 0,
                 }))
+            }
+            EditCommand::InsertPicture {
+                position,
+                data,
+                width,
+                height,
+                natural_width,
+                natural_height,
+                extension,
+                description,
+            } => {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|_| EditError::InvalidInput)?;
+                let t = &position.target;
+                self.core.insert_picture_native(
+                    t.section as usize,
+                    t.paragraph as usize,
+                    position.scalar as usize,
+                    &[],
+                    &bytes,
+                    *width,
+                    *height,
+                    *natural_width,
+                    *natural_height,
+                    extension,
+                    description,
+                    None,
+                    None,
+                )?;
+                Ok(EditSelection::caret(position.clone()))
             }
             EditCommand::InsertNote { position, endnote } => {
                 let t = &position.target;

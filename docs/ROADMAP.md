@@ -80,7 +80,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 문서 창: 눈금자 | 눈금자 보기 | | |
 | | 메모: 모든 메모 표시, 메모 안내선 표시 | | | 2차 |
 | 입력 | 도형(가로 글상자, 직사각형, 타원, 직선, 호), 글상자 | | `create_shape_control_native` | |
-| | 그림 | | `insert_picture_native` | |
+| | 그림 | PNG/JPEG 파일 선택, 본문 삽입·비율 유지·Undo·저장 | `insert_picture_native` | 기본 완료 |
 | | 표 | 표… (줄·칸 개수) | `create_table_native` | 완료(본문) |
 | | 차트, 웹 동영상 | | `set_chart_data_native` | 2차 |
 | | 수식 | | `insert_equation_native` | |

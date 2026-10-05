@@ -478,6 +478,44 @@ fn export_round_trips_edits() {
 }
 
 #[test]
+fn picture_insert_undo_and_save_round_trip() {
+    use base64::Engine;
+    let png = base64::engine::general_purpose::STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        .unwrap();
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut session = EditSession::open(&plain_document(format, false)).unwrap();
+        let before_bins = session.core.document().bin_data_content.len();
+        let command = EditCommand::InsertPicture {
+            position: point(body(), 1),
+            data: base64::engine::general_purpose::STANDARD.encode(&png),
+            width: 7_500,
+            height: 7_500,
+            natural_width: 1,
+            natural_height: 1,
+            extension: "png".into(),
+            description: "test.png".into(),
+        };
+        run(&mut session, command).unwrap();
+        assert_eq!(
+            session.core.document().bin_data_content.len(),
+            before_bins + 1
+        );
+        assert!(session.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .any(|c| matches!(c, Control::Picture(_))));
+        let reopened = EditSession::open(&session.export(save).unwrap()).unwrap();
+        assert!(reopened.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .any(|c| matches!(c, Control::Picture(_))));
+        run(&mut session, EditCommand::Undo).unwrap();
+        assert_eq!(session.core.document().bin_data_content.len(), before_bins);
+    }
+}
+
+#[test]
 fn replace_spans_paragraphs() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();

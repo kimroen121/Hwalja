@@ -42,6 +42,9 @@ enum EditCommand: Encodable, Sendable {
     /// A new page (or column) from `position` in the body.
     case pageBreak(EditPosition, column: Bool)
     case insertTable(EditPosition, rows: Int, columns: Int)
+    case insertPicture(EditPosition, data: Data, width: UInt32, height: UInt32,
+                       naturalWidth: UInt32, naturalHeight: UInt32,
+                       extension: String, description: String)
     /// A 각주 (or 미주) at `position`; the caret moves into it.
     case insertNote(EditPosition, endnote: Bool)
     /// Adds or removes a row or column of the table holding the cell `target`.
@@ -53,7 +56,9 @@ enum EditCommand: Encodable, Sendable {
     case redo
 
     private enum Key: String, CodingKey {
-        case kind, selection, text, position, style, column, rows, columns, cell, change, section, page, footer, pageNumber, endnote
+        case kind, selection, text, position, style, column, rows, columns, data, width, height,
+             naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
+             footer, pageNumber, endnote
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -85,6 +90,16 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(position, forKey: .position)
             try c.encode(rows, forKey: .rows)
             try c.encode(columns, forKey: .columns)
+        case let .insertPicture(position, data, width, height, naturalWidth, naturalHeight, ext, description):
+            try c.encode("insertPicture", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(data, forKey: .data)
+            try c.encode(width, forKey: .width)
+            try c.encode(height, forKey: .height)
+            try c.encode(naturalWidth, forKey: .naturalWidth)
+            try c.encode(naturalHeight, forKey: .naturalHeight)
+            try c.encode(ext, forKey: .extension)
+            try c.encode(description, forKey: .description)
         case let .insertNote(position, endnote):
             try c.encode("insertNote", forKey: .kind)
             try c.encode(position, forKey: .position)

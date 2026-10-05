@@ -1,4 +1,7 @@
+import AppKit
+import ImageIO
 import SwiftUI
+import UniformTypeIdentifiers
 
 // Structure commands (breaks, tables, page setup) and the sheets that ask for their values.
 
@@ -16,6 +19,38 @@ extension Viewer {
     }
     func insertTable(rows: Int, columns: Int) {
         document?.edit(undoManager) { $0.map { .insertTable($0.ordered.start, rows: rows, columns: columns) } }
+    }
+    func insertPicture() {
+        guard let document, let position = document.selection?.ordered.start else { return NSSound.beep() }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.png, .jpeg]
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+                  data.count <= 5 * 1024 * 1024,
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let widthNumber = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+                  let heightNumber = properties[kCGImagePropertyPixelHeight] as? NSNumber
+            else { return NSSound.beep() }
+            let naturalWidth = widthNumber.uint32Value, naturalHeight = heightNumber.uint32Value
+            guard (1...20_000).contains(naturalWidth), (1...20_000).contains(naturalHeight),
+                  UInt64(naturalWidth) * UInt64(naturalHeight) <= 100_000_000
+            else { return NSSound.beep() }
+            let scale = min(1, 640 / Double(naturalWidth), 800 / Double(naturalHeight))
+            let width = UInt32(max(1, (Double(naturalWidth) * scale * 75).rounded()))
+            let height = UInt32(max(1, (Double(naturalHeight) * scale * 75).rounded()))
+            let ext = url.pathExtension.lowercased() == "jpeg" ? "jpeg" : url.pathExtension.lowercased()
+            document.edit(undoManager) { _ in
+                .insertPicture(position, data: data, width: width, height: height,
+                               naturalWidth: naturalWidth, naturalHeight: naturalHeight,
+                               extension: ext, description: url.lastPathComponent)
+            }
+        }
     }
     func insertNote(endnote: Bool) {
         document?.edit(undoManager) { $0.map { .insertNote($0.ordered.start, endnote: endnote) } }

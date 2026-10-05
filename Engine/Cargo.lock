@@ -711,6 +711,7 @@ dependencies = [
 name = "hwp-engine-abi"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "rhwp",
  "roxmltree 0.20.0",
  "serde",
