@@ -83,12 +83,6 @@ fn replace_preserves_other_content() {
 #[test]
 fn rejects_unsupported_target() {
     let mut s = EditSession::open(&plain_document("hwp", true)).unwrap();
-    let host = EditTarget {
-        section: 0,
-        paragraph: 2,
-        cell: None,
-    };
-    assert!(replace(&mut s, host, 0, 0, "안됨").is_err());
     let other = EditTarget {
         section: 0,
         paragraph: 2,
@@ -156,6 +150,58 @@ fn split_merge_preserves_following_control() {
         format!("{:?}", s.core.document().sections[0].paragraphs[2].controls),
         table
     );
+}
+
+#[test]
+fn edits_text_around_controls() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let host = EditTarget {
+            paragraph: 2,
+            ..body()
+        };
+        let table = format!("{:?}", s.core.document().sections[0].paragraphs[2].controls);
+        replace(&mut s, host.clone(), 0, 0, "앞").unwrap();
+        let end = s.paragraph(&host).unwrap().text.chars().count() as u32;
+        replace(&mut s, host.clone(), end, end, "뒤 글").unwrap();
+        replace(&mut s, host.clone(), 1, 2, "").unwrap();
+        run(
+            &mut s,
+            EditCommand::Split {
+                position: point(host.clone(), 1),
+            },
+        )
+        .unwrap();
+        let next = EditTarget {
+            paragraph: 3,
+            ..body()
+        };
+        run(
+            &mut s,
+            EditCommand::MergePrevious {
+                position: point(next, 0),
+            },
+        )
+        .unwrap();
+        assert_eq!(s.paragraph(&host).unwrap().text, "앞 글", "{format}");
+        let controls = &s.core.document().sections[0].paragraphs[2].controls;
+        assert_eq!(format!("{controls:?}"), table, "{format}");
+        // The controls follow their paragraph when it joins the previous one.
+        let previous = s.paragraph(&body()).unwrap().text;
+        run(
+            &mut s,
+            EditCommand::MergePrevious {
+                position: point(host, 0),
+            },
+        )
+        .unwrap();
+        assert_eq!(s.paragraph(&body()).unwrap().text, previous + "앞 글");
+        let controls = &s.core.document().sections[0].paragraphs[1].controls;
+        assert!(
+            format!("{controls:?}").contains(&table[1..table.len() - 1]),
+            "{format}"
+        );
+    }
 }
 
 #[test]
@@ -516,7 +562,7 @@ fn replace_spans_paragraphs() {
     }
 }
 #[test]
-fn replace_refuses_joining_a_table_paragraph() {
+fn replace_joins_a_table_paragraph_keeping_the_table() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
     let last = EditTarget {
         paragraph: 2,
@@ -535,7 +581,10 @@ fn replace_refuses_joining_a_table_paragraph() {
             text: String::new(),
         },
     });
-    assert!(matches!(result, Err(EditError::UnsupportedTarget)));
+    result.unwrap();
+    assert_eq!(s.paragraph(&body()).unwrap().text, "가");
+    let controls = &s.core.document().sections[0].paragraphs[1].controls;
+    assert!(controls.iter().any(|c| matches!(c, Control::Table(_))));
 }
 #[test]
 fn formats_text_and_paragraphs_and_saves() {
@@ -1086,6 +1135,12 @@ fn structure_edits_on_corpus() {
             .paragraphs
             .iter()
             .position(|p| commands::editable(p) && !p.text.is_empty());
+        let host = doc.sections[0].paragraphs.iter().position(|p| {
+            commands::editable(p)
+                && p.controls
+                    .iter()
+                    .any(|c| !matches!(c, Control::SectionDef(_) | Control::ColumnDef(_)))
+        });
         let cell = doc.sections[0]
             .paragraphs
             .iter()
@@ -1122,6 +1177,28 @@ fn structure_edits_on_corpus() {
                 cell,
                 change: TableChange::InsertRowBelow,
             });
+        }
+        if let Some(p) = host {
+            let target = commands::at_index(&self::body(), p);
+            let end = doc.sections[0].paragraphs[p].text.chars().count() as u32;
+            for at in [0, end] {
+                commands.push(EditCommand::Replace {
+                    selection: EditSelection::caret(point(target.clone(), at)),
+                    text: "글".into(),
+                });
+                commands.push(EditCommand::Split {
+                    position: point(target.clone(), at),
+                });
+            }
+            if end > 0 {
+                commands.push(EditCommand::Replace {
+                    selection: EditSelection {
+                        anchor: point(target.clone(), 0),
+                        focus: point(target.clone(), end),
+                    },
+                    text: String::new(),
+                });
+            }
         }
         let mut page = opened.page_setup(0).unwrap();
         page.margin_left += 283;

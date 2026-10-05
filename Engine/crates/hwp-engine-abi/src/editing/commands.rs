@@ -71,13 +71,10 @@ pub(super) fn get<'a>(doc: &'a Document, t: &EditTarget) -> Result<&'a Paragraph
         .get(index(t))
         .ok_or(EditError::InvalidInput)
 }
-/// Plain text paragraphs, optionally carrying the invisible section/column definitions
-/// that every section's first paragraph holds. Preservation checks those stay intact.
+/// Paragraphs whose text can change around their controls (tables, pictures, notes…),
+/// which stay in place. Fields and title marks index the text and stay read-only.
 pub(super) fn editable(p: &Paragraph) -> bool {
-    p.controls
-        .iter()
-        .all(|c| matches!(c, Control::SectionDef(_) | Control::ColumnDef(_)))
-        && p.title_marks.is_empty()
+    p.title_marks.is_empty()
         && p.field_ranges.is_empty()
         && p.range_tags.is_empty()
         && p.orphan_field_ends.is_empty()
@@ -155,7 +152,7 @@ impl EditSession {
             reason: if allowed {
                 String::new()
             } else {
-                "그림·수식·필드가 포함된 문단은 아직 편집할 수 없습니다.".into()
+                "필드가 포함된 문단은 아직 편집할 수 없습니다.".into()
             },
         })
     }
@@ -167,9 +164,7 @@ impl EditSession {
         boundary(&para.text, p.scalar)
     }
     /// Both ends valid, in one container, with only editable paragraphs between them.
-    /// With `joinable`, paragraphs after the first must hold no controls, since a
-    /// multi-paragraph replace merges them into the first.
-    fn validate_range(&self, selection: &EditSelection, joinable: bool) -> Result<(), EditError> {
+    fn validate_range(&self, selection: &EditSelection) -> Result<(), EditError> {
         let (start, end) = ordered(selection);
         if !same_container(&start.target, &end.target) {
             return Err(EditError::UnsupportedTarget);
@@ -178,9 +173,7 @@ impl EditSession {
         self.validate_position(end)?;
         let all = paragraphs(self.core.document(), &start.target)?;
         let (s, e) = (index(&start.target), index(&end.target));
-        if all[s..=e].iter().any(|p| !editable(p))
-            || (joinable && all[s + 1..=e].iter().any(|p| !p.controls.is_empty()))
-        {
+        if all[s..=e].iter().any(|p| !editable(p)) {
             return Err(EditError::UnsupportedTarget);
         }
         Ok(())
@@ -188,7 +181,7 @@ impl EditSession {
     pub(super) fn validate_command(&self, command: &EditCommand) -> Result<(), EditError> {
         match command {
             EditCommand::Replace { selection, text } => {
-                self.validate_range(selection, true)?;
+                self.validate_range(selection)?;
                 if text.len() > 1024 * 1024 {
                     return Err(EditError::ResourceLimit);
                 }
@@ -212,7 +205,7 @@ impl EditSession {
                 })
             }
             EditCommand::FormatText { selection, style } => {
-                self.validate_range(selection, false)?;
+                self.validate_range(selection)?;
                 let (start, end) = ordered(selection);
                 if start == end {
                     return Err(EditError::InvalidInput);
@@ -220,7 +213,7 @@ impl EditSession {
                 super::format::validate_char(style)
             }
             EditCommand::FormatParagraphs { selection, style } => {
-                self.validate_range(selection, false)?;
+                self.validate_range(selection)?;
                 super::format::validate_para(style)
             }
             EditCommand::Break { position, .. } => {
