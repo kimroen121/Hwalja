@@ -211,12 +211,13 @@ enum ObjectKind: String, Codable, Sendable {
     case shape
 }
 
-/// Control `control` of a body paragraph.
+/// Control `control` of a body paragraph, or of paragraph `cell` of one of its tables or 글상자.
 struct ObjectRef: Codable, Hashable, Sendable {
     var kind: ObjectKind
     var section: UInt32
     var paragraph: UInt32
     var control: UInt32
+    var cell: CellTarget? = nil
 }
 
 /// A table border on a page that can be dragged: the right border of column `line` (or

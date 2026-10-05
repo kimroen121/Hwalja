@@ -38,7 +38,7 @@
 | 서식 | 글자 모양(⌘L: 기본·확장, 테두리·배경), 문단 모양(⌘T: 기본·테두리/배경), 글머리표·문단 번호 매기기와 한 수준 증가/감소, 스타일 상자, 개체 속성(기본·여백/캡션·그림·표·셀), 빠른 메뉴(오른쪽 클릭) | `apply_char/para_format_native`, `apply_style_native`, SetObject, SetCell | 아래 「단계」 2 |
 | 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩) | HeaderFooter, `insert_page/column_break_native` | 새 번호로 시작, 현재 쪽만 감추기, 단, 다단 설정 나누기 |
 | 표 | 표 만들기(격자·대화상자), 표/셀 속성, 줄/칸 추가하기·지우기, 셀 나누기·합치기, 셀 높이·너비를 같게(셀 블록에서 M·S·H·W), 표 테두리 끌기(칸 오른쪽·줄 아래) | `create_table_native`, `insert/delete_table_row/column_native`, `merge_table_cells_native`, `split_table_cell*_native`, ResizeTable | 셀 테두리/배경, 블록 계산식 |
-| 개체 | 클릭 선택, 핸들로 크기 조절(그림 모서리는 비율 유지, Shift로 자유 — 도형은 반대; 크기 고정이면 핸들 없음), 끌어 옮기기(글자처럼 취급 수식은 글 사이로, 글자처럼 취급 그림은 그대로), Delete로 지우기, 그림 색조 조정·밝기·대비·원래 그림으로 | SetObject, DeleteObject | 순서, 개체 풀기, 선 끝점 |
+| 개체 | 클릭 선택(표 칸·글상자 안 그림, 표 칸 안 수식 포함), 핸들로 크기 조절(그림 모서리는 비율 유지, Shift로 자유 — 도형은 반대; 크기 고정이면 핸들 없음), 끌어 옮기기(글자처럼 취급 수식은 글 사이로, 글자처럼 취급 그림은 그대로), Delete로 지우기, 그림 색조 조정·밝기·대비·원래 그림으로 | SetObject, DeleteObject | 순서, 개체 풀기, 선 끝점 |
 
 창 구성은 웹 한글과 같은 순서다: macOS 메뉴 막대(파일·편집·보기·입력·서식·쪽·표), 도구 상자(Word처럼 작은 탭 기본·편집·보기·입력·서식·쪽·표가 큰 아이콘 줄을 바꾼다), 서식 도구 상자, 사이드바(쪽 미리 보기) + 쪽, 상태 표시줄(쪽, 확대/축소).
 
@@ -52,7 +52,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 - [ ] 머리말·꼬리말 안의 글자 편집: 더블클릭으로 들어가 입력·삭제·문단 나누기/합치기·글자/문단 서식. `hit_test_in_header_footer`, `get_cursor_rect_in_header_footer`, `get_selection_rects_in_header_footer`, `insert/delete_text_in_header_footer`, `split/merge_paragraph_in_header_footer`, `apply_char_format_in_header_footer`, `apply_para_format_in_hf`. 쪽 번호 넣기는 `insert_field_in_hf`.
 - [ ] 주석 안 문단 서식과 본문에서 주석 지우기: `apply_para_format_in_footnote`, `delete_footnote`.
-- [ ] 셀·글상자 안 개체(그림·도형) 선택·속성·지우기, 중첩 표 셀 편집: `*_by_path` 함수들(`get/set_cell_picture_properties_by_path`, `get/set_cell_shape_properties_by_path`, `delete_cell_picture_control_by_path`, `copy_selection_in_cell_by_path`).
+- [ ] 셀 안 도형·중첩 표 셀 안 개체 선택, 중첩 표 셀 편집: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 표 칸·글상자 안 그림과 표 칸 안 수식은 완료.
 - [ ] 머리말·꼬리말 안 그림 속성: `get/set_header_footer_picture_properties`.
 - [ ] 주석 안 수식 고치기: `get/set_note_equation_properties`.
 - [ ] 여러 문단 선택 삭제에서 사이 문단의 컨트롤 처리: `capture_delete_range`/`restore_delete_fragment`, `delete_range_native`.
@@ -122,7 +122,7 @@ rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자�
 
 ### 5. 검증과 조판 동등성
 
-- 완료(2026-10-05, `docs/BUG_HANDOFF.md`): 저장 장벽(대기 중인 편집을 저장이 기다림), 한글 조합 중 선택·편집 명령 앞 확정, 앱·엔진 프로토콜 버전 2(맞지 않으면 렌더링 전에 열기 거부).
+- 완료(2026-10-05): 저장 장벽(대기 중인 편집을 저장이 기다림), 한글 조합 중 선택·편집 명령 앞 확정, 앱·엔진 프로토콜 버전 2(맞지 않으면 렌더링 전에 열기 거부). 수동 확인: 자동 저장·닫기 저장, ⌘A 후 입력, 수식 옮기기, 문단 모양 대화상자, ⌘F, 아랍어, 그림 옮기기.
 - 남음: 수동 점검과 남은 문제는 `docs/BUG_HANDOFF.md`.
 
 - [ ] 실제 한글 입력기로 조합·확정·후보창 위치를 수동 검증한다(연속 음절 조합 버그는 수정·테스트함).

@@ -20,9 +20,6 @@ struct ToolRow: View {
                             .font(.system(size: 13, weight: tab == name ? .semibold : .regular))
                             .foregroundStyle(tab == name ? .primary : .secondary)
                             .padding(.vertical, 4)
-                            .overlay(alignment: .bottom) {
-                                if tab == name { Capsule().fill(.primary).frame(width: 14, height: 2.5).offset(y: 3) }
-                            }
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -174,7 +171,7 @@ struct ToolRow: View {
     }
 
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
-        ToolTile("표 만들기", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
+        ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
             .disabled(!context.inBody)
         ToolTile("표/셀 속성", Icon.objectProps) { viewer.showObjectProperties() }
             .disabled(!context.inTable)
@@ -294,8 +291,8 @@ struct Choice {
     var action: () -> Void = {}
 }
 
-/// A large icon over its name. With `choices` (a menu) or `panel` (a popover), a small
-/// arrow beside the icon opens them, and the icon runs `action` when there is one.
+/// A large icon over its name. With `choices` (a menu) or `panel` (a popover), an
+/// arrow under the name opens them, and the icon runs `action` when there is one.
 struct ToolTile: View {
     let title: String, symbol: String
     var action: (() -> Void)?
@@ -316,40 +313,40 @@ struct ToolTile: View {
 
     var body: some View {
         if choices == nil, panel == nil {
-            Button(action: { action?() }) { face(arrow: false) }
-                .buttonStyle(ToolButtonStyle(on: on))
-        } else if let action {
-            HStack(spacing: 0) {
-                Button(action: action) { face(arrow: false) }
-                Button(action: open) { arrowImage.frame(width: 12, height: 22) }
-                    .background(AnchorView(anchor: anchor))
-                    .padding(.trailing, 2)
+            Button(action: { action?() }) {
+                VStack(spacing: 3) { icon; label(Text(Self.lines(title))) }.tile()
             }
-            .buttonStyle(ToolButtonStyle())
+            .buttonStyle(ToolButtonStyle(on: on))
+        } else if let action {
+            VStack(spacing: 0) {
+                Button(action: action) { icon.tile().padding(.bottom, 3) }
+                    .buttonStyle(ToolButtonStyle())
+                Button(action: open) { label(Text(title), arrow: true).tile(top: 0) }
+                    .buttonStyle(ToolButtonStyle())
+                    .background(AnchorView(anchor: anchor))
+            }
             .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel }
         } else {
-            Button(action: open) { face(arrow: true) }
-                .buttonStyle(ToolButtonStyle())
-                .background(AnchorView(anchor: anchor))
+            Button(action: open) {
+                VStack(spacing: 3) { icon; label(Text(title), arrow: true) }.tile()
+            }
+            .buttonStyle(ToolButtonStyle())
+            .background(AnchorView(anchor: anchor))
         }
     }
 
-    /// The name may take two lines; the arrow sits by the icon so it never changes the height.
-    private func face(arrow: Bool) -> some View {
-        VStack(spacing: 3) {
-            HStack(spacing: 2) {
-                icon
-                if arrow { arrowImage.frame(width: 8) }
+    /// A name on one line over the arrow, or on up to two lines without one, in the same height.
+    private func label(_ text: Text, arrow: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            text.font(.system(size: 12)).multilineTextAlignment(.center).fixedSize()
+            if arrow {
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(height: 10)
             }
-            name
         }
-        .frame(minWidth: 52).padding(.top, 3).padding(.horizontal, 2)
+        .frame(height: 30, alignment: .top)
     }
     private var icon: some View {
         Image(systemName: symbol).font(.system(size: 19, weight: .light)).frame(height: 22)
-    }
-    private var name: some View {
-        Text(Self.lines(title)).font(.system(size: 12)).multilineTextAlignment(.center).fixedSize()
     }
     /// A name of several words on two lines, broken at the space nearest the middle, as
     /// the web tool box writes 글자 모양 and 조판 부호.
@@ -362,11 +359,15 @@ struct ToolTile: View {
         }!
         return words[..<split].joined(separator: " ") + "\n" + words[split...].joined(separator: " ")
     }
-    private var arrowImage: some View {
-        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold))
-    }
     private func open() {
         if panel != nil { showsPanel = true } else if let choices { DropDown.show(choices(), below: anchor.view) }
+    }
+}
+
+private extension View {
+    /// As wide as the tile's own name and icon need.
+    func tile(top: CGFloat = 3) -> some View {
+        frame(minWidth: 32).padding(.top, top).padding(.horizontal, 5)
     }
 }
 

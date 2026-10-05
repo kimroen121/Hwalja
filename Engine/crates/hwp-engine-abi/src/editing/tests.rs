@@ -2202,11 +2202,6 @@ fn an_equation_moves_within_the_text() {
             let target = to.target.paragraph as usize;
             let command = EditCommand::MoveObject {
                 object: ObjectRef {
-                    paragraph: if target == host {
-                        host as u32
-                    } else {
-                        host as u32
-                    },
                     control: find(&s, host).unwrap_or(0) as u32,
                     ..object.clone()
                 },
@@ -2223,4 +2218,64 @@ fn an_equation_moves_within_the_text() {
             assert!(find(&s, host).is_some());
         }
     }
+}
+
+#[test]
+fn an_equation_in_a_table_cell_is_an_object() {
+    // A table whose first cell holds the paragraph an equation was put in.
+    let mut core = DocumentCore::new_empty();
+    core.create_blank_document_native().unwrap();
+    let mut doc = core.document().clone();
+    let mut para = doc.sections[0].paragraphs[0].clone();
+    para.controls.clear();
+    doc.sections[0].paragraphs.push(para);
+    core.set_document(doc);
+    core.create_table_native(0, 1, 0, 1, 2).unwrap();
+    core.insert_equation_native(0, 0, 0, "x^2", 1000, 0)
+        .unwrap();
+    let mut doc = core.document().clone();
+    let paragraphs = &mut doc.sections[0].paragraphs;
+    let with_equation = paragraphs[0].clone();
+    let Control::Table(t) = paragraphs[1]
+        .controls
+        .iter_mut()
+        .find(|c| matches!(c, Control::Table(_)))
+        .unwrap()
+    else {
+        panic!()
+    };
+    t.cells[0].paragraphs[0] = with_equation;
+    paragraphs.remove(0);
+    core.set_document(doc);
+    let mut s = EditSession::open(&core.export_hwpx_native().unwrap()).unwrap();
+    let placed = s.placed(0).unwrap();
+    let object = placed
+        .iter()
+        .find(|o| o.object.cell.is_some())
+        .expect("the equation in the cell")
+        .object
+        .clone();
+    assert_eq!(object.kind, ObjectKind::Equation);
+    let props = ObjectProps {
+        font_size: Some(2000),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: object.clone(),
+            props,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.object_props(&object).unwrap().font_size, Some(2000));
+    let delete = EditCommand::DeleteObject {
+        object: object.clone(),
+    };
+    assert_eq!(
+        run(&mut s, delete).err(),
+        Some(EditError::UnsupportedTarget)
+    );
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(s.object_props(&object).unwrap().font_size, Some(1000));
 }

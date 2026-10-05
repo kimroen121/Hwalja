@@ -422,6 +422,10 @@ impl EditSession {
             | EditCommand::EqualizeCells { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
+                // rhwp deletes only a picture from a cell.
+                if object.cell.is_some() && object.kind != ObjectKind::Picture {
+                    return Err(EditError::UnsupportedTarget);
+                }
                 self.validate_object(object, &ObjectProps::default())
             }
             EditCommand::MoveObject { object, to } => {

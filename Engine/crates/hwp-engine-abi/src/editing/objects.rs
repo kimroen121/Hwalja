@@ -39,6 +39,13 @@ fn number(json: &Value, key: &str) -> Option<f64> {
 fn index(json: &Value, key: &str) -> Option<u32> {
     json.get(key).and_then(Value::as_u64).map(|v| v as u32)
 }
+/// rhwp's path to the paragraph of table cell or 글상자 `c`.
+fn cell_path(c: &CellTarget) -> String {
+    format!(
+        "[{{\"controlIdx\":{},\"cellIdx\":{},\"cellParaIdx\":{}}}]",
+        c.control, c.cell, c.paragraph
+    )
+}
 fn object_json(props: &impl Serialize) -> Map<String, Value> {
     match serde_json::to_value(props) {
         Ok(Value::Object(map)) => map.into_iter().filter(|(_, v)| !v.is_null()).collect(),
@@ -116,13 +123,26 @@ impl EditSession {
             &EditTarget {
                 section: o.section,
                 paragraph: o.paragraph,
-                cell: None,
+                cell: o.cell.clone(),
                 note: None,
             },
         )?
         .controls
         .get(o.control as usize)
         .ok_or(EditError::InvalidInput)?;
+        // In a cell rhwp reaches only plain pictures, and the one equation of a table cell's paragraph.
+        if let Some(c) = &o.cell {
+            let reachable = match o.kind {
+                ObjectKind::Picture => matches!(control, Control::Picture(_)),
+                ObjectKind::Equation => {
+                    self.cell_equation(o.section, o.paragraph, c) == Some(o.control)
+                }
+                _ => false,
+            };
+            if !reachable {
+                return Err(EditError::UnsupportedTarget);
+            }
+        }
         let matches = match (o.kind, control) {
             (ObjectKind::Picture, Control::Picture(_)) => true,
             (ObjectKind::Picture, Control::Shape(s)) => matches!(**s, ShapeObject::Picture(_)),
@@ -137,7 +157,42 @@ impl EditSession {
             Err(EditError::UnsupportedTarget)
         }
     }
-    /// Pictures and equations of the body laid out on `page`, bottom first.
+    /// The control index of the only equation in a table cell's paragraph.
+    fn cell_equation(&self, section: u32, paragraph: u32, c: &CellTarget) -> Option<u32> {
+        let host = commands::get(
+            self.core.document(),
+            &EditTarget {
+                section,
+                paragraph,
+                cell: None,
+                note: None,
+            },
+        )
+        .ok()?;
+        if !matches!(
+            host.controls.get(c.control as usize),
+            Some(Control::Table(_))
+        ) {
+            return None;
+        }
+        let target = EditTarget {
+            section,
+            paragraph,
+            cell: Some(c.clone()),
+            note: None,
+        };
+        let controls = &commands::get(self.core.document(), &target).ok()?.controls;
+        let mut equations = controls
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| matches!(c, Control::Equation(_)));
+        match (equations.next(), equations.next()) {
+            (Some((i, _)), None) => Some(i as u32),
+            _ => None,
+        }
+    }
+    /// Pictures and equations laid out on `page`, bottom first: those of the body, and
+    /// those in a table cell or 글상자 of the body.
     pub(super) fn placed(&self, page: u32) -> Result<Vec<PlacedObject>, EditError> {
         let layout: Value = parse(self.core.get_page_control_layout_native(page))?;
         let controls = layout["controls"]
@@ -152,19 +207,38 @@ impl EditSession {
                     "shape" | "line" => ObjectKind::Shape,
                     _ => return None,
                 };
-                // Objects in cells, notes, headers and text boxes are not selectable yet.
-                if ["cellIdx", "cellPath", "noteRef", "headerFooter"]
-                    .iter()
-                    .any(|k| c.get(k).is_some())
-                {
+                // Objects in notes, headers and nested cells are not selectable yet.
+                if c.get("noteRef").is_some() || c.get("headerFooter").is_some() {
                     return None;
                 }
+                let (section, paragraph) = (index(c, "secIdx")?, index(c, "paraIdx")?);
+                let (cell, control) = match (c.get("cellPath"), c.get("cellIdx"), kind) {
+                    (None, None, _) => (None, index(c, "controlIdx")?),
+                    (Some(Value::Array(path)), _, ObjectKind::Picture) if path.len() == 1 => (
+                        Some(CellTarget {
+                            control: index(&path[0], "controlIndex")?,
+                            cell: index(&path[0], "cellIndex")?,
+                            paragraph: index(&path[0], "cellParaIndex")?,
+                        }),
+                        index(c, "controlIdx")?,
+                    ),
+                    (None, Some(_), ObjectKind::Equation) => {
+                        let cell = CellTarget {
+                            control: index(c, "controlIdx")?,
+                            cell: index(c, "cellIdx")?,
+                            paragraph: index(c, "cellParaIdx")?,
+                        };
+                        let control = self.cell_equation(section, paragraph, &cell)?;
+                        (Some(cell), control)
+                    }
+                    _ => return None,
+                };
                 let object = ObjectRef {
                     kind,
-                    section: index(c, "secIdx")?,
-                    paragraph: index(c, "paraIdx")?,
-                    control: index(c, "controlIdx")?,
-                    cell: None,
+                    section,
+                    paragraph,
+                    control,
+                    cell,
                 };
                 self.control(&object).ok()?;
                 Some(PlacedObject {
@@ -222,14 +296,25 @@ impl EditSession {
     pub fn object_props(&self, o: &ObjectRef) -> Result<ObjectProps, EditError> {
         self.control(o)?;
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
-        let json: Value = match o.kind {
-            ObjectKind::Picture => parse(self.core.get_picture_properties_native(s, p, c))?,
-            ObjectKind::Equation => parse(
+        let json: Value = match (o.kind, &o.cell) {
+            (ObjectKind::Picture, Some(cell)) => parse(
+                self.core
+                    .get_cell_picture_properties_by_path_native(s, p, &cell_path(cell), c),
+            )?,
+            (ObjectKind::Equation, Some(cell)) => parse(self.core.get_equation_properties_native(
+                s,
+                p,
+                cell.control as usize,
+                Some(cell.cell as usize),
+                Some(cell.paragraph as usize),
+            ))?,
+            (ObjectKind::Picture, None) => parse(self.core.get_picture_properties_native(s, p, c))?,
+            (ObjectKind::Equation, None) => parse(
                 self.core
                     .get_equation_properties_native(s, p, c, None, None),
             )?,
-            ObjectKind::Table => parse(self.core.get_table_properties_native(s, p, c))?,
-            ObjectKind::Shape => parse(self.core.get_shape_properties_native(s, p, c))?,
+            (ObjectKind::Table, _) => parse(self.core.get_table_properties_native(s, p, c))?,
+            (ObjectKind::Shape, _) => parse(self.core.get_shape_properties_native(s, p, c))?,
         };
         let Value::Object(mut map) = json else {
             return Err(EditError::RenderFailed);
@@ -351,11 +436,26 @@ impl EditSession {
         let mut json = object_json(props);
         write_caption(&mut json, o.kind == ObjectKind::Table);
         let core = &mut self.core;
-        match o.kind {
-            ObjectKind::Picture => {
+        match (o.kind, &o.cell) {
+            (ObjectKind::Picture, Some(cell)) => core.set_cell_picture_properties_by_path_native(
+                s,
+                p,
+                &cell_path(cell),
+                c,
+                &Value::Object(json).to_string(),
+            ),
+            (ObjectKind::Equation, Some(cell)) => core.set_equation_properties_native(
+                s,
+                p,
+                cell.control as usize,
+                Some(cell.cell as usize),
+                Some(cell.paragraph as usize),
+                &Value::Object(json).to_string(),
+            ),
+            (ObjectKind::Picture, None) => {
                 core.set_picture_properties_native(s, p, c, &Value::Object(json).to_string())
             }
-            ObjectKind::Equation => core.set_equation_properties_native(
+            (ObjectKind::Equation, None) => core.set_equation_properties_native(
                 s,
                 p,
                 c,
@@ -363,10 +463,10 @@ impl EditSession {
                 None,
                 &Value::Object(json).to_string(),
             ),
-            ObjectKind::Shape => {
+            (ObjectKind::Shape, _) => {
                 core.set_shape_properties_native(s, p, c, &Value::Object(json).to_string())
             }
-            ObjectKind::Table => core.set_table_properties_native(
+            (ObjectKind::Table, _) => core.set_table_properties_native(
                 s,
                 p,
                 c,
@@ -427,11 +527,15 @@ impl EditSession {
     }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
-        match o.kind {
-            ObjectKind::Picture => self.core.delete_picture_control_native(s, p, c),
-            ObjectKind::Equation => self.core.delete_equation_control_native(s, p, c),
-            ObjectKind::Table => self.core.delete_table_control_native(s, p, c),
-            ObjectKind::Shape => self.core.delete_shape_control_native(s, p, c),
+        match (o.kind, &o.cell) {
+            (ObjectKind::Picture, Some(cell)) => self
+                .core
+                .delete_cell_picture_control_by_path_native(s, p, &cell_path(cell), c),
+            (_, Some(_)) => return Err(EditError::UnsupportedTarget),
+            (ObjectKind::Picture, None) => self.core.delete_picture_control_native(s, p, c),
+            (ObjectKind::Equation, None) => self.core.delete_equation_control_native(s, p, c),
+            (ObjectKind::Table, None) => self.core.delete_table_control_native(s, p, c),
+            (ObjectKind::Shape, None) => self.core.delete_shape_control_native(s, p, c),
         }?;
         Ok(())
     }

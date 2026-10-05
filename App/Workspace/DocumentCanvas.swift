@@ -710,7 +710,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
             let inline = props.treatAsChar == true || placed.object.kind == .equation
             if inline, rect.origin != from.origin, rect.size == from.size {
-                guard placed.object.kind == .equation, let drop, let hit = enginePoint(drop) else { return }
+                guard placed.object.kind == .equation, placed.object.cell == nil,
+                      let drop, let hit = enginePoint(drop) else { return }
                 let target = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
                 guard let target, target.target.cell == nil, target.target.note == nil else { return NSSound.beep() }
                 model.edit(undoManager) { _ in .moveObject(placed.object, to: target) }
