@@ -1,11 +1,11 @@
 # HwpStudio
 
-HWP·HWPX 문서를 위한 macOS 네이티브 편집기(macOS 14 이상). 문서 기반 앱으로 동작하며, 본문과 표 셀의 텍스트를 편집해 HWP/HWPX로 저장하고 PDF로 내보냅니다.
+HWP·HWPX 문서를 위한 macOS 네이티브 편집기(macOS 14 이상). 문서 기반 앱으로 동작하며, 글자·문단 서식, 표, 그림, 도형, 수식, 주석, 머리말·꼬리말을 편집해 HWP/HWPX로 저장하고 PDF로 내보냅니다. 메뉴와 이름은 한컴오피스 Web 한글을 따릅니다.
 
 - 조판 엔진: [rhwp](https://github.com/edwardkim/rhwp) 0.8.6 (MIT). `Vendor/`에 고정 버전과 로컬 패치가 들어 있습니다.
 - 화면과 PDF 내보내기는 엔진의 같은 조판 결과를 씁니다. 편집하면 바뀐 쪽만 다시 그립니다.
 - 저장할 때마다 엔진이 결과를 다시 파싱해 텍스트와 컨트롤 구조가 같은지 검증합니다. 이전 판은 macOS 「버전 탐색」으로 되돌릴 수 있습니다.
-- 한컴오피스와 글꼴·쪽 나눔이 다를 수 있습니다. 배치가 의심되는 쪽이 있으면 툴바에 표시합니다.
+- 한컴오피스와 글꼴·쪽 나눔이 다를 수 있습니다.
 
 ## 빌드
 
@@ -33,7 +33,7 @@ Xcode에서 작업하려면 `Package.swift`를 엽니다. 먼저 `make engine`�
 | `Engine/` | rhwp를 감싸는 Rust C ABI (`hwp-engine-abi`). `editing/`은 편집 세션(명령, 기록, 보존 검사, 좌표, `ffi`) |
 | `Vendor/` | 체크섬으로 검증하는 rhwp 소스 압축본과 레이아웃 패치 |
 | `Tests/` | Swift 테스트와 생성된 공개 fixture |
-| `docs/ROADMAP.md` | 다음 단계 |
+| `docs/ROADMAP.md` | 목표(rhwp가 지원하는 기능 전부), 완료한 기능, 다음 단계 |
 
 ## 제한
 
