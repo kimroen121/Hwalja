@@ -121,7 +121,7 @@ impl EditSession {
     }
     pub fn reply(&self) -> EditReply {
         EditReply {
-            version: 1,
+            version: PROTOCOL_VERSION,
             revision: self.revision,
             selection: self.selection.clone(),
             caret: self
@@ -197,7 +197,7 @@ impl EditSession {
         if self.locked {
             return Err(EditError::Locked);
         }
-        if request.version != 1 {
+        if request.version != PROTOCOL_VERSION {
             return Err(EditError::InvalidInput);
         }
         if request.revision != self.revision {

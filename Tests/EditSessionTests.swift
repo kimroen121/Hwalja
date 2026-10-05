@@ -7,8 +7,13 @@ func fixture(_ ext: String) throws -> Data {
 }
 
 struct EditSessionTests {
+    @Test func protocolVersionMismatchIsRejectedBeforeRendering() {
+        let json = Data(#"{"version":999,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
+        #expect(throws: EditError.invalidInput) { try EditSession.Output((json, Data([2]))) }
+    }
+
     @Test func rejectsMalformedRenderingPayloads() {
-        let json = Data(#"{"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
+        let json = Data(#"{"version":2,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
         // Old raw PDF payload, unknown discriminator and a truncated display.
         for data in [Data("%PDF-1.7".utf8), Data([2]), Data([1])] {
             #expect(throws: EditError.renderFailed) { try EditSession.Output((json, data)) }

@@ -29,6 +29,61 @@ struct DocumentTests {
         #expect(!reopened.pages.isEmpty)
     }
 
+    /// A save that starts after an edit was accepted must not overtake that edit.
+    @Test func immediateSaveIncludesQueuedTyping() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let original = try await document.paragraph(body).text
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.select { document in
+            try await Task.sleep(for: .milliseconds(100))
+            return document.selection
+        }
+        document.type("저장 직전 입력", nil)
+
+        let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
+        let reopened = try HwpDocument(data: saved)
+        #expect(try await reopened.paragraph(body).text == "저장 직전 입력" + original)
+    }
+
+    /// Object changes already accepted by the document are part of the same save boundary.
+    @Test func immediateSaveIncludesQueuedObjectEdit() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let position = EditPosition(target: body, scalar: 0)
+        document.selection = .caret(position)
+        document.edit(nil) { _ in .insertEquation(position, script: "x", fontSize: 1_000, color: 0) }
+        await document.settle()
+        var equation: ObjectRef?
+        for control in UInt32(0)..<16 {
+            let candidate = ObjectRef(kind: .equation, section: 0, paragraph: 0, control: control)
+            if (try? await document.objectProps(candidate)) != nil { equation = candidate }
+        }
+        let object = try #require(equation)
+        document.select { document in
+            try await Task.sleep(for: .milliseconds(100))
+            return document.selection
+        }
+        document.edit(nil) { _ in .setObject(object, ObjectProps(script: "a over b")) }
+
+        let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
+        let reopened = try HwpDocument(data: saved)
+        #expect(try await reopened.objectProps(object).script == "a over b")
+    }
+
+    /// A pending token holds saves, and finishing it twice cannot corrupt the count.
+    @Test func documentWorkBarrierWaitsAndTokenFinishesOnce() {
+        let barrier = DocumentWorkBarrier()
+        let token = barrier.begin()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            barrier.waitUntilIdle()
+            finished.signal()
+        }
+        #expect(finished.wait(timeout: .now() + 0.02) == .timedOut)
+        token.finish()
+        token.finish()
+        #expect(finished.wait(timeout: .now() + 1) == .success)
+    }
+
     @Test func insertsPictureSavesAndUndoes() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let undo = UndoManager()
@@ -332,6 +387,96 @@ struct DocumentTests {
         #expect(!undo.canUndo)
     }
 
+    /// Selecting all while the last Korean syllable is marked replaces the whole document,
+    /// not the stale marked syllable.
+    @Test func compositionSelectAllReplacesTheWholeSelection() async throws {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        let editor = canvas.editor
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        editor.insertText("안녕하세", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+        editor.setMarkedText("요", selectedRange: NSRange(location: 1, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+
+        editor.selectAll(nil)
+        editor.insertText("반갑습니다", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "반갑습니다")
+        #expect(document.marked == nil)
+
+        window.undoManager?.undo()
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세요")
+    }
+
+    @Test func compositionThenArrowMovesFromCommittedText() async throws {
+        let (document, editor, _) = await editorComposingGreeting()
+        editor.doCommand(by: NSSelectorFromString("moveLeft:"))
+        editor.insertText("!", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세!요")
+        #expect(document.marked == nil)
+    }
+
+    @Test func compositionThenDeleteRemovesTheCommittedSyllable() async throws {
+        let (document, editor, window) = await editorComposingGreeting()
+        editor.doCommand(by: NSSelectorFromString("deleteBackward:"))
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세")
+        #expect(document.marked == nil)
+        window.undoManager?.undo()
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세요")
+    }
+
+    @Test func compositionThenPasteAppendsAfterCommittedText() async throws {
+        let (document, editor, _) = await editorComposingGreeting()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("!", forType: .string)
+        editor.paste(nil)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세요!")
+        #expect(document.marked == nil)
+    }
+
+    @Test func compositionThenNewlineSplitsAfterCommittedText() async throws {
+        let (document, editor, _) = await editorComposingGreeting()
+        editor.doCommand(by: NSSelectorFromString("insertNewline:"))
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세요")
+        #expect(document.selection?.focus.target.paragraph == 1)
+        #expect(document.marked == nil)
+    }
+
+    @Test func compositionThenTabAppendsAfterCommittedText() async throws {
+        let (document, editor, _) = await editorComposingGreeting()
+        editor.doCommand(by: NSSelectorFromString("insertTab:"))
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "안녕하세요\t")
+        #expect(document.marked == nil)
+    }
+
+    private func editorComposingGreeting() async -> (HwpDocument, PageEditor, NSWindow) {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        let editor = canvas.editor
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        editor.insertText("안녕하세", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+        editor.setMarkedText("요", selectedRange: NSRange(location: 1, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        await document.settle()
+        return (document, editor, window)
+    }
+
     /// The Korean input method commits a syllable and starts the next one back to back;
     /// the commit must not be overtaken by the next composition.
     @Test func backToBackSyllablesBothLand() async throws {
@@ -441,7 +586,8 @@ struct DocumentTests {
                                    y: Int((page.minY + 4 - area.minY) / area.height * CGFloat(image.pixelsHigh)))
         #expect(center?.brightnessComponent ?? 0 > 0.95)
         #expect(!document.presentation.highlight.isEmpty)
-        #expect(canvas.zoom < 1)
+        #expect(canvas.fit == .page && canvas.zoom.isFinite && canvas.zoom > 0)
+        #expect(editor.visibleRect.insetBy(dx: -1, dy: -1).contains(page))
     }
 
     /// Layout no longer depends on the viewport, so zooming and pasting across pages cannot

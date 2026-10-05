@@ -1,6 +1,10 @@
 import Foundation
 
-// Mirrors Engine/crates/hwp-engine-abi/src/editing/protocol.rs (JSON, version 1).
+// Mirrors Engine/crates/hwp-engine-abi/src/editing/protocol.rs.
+
+enum EditProtocolVersion {
+    static let current: UInt32 = 2
+}
 // Offsets (`scalar`) count Unicode scalars, not UTF-16 units.
 
 struct CellTarget: Codable, Hashable, Sendable {
@@ -318,6 +322,7 @@ struct PageSetup: Codable, Hashable, Sendable {
 }
 
 struct EditReply: Decodable, Sendable {
+    var version: UInt32 = EditProtocolVersion.current
     var revision: UInt64
     var selection: EditSelection?
     /// Caret rectangle of the selection focus, laid out with this revision.
@@ -550,7 +555,12 @@ enum EngineRequest: Encodable, Sendable {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              object, cell, script, fontSize, color, paragraph, control
     }
-    private struct Apply: Encodable { var version = 1; var revision: UInt64; var command: EditCommand; var amend: Bool }
+    private struct Apply: Encodable {
+        var version = EditProtocolVersion.current
+        var revision: UInt64
+        var command: EditCommand
+        var amend: Bool
+    }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {

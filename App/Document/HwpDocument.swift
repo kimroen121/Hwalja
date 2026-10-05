@@ -69,6 +69,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     private let sessionResult: Result<EditSession, Error>
     private nonisolated var session: EditSession { get throws { try sessionResult.get() } }
+    private nonisolated let workBarrier = DocumentWorkBarrier()
     let creationError: String?
     /// Rendered pages as shown, replaced only when a presentation is published.
     private(set) var pages: [RenderedPage]
@@ -144,7 +145,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
 
     nonisolated func snapshot(contentType: UTType) throws -> Data {
-        try session.export(contentType.preferredFilenameExtension == "hwp" ? .hwp : .hwpx)
+        // ReferenceFileDocument asks for snapshots away from the main actor. Refuse an
+        // accidental main-thread flush instead of deadlocking the tasks that must finish it.
+        if Thread.isMainThread && workBarrier.hasPendingWork { throw EditError.saveFailed }
+        workBarrier.waitUntilIdle()
+        return try session.export(contentType.preferredFilenameExtension == "hwp" ? .hwp : .hwpx)
     }
     nonisolated func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: snapshot)
@@ -394,9 +399,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
     private func enqueue(_ work: @escaping @MainActor (HwpDocument) async throws -> Void) {
+        let token = workBarrier.begin()
         queued += 1
         let previous = queue
         queue = Task { [weak self] in
+            defer { token.finish() }
             await previous?.value
             guard let self else { return }
             do { try await work(self) } catch { NSSound.beep() }

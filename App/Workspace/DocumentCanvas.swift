@@ -868,8 +868,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
         }
         if let move = Self.motions[selector] {
+            commitComposition()
             model?.move(move.motion, extend: move.extend)
         } else if let motion = Self.deletions[selector] {
+            commitComposition()
             model?.delete(motion, undoManager)
         } else {
             switch selector {
@@ -891,11 +893,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     private func replaceSelection(with text: String) {
+        commitComposition()
         model?.edit(undoManager) { selection in selection.map { .replace($0, text: text) } }
     }
 
     /// Moves the caret a screenful up or down, scrolling with it.
     private func movePage(up: Bool, extend: Bool) {
+        commitComposition()
         guard let model, let caret = caretRect, let clip = enclosingScrollView?.contentView else { return }
         let step = clip.bounds.height * 0.9 * (up ? -1 : 1)
         clip.scroll(to: clip.constrainBoundsRect(clip.bounds.offsetBy(dx: 0, dy: step)).origin)
@@ -914,6 +918,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     @objc func cut(_ sender: Any?) { copySelection(cut: true) }
     /// Pastes text, or else an image as a picture.
     @objc func paste(_ sender: Any?) {
+        commitComposition()
         let board = NSPasteboard.general
         if let text = board.string(forType: .string) {
             replaceSelection(with: text)
@@ -926,6 +931,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     @objc func delete(_ sender: Any?) { replaceSelection(with: "") }
     /// Selects all text of the body or of the cell holding the caret.
     override func selectAll(_ sender: Any?) {
+        commitComposition()
         model?.select { model in
             guard let focus = model.selection?.focus else { return nil }
             let start = try await model.navigate(from: focus, .documentStart).position

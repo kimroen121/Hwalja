@@ -157,6 +157,10 @@ extension EditSession.Output {
     /// the PDF that follows them (`EditSession::rendering` in the engine).
     init(_ payload: EditSession.Payload) throws {
         let reply: EditReply = try decode(payload)
+        guard reply.version == EditProtocolVersion.current else {
+            renderLog.error("Incompatible engine protocol: expected=\(EditProtocolVersion.current) actual=\(reply.version)")
+            throw EditError.invalidInput
+        }
         var reader = ByteReader(payload.data)
         let displays: [PageDisplay?]
         do {

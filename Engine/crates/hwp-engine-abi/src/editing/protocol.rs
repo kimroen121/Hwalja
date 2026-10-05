@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const PROTOCOL_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CellTarget {

@@ -53,6 +53,31 @@ fn replace(
     )
 }
 #[test]
+fn protocol_version_accepts_current_and_rejects_previous() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let command = |text: &str| EditCommand::Replace {
+        selection: EditSelection::caret(point(body(), 0)),
+        text: text.into(),
+    };
+    assert!(s
+        .apply(EditRequest {
+            version: 2,
+            revision: 0,
+            command: command("새"),
+            amend: false,
+        })
+        .is_ok());
+    assert!(matches!(
+        s.apply(EditRequest {
+            version: 1,
+            revision: 1,
+            command: command("옛"),
+            amend: false,
+        }),
+        Err(EditError::InvalidInput)
+    ));
+}
+#[test]
 fn replace_preserves_other_content() {
     for format in ["hwp", "hwpx"] {
         let bytes = plain_document(format, true);
@@ -94,7 +119,7 @@ fn rejects_unsupported_target() {
         note: None,
     };
     let request = EditRequest {
-        version: 1,
+        version: PROTOCOL_VERSION,
         amend: false,
         revision: 0,
         command: EditCommand::Replace {
@@ -228,7 +253,7 @@ fn preservation_rejects_changes_to_unedited_content() {
 
 fn command(s: &mut EditSession, command: EditCommand) -> Result<EditReply, EditError> {
     s.apply(EditRequest {
-        version: 1,
+        version: PROTOCOL_VERSION,
         amend: false,
         revision: s.revision,
         command,
@@ -330,7 +355,7 @@ fn ffi_round_trip_owns_results() {
         assert_eq!(data[0], 1);
         assert!(!data.windows(5).any(|w| w == b"%PDF-"));
         hwp_edit_result_free(opened);
-        let request = br#"{"op":"apply","request":{"version":1,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
+        let request = br#"{"op":"apply","request":{"version":2,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
         let applied = hwp_edit_request(session, request.as_ptr(), request.len());
         assert_eq!(hwp_edit_result_status(applied), 0, "{}", json(applied));
         assert!(json(applied).contains("\"revision\":1"));
@@ -979,7 +1004,7 @@ fn amended_edits_share_one_undo_step() {
         let start = point(body(), 0);
         let end = point(body(), if revision == 0 { 0 } else { 1 });
         s.apply(EditRequest {
-            version: 1,
+            version: PROTOCOL_VERSION,
             amend,
             revision,
             command: EditCommand::Replace {
@@ -1028,7 +1053,7 @@ fn later_formats_keep_earlier_ones() {
         ),
     ] {
         s.apply(EditRequest {
-            version: 1,
+            version: PROTOCOL_VERSION,
             amend: false,
             revision,
             command: EditCommand::FormatText {
@@ -1046,7 +1071,7 @@ fn later_formats_keep_earlier_ones() {
 fn formatting_a_span_keeps_each_runs_other_attributes() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let request = |revision, focus, style| EditRequest {
-        version: 1,
+        version: PROTOCOL_VERSION,
         amend: false,
         revision,
         command: EditCommand::FormatText {
@@ -1183,7 +1208,7 @@ fn find_reports_body_and_cell_matches() {
 }
 fn run(s: &mut EditSession, command: EditCommand) -> Result<EditReply, EditError> {
     s.apply(EditRequest {
-        version: 1,
+        version: PROTOCOL_VERSION,
         amend: false,
         revision: s.revision,
         command,
