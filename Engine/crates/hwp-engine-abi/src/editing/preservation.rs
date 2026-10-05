@@ -142,6 +142,9 @@ pub(super) fn check(
         EditCommand::InsertPicture { position, .. } => {
             return check_inserted_picture(before, after, &position.target)
         }
+        EditCommand::InsertEquation { position, .. } => {
+            return check_inserted_equation(before, after, &position.target)
+        }
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
@@ -235,6 +238,32 @@ fn check_inserted_picture(
         .truncate(a.doc_info.bin_data_list.len());
     for doc in [&mut a, &mut b] {
         doc.doc_info.raw_stream = None;
+    }
+    same_rest(&mut a, &mut b, target.section)
+}
+
+/// A formula insertion may add exactly one equation control to its host paragraph.
+fn check_inserted_equation(
+    before: &Document,
+    after: &Document,
+    target: &EditTarget,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let old = remove(&mut a, target, commands::index(target), 1)?;
+    let new = remove(&mut b, target, commands::index(target), 1)?;
+    let equations = new
+        .0
+        .iter()
+        .filter(|control| matches!(control, Control::Equation(_)))
+        .count();
+    let old_equations = old
+        .0
+        .iter()
+        .filter(|control| matches!(control, Control::Equation(_)))
+        .count();
+    if equations != old_equations + 1 {
+        return Err(EditError::PreservationFailed);
     }
     same_rest(&mut a, &mut b, target.section)
 }

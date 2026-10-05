@@ -52,6 +52,13 @@ extension Viewer {
             }
         }
     }
+    func insertEquation(script: String, fontSize: Double) {
+        guard let document, let position = document.selection?.ordered.start else { return NSSound.beep() }
+        let size = UInt32((min(max(fontSize, 4), 72) * 100).rounded())
+        document.edit(undoManager) { _ in
+            .insertEquation(position, script: script, fontSize: size, color: 0)
+        }
+    }
     func insertNote(endnote: Bool) {
         document?.edit(undoManager) { $0.map { .insertNote($0.ordered.start, endnote: endnote) } }
     }
@@ -97,6 +104,55 @@ struct TableSheet: View {
             }
         } confirm: {
             viewer.insertTable(rows: Int(rows), columns: Int(columns))
+            dismiss()
+        }
+    }
+}
+
+/// 수식 만들기: Hancom's equation script plus the size inherited from the caret.
+struct EquationSheet: View {
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var script = ""
+    @State private var fontSize: Double
+    @State private var showError = false
+
+    init(fontSize: Double, viewer: Viewer) {
+        self.viewer = viewer
+        _fontSize = State(initialValue: min(max(fontSize, 4), 72))
+    }
+
+    var body: some View {
+        DialogFrame {
+            VStack(alignment: .leading, spacing: 12) {
+                GroupTitle("수식")
+                Text("한글 수식 스크립트를 입력하세요.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $script)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 460, height: 130)
+                    .padding(6)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay { RoundedRectangle(cornerRadius: 7).stroke(.quaternary) }
+                Text("예:  1 over 2    x^2 + y^2 = z^2    sqrt x")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    FieldLabel("글자 크기")
+                    SpinField(value: $fontSize, unit: "pt", range: 4...72)
+                }
+                if showError {
+                    Text("수식을 입력해 주세요. 최대 4,096자까지 사용할 수 있습니다.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        } confirm: {
+            guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  script.count <= 4_096
+            else { showError = true; return }
+            viewer.insertEquation(script: script, fontSize: fontSize)
             dismiss()
         }
     }

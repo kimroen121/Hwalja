@@ -516,6 +516,45 @@ fn picture_insert_undo_and_save_round_trip() {
 }
 
 #[test]
+fn equation_insert_undo_and_save_round_trip() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut session = EditSession::open(&plain_document(format, false)).unwrap();
+        let command: EditCommand = serde_json::from_value(serde_json::json!({
+            "kind": "insertEquation",
+            "position": {
+                "target": { "section": 0, "paragraph": 1, "cell": null },
+                "scalar": 1
+            },
+            "script": "x^2 + y^2 = z^2",
+            "fontSize": 1000,
+            "color": 0
+        }))
+        .unwrap();
+        run(&mut session, command).unwrap();
+        let equation = session.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .find_map(|control| match control {
+                Control::Equation(equation) => Some(equation),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(equation.script, "x^2 + y^2 = z^2");
+        assert_eq!((equation.font_size, equation.color), (1000, 0));
+        let reopened = EditSession::open(&session.export(save).unwrap()).unwrap();
+        assert!(reopened.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .any(|control| matches!(control, Control::Equation(_))));
+        run(&mut session, EditCommand::Undo).unwrap();
+        assert!(!session.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .any(|control| matches!(control, Control::Equation(_))));
+    }
+}
+
+#[test]
 fn replace_spans_paragraphs() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();

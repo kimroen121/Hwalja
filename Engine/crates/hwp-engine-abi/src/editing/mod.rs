@@ -220,6 +220,7 @@ impl EditSession {
             | EditCommand::Break { position, .. }
             | EditCommand::InsertTable { position, .. }
             | EditCommand::InsertPicture { position, .. }
+            | EditCommand::InsertEquation { position, .. }
             | EditCommand::InsertNote { position, .. } => Some(position.clone()),
             EditCommand::EditTable { cell, .. } => Some(EditPosition {
                 target: cell.clone(),

@@ -29,6 +29,8 @@ struct ToolRow: View {
                 .disabled(!context.inBody)
             ToolTile("그림", Icon.picture) { viewer.insertPicture() }
                 .disabled(!context.inBody)
+            ToolTile("수식", Icon.equation) { viewer.insertingEquation = true }
+                .disabled(!context.inBody)
             RowDivider()
             Group {
                 ToolTile("각주", Icon.footnote) { viewer.insertNote(endnote: false) }
@@ -59,7 +61,7 @@ struct ToolRow: View {
 enum Icon {
     static let save = "square.and.arrow.down", cut = "scissors", copy = "doc.on.doc", paste = "clipboard"
     static let styleCopy = "paintbrush", find = "magnifyingglass", replace = "arrow.left.arrow.right"
-    static let goTo = "arrow.right.to.line", table = "tablecells", picture = "photo", symbols = "character.book.closed"
+    static let goTo = "arrow.right.to.line", table = "tablecells", picture = "photo", equation = "function", symbols = "character.book.closed"
     static let charShape = "textformat", paraShape = "text.alignleft"
     static let header = "rectangle.topthird.inset.filled", footer = "rectangle.bottomthird.inset.filled"
     static let footnote = "note.text", endnote = "doc.plaintext"

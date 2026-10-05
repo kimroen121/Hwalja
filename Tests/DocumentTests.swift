@@ -51,6 +51,32 @@ struct DocumentTests {
         #expect(document.revision == 2 && !document.reply.dirty)
     }
 
+    @Test func insertsEquationSavesAndUndoes() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        let position = EditPosition(target: body, scalar: 0)
+        let beforeOps = document.pages.reduce(0) { count, page in
+            if case .display(let display) = page { return count + display.ops.count }
+            return count
+        }
+        document.selection = .caret(position)
+        document.edit(undo) { _ in
+            .insertEquation(position, script: "1 over 2", fontSize: 1_000, color: 0)
+        }
+        await document.settle()
+        let afterOps = document.pages.reduce(0) { count, page in
+            if case .display(let display) = page { return count + display.ops.count }
+            return count
+        }
+        #expect(document.revision == 1)
+        #expect(afterOps > beforeOps)
+        let reopened = try HwpDocument(data: document.snapshot(contentType: .hwpx))
+        #expect(!reopened.pages.isEmpty)
+        undo.undo()
+        await document.settle()
+        #expect(document.revision == 2 && !document.reply.dirty)
+    }
+
     private let body = EditTarget(section: 0, paragraph: 0, cell: nil)
 
     @Test(arguments: ["hwp", "hwpx"])

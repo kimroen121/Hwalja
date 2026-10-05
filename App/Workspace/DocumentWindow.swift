@@ -54,6 +54,9 @@ struct DocumentWindow: View {
             Button("취소", role: .cancel) {}
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.insertingEquation) {
+            EquationSheet(fontSize: document.format?.text.size ?? 10, viewer: viewer)
+        }
         .sheet(isPresented: $viewer.editingCharShape) {
             CharShapeSheet(style: document.format?.text ?? CharStyle(), viewer: viewer)
         }
@@ -132,6 +135,7 @@ final class Viewer: ObservableObject {
     @Published var showsThumbnails = true
     @Published var goingToPage = false
     @Published var insertingTable = false
+    @Published var insertingEquation = false
     @Published var editingCharShape = false
     @Published var editingParaShape = false
     /// The section and paper 편집 용지 is showing.

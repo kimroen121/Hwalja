@@ -83,7 +83,7 @@ macOS 메뉴 막대도 같은 순서로 둔다(파일·편집·보기·입력·�
 | | 그림 | PNG/JPEG 파일 선택, 본문 삽입·비율 유지·Undo·저장 | `insert_picture_native` | 기본 완료 |
 | | 표 | 표… (줄·칸 개수) | `create_table_native` | 완료(본문) |
 | | 차트, 웹 동영상 | | `set_chart_data_native` | 2차 |
-| | 수식 | | `insert_equation_native` | |
+| | 수식 | 한글 수식 스크립트·크기, 본문 삽입·Undo·저장 | `insert_equation_native` | 기본 완료 |
 | | 문자표 (⌘F10) | 이모티콘 및 기호(⌃⌘Space, macOS 기본) | | 완료 |
 | | 필드 입력, 하이퍼링크, 책갈피 | | `add_bookmark_native` | |
 | | 문단 띠 | | | |

@@ -346,6 +346,28 @@ impl EditSession {
                     Ok(())
                 }
             }
+            EditCommand::InsertEquation {
+                position,
+                script,
+                font_size,
+                color,
+            } => {
+                body_only(&position.target)?;
+                self.validate_position(position)?;
+                let valid_text = script
+                    .chars()
+                    .all(|ch| matches!(ch, '\n' | '\t') || !ch.is_control());
+                if script.trim().is_empty()
+                    || script.chars().count() > 4096
+                    || !valid_text
+                    || !(400..=7_200).contains(font_size)
+                    || *color > 0x00ff_ffff
+                {
+                    Err(EditError::InvalidInput)
+                } else {
+                    Ok(())
+                }
+            }
             EditCommand::EditTable { cell, change } => {
                 let doc = self.core.document();
                 paragraphs(doc, cell)?;
@@ -805,6 +827,23 @@ impl EditSession {
                     description,
                     None,
                     None,
+                )?;
+                Ok(EditSelection::caret(position.clone()))
+            }
+            EditCommand::InsertEquation {
+                position,
+                script,
+                font_size,
+                color,
+            } => {
+                let target = &position.target;
+                self.core.insert_equation_native(
+                    target.section as usize,
+                    target.paragraph as usize,
+                    position.scalar as usize,
+                    script,
+                    *font_size,
+                    *color,
                 )?;
                 Ok(EditSelection::caret(position.clone()))
             }

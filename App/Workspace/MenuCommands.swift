@@ -115,6 +115,8 @@ struct MenuItems {
                 .disabled(!context.inBody)
             item("그림…", Icon.picture) { viewer?.insertPicture() }
                 .disabled(!context.inBody)
+            item("수식…", Icon.equation) { viewer?.insertingEquation = true }
+                .disabled(!context.inBody)
             Divider()
             item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
                 .disabled(!context.hasSelection)

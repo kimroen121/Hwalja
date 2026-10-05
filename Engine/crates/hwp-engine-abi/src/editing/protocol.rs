@@ -91,6 +91,14 @@ pub enum EditCommand {
         extension: String,
         description: String,
     },
+    /// A Hancom equation script placed in body text at `position`.
+    InsertEquation {
+        position: EditPosition,
+        script: String,
+        #[serde(rename = "fontSize")]
+        font_size: u32,
+        color: u32,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,
