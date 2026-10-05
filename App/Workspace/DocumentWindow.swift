@@ -1,34 +1,37 @@
 import PDFKit
 import SwiftUI
 
-/// One document window: page thumbnails in the sidebar, the editable pages in the detail.
+/// One document window, laid out like Hancom Office Web: the menu row, the 기본 and 서식
+/// tool rows, then page thumbnails beside the pages, and a status bar.
 struct DocumentWindow: View {
-    @ObservedObject var document: HwpDocument
+    let document: HwpDocument
     @StateObject private var viewer = Viewer()
     @State private var pageField = ""
 
     var body: some View {
-        NavigationSplitView {
-            PageThumbnails(document: document, viewer: viewer)
-                .navigationSplitViewColumnWidth(min: 120, ideal: 150, max: 220)
-        } detail: {
-            Canvas(canvas: viewer.canvas, document: document)
-                .frame(minWidth: 480, minHeight: 400)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if viewer.finding { FindBar(document: document, viewer: viewer) }
+        VStack(spacing: 0) {
+            MenuRow(document: document, viewer: viewer)
+            Divider()
+            if viewer.showsTools {
+                ToolRow(document: document, viewer: viewer)
+                Divider()
+            }
+            if viewer.showsFormat {
+                FormatRow(document: document, editor: viewer.canvas.editor)
+                Divider()
+            }
+            if viewer.finding { FindBar(viewer: viewer) }
+            HStack(spacing: 0) {
+                if viewer.showsThumbnails {
+                    PageThumbnails(document: document, viewer: viewer, position: viewer.position)
+                        .frame(width: 150)
+                    Divider()
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    HStack {
-                        Spacer()
-                        Text("\(viewer.page + 1) / \(document.reply.pageCount)쪽")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.callout)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(.bar)
-                }
+                Canvas(canvas: viewer.canvas, document: document)
+                    .frame(minWidth: 480, minHeight: 400)
+            }
+            Divider()
+            StatusBar(document: document, viewer: viewer, position: viewer.position)
         }
         .alert("쪽으로 이동", isPresented: $viewer.goingToPage) {
             TextField("쪽", text: $pageField)
@@ -41,31 +44,43 @@ struct DocumentWindow: View {
         }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
-        .toolbar {
-            FormatBar(document: document, editor: viewer.canvas.editor)
-            if let first = document.reply.suspectPages.first {
-                ToolbarItem {
-                    Button { viewer.canvas.go(to: Int(first)) } label: {
-                        Label("배치 확인", systemImage: "exclamationmark.triangle")
-                    }
-                    .help(document.reply.suspectPages.map { "\($0 + 1)쪽" }.joined(separator: ", "))
-                }
-            }
-            ToolbarItem {
-                Menu("\(viewer.zoomPercent)%") { ZoomItems(viewer: viewer) }
-                .help("확대/축소")
-            }
-        }
     }
 }
 
-/// Zoom choices shared by the toolbar and the View menu.
+/// Page count, page in view and zoom.
+private struct StatusBar: View {
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
+    @ObservedObject var position: ViewPosition
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("\(position.page + 1) / \(document.context.pageCount)쪽")
+                .monospacedDigit()
+            Spacer()
+            ToolIcon("축소", "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
+            Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
+                .menuStyle(.borderlessButton)
+                .monospacedDigit()
+                .fixedSize()
+            ToolIcon("확대", "plus.magnifyingglass") { viewer.canvas.zoomIn(nil) }
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .controlSize(.small)
+        .padding(.horizontal, 12)
+        .frame(height: 26)
+    }
+}
+
+/// Zoom choices shared by the status bar and the View menu.
 struct ZoomItems: View {
-    @ObservedObject var viewer: Viewer
+    let viewer: Viewer
+    @ObservedObject var position: ViewPosition
 
     var body: some View {
         ForEach([50, 75, 100, 125, 150, 200, 300], id: \.self) { percent in
-            Toggle("\(percent)%", isOn: Binding(get: { viewer.zoomPercent == percent && viewer.canvas.fit == nil },
+            Toggle("\(percent)%", isOn: Binding(get: { position.zoomPercent == percent && viewer.canvas.fit == nil },
                                                 set: { _ in viewer.canvas.setZoom(CGFloat(percent) / 100) }))
         }
         Divider()
@@ -74,17 +89,26 @@ struct ZoomItems: View {
     }
 }
 
-/// Owns the window's canvas and publishes what the toolbar, sidebar and find bar show.
+/// Page in view and zoom. Kept apart from `Viewer` because they change on every scroll.
+@MainActor
+final class ViewPosition: ObservableObject {
+    /// Zero-based page in view.
+    @Published fileprivate(set) var page = 0
+    @Published fileprivate(set) var zoomPercent = 100
+}
+
+/// Owns the window's canvas and the state of its bars and sheets.
 @MainActor
 final class Viewer: ObservableObject {
     let canvas = DocumentCanvas(frame: .zero)
-    @Published private(set) var zoomPercent = 100
-    /// Zero-based page in view.
-    @Published private(set) var page = 0
+    let position = ViewPosition()
     /// Pages side by side.
     @Published var columns = 1 {
         didSet { canvas.columns = columns }
     }
+    @Published var showsTools = true
+    @Published var showsFormat = true
+    @Published var showsThumbnails = true
     @Published var goingToPage = false
     @Published var insertingTable = false
     /// The section and paper 편집 용지 is showing.
@@ -95,19 +119,42 @@ final class Viewer: ObservableObject {
     @Published var replacing = false
     @Published var query = ""
     @Published var replacement = ""
-    /// Matches of `query` in the latest revision.
+    /// Matches of `query` in the latest searched revision, and the selected one.
     @Published private(set) var matches: [EditSelection] = []
+    @Published private(set) var currentMatch: Int?
+    private var searchedRevision: UInt64?
 
     private var document: HwpDocument? { canvas.editor.model }
     private var undoManager: UndoManager? { canvas.editor.undoManager }
+
+    var zoomPercent: Int { position.zoomPercent }
 
     init() {
         canvas.onViewChange = { [weak self] in
             guard let self else { return }
             let zoom = Int((canvas.zoom * 100).rounded()), page = canvas.currentPage
-            if zoom != zoomPercent { zoomPercent = zoom }
-            if page != self.page { self.page = page }
+            if zoom != position.zoomPercent { position.zoomPercent = zoom }
+            if page != position.page { position.page = page }
         }
+        canvas.editor.onPresent = { [weak self] in self?.documentPresented() }
+    }
+
+    /// Keeps the find bar's matches and count current as the document changes.
+    private func documentPresented() {
+        guard finding, let document else { return }
+        if document.revision != searchedRevision {
+            Task { await search() }
+        } else {
+            let current = document.selection.flatMap { matches.firstIndex(of: $0) }
+            if current != currentMatch { currentMatch = current }
+        }
+    }
+
+    /// 모양 복사 in one button: applies the copied format to selected text, otherwise
+    /// copies the format at the caret.
+    func paintFormat() {
+        let editor = canvas.editor
+        if document?.context.hasRange == true, PageEditor.copiedStyle != nil { editor.pasteFont(nil) } else { editor.copyFont(nil) }
     }
 }
 
@@ -130,7 +177,9 @@ extension Viewer {
         }
     }
     func search() async {
+        searchedRevision = document?.revision
         matches = query.isEmpty ? [] : (try? await document?.find(query)) ?? []
+        currentMatch = document?.selection.flatMap { matches.firstIndex(of: $0) }
     }
 
     /// Selects the match after the selection (or before it), wrapping around the document.
@@ -178,7 +227,6 @@ extension Viewer {
 /// The find bar above the pages: the query with match count and arrows, and when
 /// replacing, the replacement with its buttons.
 private struct FindBar: View {
-    @ObservedObject var document: HwpDocument
     @ObservedObject var viewer: Viewer
     @FocusState private var focused: Bool
 
@@ -190,8 +238,7 @@ private struct FindBar: View {
                     .focused($focused)
                     .onSubmit { viewer.findNext() }
                 if !viewer.query.isEmpty {
-                    let current = document.selection.flatMap { viewer.matches.firstIndex(of: $0) }
-                    Text(current.map { "\($0 + 1)/\(viewer.matches.count)" } ?? "\(viewer.matches.count)")
+                    Text(viewer.currentMatch.map { "\($0 + 1)/\(viewer.matches.count)" } ?? "\(viewer.matches.count)")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -218,11 +265,10 @@ private struct FindBar: View {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .onAppear { focused = true }
         .onChange(of: viewer.finding) { if viewer.finding { focused = true } }
-        .task(id: "\(viewer.query)\u{0}\(document.revision)") { await viewer.search() }
+        .task(id: viewer.query) { await viewer.search() }
     }
 }
 
@@ -245,10 +291,11 @@ private struct Canvas: NSViewRepresentable {
 /// Page thumbnails; a page's image is redrawn only when the engine replaced that page.
 private struct PageThumbnails: View {
     @ObservedObject var document: HwpDocument
-    @ObservedObject var viewer: Viewer
+    let viewer: Viewer
+    @ObservedObject var position: ViewPosition
 
     var body: some View {
-        let pages = document.pages
+        let pages = document.thumbnails
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -260,7 +307,7 @@ private struct PageThumbnails: View {
                                         .id(page.id)
                                         .padding(3)
                                         .background(RoundedRectangle(cornerRadius: 4)
-                                            .fill(index == viewer.page ? Color.accentColor.opacity(0.35) : .clear))
+                                            .fill(index == position.page ? Color.accentColor.opacity(0.35) : .clear))
                                     Text("\(index + 1)").font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -270,13 +317,13 @@ private struct PageThumbnails: View {
                 }
                 .padding(.vertical, 12)
             }
-            .onChange(of: viewer.page) { proxy.scrollTo(viewer.page) }
+            .onChange(of: position.page) { proxy.scrollTo(position.page) }
         }
     }
 }
 
-/// Draws off the main actor once a page has stopped changing, keeping the previous image
-/// meanwhile, so typing never waits for a thumbnail.
+/// Draws off the main actor, keeping the previous image meanwhile. The document hands
+/// out new thumbnail pages only once typing pauses.
 private struct Thumbnail: View {
     let page: RenderedPage
     @State private var image: CGImage?
@@ -289,8 +336,6 @@ private struct Thumbnail: View {
         .frame(width: size.width, height: size.height)
         .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
         .task(id: page.id) {
-            if image != nil { try? await Task.sleep(for: .milliseconds(400)) }
-            guard !Task.isCancelled else { return }
             let page = page
             let drawn = await Task.detached(priority: .utility) { Drawn(Self.render(page, size: size)) }.value
             if !Task.isCancelled { image = drawn.image }

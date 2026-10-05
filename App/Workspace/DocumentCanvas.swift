@@ -43,7 +43,10 @@ final class DocumentCanvas: NSScrollView {
             DispatchQueue.main.async { [weak self] in self?.fitWindowToPage() }
         }
     }
-    @objc private func viewChanged() { onViewChange?() }
+    @objc private func viewChanged() {
+        editor.placeCaret()
+        onViewChange?()
+    }
     @objc private func userMagnified() { fit = nil }
 
     /// ⌘ or ⌃ with the scroll wheel zooms around the pointer.
@@ -172,7 +175,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var observer: AnyCancellable?
     private var pageFrames: [NSRect] = []
     private var shown = Presentation()
-    private let caret = NSTextInsertionIndicator(frame: .zero)
+    /// A thin bar, one screen point wide at any zoom.
+    private let caret = NSView()
+    /// Called after each presentation is applied.
+    var onPresent: (() -> Void)?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// Latest drag point waiting for the hit test in flight.
@@ -186,8 +192,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         super.init(frame: .zero)
         // Pages are white paper in any mode, so highlight and caret use light-mode colors.
         appearance = NSAppearance(named: .aqua)
+        caret.wantsLayer = true
+        caret.layer?.backgroundColor = NSColor.black.cgColor
+        caret.isHidden = true
         addSubview(caret)
-        caret.displayMode = .hidden
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -195,9 +203,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         guard model !== self.model else { return }
         self.model = model
         shown = model.presentation
-        observer = model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.sync() }
+        observer = model.presented.sink { [weak self] in self?.sync() }
         layoutPages(force: true)
         needsDisplay = true
     }
@@ -303,15 +309,29 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         (old + highlightRects).forEach { setNeedsDisplay($0.insetBy(dx: -1, dy: -1)) }
         placeCaret()
         if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
+        onPresent?()
     }
 
-    private func placeCaret() {
-        guard let rect = caretRect, shown.highlight.isEmpty else {
-            caret.displayMode = .hidden
+    /// Shows the caret where the presentation puts it, solid for a moment, then blinking.
+    func placeCaret() {
+        let active = window?.isKeyWindow == true && window?.firstResponder === self
+        guard active, let rect = caretRect, shown.highlight.isEmpty else {
+            caret.isHidden = true
             return
         }
-        caret.frame = NSRect(x: rect.minX - 1, y: rect.minY, width: 2, height: rect.height)
-        caret.displayMode = window?.isKeyWindow == true && window?.firstResponder === self ? .automatic : .hidden
+        let width = 1 / (enclosingScrollView?.magnification ?? 1)
+        let frame = NSRect(x: rect.minX - width / 2, y: rect.minY, width: width, height: rect.height)
+        guard caret.isHidden || caret.frame != frame else { return }
+        caret.frame = frame
+        caret.isHidden = false
+        let blink = CAKeyframeAnimation(keyPath: "opacity")
+        blink.values = [1, 0]
+        blink.keyTimes = [0, 0.5, 1]
+        blink.calculationMode = .discrete
+        blink.duration = 1.06
+        blink.repeatCount = .infinity
+        blink.beginTime = CACurrentMediaTime() + 0.5
+        caret.layer?.add(blink, forKey: "blink")
     }
 
     override func becomeFirstResponder() -> Bool {

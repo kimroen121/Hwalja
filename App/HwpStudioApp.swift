@@ -6,14 +6,6 @@ struct HwpStudioApp: App {
         DocumentGroup(newDocument: { HwpDocument() }) { file in
             DocumentWindow(document: file.document)
         }
-        .commands {
-            FileCommands()
-            EditCommands()
-            ViewCommands()
-            InsertCommands()
-            FormatCommands()
-            PageCommands()
-            TableCommands()
-        }
+        .commands { MenuBarCommands() }
     }
 }

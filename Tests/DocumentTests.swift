@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import AppKit
 import PDFKit
+import SwiftUI
 @testable import HwpStudio
 
 @MainActor
@@ -286,6 +287,85 @@ struct DocumentTests {
         let start = ContinuousClock.now
         next.draw(in: context, rect: CGRect(origin: .zero, size: page.size))
         print("BENCH draw of the new page", ContinuousClock.now - start)
+    }
+
+    /// Opt-in: types fast into a real window and reports how far the screen falls behind.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_BENCH"] != nil))
+    func benchHostedTyping() async throws {
+        let url = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_BENCH"]!)
+        for hosted in [false, true] {
+            let document = try HwpDocument(data: Data(contentsOf: url))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 900),
+                                  styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            let canvas: DocumentCanvas
+            if hosted {
+                window.contentView = NSHostingView(rootView: DocumentWindow(document: document))
+                window.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(500))
+                canvas = try #require(Self.findCanvas(window))
+            } else {
+                canvas = DocumentCanvas(frame: window.contentLayoutRect)
+                window.contentView = canvas
+                canvas.bind(document)
+            }
+            let editor = canvas.editor
+            window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(editor)
+            document.selection = .caret(try await document.hitTest(page: 0, x: 300, y: 300))
+            await document.settle()
+            let start = ContinuousClock.now
+            // Two-set Korean typing at about 12 keys a second.
+            for _ in 0..<10 {
+                for (text, commit) in [("ㄱ", false), ("가", false), ("각", false), ("각", true)] {
+                    if commit {
+                        editor.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                    } else {
+                        editor.setMarkedText(text, selectedRange: NSRange(location: 1, length: 0),
+                                             replacementRange: NSRange(location: NSNotFound, length: 0))
+                    }
+                    window.displayIfNeeded()
+                    try await Task.sleep(for: .milliseconds(Int(ProcessInfo.processInfo.environment["HWP_KEY_MS"] ?? "80")!))
+                }
+            }
+            let typed = ContinuousClock.now
+            await document.settle()
+            window.displayIfNeeded()
+            print("BENCH hosted \(hosted): typing \(typed - start), behind by \(ContinuousClock.now - typed)")
+            window.orderOut(nil)
+        }
+    }
+    /// Opt-in: `HWP_ROWS_PNG=<file> swift test --filter snapshotRows` renders the tool and
+    /// format rows (pop-up menus draw as placeholders).
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HWP_ROWS_PNG"] != nil))
+    func snapshotRows() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.selection = .caret(try await document.hitTest(page: 0, x: 200, y: 200))
+        document.type("가", nil)
+        await document.settle()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        let rows = VStack(spacing: 0) {
+            MenuRow(document: document, viewer: viewer)
+            Divider()
+            ToolRow(document: document, viewer: viewer)
+            Divider()
+            FormatRow(document: document, editor: viewer.canvas.editor)
+        }
+        .frame(width: 1100)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: rows)
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+            .write(to: URL(fileURLWithPath: ProcessInfo.processInfo.environment["HWP_ROWS_PNG"]!))
+    }
+
+    private static func findCanvas(_ window: NSWindow) -> DocumentCanvas? {
+        func search(_ view: NSView) -> DocumentCanvas? {
+            if let canvas = view as? DocumentCanvas { return canvas }
+            return view.subviews.lazy.compactMap(search).first
+        }
+        return window.contentView.flatMap(search)
     }
 
     /// Native pages draw what the exported PDF shows: the same faces at the same places.

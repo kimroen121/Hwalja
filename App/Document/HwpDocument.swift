@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -25,9 +26,22 @@ struct Presentation: Equatable {
     var highlight: [PageRect] = []
 }
 
+/// What menus and bars depend on. It changes far less often than the caret, so SwiftUI
+/// views observe only this (plus `format` and `thumbnails`), never each keystroke.
+struct EditingContext: Equatable {
+    var hasSelection = false
+    /// The selection covers text.
+    var hasRange = false
+    /// The caret is in a table cell (otherwise in body text).
+    var inTable = false
+    var pageCount = 0
+    var canUndo = false
+    var canRedo = false
+}
+
 /// One open HWP/HWPX document: the engine session plus the state views render.
 /// Edits and moves run one at a time in submission order; each sees the result of the
-/// previous one, and each ends by publishing a `Presentation`.
+/// previous one, and each ends by publishing a `Presentation` to `presented`.
 @MainActor
 final class HwpDocument: @preconcurrency ReferenceFileDocument {
     static let readableContentTypes = UTType.hwpFamily
@@ -40,13 +54,20 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Rendered pages as shown, replaced only when a presentation is published.
     private(set) var pages: [RenderedPage]
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
-    private(set) var reply: EditReply { willSet { objectWillChange.send() } }
-    var selection: EditSelection? { willSet { objectWillChange.send() } }
+    private(set) var reply: EditReply
+    var selection: EditSelection?
     /// Text the input method is still composing; it is already in the document.
-    private(set) var marked: EditSelection? { willSet { objectWillChange.send() } }
+    private(set) var marked: EditSelection?
+    private(set) var presentation = Presentation()
+    /// Sent after each new `presentation`, for the canvas and the find bar.
+    let presented = PassthroughSubject<Void, Never>()
+
     /// Format at the caret (or at the end of the selection).
     private(set) var format: Format? { willSet { objectWillChange.send() } }
-    private(set) var presentation = Presentation() { willSet { objectWillChange.send() } }
+    private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
+    /// Pages for the thumbnails, updated once typing pauses.
+    private(set) var thumbnails: [RenderedPage] = [] { willSet { objectWillChange.send() } }
+    private var thumbnailUpdate: Task<Void, Never>?
 
     private var queue: Task<Void, Never>?
     /// Number of works ever queued; identifies the latest one.
@@ -67,6 +88,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         self.session = session
         pages = output.pages
         reply = output.reply
+        thumbnails = output.pages
+        context.pageCount = output.pages.count
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
@@ -77,6 +100,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         self.session = session
         pages = output.pages
         reply = output.reply
+        thumbnails = output.pages
+        context.pageCount = output.pages.count
     }
 
     nonisolated func snapshot(contentType: UTType) throws -> Data {
@@ -304,8 +329,22 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             next.reflowed = next.reflowed || pages.count != count
         }
         staged = []
-        if format != self.format { self.format = format }
         presentation = next
+        presented.send()
+        if format != self.format { self.format = format }
+        let context = EditingContext(hasSelection: selection != nil, hasRange: selection.map { $0.anchor != $0.focus } ?? false,
+                              inTable: selection?.focus.target.cell != nil, pageCount: pages.count,
+                              canUndo: reply.canUndo, canRedo: reply.canRedo)
+        if context != self.context { self.context = context }
+        if !next.changedPages.isEmpty { scheduleThumbnails() }
+    }
+    private func scheduleThumbnails() {
+        thumbnailUpdate?.cancel()
+        thumbnailUpdate = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            thumbnails = pages
+        }
     }
 
     private enum Step { case undo, redo }

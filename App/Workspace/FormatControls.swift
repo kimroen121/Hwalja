@@ -40,130 +40,130 @@ enum FormatChoices {
     }
 }
 
-/// The window's format bar: font, size, character styles, color, alignment and line spacing.
-struct FormatBar: ToolbarContent {
+/// 서식 도구 상자: undo, font, size, character styles, color, alignment and line spacing.
+/// It observes only the document's format and context, so typing never rebuilds it.
+struct FormatRow: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
 
-    private var text: CharStyle? { document.format?.text }
-    private var paragraph: ParaStyle? { document.format?.paragraph }
-    /// Character formats apply to selected text.
-    private var hasRange: Bool { document.selection.map { $0.anchor != $0.focus } ?? false }
-
-    var body: some ToolbarContent {
-        ToolbarItemGroup {
+    var body: some View {
+        let text = document.format?.text, paragraph = document.format?.paragraph, context = document.context
+        HStack(spacing: 4) {
+            ToolIcon("되돌리기", "arrow.uturn.backward") { send(Selector(("undo:"))) }
+                .disabled(!context.canUndo)
+            ToolIcon("다시 실행", "arrow.uturn.forward") { send(Selector(("redo:"))) }
+                .disabled(!context.canRedo)
+            RowDivider()
             Group {
-                Menu(text?.font ?? "글꼴") {
-                    ForEach(FormatChoices.families, id: \.family) { font in
-                        Button(font.name) { editor.setFont(font.family) }
-                    }
-                }
-                .frame(width: 140)
-                .help("글꼴")
-                Menu(text?.size.map(FormatChoices.points) ?? "크기") {
+                Menu { FontList(editor: editor) } label: { Text(text?.font ?? "글꼴").lineLimit(1) }
+                    .frame(width: 150)
+                    .help("글꼴")
+                Menu {
                     ForEach(FormatChoices.sizes, id: \.self) { size in
                         Button(FormatChoices.points(size)) { editor.setFontSize(size) }
                     }
-                }
-                .frame(width: 72)
-                .help("글자 크기")
-                ControlGroup {
-                    style("굵게", "bold", text?.bold, editor.toggleBold)
-                    style("기울임꼴", "italic", text?.italic, editor.toggleItalic)
-                    style("밑줄", "underline", text?.underline, editor.toggleUnderline)
-                    style("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough)
-                }
+                } label: { Text(text?.size.map(FormatChoices.points) ?? "크기").monospacedDigit() }
+                    .frame(width: 72)
+                    .help("글자 크기")
+                ToolIcon("글자 크게", "textformat.size.larger") { editor.stepFontSize(by: 1) }
+                ToolIcon("글자 작게", "textformat.size.smaller") { editor.stepFontSize(by: -1) }
+                RowDivider()
+                ToolIcon("굵게", "bold", on: text?.bold == true) { editor.toggleBold() }
+                ToolIcon("기울임꼴", "italic", on: text?.italic == true) { editor.toggleItalic() }
+                ToolIcon("밑줄", "underline", on: text?.underline == true) { editor.toggleUnderline() }
+                ToolIcon("취소선", "strikethrough", on: text?.strikethrough == true) { editor.toggleStrikethrough() }
                 Menu {
                     ForEach(FormatChoices.colors, id: \.hex) { color in
                         Button { editor.setTextColor(color.hex) } label: {
                             Label { Text(color.name) } icon: { Image(nsImage: FormatChoices.swatch(color.hex)) }
                         }
                     }
-                } label: {
-                    Label("글자 색", systemImage: "paintbrush.pointed")
-                }
-                .help("글자 색")
+                } label: { Image(systemName: "paintbrush.pointed") }
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    .help("글자 색")
             }
-            .disabled(!hasRange)
+            .disabled(!context.hasRange)
+            RowDivider()
             Group {
-                Picker("정렬", selection: Binding(get: { paragraph?.alignment }, set: { $0.map(editor.setAlignment) })) {
-                    ForEach([Alignment.justify, .left, .center, .right], id: \.self) { alignment in
-                        let label = FormatChoices.label(alignment)
-                        Label(label.title, systemImage: label.symbol).tag(Optional(alignment))
-                    }
+                ForEach(Alignment.allCases, id: \.self) { alignment in
+                    let label = FormatChoices.label(alignment)
+                    ToolIcon(label.title, label.symbol, on: paragraph?.alignment == alignment) { editor.setAlignment(alignment) }
                 }
-                .pickerStyle(.segmented)
-                .help("정렬")
+                RowDivider()
                 Menu {
                     ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
                         Button("\(Int(percent))%") { editor.setLineSpacing(percent) }
                     }
                 } label: {
-                    Label("줄 간격", systemImage: "arrow.up.and.down.text.horizontal")
+                    Label(paragraph?.lineSpacing.map { "\(Int($0))%" } ?? "줄 간격", systemImage: "arrow.up.and.down.text.horizontal")
+                        .labelStyle(.titleAndIcon)
+                        .monospacedDigit()
                 }
+                .fixedSize()
                 .help("줄 간격")
             }
-            .disabled(document.selection == nil)
+            .disabled(!context.hasSelection)
+            Spacer(minLength: 0)
         }
-    }
-
-    private func style(_ title: String, _ symbol: String, _ on: Bool?, _ action: @escaping () -> Void) -> some View {
-        Toggle(isOn: Binding(get: { on == true }, set: { _ in action() })) {
-            Label(title, systemImage: symbol)
-        }
-        .help(title)
+        .controlSize(.small)
+        .padding(.horizontal, 8)
+        .frame(height: 30)
     }
 }
 
-/// The Format menu, acting on the focused document window.
-struct FormatCommands: Commands {
-    @FocusedObject private var document: HwpDocument?
-    @FocusedObject private var viewer: Viewer?
-
-    var body: some Commands {
-        CommandMenu("서식") {
-            let text = document?.format?.text
-            let editor = viewer?.canvas.editor
-            let hasRange = document?.selection.map { $0.anchor != $0.focus } ?? false
-            Group {
-                toggle("굵게", text?.bold) { editor?.toggleBold() }.keyboardShortcut("b")
-                toggle("기울임꼴", text?.italic) { editor?.toggleItalic() }.keyboardShortcut("i")
-                toggle("밑줄", text?.underline) { editor?.toggleUnderline() }.keyboardShortcut("u")
-                toggle("취소선", text?.strikethrough) { editor?.toggleStrikethrough() }
-                    .keyboardShortcut("x", modifiers: [.command, .shift])
-                Divider()
-                Button("글자 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
-                Button("글자 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
-            }
-            .disabled(!hasRange)
-            Divider()
-            Group {
-                ForEach(Alignment.allCases, id: \.self) { alignment in
-                    let shortcut: KeyboardShortcut? = switch alignment {
-                    case .left: KeyboardShortcut("[", modifiers: [.command, .shift])
-                    case .center: KeyboardShortcut("\\", modifiers: [.command, .shift])
-                    case .right: KeyboardShortcut("]", modifiers: [.command, .shift])
-                    case .justify: KeyboardShortcut("\\", modifiers: [.command, .option, .shift])
-                    default: nil
-                    }
-                    toggle(FormatChoices.label(alignment).title, document?.format?.paragraph.alignment == alignment) {
-                        editor?.setAlignment(alignment)
-                    }
-                    .keyboardShortcut(shortcut)
-                }
-                Menu("줄 간격") {
-                    ForEach(FormatChoices.lineSpacings, id: \.self) { percent in
-                        toggle("\(Int(percent))%", document?.format?.paragraph.lineSpacing == percent) {
-                            editor?.setLineSpacing(percent)
-                        }
-                    }
-                }
-            }
-            .disabled(document?.selection == nil)
+/// Every installed font family. A separate view with no changing inputs, so SwiftUI
+/// builds its long list once instead of on every format change.
+private struct FontList: View {
+    let editor: PageEditor
+    var body: some View {
+        ForEach(FormatChoices.families, id: \.family) { font in
+            Button(font.name) { editor.setFont(font.family) }
         }
     }
+}
 
-    private func toggle(_ title: String, _ on: Bool?, _ action: @escaping () -> Void) -> some View {
-        Toggle(title, isOn: Binding(get: { on == true }, set: { _ in action() }))
+/// A small icon button for the format row; `on` keeps it highlighted.
+struct ToolIcon: View {
+    let title: String, symbol: String, on: Bool, action: () -> Void
+    init(_ title: String, _ symbol: String, on: Bool = false, action: @escaping () -> Void) {
+        (self.title, self.symbol, self.on, self.action) = (title, symbol, on, action)
     }
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).frame(width: 24, height: 22)
+        }
+        .buttonStyle(ToolButtonStyle(on: on))
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
+/// Flat button that shows a background on hover, press and when on.
+struct ToolButtonStyle: ButtonStyle {
+    var on = false
+    func makeBody(configuration: Configuration) -> some View {
+        Styled(configuration: configuration, on: on)
+    }
+    private struct Styled: View {
+        let configuration: Configuration
+        let on: Bool
+        @State private var hovering = false
+        @Environment(\.isEnabled) private var enabled
+        var body: some View {
+            configuration.label
+                .foregroundStyle(enabled ? .primary : .tertiary)
+                .background(RoundedRectangle(cornerRadius: 5).fill(fill))
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+        }
+        private var fill: Color {
+            if on || configuration.isPressed { return Color.primary.opacity(0.14) }
+            return hovering && enabled ? Color.primary.opacity(0.07) : .clear
+        }
+    }
+}
+
+struct RowDivider: View {
+    var body: some View { Divider().frame(height: 18).padding(.horizontal, 4) }
 }
