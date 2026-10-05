@@ -2194,6 +2194,77 @@ fn pictures_and_equations_go_into_a_table_cell() {
 }
 
 #[test]
+fn a_table_cell_picture_resizes_deletes_undoes_and_round_trips_both_formats() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let extension = match format {
+            SaveFormat::Hwp => "hwp",
+            SaveFormat::Hwpx => "hwpx",
+            SaveFormat::Pdf => unreachable!(),
+        };
+        let mut s = EditSession::open(&plain_document(extension, false)).unwrap();
+        let caret = run(
+            &mut s,
+            EditCommand::InsertTable {
+                position: point(body(), 0),
+                rows: 1,
+                columns: 1,
+            },
+        )
+        .unwrap()
+        .selection
+        .unwrap()
+        .focus;
+        run(&mut s, picture_at(caret.clone())).unwrap();
+        let object = s
+            .placed(0)
+            .unwrap()
+            .into_iter()
+            .find(|placed| placed.object.kind == ObjectKind::Picture)
+            .unwrap()
+            .object;
+        assert_eq!(object.cell, caret.target.cell);
+
+        run(
+            &mut s,
+            EditCommand::SetObject {
+                object: object.clone(),
+                props: ObjectProps {
+                    width: Some(12_000),
+                    height: Some(9_000),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        run(
+            &mut s,
+            EditCommand::DeleteObject {
+                object: object.clone(),
+            },
+        )
+        .unwrap();
+        assert!(s.placed(0).unwrap().is_empty(), "{format:?}");
+        run(&mut s, EditCommand::Undo).unwrap();
+
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let reopened_object = reopened
+            .placed(0)
+            .unwrap()
+            .into_iter()
+            .find(|placed| placed.object.kind == ObjectKind::Picture)
+            .unwrap()
+            .object;
+        assert_eq!(reopened_object.cell, caret.target.cell, "{format:?}");
+        let props = reopened.object_props(&reopened_object).unwrap();
+        assert_eq!(
+            (props.width, props.height),
+            (Some(12_000), Some(9_000)),
+            "{format:?}"
+        );
+    }
+}
+
+#[test]
 fn an_equation_moves_within_the_text() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();
