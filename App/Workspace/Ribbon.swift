@@ -34,8 +34,8 @@ struct ToolRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 2) { tiles(context) }
                     .padding(.horizontal, 8)
-                    .padding(.top, 6)
-                    .padding(.bottom, 4)
+                    .padding(.top, 10)
+                    .padding(.bottom, 1)
             }
         }
     }
