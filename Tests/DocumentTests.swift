@@ -16,10 +16,10 @@ struct DocumentTests {
         #expect(throws: EditError.self) { try document.snapshot(contentType: .hwpx) }
     }
 
-    @Test func blankEngineMismatchExplainsHowToRecover() {
+    @Test func blankEngineMismatchReportsCreationError() {
         let document = HwpDocument(blankUsing: { _ in throw EditError.incompatibleEngine })
-        #expect(document.creationError?.contains("엔진") == true)
-        #expect(document.creationError?.contains("다시 빌드") == true)
+        #expect(document.creationError != nil)
+        #expect(document.pages.isEmpty)
     }
 
     @Test func corruptExistingDocumentStillThrows() {

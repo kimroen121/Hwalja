@@ -525,17 +525,6 @@ enum EditError: String, Error, Decodable, Sendable {
     case locked = "Locked"
 }
 
-extension EditError: LocalizedError {
-    var errorDescription: String? {
-        switch self {
-        case .incompatibleEngine:
-            "앱과 문서 엔진 버전이 맞지 않습니다. HwpStudio 앱과 엔진을 함께 다시 빌드해 주세요."
-        default:
-            nil
-        }
-    }
-}
-
 enum SaveFormat: String, Encodable, Sendable {
     case hwp, hwpx
     /// The whole document as rendered.

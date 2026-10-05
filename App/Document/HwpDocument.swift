@@ -123,12 +123,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             context.pageCount = output.pages.count
         } catch {
             sessionResult = .failure(error)
-            creationError = if let editError = error as? EditError,
-                               editError == .incompatibleEngine {
-                editError.localizedDescription
-            } else {
-                "새 문서를 만들지 못했습니다. 다시 시도하거나 다른 문서를 열어 주세요."
-            }
+            creationError = "새 문서를 만들지 못했습니다. 다시 시도하거나 다른 문서를 열어 주세요."
             pages = []
             reply = EditReply(revision: 0, pageCount: 0, changedPages: [], canUndo: false, canRedo: false, dirty: false)
             // EditError contains only a category, never document text or bytes.
