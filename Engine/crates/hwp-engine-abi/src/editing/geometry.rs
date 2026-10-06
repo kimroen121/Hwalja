@@ -120,6 +120,22 @@ impl EditSession {
             if hit.get("hit") != Some(&Value::Bool(true)) {
                 continue;
             }
+            // rhwp deliberately snaps a header/footer hit to its nearest line. Entry into
+            // edit mode must still require clicking visible text rather than anywhere on
+            // the page, so discard that nearest-line fallback when the pointer is outside
+            // the returned caret line.
+            let cursor = hit.get("cursorRect").ok_or(EditError::RenderFailed)?;
+            let line_y = cursor
+                .get("y")
+                .and_then(Value::as_f64)
+                .ok_or(EditError::RenderFailed)?;
+            let height = cursor
+                .get("height")
+                .and_then(Value::as_f64)
+                .ok_or(EditError::RenderFailed)?;
+            if y < line_y - 2.0 || y > line_y + height + 2.0 {
+                continue;
+            }
             let target = EditTarget {
                 section: field(&hit, "sectionIndex")?,
                 paragraph: field(&hit, "paraIndex")?,

@@ -786,6 +786,50 @@ struct DocumentTests {
         #expect(!copied.unicodeScalars.contains { (0x15...0x17).contains($0.value) })
     }
 
+    @Test func headerFooterEditingRequiresDoubleClickThenSupportsClickAndBodyExit() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        let canvas = viewer.canvas
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 900),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        viewer.headerFooter(footer: false, pageNumber: .center)
+        await document.settle()
+        let target = EditTarget(
+            section: 0, paragraph: 0, cell: nil, note: nil,
+            headerFooter: HeaderFooterTarget(footer: false, applyTo: 0, page: 0)
+        )
+        document.selection = .caret(EditPosition(target: target, scalar: 0))
+        document.type("학교 머리말 ", nil)
+        await document.settle()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        let editor = canvas.editor
+        editor.layoutSubtreeIfNeeded()
+        let page = try #require(editor.frame(ofPage: 0))
+        let header = PageGeometry.viewRect(
+            try await document.caret(at: EditPosition(target: target, scalar: 2)), in: page
+        )
+        func event(at point: NSPoint, clicks: Int) -> NSEvent {
+            NSEvent.mouseEvent(with: .leftMouseDown, location: editor.convert(point, to: nil),
+                               modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                               context: nil, eventNumber: 0, clickCount: clicks, pressure: 1)!
+        }
+
+        editor.mouseDown(with: event(at: NSPoint(x: header.midX, y: header.midY), clicks: 1))
+        await document.settle()
+        #expect(document.selection?.focus.target.headerFooter == nil)
+        editor.mouseDown(with: event(at: NSPoint(x: header.midX, y: header.midY), clicks: 2))
+        await document.settle()
+        #expect(document.selection?.focus.target.headerFooter == target.headerFooter)
+        editor.mouseDown(with: event(at: NSPoint(x: header.maxX, y: header.midY), clicks: 1))
+        await document.settle()
+        #expect(document.selection?.focus.target.headerFooter == target.headerFooter)
+        editor.mouseDown(with: event(at: NSPoint(x: page.midX, y: page.midY), clicks: 1))
+        await document.settle()
+        #expect(document.selection?.focus.target.headerFooter == nil)
+    }
+
     @Test func styleChosenAtTheCaretAppliesToTheNextText() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let undo = UndoManager()

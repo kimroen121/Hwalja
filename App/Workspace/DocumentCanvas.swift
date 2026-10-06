@@ -539,10 +539,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private func click(_ model: HwpDocument, _ hit: (page: Int, point: CGPoint), clicks: Int, extend: Bool,
                        pressedAt point: NSPoint? = nil) {
         model.select { [weak self] model in
-            let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            let editingHeaderFooter = model.selection?.focus.target.isHeaderFooter == true
+            let position = try? await model.hitTest(
+                page: hit.page, x: hit.point.x, y: hit.point.y,
+                includeHeaderFooter: clicks >= 2 || editingHeaderFooter
+            )
             // A click on an object selects it, except inside a 글상자, away from its edge,
             // where it places the caret in the box's text.
-            if !extend, let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y),
+            if position?.target.isHeaderFooter != true, !extend,
+               let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y),
                !(Self.inside(object.rect, hit.point) && position.map { Self.holds(object.object, $0) } == true) {
                 model.object = object
                 if clicks == 2 { self?.onOpenObject?(object) }
@@ -843,7 +848,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
             // A press that selected an object drags the object, never the text.
             guard model.object == nil, let anchor = model.selection?.anchor else { return nil }
-            let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            let position = try await model.hitTest(
+                page: hit.page, x: hit.point.x, y: hit.point.y,
+                includeHeaderFooter: anchor.target.isHeaderFooter
+            )
             // The selection stops at the edge of its text, table or note.
             let selection = EditSelection(anchor: anchor, focus: position)
             return selection.reaches(position) ? selection : nil
@@ -954,9 +962,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         enclosingScrollView?.reflectScrolledClipView(clip)
         guard let hit = enginePoint(NSPoint(x: caret.midX, y: caret.midY + step)) else { return }
         model.select { model in
-            let position = try await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y)
+            let position = try await model.hitTest(
+                page: hit.page, x: hit.point.x, y: hit.point.y,
+                includeHeaderFooter: model.selection?.focus.target.isHeaderFooter == true
+            )
             guard extend, let anchor = model.selection?.anchor else { return .caret(position) }
-            return EditSelection(anchor: anchor, focus: position)
+            let selection = EditSelection(anchor: anchor, focus: position)
+            return selection.reaches(position) ? selection : nil
         }
     }
 
