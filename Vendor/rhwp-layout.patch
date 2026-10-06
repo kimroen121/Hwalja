@@ -477,6 +477,18 @@ index 9352fff..0df9b4d 100644
          &self,
          section_idx: usize,
          start_para_idx: usize,
+diff --git a/src/document_core/queries/cursor_rect.rs b/src/document_core/queries/cursor_rect.rs
+index 912aa12..83d0fc0 100644
+--- a/src/document_core/queries/cursor_rect.rs
++++ b/src/document_core/queries/cursor_rect.rs
+@@ -216,6 +216,7 @@ fn note_number_format_from_hwp_code(code: u8) -> crate::renderer::NumberFormat {
+         4 => crate::renderer::NumberFormat::LatinUpper,
+         5 => crate::renderer::NumberFormat::LatinLower,
+         8 => crate::renderer::NumberFormat::HangulGaNaDa,
++        10 => crate::renderer::NumberFormat::HangulJamo,
+         12 => crate::renderer::NumberFormat::HangulNumber,
+         13 => crate::renderer::NumberFormat::HanjaNumber,
+         _ => crate::renderer::NumberFormat::Digit,
 diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queries/hwpctrl_sets.rs
 index db57b8f..26fb6f9 100644
 --- a/src/document_core/queries/hwpctrl_sets.rs
@@ -862,8 +874,20 @@ index 0d7d79a..9f19203 100644
                      }
                      // [#6122] 폭 초과로 내린 개체는 composed 줄 높이에 없다 — 그 아래로
                      // 흐름을 밀지 않으면 다음 문단(캡션)이 그림 위에 겹쳐 그려진다.
+diff --git a/src/renderer/layout/utils.rs b/src/renderer/layout/utils.rs
+index 7ae0e89..b809400 100644
+--- a/src/renderer/layout/utils.rs
++++ b/src/renderer/layout/utils.rs
+@@ -241,6 +241,7 @@ pub(crate) fn numbering_format_to_number_format(code: u8) -> NumFmt {
+         4 => NumFmt::LatinUpper,    // A, B, C
+         5 => NumFmt::LatinLower,    // a, b, c
+         8 => NumFmt::HangulGaNaDa,  // 가, 나, 다
++        10 => NumFmt::HangulJamo,   // ㄱ, ㄴ, ㄷ
+         12 => NumFmt::HangulNumber, // 일, 이, 삼
+         13 => NumFmt::HanjaNumber,  // 一, 二, 三
+         _ => NumFmt::Digit,
 diff --git a/src/renderer/mod.rs b/src/renderer/mod.rs
-index 9d37742..216735e 100644
+index 9d37742..4fcd199 100644
 --- a/src/renderer/mod.rs
 +++ b/src/renderer/mod.rs
 @@ -1501,6 +1501,9 @@ pub fn base_family_without_weight_suffix(font_family: &str) -> Option<String> {
@@ -889,6 +913,41 @@ index 9d37742..216735e 100644
          push_unique_family(&mut family_names, *alias);
      }
      if let Some(base) = base_family_without_weight_suffix(primary) {
+@@ -1944,6 +1953,8 @@ pub enum NumberFormat {
+     LatinLower,
+     /// 한글 가나다: 가, 나, 다
+     HangulGaNaDa,
++    /// 한글 자모: ㄱ, ㄴ, ㄷ (문단 번호 형식 10)
++    HangulJamo,
+     /// 한글 일이삼: 일, 이, 삼
+     HangulNumber,
+     /// 한자 一二三: 一, 二, 三
+@@ -1978,6 +1989,7 @@ pub fn format_number(number: u16, format: NumberFormat) -> String {
+         NumberFormat::LatinUpper => format_latin(number, true),
+         NumberFormat::LatinLower => format_latin(number, false),
+         NumberFormat::HangulGaNaDa => format_hangul_ganada(number),
++        NumberFormat::HangulJamo => format_hangul_jamo(number),
+         NumberFormat::HangulNumber => format_hangul_number(number),
+         NumberFormat::HanjaNumber => format_hanja_number(number),
+     }
+@@ -2059,6 +2071,17 @@ fn format_hangul_ganada(n: u16) -> String {
+         .unwrap_or_else(|| n.to_string())
+ }
+ 
++/// 한글 자모 변환 (ㄱ ~ ㅎ, 이후 숫자)
++fn format_hangul_jamo(n: u16) -> String {
++    const JAMO: [char; 14] = [
++        'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ',
++    ];
++    n.checked_sub(1)
++        .and_then(|idx| JAMO.get(idx as usize))
++        .map(|c| c.to_string())
++        .unwrap_or_else(|| n.to_string())
++}
++
+ /// 한글 숫자 변환 (일, 이, 삼, ...)
+ fn format_hangul_number(n: u16) -> String {
+     const HANGUL_DIGITS: [&str; 10] = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
 diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
 index 3989968..e268160 100644
 --- a/src/renderer/pdf.rs

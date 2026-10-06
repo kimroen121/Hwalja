@@ -527,6 +527,10 @@ struct ParaStyle: PartialFormat {
     var pattern: Int?
     /// 문단 테두리 연결.
     var borderConnect: Bool?
+    /// 시작 번호 방식, in the body: 0 앞 번호 목록에 이어, 1 이전 번호 목록에 이어, 2 새 번호
+    /// 목록 시작 at `startNumber` (1수준 시작 번호).
+    var restart: Int?
+    var startNumber: Int?
 }
 
 /// A caret motion, resolved against the engine's line layout.

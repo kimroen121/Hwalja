@@ -348,6 +348,10 @@ impl EditSession {
             EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
+                // rhwp restarts numbering in body paragraphs only.
+                if style.restart.is_some() {
+                    body_only(&ordered(selection).0.target)?;
+                }
                 super::format::validate_para(style)
             }
             EditCommand::InsertNote { position, .. } => {
@@ -938,6 +942,15 @@ impl EditSession {
                 let props = self.para_props(style);
                 for i in index(&start.target)..=index(&end.target) {
                     self.format_paragraph(&at_index(&start.target, i), &props)?;
+                }
+                if let Some(mode) = style.restart {
+                    let t = &start.target;
+                    self.core.set_numbering_restart_native(
+                        t.section as usize,
+                        t.paragraph as usize,
+                        mode,
+                        style.start_number.unwrap_or(1),
+                    )?;
                 }
                 Ok(selection.clone())
             }

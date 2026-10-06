@@ -288,6 +288,8 @@ struct MenuItems {
             item("글자 모양…", Icon.charShape) { viewer?.editingCharShape = true }.keyboardShortcut("l")
             Divider()
             item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t")
+            item("글머리표 모양…", "list.bullet") { viewer?.editingList = "글머리표" }
+            item("문단 번호 모양…", "list.number") { viewer?.editingList = "문단 번호" }
         }
         .disabled(!context.canFormat)
         Group {

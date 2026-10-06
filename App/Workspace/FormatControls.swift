@@ -5,10 +5,16 @@ import SwiftUI
 enum FormatChoices {
     static let sizes: [Double] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
     static let lineSpacings: [Double] = [100, 130, 160, 180, 200, 250, 300]
-    /// 글머리표 characters.
-    static let bullets = ["●", "■", "◆", "▶", "○", "□", "◇", "▷", "★", "☆", "✓", "※", "-"]
-    /// Each 문단 번호 kind as its first level reads (the engine's `NUMBERINGS`).
-    static let numberings = ["1.", "가.", "①", "a."]
+    /// 글머리표 characters, in 글머리표 모양's order.
+    static let bullets = ["●", "•", "■", "▪", "◆", "⬥", "▶", "○", "□", "◇", "▷", "◉", "☑", "✔", "★", "❖", "☞"]
+    /// Each 문단 번호 kind as its first four levels read, in 문단 번호 모양's order (the
+    /// engine's `NUMBERINGS`).
+    static let numberings = [
+        ["1.", "가.", "1)", "가)"], ["(1)", "(가)", "(a)", "1)"], ["1)", "가)", "a)", "(1)"],
+        ["①", "(ㄱ)", "(a)", "1)"], ["가)", "a)", "(1)", "(가)"], ["(ㄱ)", "(1)", "(a)", "1)"],
+        ["I.", "A.", "1.", "i)"], ["i.", "a.", "(i)", "(a)"], ["A.", "1.", "가,", "(a)"],
+        ["1.", "1.1.", "1.1.1.", "1.1.1.1."],
+    ]
     static let colors = ["#000000", "#808080", "#ff0000", "#ff8000", "#ffd700", "#008000", "#0000ff", "#000080", "#800080"]
     /// 형광펜 colors; `none` removes the highlight.
     static let highlights = ["#ffff00", "#a6ff4d", "#66ffff", "#ff99cc", "#ffc04d"]
@@ -124,7 +130,9 @@ struct FormatRow: View {
                 }
                 MenuArrow(title: "문단 번호 매기기") {
                     FormatChoices.numberings.indices.map { kind in
-                        Choice(title: FormatChoices.numberings[kind]) { editor.format(ParaStyle(head: "Number", numbering: kind)) }
+                        Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) {
+                            editor.format(ParaStyle(head: "Number", numbering: kind))
+                        }
                     }
                 }
                 Group {

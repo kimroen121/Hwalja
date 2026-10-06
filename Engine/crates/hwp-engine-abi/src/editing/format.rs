@@ -1,6 +1,7 @@
 //! Character and paragraph formats: the caret query and the rhwp property JSON for changes.
 use super::commands::{get, index};
 use super::*;
+use rhwp::model::paragraph::NumberingRestart;
 use serde_json::{json, Map, Value};
 
 pub(super) fn validate_char(style: &CharStyle) -> Result<(), EditError> {
@@ -76,6 +77,11 @@ pub(super) fn validate_para(style: &ParaStyle) -> Result<(), EditError> {
         && head_ok
         && style.level.is_none_or(|v| v <= 6)
         && style.korean_break_unit.is_none_or(|v| v <= 1)
+        && match (style.restart, style.start_number) {
+            (None | Some(0 | 1), None) => true,
+            (Some(2), Some(n)) => (1..=u16::MAX as u32).contains(&n),
+            _ => false,
+        }
         && style.english_break_unit.is_none_or(|v| v <= 2)
         && style.line_spacing_kind.is_some() == style.line_spacing.is_some()
         && BorderFill::of_para(style).valid()
@@ -208,9 +214,10 @@ fn color(text: &str) -> Option<String> {
     let hex = text.strip_prefix('#')?;
     (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| text.to_lowercase())
 }
-/// 문단 번호 kinds: each level's format (`^n` is the level's number) and number shape
-/// (0 1·2·3, 1 ①, 5 a·b·c, 8 가·나·다, 10 ㄱ·ㄴ·ㄷ), deeper levels as Hancom's default.
-pub(super) const NUMBERINGS: [[(&str, u8); 7]; 4] = [
+/// 문단 번호 kinds of 문단 번호 모양, in its order: each level's format (`^n` is level n's
+/// number) and number shape (0 1·2·3, 1 ①, 2 I, 3 i, 4 A, 5 a, 8 가, 10 ㄱ). Levels 5–7,
+/// which the dialog does not show, continue as the first kind.
+pub(super) const NUMBERINGS: [[(&str, u8); 7]; 10] = [
     [
         ("^1.", 0),
         ("^2.", 8),
@@ -221,33 +228,96 @@ pub(super) const NUMBERINGS: [[(&str, u8); 7]; 4] = [
         ("^7", 1),
     ],
     [
-        ("^1.", 8),
-        ("^2)", 0),
-        ("^3)", 8),
+        ("(^1)", 0),
+        ("(^2)", 8),
+        ("(^3)", 5),
+        ("^4)", 0),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1)", 0),
+        ("^2)", 8),
+        ("^3)", 5),
         ("(^4)", 0),
-        ("(^5)", 8),
-        ("^6", 1),
-        ("^7", 10),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
     ],
     [
         ("^1", 1),
-        ("^2.", 0),
-        ("^3.", 8),
+        ("(^2)", 10),
+        ("(^3)", 5),
         ("^4)", 0),
-        ("^5)", 8),
-        ("(^6)", 0),
-        ("(^7)", 8),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
     ],
     [
-        ("^1.", 5),
-        ("^2)", 0),
-        ("^3)", 8),
-        ("(^4)", 0),
-        ("(^5)", 8),
-        ("^6", 1),
-        ("^7", 10),
+        ("^1)", 8),
+        ("^2)", 5),
+        ("(^3)", 0),
+        ("(^4)", 8),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("(^1)", 10),
+        ("(^2)", 0),
+        ("(^3)", 5),
+        ("^4)", 0),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1.", 2),
+        ("^2.", 4),
+        ("^3.", 0),
+        ("^4)", 3),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1.", 3),
+        ("^2.", 5),
+        ("(^3)", 3),
+        ("(^4)", 5),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1.", 4),
+        ("^2.", 0),
+        ("^3,", 8),
+        ("(^4)", 5),
+        ("(^5)", 0),
+        ("(^6)", 8),
+        ("^7", 1),
+    ],
+    [
+        ("^1.", 0),
+        ("^1.^2.", 0),
+        ("^1.^2.^3.", 0),
+        ("^1.^2.^3.^4.", 0),
+        ("^1.^2.^3.^4.^5.", 0),
+        ("^1.^2.^3.^4.^5.^6.", 0),
+        ("^1.^2.^3.^4.^5.^6.^7.", 0),
     ],
 ];
+/// Whether numbering `n` is 문단 번호 kind `kind`.
+fn is_kind(n: &rhwp::model::style::Numbering, kind: usize) -> bool {
+    NUMBERINGS[kind]
+        .iter()
+        .enumerate()
+        .all(|(i, (format, shape))| {
+            n.level_formats[i] == *format && n.heads[i].number_format == *shape
+        })
+}
 /// Paragraph lengths are stored in 1/200 pt (twice HWPUNIT).
 const PARA_UNITS_PER_POINT: f64 = 200.0;
 
@@ -332,12 +402,7 @@ impl EditSession {
         use rhwp::model::style::{Numbering, NumberingHead};
         let levels = NUMBERINGS[kind];
         let info = &mut self.core.document_mut().doc_info;
-        let same = |n: &Numbering| {
-            levels.iter().enumerate().all(|(i, (format, shape))| {
-                n.level_formats[i] == *format && n.heads[i].number_format == *shape
-            })
-        };
-        if let Some(i) = info.numberings.iter().position(same) {
+        if let Some(i) = info.numberings.iter().position(|n| is_kind(n, kind)) {
             return i as u16 + 1;
         }
         let mut n = Numbering {
@@ -355,6 +420,28 @@ impl EditSession {
         info.numberings.push(n);
         info.raw_stream_dirty = true;
         info.numberings.len() as u16
+    }
+    /// Which 문단 번호 kind the numbering with 1-based id `id` is, if one of them.
+    fn numbering_kind(&self, id: u16) -> Option<u8> {
+        let n = self
+            .core
+            .document()
+            .doc_info
+            .numberings
+            .get(id.checked_sub(1)? as usize)?;
+        (0..NUMBERINGS.len())
+            .find(|&kind| is_kind(n, kind))
+            .map(|kind| kind as u8)
+    }
+    /// The character of the 글머리표 with 1-based id `id`.
+    fn bullet_char(&self, id: u16) -> Option<String> {
+        let b = self
+            .core
+            .document()
+            .doc_info
+            .bullets
+            .get(id.checked_sub(1)? as usize)?;
+        Some(rhwp::renderer::layout::map_pua_bullet_char(b.bullet_char).to_string())
     }
     /// The 1-based id of the 글머리표 drawing `c`, added if the document lacks it.
     fn bullet(&mut self, c: char) -> u16 {
@@ -677,6 +764,11 @@ impl EditSession {
         let first = |key: &str| text.get(key).and_then(|a| a.get(0)).and_then(Value::as_f64);
         let on = |key: &str| text.get(key).and_then(Value::as_i64).map(|v| v != 0);
         let shape = self.paragraph_shape(t)?;
+        let restart = get(self.core.document(), t)?.numbering_restart;
+        let head = para
+            .get("headType")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let points = |v: i32| v as f64 / PARA_UNITS_PER_POINT;
         use rhwp::model::style::LineSpacingType;
         let (kind, spacing) = match shape.line_spacing_type {
@@ -758,12 +850,13 @@ impl EditSession {
                 keep_lines: para_flag("keepLines"),
                 widow_orphan: para_flag("widowOrphan"),
                 page_break_before: para_flag("pageBreakBefore"),
-                head: para
-                    .get("headType")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                numbering: None,
-                bullet: None,
+                numbering: (head.as_deref() == Some("Number"))
+                    .then(|| self.numbering_kind(shape.numbering_id))
+                    .flatten(),
+                bullet: (head.as_deref() == Some("Bullet"))
+                    .then(|| self.bullet_char(shape.numbering_id))
+                    .flatten(),
+                head,
                 level: para_unit("paraLevel"),
                 korean_break_unit: para_unit("koreanBreakUnit"),
                 english_break_unit: para_unit("englishBreakUnit"),
@@ -774,6 +867,15 @@ impl EditSession {
                 pattern_color: p_pattern_color,
                 pattern: p_pattern,
                 border_connect: para_flag("borderConnect"),
+                restart: Some(match restart {
+                    None => 0,
+                    Some(NumberingRestart::ContinuePrevious) => 1,
+                    Some(NumberingRestart::NewStart(_)) => 2,
+                }),
+                start_number: match restart {
+                    Some(NumberingRestart::NewStart(n)) => Some(n),
+                    _ => None,
+                },
             },
             fonts,
         })

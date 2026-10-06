@@ -544,6 +544,10 @@ pub struct ParaStyle {
     pub pattern: Option<u8>,
     /// 문단 테두리 연결: one border around consecutive paragraphs with the same one.
     pub border_connect: Option<bool>,
+    /// 시작 번호 방식 of the first paragraph, in the body: 0 앞 번호 목록에 이어, 1 이전
+    /// 번호 목록에 이어, 2 새 번호 목록 시작 at `start_number` (1수준 시작 번호).
+    pub restart: Option<u8>,
+    pub start_number: Option<u32>,
 }
 /// A caret motion, resolved against the engine's line layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

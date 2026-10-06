@@ -2531,12 +2531,37 @@ fn numbering_and_bullets_head_paragraphs() {
     assert!(text.starts_with("가.가"), "{text}");
     let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
     assert_eq!((now.head.as_deref(), now.level), (Some("Number"), Some(1)));
+    assert_eq!(now.numbering, Some(0));
+    // ① (ㄱ) (a) 1): its second level counts ㄱ, ㄴ.
+    let jamo = ParaStyle {
+        head: Some("Number".into()),
+        numbering: Some(3),
+        ..Default::default()
+    };
+    let text = apply(&mut s, jamo);
+    assert!(
+        text.starts_with("(ㄱ)가") && text.contains("(ㄴ)보존"),
+        "{text}"
+    );
+    // 새 번호 목록 시작 at 5.
+    let restart = ParaStyle {
+        level: Some(0),
+        restart: Some(2),
+        start_number: Some(5),
+        ..Default::default()
+    };
+    let text = apply(&mut s, restart);
+    assert!(text.starts_with("⑤가") && text.contains("⑥보존"), "{text}");
+    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    assert_eq!((now.restart, now.start_number), (Some(2), Some(5)));
     let bullet = ParaStyle {
         head: Some("Bullet".into()),
         bullet: Some("■".into()),
         ..Default::default()
     };
     assert!(apply(&mut s, bullet).contains('■'));
+    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    assert_eq!(now.bullet.as_deref(), Some("■"));
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         let head = reopened

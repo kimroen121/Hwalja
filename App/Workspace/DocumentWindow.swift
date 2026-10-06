@@ -63,6 +63,11 @@ struct DocumentWindow: View {
         .sheet(isPresented: $viewer.editingParaShape) {
             ParaShapeSheet(style: document.format?.paragraph ?? ParaStyle(), viewer: viewer)
         }
+        .sheet(isPresented: Binding(get: { viewer.editingList != nil }, set: { if !$0 { viewer.editingList = nil } })) {
+            if let tab = viewer.editingList {
+                ListSheet(style: document.format?.paragraph ?? ParaStyle(), body: document.context.inBody, tab: tab, viewer: viewer)
+            }
+        }
         .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
             if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
         }
@@ -154,6 +159,8 @@ final class Viewer: ObservableObject {
     @Published var objectSheet: ObjectSheetState?
     @Published var editingCharShape = false
     @Published var editingParaShape = false
+    /// 글머리표 및 문단 번호, open at its 글머리표 or 문단 번호 tab.
+    @Published var editingList: String?
     /// The section and paper 편집 용지 is showing.
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
 
