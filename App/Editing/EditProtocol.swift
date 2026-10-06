@@ -94,13 +94,15 @@ enum EditCommand: Encodable, Sendable {
     case setPage(section: UInt32, PageSetup)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
+    /// 단 하나, 둘 or 셋 for a section with one column definition.
+    case setColumns(section: UInt32, count: UInt16)
     case undo
     case redo
 
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -207,6 +209,10 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .setColumns(section, count):
+            try c.encode("setColumns", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(count, forKey: .count)
         case let .calculateBlock(selection, function):
             try c.encode("calculateBlock", forKey: .kind)
             try c.encode(selection, forKey: .selection)

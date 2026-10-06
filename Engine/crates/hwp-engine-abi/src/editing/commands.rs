@@ -439,6 +439,15 @@ impl EditSession {
                 validate_page(page)
             }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
+            EditCommand::SetColumns { section, count } => {
+                self.section_exists(*section)?;
+                // rhwp lays every line of a section out at its first definition's width.
+                if (1..=3).contains(count) && self.column_defs(*section).len() == 1 {
+                    Ok(())
+                } else {
+                    Err(EditError::UnsupportedTarget)
+                }
+            }
             EditCommand::SetObject { object, props } => self.validate_object(object, props),
             EditCommand::MergeCells { .. }
             | EditCommand::SplitCells { .. }
@@ -470,6 +479,18 @@ impl EditSession {
             .get(section as usize)
             .map(|_| ())
             .ok_or(EditError::InvalidInput)
+    }
+    /// The 단 정의 of a section, in order.
+    pub(super) fn column_defs(&self, section: u32) -> Vec<&rhwp::model::page::ColumnDef> {
+        self.core.document().sections[section as usize]
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.controls)
+            .filter_map(|c| match c {
+                Control::ColumnDef(d) => Some(d),
+                _ => None,
+            })
+            .collect()
     }
     /// The selection, unchanged by an edit that only touched the section's page layout.
     fn kept(&self, section: u32) -> EditSelection {
@@ -1056,6 +1077,13 @@ impl EditSession {
             EditCommand::SetPage { section, page } => {
                 let json = serde_json::to_string(page).map_err(|_| EditError::InvalidInput)?;
                 self.core.set_page_def_native(*section as usize, &json)?;
+                Ok(self.kept(*section))
+            }
+            EditCommand::SetColumns { section, count } => {
+                let current = self.column_defs(*section)[0];
+                let (kind, spacing) = (current.column_type as u8, current.spacing);
+                self.core
+                    .set_column_def_native(*section as usize, *count, kind, true, spacing)?;
                 Ok(self.kept(*section))
             }
             EditCommand::HeaderFooter {

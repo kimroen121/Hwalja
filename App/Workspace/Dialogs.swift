@@ -62,6 +62,12 @@ extension Viewer {
             .headerFooter(section: selection?.focus.target.section ?? 0, footer: footer, pageNumber: pageNumber)
         }
     }
+    /// 단 하나, 둘 or 셋 for the section holding the caret.
+    func setColumns(_ count: UInt16) {
+        document?.edit(undoManager) { selection in
+            .setColumns(section: selection?.focus.target.section ?? 0, count: count)
+        }
+    }
 }
 
 /// 표 만들기: row and column counts.

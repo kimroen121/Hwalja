@@ -208,6 +208,7 @@ pub(super) fn check(
             return check_inserted_note(before, after, &position.target)
         }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
+        EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::InsertShape { position, .. } => {
             return check_host(
                 before,
@@ -639,6 +640,21 @@ fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), E
         for (c, d) in p.controls.iter_mut().zip(&q.controls) {
             if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
                 c.page_def = d.page_def.clone();
+            }
+        }
+    }
+    same_rest(&mut a, &mut b, section)
+}
+/// Only the section's 단 정의 changed.
+fn check_columns(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let x = &mut a.sections[section as usize].paragraphs;
+    let y = &b.sections[section as usize].paragraphs;
+    for (p, q) in x.iter_mut().zip(y) {
+        for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+            if let (Control::ColumnDef(c), Control::ColumnDef(d)) = (c, d) {
+                *c = d.clone();
             }
         }
     }

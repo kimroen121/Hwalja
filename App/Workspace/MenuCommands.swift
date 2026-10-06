@@ -352,6 +352,12 @@ struct MenuItems {
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
         }
         .disabled(!context.inBody)
+        Menu {
+            ForEach(Array(["하나", "둘", "셋"].enumerated()), id: \.offset) { index, title in
+                Button(title) { viewer?.setColumns(UInt16(index + 1)) }
+            }
+        } label: { Label("단", systemImage: Icon.columns) }
+        .disabled(viewer == nil || context.locked)
     }
     private func headerItems(footer: Bool) -> some View {
         ForEach(Self.headerShapes, id: \.title) { shape in

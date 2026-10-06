@@ -273,6 +273,7 @@ enum Icon {
     static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
+    static let columns = "rectangle.split.2x1"
     static func placement(_ placement: Placement?) -> String {
         switch placement {
         case nil: "rectangle"

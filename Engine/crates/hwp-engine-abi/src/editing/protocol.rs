@@ -217,6 +217,12 @@ pub enum EditCommand {
         section: u32,
         page: PageSetup,
     },
+    /// 단 하나, 둘 or 셋: `count` columns of the same width for a section with one column
+    /// definition.
+    SetColumns {
+        section: u32,
+        count: u16,
+    },
     /// Replaces the header (or footer) shown on every page of a section with an empty
     /// one, or one holding the page number at `page_number`.
     HeaderFooter {

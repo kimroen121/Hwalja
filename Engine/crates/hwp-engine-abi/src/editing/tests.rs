@@ -3377,3 +3377,19 @@ fn block_calculations_fill_the_empty_cells_to_the_right_and_below() {
         assert_eq!(text(&s, 1, 1), "4");
     }
 }
+
+#[test]
+fn columns_change_for_the_section_and_save() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+        let count = |s: &EditSession| s.column_defs(0)[0].column_count;
+        let columns = |count| EditCommand::SetColumns { section: 0, count };
+        run(&mut s, columns(2)).unwrap();
+        assert_eq!(count(&s), 2);
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(count(&reopened), 2, "{format:?}");
+        run(&mut s, columns(1)).unwrap();
+        assert_eq!(count(&s), 1);
+        assert!(s.validate_command(&columns(4)).is_err());
+    }
+}
