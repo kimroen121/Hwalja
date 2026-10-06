@@ -81,12 +81,12 @@ struct FormatRow: View {
             ToolIcon("다시 실행", symbol: Icon.redo) { send(Selector(("redo:"))) }
                 .disabled(!context.canRedo)
             RowDivider()
+            FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
+                Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
+                    .lineLimit(1).frame(width: 84, alignment: .leading)
+            }
+            .disabled(!context.canApplyStyle)
             Group {
-                FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
-                    Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
-                        .lineLimit(1).frame(width: 84, alignment: .leading)
-                }
-                .disabled(context.aside)
                 FieldBox(title: "언어", opensWhenClicked: true, choices: {
                     ([nil] + CharShapeSheet.languageNames.indices.map { $0 }).map { index in
                         Choice(title: index.map { CharShapeSheet.languageNames[$0] } ?? "대표", on: index == language) {
