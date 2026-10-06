@@ -7,6 +7,31 @@ func fixture(_ ext: String) throws -> Data {
 }
 
 struct EditSessionTests {
+    @Test func headerFooterTargetRoundTripsThroughRequests() throws {
+        let target = EditTarget(
+            section: 2,
+            paragraph: 3,
+            cell: nil,
+            note: nil,
+            headerFooter: HeaderFooterTarget(footer: true, applyTo: 2, page: 4)
+        )
+        let position = EditPosition(target: target, scalar: 5)
+        let command = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            EngineRequest.apply(revision: 7, .replace(.caret(position), text: "글"), amend: false)
+        )) as? [String: Any]
+        let request = command?["request"] as? [String: Any]
+        let encodedTarget = (((request?["command"] as? [String: Any])?["selection"] as? [String: Any])?["anchor"] as? [String: Any])?["target"] as? [String: Any]
+        let hf = encodedTarget?["headerFooter"] as? [String: Any]
+        #expect(hf?["footer"] as? Bool == true)
+        #expect(hf?["applyTo"] as? Int == 2)
+        #expect(hf?["page"] as? Int == 4)
+
+        let hit = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            EngineRequest.hitTest(revision: 7, page: 4, x: 10, y: 20, includeHeaderFooter: true)
+        )) as? [String: Any]
+        #expect(hit?["includeHeaderFooter"] as? Bool == true)
+    }
+
     @Test func protocolVersionMismatchIsRejectedBeforeRendering() {
         let json = Data(#"{"version":999,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
         #expect(throws: EditError.incompatibleEngine) { try EditSession.Output((json, Data([2]))) }

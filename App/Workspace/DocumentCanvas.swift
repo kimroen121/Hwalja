@@ -1093,6 +1093,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 extension EditTarget {
     /// Index of the paragraph within its container (body, cell or note).
     var index: UInt32 { cell?.paragraph ?? note?.paragraph ?? paragraph }
+    var isHeaderFooter: Bool { headerFooter != nil }
     func offset(by delta: Int) -> EditTarget {
         var target = self
         let value = UInt32(max(0, Int(index) + delta))

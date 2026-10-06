@@ -757,6 +757,35 @@ struct DocumentTests {
         #expect(document.presentation.caret != nil)
     }
 
+    @Test func headerFooterTargetSupportsTypingSelectionAndPlainTextCopy() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        viewer.headerFooter(footer: false, pageNumber: .center)
+        await document.settle()
+        let target = EditTarget(
+            section: 0,
+            paragraph: 0,
+            cell: nil,
+            note: nil,
+            headerFooter: HeaderFooterTarget(footer: false, applyTo: 0, page: 0)
+        )
+        #expect(target.isHeaderFooter)
+        #expect(target.offset(by: 1).paragraph == 1)
+        document.selection = .caret(EditPosition(target: target, scalar: 0))
+        document.type("학교 ", nil)
+        await document.settle()
+        let paragraph = try await document.paragraph(target)
+        #expect(paragraph.text.hasPrefix("학교 "))
+        let selection = EditSelection(
+            anchor: EditPosition(target: target, scalar: 0),
+            focus: EditPosition(target: target, scalar: UInt32(paragraph.text.unicodeScalars.count))
+        )
+        let copied = try await document.text(of: selection)
+        #expect(copied.hasPrefix("학교 "))
+        #expect(!copied.unicodeScalars.contains { (0x15...0x17).contains($0.value) })
+    }
+
     @Test func styleChosenAtTheCaretAppliesToTheNextText() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let undo = UndoManager()

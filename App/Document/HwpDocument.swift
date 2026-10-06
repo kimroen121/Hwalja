@@ -394,7 +394,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             lines.append(text.scalars(lower..<max(lower, upper)))
         }
         // Objects in the line stand in the text as U+FFFC; copied text leaves them out.
-        return lines.joined(separator: "\n").replacingOccurrences(of: "\u{FFFC}", with: "")
+        let hidden: Set<Character> = ["\u{FFFC}", "\u{0015}", "\u{0016}", "\u{0017}"]
+        return lines.joined(separator: "\n").filter { !hidden.contains($0) }
     }
 
     // MARK: Running
