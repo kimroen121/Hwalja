@@ -653,6 +653,144 @@ index c455a55..aa4e690 100644
          recompose_stored_lines_in_frame(
              composed,
              &rebuild_input,
+diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
+index 4b1109c..765c315 100644
+--- a/src/renderer/composer/line_breaking.rs
++++ b/src/renderer/composer/line_breaking.rs
+@@ -2481,6 +2481,39 @@ fn apply_inline_control_line_height(seg: &mut LineSeg, height_hwp: i32) {
+     }
+ }
+ 
++/// HwpStudio: grows a reflowed line for an object in it. An equation stands on its own
++/// baseline (`baseline` percent of its height down), so the line takes the larger of the
++/// text's and the equation's parts above and below the baseline; other objects keep
++/// [`apply_inline_control_line_height`].
++fn apply_inline_control_line_metrics(seg: &mut LineSeg, height_hwp: i32, baseline_hwp: Option<i32>) {
++    let Some(above) = baseline_hwp.filter(|above| (0..=height_hwp).contains(above)) else {
++        return apply_inline_control_line_height(seg, height_hwp);
++    };
++    let ascent = seg.baseline_distance.max(above);
++    let descent = (seg.line_height - seg.baseline_distance).max(height_hwp - above);
++    seg.line_height = ascent + descent;
++    seg.text_height = ascent + descent;
++    seg.baseline_distance = ascent;
++}
++
++/// HwpStudio: each object in the line of a paragraph with its height and, for an equation,
++/// its baseline from the top.
++fn inline_control_metrics_hwp(para: &Paragraph) -> Vec<(i32, Option<i32>)> {
++    para.controls
++        .iter()
++        .filter_map(|control| {
++            let (_, height) = inline_control_size_hwp(control)?;
++            let baseline = match control {
++                Control::Equation(equation) if equation.baseline > 0 => {
++                    Some(height.saturating_mul(i32::from(equation.baseline)) / 100)
++                }
++                _ => None,
++            };
++            Some((height, baseline))
++        })
++        .collect()
++}
++
+ fn apply_inline_control_frame_height(metrics: &mut FrameRowMetrics, height_hwp: i32) {
+     if height_hwp > metrics.line_height {
+         metrics.line_height = height_hwp;
+@@ -3469,30 +3502,36 @@ fn reflow_line_segs_impl(
+                 }
+                 Some((start, ctrl))
+             })
+-            .filter_map(|(start, ctrl)| inline_control_size_hwp(ctrl).map(|size| (start, size)))
++            .filter_map(|(start, ctrl)| inline_control_size_hwp(ctrl).map(|size| (start, size, ctrl)))
+             .collect::<Vec<_>>();
+         if !inline_sizes.is_empty() {
+             let max_line_width = seg_width_hwp.max(1);
+-            let mut line_specs: Vec<(u32, i32, i32)> = Vec::new();
++            // HwpStudio: each line keeps its objects' heights and equation baselines.
++            let mut line_specs: Vec<(u32, i32, Vec<(i32, Option<i32>)>)> = Vec::new();
+             let mut line_start = 0u32;
+             let mut line_width = 0i32;
+-            let mut line_height = 0i32;
++            let mut line_objects = Vec::new();
+ 
+-            for (utf16_start, (ctrl_width, ctrl_height)) in inline_sizes.iter().copied() {
++            for (utf16_start, (ctrl_width, ctrl_height), ctrl) in inline_sizes.iter().copied() {
+                 if line_width > 0 && line_width + ctrl_width > max_line_width {
+-                    line_specs.push((line_start, line_width, line_height));
++                    line_specs.push((line_start, line_width, std::mem::take(&mut line_objects)));
+                     line_start = utf16_start;
+                     line_width = 0;
+-                    line_height = 0;
+                 }
+                 line_width += ctrl_width;
+-                line_height = line_height.max(ctrl_height);
++                let baseline = match ctrl {
++                    Control::Equation(equation) if equation.baseline > 0 => {
++                        Some(ctrl_height.saturating_mul(i32::from(equation.baseline)) / 100)
++                    }
++                    _ => None,
++                };
++                line_objects.push((ctrl_height, baseline));
+             }
+-            line_specs.push((line_start, line_width, line_height));
++            line_specs.push((line_start, line_width, line_objects));
+ 
+             let orig_line_segs = para.line_segs.clone();
+             let mut new_line_segs = Vec::with_capacity(line_specs.len());
+-            for (line_idx, (start_pos, _line_width, height_hwp)) in
++            for (line_idx, (start_pos, _line_width, objects)) in
+                 line_specs.into_iter().enumerate()
+             {
+                 let mut seg = make_line_seg(start_pos, 0.0);
+@@ -3512,7 +3551,9 @@ fn reflow_line_segs_impl(
+                         seg.tag
+                     };
+                 }
+-                apply_inline_control_line_height(&mut seg, height_hwp);
++                for (height_hwp, baseline_hwp) in objects {
++                    apply_inline_control_line_metrics(&mut seg, height_hwp, baseline_hwp);
++                }
+                 new_line_segs.push(seg);
+             }
+ 
+@@ -3535,8 +3576,8 @@ fn reflow_line_segs_impl(
+             if let Some(template) = orig.as_ref() {
+                 seg.vertical_pos = template.vertical_pos;
+             }
+-            if let Some(height_hwp) = inline_control_line_height_hwp(para) {
+-                apply_inline_control_line_height(&mut seg, height_hwp);
++            for (height_hwp, baseline_hwp) in inline_control_metrics_hwp(para) {
++                apply_inline_control_line_metrics(&mut seg, height_hwp, baseline_hwp);
+             }
+             para.replace_line_segs(vec![seg]);
+         }
+@@ -3754,16 +3795,15 @@ fn reflow_line_segs_impl(
+             let (_, height_hwp) = forced_inline_line.expect("checked inline control");
+             apply_inline_control_line_height(&mut text_seg, height_hwp);
+         }
+-        if let Some(height_hwp) = inline_controls
+-            .iter()
+-            .filter(|control| {
+-                (lb.start_idx..lb.end_idx).contains(&control.char_position)
+-                    || (lb.end_idx == text_len && control.char_position == text_len)
+-            })
+-            .map(|control| control.height_hwp)
+-            .max()
+-        {
+-            apply_inline_control_line_height(&mut text_seg, height_hwp);
++        for control in inline_controls.iter().filter(|control| {
++            (lb.start_idx..lb.end_idx).contains(&control.char_position)
++                || (lb.end_idx == text_len && control.char_position == text_len)
++        }) {
++            apply_inline_control_line_metrics(
++                &mut text_seg,
++                control.height_hwp,
++                control.baseline_distance_hwp,
++            );
+         }
+         new_line_segs.push(text_seg);
+ 
 diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
 index 8bcc337..0972cdf 100644
 --- a/src/renderer/equation/ast.rs
