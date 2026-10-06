@@ -83,7 +83,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     private(set) var pages: [RenderedPage]
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
     private(set) var reply: EditReply
-    var selection: EditSelection?
+    var selection: EditSelection? {
+        didSet {
+            if let selection, !selection.focus.target.isHeaderFooter { bodySelection = selection }
+        }
+    }
+    /// The selection before the caret went into a 머리말 or 꼬리말, where 닫기 returns.
+    private var bodySelection: EditSelection?
     /// The picture or equation selected as an object.
     var object: PlacedObject?
     /// Text the input method is still composing; it is already in the document.
@@ -314,6 +320,19 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 document.selection = selection
                 document.object = nil
             }
+        }
+    }
+    /// 닫기: from a 머리말 or 꼬리말 back to where the caret was before.
+    func closeHeaderFooter() {
+        select { $0.bodySelection }
+    }
+    /// 머리말/꼬리말 지우기 for the one holding the caret, which goes back where it was before.
+    func deleteHeaderFooter(_ undoManager: UndoManager?) {
+        enqueue { document in
+            guard let target = document.selection?.focus.target, target.isHeaderFooter else { return }
+            try await document.run(.deleteHeaderFooter(target))
+            if let body = document.bodySelection { document.selection = body }
+            document.registerHistory(.undo, undoManager)
         }
     }
     /// Lets go of the selected object, keeping the caret where it was.

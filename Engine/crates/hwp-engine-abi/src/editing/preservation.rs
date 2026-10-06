@@ -80,27 +80,22 @@ fn edited_paragraphs<'a>(
     doc: &'a mut Document,
     t: &EditTarget,
 ) -> Result<&'a mut Vec<Paragraph>, EditError> {
+    let place = t
+        .header_footer
+        .is_some()
+        .then(|| super::header_footer::place(doc, t))
+        .transpose()
+        .map_err(|_| EditError::PreservationFailed)?;
     let section = doc
         .sections
         .get_mut(t.section as usize)
         .ok_or(EditError::PreservationFailed)?;
-    Ok(if let Some(hf) = &t.header_footer {
-        let apply =
-            super::header_footer::apply(hf.apply_to).ok_or(EditError::PreservationFailed)?;
-        section
-            .paragraphs
-            .iter_mut()
-            .flat_map(|paragraph| &mut paragraph.controls)
-            .find_map(|control| match control {
-                Control::Header(header) if !hf.footer && header.apply_to == apply => {
-                    Some(&mut header.paragraphs)
-                }
-                Control::Footer(footer) if hf.footer && footer.apply_to == apply => {
-                    Some(&mut footer.paragraphs)
-                }
-                _ => None,
-            })
-            .ok_or(EditError::PreservationFailed)?
+    Ok(if let Some((p, c)) = place {
+        match &mut section.paragraphs[p].controls[c] {
+            Control::Header(h) => &mut h.paragraphs,
+            Control::Footer(f) => &mut f.paragraphs,
+            _ => return Err(EditError::PreservationFailed),
+        }
     } else if let Some(c) = &t.cell {
         match section
             .paragraphs
@@ -209,6 +204,9 @@ pub(super) fn check(
         }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
+        EditCommand::DeleteHeaderFooter { target } => {
+            return check_deleted_header_footer(before, after, target)
+        }
         EditCommand::InsertShape { position, .. } => {
             return check_host(
                 before,
@@ -659,6 +657,24 @@ fn check_columns(before: &Document, after: &Document, section: u32) -> Result<()
         }
     }
     same_rest(&mut a, &mut b, section)
+}
+/// Only the definition `target` is in is gone, with its data record.
+fn check_deleted_header_footer(
+    before: &Document,
+    after: &Document,
+    target: &EditTarget,
+) -> Result<(), EditError> {
+    let (p, c) =
+        super::header_footer::place(before, target).map_err(|_| EditError::PreservationFailed)?;
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let p = &mut a.sections[target.section as usize].paragraphs[p];
+    p.controls.remove(c);
+    if c < p.ctrl_data_records.len() {
+        p.ctrl_data_records.remove(c);
+    }
+    p.char_count -= 8;
+    same_rest(&mut a, &mut b, target.section)
 }
 /// A header or footer command may only add or replace that one control and append
 /// paragraph shapes.

@@ -786,6 +786,30 @@ struct DocumentTests {
         #expect(!copied.unicodeScalars.contains { (0x15...0x17).contains($0.value) })
     }
 
+    @Test func headerFooterClosesAndIsDeletedBackToTheBodyCaret() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        viewer.headerFooter(footer: false, pageNumber: .center)
+        await document.settle()
+        let target = EditTarget(
+            section: 0, paragraph: 0, cell: nil, note: nil,
+            headerFooter: HeaderFooterTarget(footer: false, applyTo: 0, page: 0)
+        )
+        let caret = EditSelection.caret(EditPosition(target: body, scalar: 0))
+        document.selection = caret
+        document.selection = .caret(EditPosition(target: target, scalar: 0))
+        document.type("머리", nil)
+        document.closeHeaderFooter()
+        await document.settle()
+        #expect(document.selection == caret)
+        document.selection = .caret(EditPosition(target: target, scalar: 0))
+        document.deleteHeaderFooter(nil)
+        await document.settle()
+        #expect(document.selection == caret)
+        await #expect(throws: (any Error).self) { try await document.paragraph(target) }
+    }
+
     @Test func headerFooterEditingRequiresDoubleClickThenSupportsClickAndBodyExit() async throws {
         let document = HwpDocument()
         let viewer = Viewer()

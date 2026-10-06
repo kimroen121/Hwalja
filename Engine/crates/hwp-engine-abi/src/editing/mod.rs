@@ -262,6 +262,7 @@ impl EditSession {
             }),
             EditCommand::SetPage { .. }
             | EditCommand::SetColumns { .. }
+            | EditCommand::DeleteHeaderFooter { .. }
             | EditCommand::HeaderFooter { .. }
             | EditCommand::Undo
             | EditCommand::Redo => None,

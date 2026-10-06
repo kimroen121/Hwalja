@@ -3455,3 +3455,53 @@ fn columns_change_for_the_section_and_save() {
         assert!(s.validate_command(&columns(4)).is_err());
     }
 }
+
+#[test]
+fn headers_go_page_to_page_and_are_deleted() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let header = EditCommand::HeaderFooter {
+        section: 0,
+        footer: false,
+        page_number: Some(Placement::Center),
+    };
+    run(&mut s, header).unwrap();
+    let new_page = EditCommand::Break {
+        position: point(body(), 1),
+        column: false,
+    };
+    run(&mut s, new_page).unwrap();
+    assert!(s.core.page_count() >= 2);
+    let on = |page| point(
+        EditTarget {
+            section: 0,
+            paragraph: 0,
+            cell: None,
+            note: None,
+            header_footer: Some(HeaderFooterTarget {
+                footer: false,
+                apply_to: 0,
+                page,
+            }),
+        },
+        0,
+    );
+    let go = |s: &EditSession, from: &EditPosition, motion| {
+        s.navigate(s.revision, from, motion, None).unwrap()
+    };
+    let next = go(&s, &on(0), Motion::NextHeaderFooter);
+    assert_eq!(next.position, on(1));
+    assert_eq!(next.caret.page, 1);
+    assert_eq!(go(&s, &next.position, Motion::PreviousHeaderFooter).position, on(0));
+    let last = on(s.core.page_count() - 1);
+    assert_eq!(go(&s, &last, Motion::NextHeaderFooter).position, last);
+
+    // 머리말/꼬리말 지우기 leaves the caret in the body.
+    replace(&mut s, on(0).target, 0, 0, "머리").unwrap();
+    let reply = run(&mut s, EditCommand::DeleteHeaderFooter { target: on(0).target }).unwrap();
+    assert!(reply.selection.unwrap().focus.target.header_footer.is_none());
+    assert!(s.paragraph(&on(0).target).is_err());
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert!(reopened.paragraph(&on(0).target).is_err(), "{format:?}");
+    }
+}

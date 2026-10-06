@@ -443,6 +443,12 @@ impl EditSession {
                 validate_page(page)
             }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
+            EditCommand::DeleteHeaderFooter { target } => {
+                if target.header_footer.is_none() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                paragraphs(self.core.document(), target).map(|_| ())
+            }
             EditCommand::SetColumns { section, count } => {
                 self.section_exists(*section)?;
                 // rhwp lays every line of a section out at its first definition's width.
@@ -497,8 +503,13 @@ impl EditSession {
             .collect()
     }
     /// The selection, unchanged by an edit that only touched the section's page layout.
+    /// The selection, or the start of the section when it no longer exists.
     fn kept(&self, section: u32) -> EditSelection {
-        self.selection.clone().unwrap_or_else(|| {
+        let doc = self.core.document();
+        let exists = |s: &EditSelection| {
+            get(doc, &s.anchor.target).is_ok() && get(doc, &s.focus.target).is_ok()
+        };
+        self.selection.clone().filter(exists).unwrap_or_else(|| {
             EditSelection::caret(EditPosition {
                 target: EditTarget {
                     section,
@@ -1091,6 +1102,24 @@ impl EditSession {
                 let json = serde_json::to_string(page).map_err(|_| EditError::InvalidInput)?;
                 self.core.set_page_def_native(*section as usize, &json)?;
                 Ok(self.kept(*section))
+            }
+            EditCommand::DeleteHeaderFooter { target } => {
+                let hf = target
+                    .header_footer
+                    .as_ref()
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let s = target.section as usize;
+                let (p, c) = header_footer::place(self.core.document(), target)?;
+                self.core
+                    .delete_header_footer_native(s, !hf.footer, hf.apply_to)?;
+                // rhwp leaves the control's data record behind, where the next control
+                // would take it.
+                let records =
+                    &mut self.core.document_mut().sections[s].paragraphs[p].ctrl_data_records;
+                if c < records.len() {
+                    records.remove(c);
+                }
+                Ok(self.kept(target.section))
             }
             EditCommand::SetColumns { section, count } => {
                 let current = self.column_defs(*section)[0];

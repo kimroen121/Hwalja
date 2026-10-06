@@ -24,11 +24,8 @@ pub(super) fn apply_to(apply: HeaderFooterApply) -> u8 {
     }
 }
 
-/// The paragraphs of the definition `t` names.
-pub(super) fn paragraphs<'a>(
-    doc: &'a Document,
-    t: &EditTarget,
-) -> Result<&'a [Paragraph], EditError> {
+/// Where the definition `t` names sits: its body paragraph and control.
+pub(super) fn place(doc: &Document, t: &EditTarget) -> Result<(usize, usize), EditError> {
     let hf = t
         .header_footer
         .as_ref()
@@ -39,17 +36,28 @@ pub(super) fn paragraphs<'a>(
         .ok_or(EditError::InvalidInput)?
         .paragraphs
         .iter()
-        .flat_map(|p| &p.controls)
-        .find_map(|c| match c {
-            Control::Header(h) if !hf.footer && h.apply_to == applies => {
-                Some(h.paragraphs.as_slice())
-            }
-            Control::Footer(f) if hf.footer && f.apply_to == applies => {
-                Some(f.paragraphs.as_slice())
-            }
-            _ => None,
+        .enumerate()
+        .find_map(|(p, para)| {
+            let c = para.controls.iter().position(|c| match c {
+                Control::Header(h) => !hf.footer && h.apply_to == applies,
+                Control::Footer(f) => hf.footer && f.apply_to == applies,
+                _ => false,
+            })?;
+            Some((p, c))
         })
         .ok_or(EditError::UnsupportedTarget)
+}
+/// The paragraphs of the definition `t` names.
+pub(super) fn paragraphs<'a>(
+    doc: &'a Document,
+    t: &EditTarget,
+) -> Result<&'a [Paragraph], EditError> {
+    let (p, c) = place(doc, t)?;
+    match &doc.sections[t.section as usize].paragraphs[p].controls[c] {
+        Control::Header(h) => Ok(&h.paragraphs),
+        Control::Footer(f) => Ok(&f.paragraphs),
+        _ => Err(EditError::UnsupportedTarget),
+    }
 }
 
 /// Whether `from..to` can change: as in the body, except that fields may stand in the text

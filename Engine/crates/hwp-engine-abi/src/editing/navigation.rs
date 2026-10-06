@@ -199,6 +199,42 @@ impl EditSession {
                 let next = (i + 1).min(count - 1);
                 at(next, length(next)?)
             }
+            Motion::NextHeaderFooter | Motion::PreviousHeaderFooter => {
+                let hf = from
+                    .target
+                    .header_footer
+                    .as_ref()
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let step = if motion == Motion::NextHeaderFooter {
+                    1
+                } else {
+                    -1
+                };
+                let found: Value = serde_json::from_str(
+                    &self
+                        .core
+                        .navigate_header_footer_by_page_native(hf.page, !hf.footer, step)?,
+                )
+                .map_err(|_| EditError::RenderFailed)?;
+                let field = |key| found.get(key).and_then(Value::as_u64).map(|v| v as u32);
+                match (field("pageIndex"), field("sectionIdx"), field("applyTo")) {
+                    (Some(page), Some(section), Some(apply_to)) => EditPosition {
+                        target: EditTarget {
+                            section,
+                            paragraph: 0,
+                            cell: None,
+                            note: None,
+                            header_footer: Some(HeaderFooterTarget {
+                                footer: hf.footer,
+                                apply_to: apply_to as u8,
+                                page,
+                            }),
+                        },
+                        scalar: 0,
+                    },
+                    _ => from.clone(),
+                }
+            }
             Motion::DocumentStart => at(0, 0),
             Motion::DocumentEnd => at(count - 1, length(count - 1)?),
         };

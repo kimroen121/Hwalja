@@ -217,6 +217,10 @@ pub enum EditCommand {
         section: u32,
         page: PageSetup,
     },
+    /// 머리말/꼬리말 지우기: the definition `target` (a 머리말 or 꼬리말 paragraph) is in.
+    DeleteHeaderFooter {
+        target: EditTarget,
+    },
     /// 단 하나, 둘 or 셋: `count` columns of the same width for a section with one column
     /// definition.
     SetColumns {
@@ -571,6 +575,10 @@ pub enum Motion {
     /// Edges of the body or of the cell holding the caret.
     DocumentStart,
     DocumentEnd,
+    /// From a 머리말 (or 꼬리말) to the start of the one on the next (or previous) page
+    /// that has one.
+    NextHeaderFooter,
+    PreviousHeaderFooter,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

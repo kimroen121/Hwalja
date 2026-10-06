@@ -36,7 +36,7 @@
 | 보기 | 확대/축소(50–300%, 쪽 맞춤, 폭 맞춤, ⌘/⌃+휠·핀치), 쪽 모양(한 쪽·두 쪽·세 쪽), 표시/숨기기(조판 부호, 문단 부호, 투명 선, 격자 보기 5 mm 점), 도구 상자(기본·서식), 사이드바 | `show_paragraph_marks`, `show_control_codes`, `show_transparent_borders`(패치로 공개) | 쪽 윤곽, 눈금자 |
 | 입력 | 도형(가로 글상자·직사각형·타원·직선·호, 끌어 그리기), 글상자(안 글자 입력 포함), 그림(모든 그림 파일, 붙이기), 표, 수식(편집기·실시간 미리 보기·더블클릭 고치기), 문자표(macOS 이모티콘 및 기호), 각주·미주(안 글자 편집·글자/문단 모양 포함), 캡션 넣기(9곳) | InsertShape, `insert_picture_native`, `create_table_native`, `insert_equation_native`, InsertNote, SetObject(caption) | 책갈피, 누름틀·필드 입력, 차트 |
 | 서식 | 글자 모양(⌘L: 기본·확장, 테두리·배경), 문단 모양(⌘T: 기본·테두리/배경), 글머리표·문단 번호 매기기, 글머리표 모양…·문단 번호 모양…(글머리표 17종, 문단 번호 10종, 본문의 시작 번호 방식), 한 수준 증가/감소, 스타일 상자, 개체 속성(기본·여백/캡션·그림·표·셀), 빠른 메뉴(오른쪽 클릭) | `apply_char/para_format_native`, `apply_style_native`, `set_numbering_restart_native`, SetObject, SetCell | 아래 「단계」 2 |
-| 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호, 더블클릭으로 들어가 글자 편집 — 쪽 번호 필드는 지우지 않음), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩), 단(하나·둘·셋) | HeaderFooter, `*_in_header_footer_native`, `insert_page/column_break_native`, `set_column_def_native` | 새 번호로 시작, 현재 쪽만 감추기, 단 왼쪽·오른쪽, 다단 설정 나누기 |
+| 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호, 더블클릭으로 들어가 글자 편집 — 쪽 번호 필드는 지우지 않음, 빠른 메뉴의 머리말/꼬리말 지우기·다음/이전 머리말/꼬리말·닫기), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩), 단(하나·둘·셋) | HeaderFooter, `*_in_header_footer_native`, `insert_page/column_break_native`, `set_column_def_native` | 새 번호로 시작, 현재 쪽만 감추기, 단 왼쪽·오른쪽, 다단 설정 나누기 |
 | 표 | 표 만들기(격자·대화상자), 표/셀 속성, 줄/칸 추가하기·지우기, 셀 나누기·합치기, 셀 높이·너비를 같게(셀 블록에서 M·S·H·W), 표 테두리 끌기(칸 오른쪽·줄 아래), 블록 계산식(블록 합계·평균·곱, 블록의 오른쪽·아래 빈 셀에 값으로) | `create_table_native`, `insert/delete_table_row/column_native`, `merge_table_cells_native`, `split_table_cell*_native`, ResizeTable, `evaluate_table_formula` | 셀 테두리/배경, 블록 계산식 결과의 자동 다시 계산(계산식 필드) |
 | 개체 | 클릭 선택(표 칸·글상자 안 그림, 표 칸 안 수식 포함), 핸들로 크기 조절(그림 모서리는 비율 유지, Shift로 자유 — 도형은 반대; 크기 고정이면 핸들 없음), 끌어 옮기기(글자처럼 취급 그림·수식은 끄는 동안 놓일 자리를 커서로 보이고 글 사이·표 칸 안으로), 표 칸 안에 그림·수식 넣기, 캡션 넣기와 캡션 글자 고치기(그림·표), Delete로 지우기, 그리기 개체 순서(맨 앞으로·앞으로·맨 뒤로·뒤로)·개체 풀기·도형 안에 글자 넣기·글상자 속성 없애기, 그림 색조 조정·밝기·대비·원래 그림으로 | SetObject, DeleteObject, MoveObject(`copy_control`·`paste_internal`), Order(`change_shape_z_order_native`), Ungroup, SetTextBox(`set_text_box_at`) | 선 끝점 |
 
@@ -81,10 +81,9 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
   - [ ] 개체 속성 › 고정값·본문 위치.
 - 쪽
   - [ ] 새 번호로 시작…: `insert_new_number_native`.
-  - [ ] 현재 쪽만 감추기…: `get/set_page_hide_native`.
+  - [ ] 현재 쪽만 감추기…(머리말·꼬리말 등): `get/set_page_hide_native`, `toggle_hide_header_footer_native`.
   - [ ] 단 › 왼쪽·오른쪽: 두 단의 너비 비율을 한글에서 확인해야 한다.
   - [ ] 다단 설정 나누기: rhwp는 구역의 줄을 모두 첫 단 정의의 너비로 나누므로, 단 정의가 둘 이상인 구역의 조판부터 고쳐야 한다. 지금은 단 정의가 하나인 구역에서만 「단」을 바꾼다.
-  - [ ] 머리말·꼬리말 감추기: `toggle_hide_header_footer_native`, `apply_hf_template_native`, `delete_header_footer_native`.
 - 표
   - [ ] 셀 테두리/배경 › 각 셀마다 적용…, 하나의 셀처럼 적용…: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.
   - [ ] 표 테두리 끌기의 나머지(바깥 왼쪽·위 테두리, 셀 안의 표): `resize_table_cells`, `move_table_offset`.

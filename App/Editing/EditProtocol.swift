@@ -94,6 +94,8 @@ enum EditCommand: Encodable, Sendable {
     case setPage(section: UInt32, PageSetup)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
+    /// 머리말/꼬리말 지우기: the definition `target` is in.
+    case deleteHeaderFooter(EditTarget)
     /// 단 하나, 둘 or 셋 for a section with one column definition.
     case setColumns(section: UInt32, count: UInt16)
     case undo
@@ -102,7 +104,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -209,6 +211,9 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .deleteHeaderFooter(target):
+            try c.encode("deleteHeaderFooter", forKey: .kind)
+            try c.encode(target, forKey: .target)
         case let .setColumns(section, count):
             try c.encode("setColumns", forKey: .kind)
             try c.encode(section, forKey: .section)
@@ -543,6 +548,8 @@ enum Motion: String, Encodable, Sendable {
     case lineStart, lineEnd, up, down, paragraphStart, paragraphEnd
     /// Edges of the body or of the cell holding the caret.
     case documentStart, documentEnd
+    /// From a 머리말 (or 꼬리말) to the one on the next (or previous) page that has one.
+    case nextHeaderFooter, previousHeaderFooter
 
     var isVertical: Bool { self == .up || self == .down }
 }

@@ -128,6 +128,22 @@ struct MenuItems {
             case nil: break
             }
         }
+        if viewer.document?.selection?.focus.target.isHeaderFooter == true {
+            let document = viewer.document
+            let go = { (motion: Motion) in
+                document?.select { document in
+                    guard let focus = document.selection?.focus else { return nil }
+                    return try await .caret(document.navigate(from: focus, motion).position)
+                }
+            }
+            items += [
+                nil,
+                Choice(title: "머리말/꼬리말 지우기") { document?.deleteHeaderFooter(viewer.undoManager) },
+                Choice(title: "다음 머리말/꼬리말") { go(.nextHeaderFooter) },
+                Choice(title: "이전 머리말/꼬리말") { go(.previousHeaderFooter) },
+                Choice(title: "닫기") { document?.closeHeaderFooter() },
+            ]
+        }
         if context.inTable, context.object == nil {
             let block = context.cellBlock
             items += [
