@@ -192,6 +192,62 @@ fn header_footer_hit_testing_requires_opt_in_and_geometry_round_trips() {
     assert_eq!(word_end.position.target, hit.target);
     assert!(word_end.position.scalar >= hit.scalar);
 }
+
+#[test]
+fn header_footer_navigation_stays_in_its_definition() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 0, "가👨‍👩‍👧‍👦e\u{301} 끝")
+        .unwrap();
+    s.core
+        .split_paragraph_in_header_footer_native(0, true, 0, 0, 12, None)
+        .unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 1, 0, "둘째 줄")
+        .unwrap();
+    let first = header_footer_target(false, 0, 0);
+    let second = header_footer_target(false, 0, 1);
+
+    let right = s
+        .navigate(0, &point(first.clone(), 1), Motion::Right, None)
+        .unwrap();
+    assert_eq!(right.position.scalar, 8, "가족 emoji must remain one grapheme");
+    assert_eq!(right.position.target, first);
+
+    let line_end = s
+        .navigate(0, &point(first.clone(), 0), Motion::LineEnd, None)
+        .unwrap();
+    assert_eq!(line_end.position, point(first.clone(), 12));
+    let down = s
+        .navigate(0, &point(first.clone(), 0), Motion::Down, None)
+        .unwrap();
+    assert_eq!(down.position.target, second);
+    let up = s
+        .navigate(0, &down.position, Motion::Up, Some(down.goal_x))
+        .unwrap();
+    assert_eq!(up.position.target, first);
+
+    let end = s
+        .navigate(0, &point(first, 0), Motion::DocumentEnd, None)
+        .unwrap();
+    assert_eq!(end.position, point(second, 4));
+}
+
+#[test]
+fn header_footer_selection_rejects_different_definitions() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core.create_header_footer_native(0, false, 0).unwrap();
+    let selection = EditSelection {
+        anchor: point(header_footer_target(false, 0, 0), 0),
+        focus: point(header_footer_target(true, 0, 0), 0),
+    };
+    assert_eq!(
+        s.selection_rects(0, &selection).unwrap_err(),
+        EditError::UnsupportedTarget
+    );
+}
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
     EditPosition { target, scalar }
 }

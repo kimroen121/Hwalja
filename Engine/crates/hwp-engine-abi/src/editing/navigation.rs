@@ -111,6 +111,26 @@ impl EditSession {
                 let end = length(index(&next.target))?;
                 at(index(&next.target), s.min(end))
             }
+            Motion::LineStart | Motion::LineEnd if from.target.header_footer.is_some() => {
+                let (first, last) = self.header_footer_line(from)?;
+                at(
+                    i,
+                    if motion == Motion::LineStart {
+                        first
+                    } else {
+                        last
+                    },
+                )
+            }
+            Motion::Up | Motion::Down if from.target.header_footer.is_some() => {
+                let (moved, x) = self.header_footer_vertical(
+                    from,
+                    motion == Motion::Down,
+                    goal_x,
+                )?;
+                goal = Some(x);
+                moved
+            }
             Motion::LineStart | Motion::LineEnd if self.has_stops(&from.target) => {
                 let stops = self.paragraph_stops(&from.target);
                 let (first, last) = stops
@@ -177,6 +197,73 @@ impl EditSession {
             position,
             caret,
         })
+    }
+
+    /// Visual line bounds for a header/footer position, derived from its native caret geometry.
+    fn header_footer_line(&self, p: &EditPosition) -> Result<(u32, u32), EditError> {
+        let current = self.rhwp_caret(p)?;
+        let len = logical::length(get(self.core.document(), &p.target)?);
+        let same_line = |caret: &PageRect| {
+            caret.page == current.page && (caret.y - current.y).abs() <= current.height * 0.5
+        };
+        let mut scalars = (0..=len).filter(|scalar| {
+            self.rhwp_caret(&EditPosition {
+                target: p.target.clone(),
+                scalar: *scalar,
+            })
+            .is_ok_and(|caret| same_line(&caret))
+        });
+        let first = scalars.next().ok_or(EditError::UnsupportedTarget)?;
+        Ok((first, scalars.last().unwrap_or(first)))
+    }
+
+    /// One visual line inside the same semantic header/footer definition.
+    fn header_footer_vertical(
+        &self,
+        p: &EditPosition,
+        down: bool,
+        goal_x: Option<f64>,
+    ) -> Result<(EditPosition, f64), EditError> {
+        let current = self.rhwp_caret(p)?;
+        let x = goal_x.unwrap_or(current.x);
+        let count = paragraphs(self.core.document(), &p.target)?.len();
+        let mut candidates = Vec::new();
+        for paragraph in 0..count {
+            let target = at_index(&p.target, paragraph);
+            let len = logical::length(get(self.core.document(), &target)?);
+            for scalar in 0..=len {
+                let position = EditPosition {
+                    target: target.clone(),
+                    scalar,
+                };
+                let Ok(caret) = self.rhwp_caret(&position) else {
+                    continue;
+                };
+                let dy = caret.y - current.y;
+                if caret.page == current.page
+                    && if down {
+                        dy > current.height * 0.5
+                    } else {
+                        dy < -current.height * 0.5
+                    }
+                {
+                    candidates.push((position, caret, dy.abs()));
+                }
+            }
+        }
+        let Some(nearest_y) = candidates.iter().map(|(_, _, dy)| *dy).min_by(f64::total_cmp)
+        else {
+            return Ok((p.clone(), x));
+        };
+        let position = candidates
+            .into_iter()
+            .filter(|(_, _, dy)| (*dy - nearest_y).abs() <= current.height * 0.5)
+            .min_by(|(_, a, _), (_, b, _)| {
+                (a.x - x).abs().total_cmp(&(b.x - x).abs())
+            })
+            .map(|(position, _, _)| position)
+            .unwrap_or_else(|| p.clone());
+        Ok((position, x))
     }
 
     fn line(&self, p: &EditPosition) -> Result<Value, EditError> {
