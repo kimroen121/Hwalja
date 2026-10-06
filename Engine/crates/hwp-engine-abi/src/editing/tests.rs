@@ -3684,3 +3684,60 @@ fn replace_all_is_one_edit() {
     run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(text(&s, 0), "가나 가나");
 }
+
+#[test]
+fn line_ends_move_one_at_a_time() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    for flip in [false, true] {
+        let line = EditCommand::InsertShape {
+            position: point(body(), 0),
+            shape: "line".into(),
+            x: 10_000,
+            y: 20_000,
+            width: 15_000,
+            height: if flip { 7_500 } else { 0 },
+            flip,
+        };
+        run(&mut s, line).unwrap();
+    }
+    let placed = s.placed(0).unwrap();
+    let ends = |s: &EditSession, i: usize| s.placed(0).unwrap()[i].ends.unwrap();
+    // 10 000 HWPUNIT is 133.3 px; 15 000 is 200.
+    let [x1, y1, x2, y2] = ends(&s, 0);
+    assert!(
+        (x1 - 133.3).abs() < 2.0 && (x2 - 333.3).abs() < 2.0,
+        "{:?}",
+        ends(&s, 0)
+    );
+    assert!((y1 - y2).abs() < 1.0);
+    // Flipped: the other diagonal of its box.
+    let [fx1, fy1, fx2, fy2] = ends(&s, 1);
+    assert!((fx2 - fx1) * (fy2 - fy1) < 0.0, "{:?}", ends(&s, 1));
+    let line = placed[0].object.clone();
+    let lower = EditCommand::MoveLineEnd {
+        object: line.clone(),
+        end: true,
+        dx: 0,
+        dy: 7_500,
+    };
+    run(&mut s, lower).unwrap();
+    let [nx1, ny1, nx2, ny2] = ends(&s, 0);
+    assert!((nx1 - x1).abs() < 1.0 && (ny1 - y1).abs() < 1.0);
+    assert!(
+        (nx2 - x2).abs() < 1.0 && (ny2 - y2 - 100.0).abs() < 2.0,
+        "{:?}",
+        ends(&s, 0)
+    );
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let [_, a, _, b] = reopened.placed(0).unwrap()[0].ends.unwrap();
+        assert!((b - a - 100.0).abs() < 2.0, "{format:?}");
+    }
+    let away = EditCommand::MoveLineEnd {
+        object: line,
+        end: false,
+        dx: -50_000,
+        dy: 0,
+    };
+    assert!(s.validate_command(&away).is_err());
+}

@@ -80,6 +80,8 @@ enum EditCommand: Encodable, Sendable {
     case order(ObjectRef, Order)
     /// 블록 합계, 블록 평균 or 블록 곱 over the block `selection` covers.
     case calculateBlock(EditSelection, BlockFunction)
+    /// Moves the start (or, with `end`, the end) of a 직선 by `dx`, `dy` (HWPUNIT).
+    case moveLineEnd(ObjectRef, end: Bool, dx: Int32, dy: Int32)
     /// 개체 풀기.
     case ungroup(ObjectRef)
     /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
@@ -108,7 +110,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -235,6 +237,12 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("calculateBlock", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(function, forKey: .function)
+        case let .moveLineEnd(object, end, dx, dy):
+            try c.encode("moveLineEnd", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(end, forKey: .end)
+            try c.encode(dx, forKey: .dx)
+            try c.encode(dy, forKey: .dy)
         case let .ungroup(object):
             try c.encode("ungroup", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -312,6 +320,8 @@ struct PlacedObject: Decodable, Hashable, Sendable {
     var group: Bool
     /// A drawing object that can hold text, and whether it does.
     var textBox: Bool?
+    /// A 직선's start and end on the page (x, y, x, y in page pixels).
+    var ends: [Double]?
 }
 
 /// Object properties in the engine's names and units (lengths in HWPUNIT). As a query

@@ -31,6 +31,8 @@ struct Presentation: Equatable {
     var objectLocked = false
     /// The selected object sits in the line (글자처럼 취급): dragging it moves it in the text.
     var objectInLine = false
+    /// The selected 직선's ends (x, y, x, y in page pixels), dragged one at a time.
+    var lineEnds: [Double]?
 }
 
 /// What menus and bars depend on. It changes far less often than the caret, so SwiftUI
@@ -526,7 +528,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             (locked, inLine) = (props?.sizeProtect == true, props?.treatAsChar == true)
         }
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect,
-                                objectLocked: locked, objectInLine: inLine)
+                                objectLocked: locked, objectInLine: inLine, lineEnds: object?.ends)
         for output in staged {
             let count = pages.count
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {

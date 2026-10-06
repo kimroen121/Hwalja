@@ -317,12 +317,17 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         for rect in highlightRects where rect.intersects(dirtyRect) {
             rect.fill(using: .multiply)
         }
-        if let rect = objectRect, rect.insetBy(dx: -4, dy: -4).intersects(dirtyRect) {
+        if let rect = objectRect, rect.insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
             drawHandles(around: rect)
         }
         if let rubber {
             let band = NSBezierPath()
-            if drawingShape == "line" || { if case .border = drag { true } else { false } }() {
+            if drawingShape == "line" || {
+                switch drag {
+                case .border, .lineEnd: true
+                default: false
+                }
+            }() {
                 band.move(to: rubber.start)
                 band.line(to: rubber.end)
             } else if drawingShape == "ellipse" {
@@ -350,10 +355,22 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         NSColor.systemIndigo.withAlphaComponent(0.6).setFill()
         dots.fill()
     }
-    /// The frame and eight sizing handles of a selected object, one screen point thick.
+    /// The frame and eight sizing handles of a selected object, one screen point thick; a
+    /// 직선 has a handle at each end instead.
     private func drawHandles(around rect: NSRect) {
         let scale = 1 / (enclosingScrollView?.magnification ?? 1)
         NSColor.controlAccentColor.setStroke()
+        if let ends = lineEnds {
+            let side = 6 * scale
+            for end in [ends.start, ends.end] {
+                let handle = NSBezierPath(rect: NSRect(x: end.x - side / 2, y: end.y - side / 2, width: side, height: side))
+                handle.lineWidth = scale
+                NSColor.white.setFill()
+                handle.fill()
+                handle.stroke()
+            }
+            return
+        }
         let frame = NSBezierPath(rect: rect)
         frame.lineWidth = scale
         frame.stroke()
@@ -388,6 +405,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let cursor: NSCursor
         if drawingShape != nil {
             cursor = .crosshair
+        } else if lineEnd(at: point) != nil {
+            cursor = .crosshair
         } else if let rect = objectRect, let handle = handle(at: point, of: rect) {
             cursor = Self.resizeCursor(handle.x, handle.y)
         } else if let rect = objectRect, movable, rect.contains(point) {
@@ -409,6 +428,22 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var highlightRects: [NSRect] { shown.highlight.compactMap(viewRect) }
     private var caretRect: NSRect? { shown.caret.flatMap(viewRect) }
     private var objectRect: NSRect? { shown.object.flatMap(viewRect) }
+    /// The selected 직선's start and end in view points.
+    private var lineEnds: (start: NSPoint, end: NSPoint)? {
+        guard let ends = shown.lineEnds, ends.count == 4, let page = shown.object?.page,
+              let frame = frame(ofPage: Int(page)) else { return nil }
+        let point = { (x: Double, y: Double) in
+            NSPoint(x: frame.minX + x * PageGeometry.pointsPerPixel, y: frame.minY + y * PageGeometry.pointsPerPixel)
+        }
+        return (point(ends[0], ends[1]), point(ends[2], ends[3]))
+    }
+    /// The 직선 end under a point: true for its end, false for its start.
+    private func lineEnd(at point: NSPoint) -> Bool? {
+        guard let ends = lineEnds, model?.presentation.objectLocked != true else { return nil }
+        let reach = 5 / (enclosingScrollView?.magnification ?? 1)
+        let near = { (end: NSPoint) in abs(point.x - end.x) <= reach && abs(point.y - end.y) <= reach }
+        return near(ends.end) ? true : near(ends.start) ? false : nil
+    }
 
     private func viewRect(_ rect: PageRect) -> NSRect? {
         frame(ofPage: Int(rect.page)).map { PageGeometry.viewRect(rect, in: $0) }
@@ -502,6 +537,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         commitComposition()
         let clicks = event.clickCount, extend = event.modifierFlags.contains(.shift)
         if clicks == 1, !extend {
+            if let end = lineEnd(at: point), let ends = lineEnds {
+                let (from, other) = end ? (ends.end, ends.start) : (ends.start, ends.end)
+                drag = .lineEnd(end: end, from: from, other: other)
+                return setRubber((other, from))
+            }
             if let rect = objectRect, let handle = handle(at: point, of: rect) {
                 drag = .resize(handle: handle, from: rect)
                 return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
@@ -593,6 +633,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// object itself, or on a table border, until the mouse goes up.
     private enum Drag {
         case resize(handle: (x: Int, y: Int), from: NSRect)
+        /// A 직선's end (or start) dragged from `from`, the `other` end staying.
+        case lineEnd(end: Bool, from: NSPoint, other: NSPoint)
         /// `click` is where to click if it never moves.
         case move(start: NSPoint, from: NSRect, moved: Bool, click: (page: Int, point: CGPoint)?)
         /// `extent` is the table's span along the border, in view points.
@@ -607,7 +649,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var linesGeneration = 0
 
     /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
-    private var resizable: Bool { [.picture, .shape].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true }
+    private var resizable: Bool {
+        [.picture, .shape].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true && lineEnds == nil
+    }
     private var movable: Bool { [.picture, .shape, .equation].contains(model?.object?.object.kind) }
 
     private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
@@ -759,6 +803,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             switch current {
             case let .resize(handle, from):
                 place(resized(handle, from: from, to: point, keepRatio: keepsRatio(event)), from: from)
+            case let .lineEnd(end, from, _):
+                guard let model, let object = model.object?.object, hypot(point.x - from.x, point.y - from.y) > 1 else { return }
+                // View points are 1/72 inch; HWPUNIT is 1/7200 inch.
+                let (dx, dy) = (Int32(((point.x - from.x) * 100).rounded()), Int32(((point.y - from.y) * 100).rounded()))
+                model.edit(undoManager) { _ in .moveLineEnd(object, end: end, dx: dx, dy: dy) }
             case let .move(start, from, moved, click):
                 if moved {
                     place(from.offsetBy(dx: point.x - start.x, dy: point.y - start.y), from: from, dropAt: point)
@@ -792,6 +841,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         case let .resize(handle, from):
             let rect = resized(handle, from: from, to: point, keepRatio: keepsRatio(event))
             return setRubber((rect.origin, NSPoint(x: rect.maxX, y: rect.maxY)))
+        case let .lineEnd(_, _, other):
+            return setRubber((other, point))
         case let .move(start, from, moved, click):
             guard moved || hypot(point.x - start.x, point.y - start.y) > 3 else { return }
             drag = .move(start: start, from: from, moved: true, click: click)

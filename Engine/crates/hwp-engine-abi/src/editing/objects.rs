@@ -255,7 +255,35 @@ impl EditSession {
                     Control::Shape(s) => Some(&**s),
                     _ => None,
                 };
+                let (x, y, w, h) = (
+                    number(c, "x")?,
+                    number(c, "y")?,
+                    number(c, "w")?,
+                    number(c, "h")?,
+                );
+                // Each end in proportion to the line's box.
+                let ends = match shape {
+                    Some(ShapeObject::Line(l)) if l.connector.is_none() => {
+                        let along = |v: i32, size: u32, start: f64, extent: f64| {
+                            start
+                                + if size > 0 {
+                                    v as f64 / size as f64 * extent
+                                } else {
+                                    0.0
+                                }
+                        };
+                        let (cw, ch) = (l.common.width, l.common.height);
+                        Some([
+                            along(l.start.x, cw, x, w),
+                            along(l.start.y, ch, y, h),
+                            along(l.end.x, cw, x, w),
+                            along(l.end.y, ch, y, h),
+                        ])
+                    }
+                    _ => None,
+                };
                 Some(PlacedObject {
+                    ends,
                     group: matches!(shape, Some(ShapeObject::Group(_))),
                     text_box: shape
                         .and_then(ShapeObject::drawing)
@@ -263,10 +291,10 @@ impl EditSession {
                     object,
                     rect: PageRect {
                         page,
-                        x: number(c, "x")?,
-                        y: number(c, "y")?,
-                        width: number(c, "w")?,
-                        height: number(c, "h")?,
+                        x,
+                        y,
+                        width: w,
+                        height: h,
                     },
                 })
             })
@@ -615,6 +643,42 @@ impl EditSession {
             (ObjectKind::Shape, None) => self.core.delete_shape_control_native(s, p, c),
         }?;
         Ok(())
+    }
+    /// The ends of 직선 `o` where `MoveLineEnd` leaves them, from the corner its offsets
+    /// count from (HWPUNIT).
+    pub(super) fn line_ends(&self, command: &EditCommand) -> Result<[i32; 4], EditError> {
+        let EditCommand::MoveLineEnd {
+            object,
+            end,
+            dx,
+            dy,
+        } = command
+        else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        self.validate_drawing(
+            object,
+            |s| matches!(s, ShapeObject::Line(l) if l.connector.is_none()),
+        )?;
+        let Control::Shape(shape) = self.control(object)? else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let ShapeObject::Line(l) = &**shape else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let (x, y) = (
+            l.common.horizontal_offset as i32,
+            l.common.vertical_offset as i32,
+        );
+        let mut ends = [x + l.start.x, y + l.start.y, x + l.end.x, y + l.end.y];
+        let at = if *end { 2 } else { 0 };
+        ends[at] = ends[at].saturating_add(*dx);
+        ends[at + 1] = ends[at + 1].saturating_add(*dy);
+        if ends.iter().all(|v| (0..=1_000_000).contains(v)) {
+            Ok(ends)
+        } else {
+            Err(EditError::InvalidInput)
+        }
     }
     /// A drawing object of the body for which `test` holds.
     pub(super) fn validate_drawing(

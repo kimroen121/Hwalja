@@ -496,6 +496,7 @@ impl EditSession {
             }
             EditCommand::MoveObject { object, to } => self.validate_move(object, to),
             EditCommand::Order { object, .. } => self.validate_drawing(object, |_| true),
+            EditCommand::MoveLineEnd { .. } => self.line_ends(command).map(|_| ()),
             EditCommand::Ungroup { object } => {
                 self.validate_drawing(object, |s| matches!(s, ShapeObject::Group(_)))
             }
@@ -1203,6 +1204,19 @@ impl EditSession {
             }
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::MoveLineEnd { object, .. } => {
+                let [x1, y1, x2, y2] = self.line_ends(command)?;
+                self.core.move_line_endpoint_native(
+                    object.section as usize,
+                    object.paragraph as usize,
+                    object.control as usize,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                )?;
                 Ok(self.kept(object.section))
             }
             EditCommand::Ungroup { object } => {

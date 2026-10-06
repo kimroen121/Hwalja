@@ -281,6 +281,36 @@ struct DocumentTests {
         #expect(document.object == nil)
     }
 
+    /// A 직선's end is dragged by its handle; the other end stays.
+    @Test func lineEndsAreDragged() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 900, height: 900))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        canvas.setZoom(1)
+        canvas.tile()
+        let editor = canvas.editor
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.insertShape("line", page: 0, from: CGPoint(x: 200, y: 300), to: CGPoint(x: 320, y: 300), nil)
+        await document.settle()
+        let page = try #require(editor.frame(ofPage: 0))
+        let ends = try #require(document.object?.ends)
+        let end = NSPoint(x: page.minX + ends[2] * PageGeometry.pointsPerPixel, y: page.minY + ends[3] * PageGeometry.pointsPerPixel)
+        let event = { (type: NSEvent.EventType, point: NSPoint) in
+            NSEvent.mouseEvent(with: type, location: editor.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        let to = NSPoint(x: end.x, y: end.y + 30)
+        editor.mouseDown(with: event(.leftMouseDown, end))
+        editor.mouseDragged(with: event(.leftMouseDragged, to))
+        editor.mouseUp(with: event(.leftMouseUp, to))
+        await document.settle()
+        let moved = try #require(document.object?.ends)
+        #expect(abs(moved[0] - ends[0]) < 1 && abs(moved[1] - ends[1]) < 1)
+        #expect(abs(moved[3] - ends[3] - 40) < 2)
+    }
+
     /// Dragging with the mouse sizes and moves the selected shape, and moves a table border.
     @Test func objectsAndTableBordersAreDragged() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))

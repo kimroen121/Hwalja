@@ -181,6 +181,14 @@ pub enum EditCommand {
         object: ObjectRef,
         order: Order,
     },
+    /// Moves the start (or, with `end`, the end) of a 직선 of the body by `dx`, `dy`
+    /// (HWPUNIT), the other end staying.
+    MoveLineEnd {
+        object: ObjectRef,
+        end: bool,
+        dx: i32,
+        dy: i32,
+    },
     /// 개체 풀기: a group of drawing objects of the body into its members.
     Ungroup {
         object: ObjectRef,
@@ -320,6 +328,8 @@ pub struct PlacedObject {
     /// 글상자 속성 없애기).
     #[serde(rename = "textBox")]
     pub text_box: Option<bool>,
+    /// A 직선's start and end on the page (x, y, x, y in page pixels), for dragging them.
+    pub ends: Option<[f64; 4]>,
 }
 /// Object properties in rhwp's names and units (lengths in HWPUNIT). As a query result
 /// the fields the object has are set; as a change, unset fields stay.
