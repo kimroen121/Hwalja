@@ -439,7 +439,16 @@ impl EditSession {
             && one_of(&props.vert_align, &["Top", "Center", "Bottom"])
             && one_of(&props.effect, &["RealPic", "GrayScale", "BlackWhite"])
             && one_of(&props.caption, &CAPTIONS)
-            && (o.kind != ObjectKind::Equation || props.caption.is_none())
+            && props.caption_width.is_none_or(|v| v <= 1_000_000)
+            && props
+                .caption_spacing
+                .is_none_or(|v| (0..=i16::MAX as i32).contains(&v))
+            && (o.kind != ObjectKind::Table || props.caption_include_margin.is_none())
+            && (o.kind != ObjectKind::Equation
+                || (props.caption.is_none()
+                    && props.caption_width.is_none()
+                    && props.caption_spacing.is_none()
+                    && props.caption_include_margin.is_none()))
             && props.script.as_deref().is_none_or(is_script)
             && props.font_size.is_none_or(|v| (100..=12_700).contains(&v))
             && props.color.is_none_or(|v| v <= 0x00ff_ffff)

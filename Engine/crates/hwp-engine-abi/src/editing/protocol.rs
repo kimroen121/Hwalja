@@ -357,6 +357,11 @@ pub struct ObjectProps {
     /// Pictures and tables: None, Top, Bottom, or Left/Right with Top, Center or Bottom
     /// (LeftTop … RightBottom), the positions of 캡션 넣기.
     pub caption: Option<String>,
+    /// 캡션 크기 (of a caption beside the object) and 개체와의 간격.
+    pub caption_width: Option<u32>,
+    pub caption_spacing: Option<i32>,
+    /// 여백 부분까지 너비 확대 (pictures and drawing objects).
+    pub caption_include_margin: Option<bool>,
     pub outer_margin_left: Option<i32>,
     pub outer_margin_right: Option<i32>,
     pub outer_margin_top: Option<i32>,

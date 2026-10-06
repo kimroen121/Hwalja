@@ -3178,6 +3178,35 @@ fn captions_are_written_and_edited() {
     assert_eq!(hit.target, caption);
     let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
     assert_eq!(reopened.paragraph(&caption).unwrap().text, "그림  꽃");
+    // 캡션 크기, 개체와의 간격 and 여백 부분까지 너비 확대.
+    let sized = ObjectProps {
+        caption: Some("LeftCenter".into()),
+        caption_width: Some(3_000),
+        caption_spacing: Some(500),
+        caption_include_margin: Some(true),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: object.clone(),
+            props: sized,
+        },
+    )
+    .unwrap();
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+    for session in [&s, &reopened] {
+        let now = session.object_props(&object).unwrap();
+        assert_eq!(
+            (
+                now.caption.as_deref(),
+                now.caption_width,
+                now.caption_spacing,
+                now.caption_include_margin
+            ),
+            (Some("LeftCenter"), Some(3_000), Some(500), Some(true))
+        );
+    }
 
     // A table's caption is its cell `CAPTION`.
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();

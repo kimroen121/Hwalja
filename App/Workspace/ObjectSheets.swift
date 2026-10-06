@@ -203,8 +203,20 @@ struct ObjectSheet: View {
             sides(\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom)
             if kind == .picture || kind == .table {
                 GroupTitle("캡션")
-                CaptionGrid(selection: text(\.caption, "None"))
-                    .padding(.leading, 12)
+                HStack(alignment: .top, spacing: 24) {
+                    CaptionGrid(selection: text(\.caption, "None"))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                            GridRow { length("크기", \.captionWidth) }
+                            GridRow { length("개체와의 간격", \.captionSpacing) }
+                        }
+                        if kind == .picture {
+                            Toggle("여백 부분까지 너비 확대", isOn: flag(\.captionIncludeMargin))
+                        }
+                    }
+                    .disabled((props.caption ?? "None") == "None")
+                }
+                .padding(.leading, 12)
             }
             Spacer(minLength: 0)
         }

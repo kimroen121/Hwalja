@@ -345,6 +345,10 @@ struct ObjectProps: PartialFormat {
     var allowOverlap: Bool?
     /// Pictures and tables: None, Top, Bottom, or LeftTop … RightBottom (캡션 넣기).
     var caption: String?
+    /// 캡션 크기 (of a caption beside the object) and 개체와의 간격, HWPUNIT; 여백 부분까지 너비 확대.
+    var captionWidth: UInt32?
+    var captionSpacing: Int32?
+    var captionIncludeMargin: Bool?
     var outerMarginLeft: Int32?
     var outerMarginRight: Int32?
     var outerMarginTop: Int32?
