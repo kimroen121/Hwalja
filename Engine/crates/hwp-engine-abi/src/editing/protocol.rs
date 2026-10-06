@@ -468,6 +468,9 @@ pub struct EditReply {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CharStyle {
+    /// As a change, the 언어 (0 한글, 1 영문, 2 한자, 3 일어, 4 외국어, 5 기호, 6 사용자)
+    /// whose font, 상대 크기, 장평, 글자 위치 and 자간 change; unset, all of them (대표).
+    pub language: Option<u8>,
     pub font: Option<String>,
     /// Points.
     pub size: Option<f64>,
@@ -622,6 +625,8 @@ pub struct Navigation {
 #[serde(rename_all = "camelCase")]
 pub struct Format {
     pub text: CharStyle,
+    /// The font, 상대 크기, 장평, 글자 위치 and 자간 of each 언어, in `language` order.
+    pub languages: Vec<CharStyle>,
     pub paragraph: ParaStyle,
     /// The paragraph's 스타일.
     pub style: u32,

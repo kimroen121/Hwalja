@@ -25,7 +25,8 @@ pub(super) fn validate_char(style: &CharStyle) -> Result<(), EditError> {
         && style
             .relative_size
             .is_none_or(|r| (10.0..=250.0).contains(&r))
-        && style.offset.is_none_or(|o| (-100.0..=100.0).contains(&o));
+        && style.offset.is_none_or(|o| (-100.0..=100.0).contains(&o))
+        && style.language.is_none_or(|l| l < 7);
     let border_ok = BorderFill::of_char(style).valid();
     if font_ok
         && size_ok
@@ -309,6 +310,53 @@ pub(super) const NUMBERINGS: [[(&str, u8); 7]; 10] = [
         ("^1.^2.^3.^4.^5.^6.^7.", 0),
     ],
 ];
+/// A change to the font, 상대 크기, 장평, 글자 위치 and 자간 of some 언어, made over each
+/// run's own values for the others.
+pub(super) struct Languages {
+    languages: std::ops::Range<usize>,
+    fonts: [Option<u16>; 7],
+    ratio: Option<u8>,
+    spacing: Option<i8>,
+    size: Option<u8>,
+    offset: Option<i8>,
+}
+impl Languages {
+    fn is_empty(&self) -> bool {
+        self.fonts.iter().all(Option::is_none)
+            && self.ratio.is_none()
+            && self.spacing.is_none()
+            && self.size.is_none()
+            && self.offset.is_none()
+    }
+    /// `props` with the change laid over the run's `own` shape.
+    fn over(&self, own: &rhwp::model::style::CharShape, props: &str) -> String {
+        let mut map: Map<String, Value> = serde_json::from_str(props).unwrap_or_default();
+        let (mut fonts, mut ratios, mut spacings, mut sizes, mut offsets) = (
+            own.font_ids,
+            own.ratios,
+            own.spacings,
+            own.relative_sizes,
+            own.char_offsets,
+        );
+        for l in self.languages.clone() {
+            fonts[l] = self.fonts[l].unwrap_or(fonts[l]);
+            ratios[l] = self.ratio.unwrap_or(ratios[l]);
+            spacings[l] = self.spacing.unwrap_or(spacings[l]);
+            sizes[l] = self.size.unwrap_or(sizes[l]);
+            offsets[l] = self.offset.unwrap_or(offsets[l]);
+        }
+        for (key, value) in [
+            ("fontIds", json!(fonts)),
+            ("ratios", json!(ratios)),
+            ("spacings", json!(spacings)),
+            ("relativeSizes", json!(sizes)),
+            ("charOffsets", json!(offsets)),
+        ] {
+            map.insert(key.into(), value);
+        }
+        Value::Object(map).to_string()
+    }
+}
 /// Whether numbering `n` is 문단 번호 kind `kind`.
 fn is_kind(n: &rhwp::model::style::Numbering, kind: usize) -> bool {
     NUMBERINGS[kind]
@@ -462,14 +510,21 @@ impl EditSession {
         info.raw_stream_dirty = true;
         info.bullets.len() as u16
     }
-    /// rhwp property JSON for a character change. Registers a new font name if needed.
-    pub(super) fn char_props(&mut self, style: &CharStyle) -> String {
+    /// rhwp property JSON for a character change, without the values each 언어 has (see
+    /// `Languages`). Registers a new font name if needed.
+    pub(super) fn char_props(&mut self, style: &CharStyle) -> (String, Languages) {
         let mut props = Map::new();
+        let languages = match style.language {
+            Some(l) => l as usize..l as usize + 1,
+            None => 0..7,
+        };
+        let mut fonts = [None; 7];
         if let Some(font) = &style.font {
-            props.insert(
-                "fontId".into(),
-                json!(self.core.find_or_create_font_id_native(font.trim())),
-            );
+            for l in languages.clone() {
+                // Each 언어 lists its own fonts.
+                let id = self.core.find_or_create_font_id_for_lang(l, font.trim());
+                fonts[l] = u16::try_from(id).ok();
+            }
         }
         if let Some(size) = style.size {
             props.insert("fontSize".into(), json!((size * 100.0).round() as i32));
@@ -511,18 +566,14 @@ impl EditSession {
         if let Some(shape) = style.strike_shape {
             props.insert("strikeShape".into(), json!(shape));
         }
-        if let Some(ratio) = style.ratio {
-            props.insert("ratios".into(), json!(vec![ratio.round() as u8; 7]));
-        }
-        if let Some(spacing) = style.spacing {
-            props.insert("spacings".into(), json!(vec![spacing.round() as i8; 7]));
-        }
-        if let Some(size) = style.relative_size {
-            props.insert("relativeSizes".into(), json!(vec![size.round() as u8; 7]));
-        }
-        if let Some(offset) = style.offset {
-            props.insert("charOffsets".into(), json!(vec![offset.round() as i8; 7]));
-        }
+        let languages = Languages {
+            languages,
+            fonts,
+            ratio: style.ratio.map(|v| v.round() as u8),
+            spacing: style.spacing.map(|v| v.round() as i8),
+            size: style.relative_size.map(|v| v.round() as u8),
+            offset: style.offset.map(|v| v.round() as i8),
+        };
         BorderFill::of_char(style).insert(&mut props);
         // One of superscript and subscript at a time.
         if let Some(on) = style.superscript {
@@ -547,7 +598,7 @@ impl EditSession {
                 props.insert(key.into(), json!(on));
             }
         }
-        Value::Object(props).to_string()
+        (Value::Object(props).to_string(), languages)
     }
     /// Applies `props` to `from..to`, one existing run at a time: rhwp derives the new
     /// shape from the run at the range start, which would copy that run's other
@@ -558,6 +609,7 @@ impl EditSession {
         from: u32,
         to: u32,
         props: &str,
+        languages: &Languages,
     ) -> Result<(), EditError> {
         let para = get(self.core.document(), t)?;
         let (from, to) = (
@@ -574,8 +626,18 @@ impl EditSession {
                 _ => runs.push((offset, offset + 1)),
             }
         }
-        for (start, end) in runs {
-            self.format_run(t, start, end, props)?;
+        let shapes: Vec<_> = runs
+            .iter()
+            .map(|&(start, _)| para.char_shape_id_at(start as usize))
+            .collect();
+        for ((start, end), shape) in runs.into_iter().zip(shapes) {
+            let own =
+                shape.and_then(|id| self.core.document().doc_info.char_shapes.get(id as usize));
+            let props = match own {
+                Some(own) if !languages.is_empty() => languages.over(own, props),
+                _ => props.to_string(),
+            };
+            self.format_run(t, start, end, &props)?;
         }
         Ok(())
     }
@@ -783,10 +845,27 @@ impl EditSession {
         let (line, width, border, fill, pattern_color, pattern) = read_border_fill(&text);
         let (p_line, p_width, p_border, p_fill, p_pattern_color, p_pattern) =
             read_border_fill(&para);
+        let at = |key: &str, l: usize| text.get(key).and_then(|a| a.get(l)).and_then(Value::as_f64);
+        let languages = (0..7)
+            .map(|l| CharStyle {
+                font: text
+                    .get("fontFamilies")
+                    .and_then(|a| a.get(l))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                ratio: at("ratios", l),
+                spacing: at("spacings", l),
+                relative_size: at("relativeSizes", l),
+                offset: at("charOffsets", l),
+                ..Default::default()
+            })
+            .collect();
         Ok(Format {
             style,
+            languages,
             text_box: super::commands::in_text_box(self.core.document(), t),
             text: CharStyle {
+                language: None,
                 font: Some(font),
                 size: text
                     .get("fontSize")

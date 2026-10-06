@@ -152,16 +152,26 @@ struct BorderFillGroups<Style: BorderFillStyle, Extra: View>: View {
 /// attributes, colors) and 확장 (밑줄, 취소선, 테두리, 배경). Only changed attributes apply.
 struct CharShapeSheet: View {
     let original: CharStyle
+    /// Each 언어's own font and scales, as they were.
+    let languages: [CharStyle]
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var style: CharStyle
+    @State private var edited: [CharStyle]
+    /// The 언어 the font and scales show: nil for 대표, else an index into `languages`.
+    @State private var language: Int?
     @State private var tab: String
 
-    init(style: CharStyle, viewer: Viewer, tab: String = "기본") {
+    /// 언어별 설정's choices, in the web editor's order.
+    static let languageNames = ["한글", "영문", "한자", "일어", "외국어", "기호", "사용자"]
+
+    init(style: CharStyle, languages: [CharStyle], viewer: Viewer, tab: String = "기본") {
         original = style
+        self.languages = languages
         _tab = State(initialValue: tab)
         self.viewer = viewer
         _style = State(initialValue: style)
+        _edited = State(initialValue: languages)
     }
 
     var body: some View {
@@ -173,6 +183,13 @@ struct CharShapeSheet: View {
             .frame(width: 520, height: 330)
         } confirm: {
             viewer.applyCharShape(style.changesWithBorderFill(from: original))
+            // Then each 언어 set apart from 대표.
+            for (index, (now, was)) in zip(edited, languages).enumerated() {
+                var change = now.changes(from: was)
+                guard change != CharStyle() else { continue }
+                change.language = index
+                viewer.applyCharShape(change)
+            }
             dismiss()
         }
     }
@@ -184,21 +201,22 @@ struct CharShapeSheet: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     FieldLabel("언어")
-                    ChoiceField(.constant(0), [(0, "대표")], minWidth: 90)
+                    ChoiceField(Binding { language ?? -1 } set: { language = $0 < 0 ? nil : $0 },
+                                [(-1, "대표")] + Self.languageNames.enumerated().map { ($0.offset, $0.element) }, minWidth: 90)
                     FieldLabel("글꼴")
-                    ChoiceField(value(\.font, ""), fonts, minWidth: 110)
+                    ChoiceField(lingual(\.font, ""), fonts, minWidth: 110)
                 }
                 GridRow {
                     FieldLabel("상대 크기")
-                    SpinField(value: value(\.relativeSize, 100), unit: "%", range: 10...250)
+                    SpinField(value: lingual(\.relativeSize, 100), unit: "%", range: 10...250)
                     FieldLabel("장평")
-                    SpinField(value: value(\.ratio, 100), unit: "%", range: 50...200)
+                    SpinField(value: lingual(\.ratio, 100), unit: "%", range: 50...200)
                 }
                 GridRow {
                     FieldLabel("글자 위치")
-                    SpinField(value: value(\.offset, 0), unit: "%", range: -100...100)
+                    SpinField(value: lingual(\.offset, 0), unit: "%", range: -100...100)
                     FieldLabel("자간")
-                    SpinField(value: value(\.spacing, 0), unit: "%", range: -50...50)
+                    SpinField(value: lingual(\.spacing, 0), unit: "%", range: -50...50)
                 }
             }
             .padding(.leading, 12)
@@ -297,6 +315,11 @@ struct CharShapeSheet: View {
     }
     private func value<T>(_ key: WritableKeyPath<CharStyle, T?>, _ fallback: T) -> Binding<T> {
         Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
+    }
+    /// A value of the chosen 언어, or of 대표.
+    private func lingual<T>(_ key: WritableKeyPath<CharStyle, T?>, _ fallback: T) -> Binding<T> {
+        guard let language, edited.indices.contains(language) else { return value(key, fallback) }
+        return Binding { edited[language][keyPath: key] ?? fallback } set: { edited[language][keyPath: key] = $0 }
     }
     /// Installed families, and the document's font when it isn't installed.
     private var fonts: [(value: String, title: String)] {

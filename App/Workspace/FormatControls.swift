@@ -70,6 +70,8 @@ enum FormatChoices {
 struct FormatRow: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
+    /// The 언어 the font box shows and changes; nil for 대표 (all of them).
+    @State private var language: Int?
 
     var body: some View {
         let text = document.format?.text, paragraph = document.format?.paragraph, context = document.context
@@ -85,8 +87,19 @@ struct FormatRow: View {
                         .lineLimit(1).frame(width: 84, alignment: .leading)
                 }
                 .disabled(context.aside)
-                FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(text?.font, editor) }) {
-                    Text(text?.font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
+                FieldBox(title: "언어", opensWhenClicked: true, choices: {
+                    ([nil] + CharShapeSheet.languageNames.indices.map { $0 }).map { index in
+                        Choice(title: index.map { CharShapeSheet.languageNames[$0] } ?? "대표", on: index == language) {
+                            language = index
+                        }
+                    }
+                }) {
+                    Text(language.map { CharShapeSheet.languageNames[$0] } ?? "대표").lineLimit(1).frame(width: 44, alignment: .leading)
+                }
+                let languages = document.format?.languages ?? []
+                let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
+                FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(font, language, editor) }) {
+                    Text(font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
                 }
                 SizeField(size: text?.size, editor: editor)
                 RowDivider()
@@ -157,9 +170,11 @@ struct FormatRow: View {
             }
         }
     }
-    private static func fonts(_ current: String?, _ editor: PageEditor) -> [Choice?] {
+    private static func fonts(_ current: String?, _ language: Int?, _ editor: PageEditor) -> [Choice?] {
         FormatChoices.families.map { font in
-            Choice(title: font.name, on: font.name == current || font.family == current) { editor.format(CharStyle(font: font.family)) }
+            Choice(title: font.name, on: font.name == current || font.family == current) {
+                editor.format(CharStyle(language: language, font: font.family))
+            }
         }
     }
 }

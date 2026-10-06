@@ -483,6 +483,9 @@ extension PartialFormat {
 
 /// Character format: as a query result every field is set; as a change, nil fields stay.
 struct CharStyle: PartialFormat {
+    /// As a change, the 언어 (0 한글, 1 영문, 2 한자, 3 일어, 4 외국어, 5 기호, 6 사용자) whose
+    /// font, 상대 크기, 장평, 글자 위치 and 자간 change; nil, all of them (대표).
+    var language: Int?
     var font: String?
     /// Points.
     var size: Double?
@@ -597,6 +600,8 @@ struct Navigation: Decodable, Sendable {
 /// Format at the caret, with the font names the renderer tries in order.
 struct Format: Decodable, Hashable, Sendable {
     var text: CharStyle
+    /// The font, 상대 크기, 장평, 글자 위치 and 자간 of each 언어, in `CharStyle.language` order.
+    var languages: [CharStyle]
     var paragraph: ParaStyle
     /// The paragraph's 스타일.
     var style: UInt32

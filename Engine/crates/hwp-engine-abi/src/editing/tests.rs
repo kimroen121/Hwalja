@@ -3770,3 +3770,55 @@ fn line_ends_move_one_at_a_time() {
     };
     assert!(s.validate_command(&away).is_err());
 }
+
+#[test]
+fn each_language_keeps_its_own_font_and_scale() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, all, "한글 Latin").unwrap();
+    let whole = EditSelection {
+        anchor: point(body(), 0),
+        focus: point(body(), 8),
+    };
+    let format = |s: &mut EditSession, style: CharStyle| {
+        let command = EditCommand::FormatText {
+            selection: whole.clone(),
+            style,
+        };
+        run(s, command).unwrap();
+        s.format(s.revision, &point(body(), 4)).unwrap().languages
+    };
+    let before = s.format(s.revision, &point(body(), 4)).unwrap().languages;
+    // 영문 only.
+    let latin = format(
+        &mut s,
+        CharStyle {
+            language: Some(1),
+            font: Some("Arial".into()),
+            ratio: Some(80.0),
+            ..Default::default()
+        },
+    );
+    assert_eq!(latin[1].font.as_deref(), Some("Arial"));
+    assert_eq!(latin[1].ratio, Some(80.0));
+    assert_eq!(latin[0], before[0]);
+    // 대표: every 언어.
+    let all = format(
+        &mut s,
+        CharStyle {
+            font: Some("돋움".into()),
+            ..Default::default()
+        },
+    );
+    assert!(
+        all.iter().all(|l| l.font.as_deref() == Some("돋움")),
+        "{all:?}"
+    );
+    assert_eq!(all[1].ratio, Some(80.0));
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let languages = reopened.format(0, &point(body(), 4)).unwrap().languages;
+        assert_eq!(languages[1].ratio, Some(80.0), "{format:?}");
+        assert_eq!(languages[1].font.as_deref(), Some("돋움"), "{format:?}");
+    }
+}

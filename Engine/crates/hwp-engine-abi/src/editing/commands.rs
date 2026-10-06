@@ -978,7 +978,7 @@ impl EditSession {
             }
             EditCommand::FormatText { selection, style } => {
                 let (start, end) = ordered(selection);
-                let props = self.char_props(style);
+                let (props, languages) = self.char_props(style);
                 for i in index(&start.target)..=index(&end.target) {
                     let target = at_index(&start.target, i);
                     let from = if i == index(&start.target) {
@@ -992,7 +992,7 @@ impl EditSession {
                         self.length(&target)?
                     };
                     if to > from {
-                        self.format_text(&target, from, to, &props)?;
+                        self.format_text(&target, from, to, &props, &languages)?;
                     }
                 }
                 Ok(selection.clone())

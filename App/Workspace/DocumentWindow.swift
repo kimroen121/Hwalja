@@ -58,7 +58,7 @@ struct DocumentWindow: View {
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
         .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingCharShape) {
-            CharShapeSheet(style: document.format?.text ?? CharStyle(), viewer: viewer)
+            CharShapeSheet(style: document.format?.text ?? CharStyle(), languages: document.format?.languages ?? [], viewer: viewer)
         }
         .sheet(isPresented: $viewer.editingParaShape) {
             ParaShapeSheet(style: document.format?.paragraph ?? ParaStyle(), viewer: viewer)
