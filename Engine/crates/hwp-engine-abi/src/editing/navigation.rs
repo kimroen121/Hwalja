@@ -70,6 +70,7 @@ impl EditSession {
         let at = |i: usize, scalar: u32| EditPosition {
             target: at_index(&from.target, i),
             scalar,
+            upstream: false,
         };
         let length = |i: usize| -> Result<u32, EditError> {
             Ok(logical::length(get(doc, &at_index(&from.target, i))?))
@@ -154,38 +155,29 @@ impl EditSession {
                 goal = Some(x);
                 moved
             }
-            Motion::LineStart | Motion::LineEnd if self.has_stops(&from.target) => {
-                let stops = self.paragraph_stops(&from.target);
-                let (first, last) = stops
-                    .as_ref()
-                    .and_then(|stops| stops::line(stops, s))
-                    .unwrap_or((s, s));
-                at(
-                    i,
-                    if motion == Motion::LineStart {
-                        first
-                    } else {
-                        last
-                    },
-                )
-            }
             Motion::LineStart | Motion::LineEnd => {
-                let line = self.line(from)?;
-                let field = |key| line.get(key).and_then(Value::as_u64).unwrap_or(0) as u32;
-                let (start, end) = (field("charStart"), field("charEnd").min(len));
-                let last = field("lineIndex") + 1 >= field("lineCount");
-                let scalar = match motion {
-                    Motion::LineStart => start,
-                    // A wrapped line's end offset is where the next line starts; stop
-                    // before the character the line wrapped after.
-                    _ if last => end,
-                    _ => grapheme_stops(text)
-                        .into_iter()
-                        .rev()
-                        .find(|&b| b < end && b >= start)
-                        .unwrap_or(start),
+                // At a wrapped line's end the caret is on the line of the position before.
+                let here = if from.upstream {
+                    s.saturating_sub(1)
+                } else {
+                    s
                 };
-                at(i, scalar)
+                let drawn = self.drawn_stops(&from.target);
+                let line = drawn.as_ref().and_then(|stops| {
+                    let (first, last) = stops::line(stops, here)?;
+                    Some((first, last, stops.range(last + 1..).next().map(|(&k, _)| k)))
+                });
+                match (motion, line) {
+                    (Motion::LineStart, Some((first, _, _))) => at(i, first),
+                    // A wrapped line ends where the next starts; the caret stays on it.
+                    (_, Some((_, _, Some(next)))) => EditPosition {
+                        upstream: true,
+                        ..at(i, next)
+                    },
+                    (_, Some((_, last, None))) => at(i, last),
+                    (Motion::LineStart, None) => at(i, 0),
+                    (_, None) => at(i, len),
+                }
             }
             Motion::Up | Motion::Down => {
                 let (moved, x) = self.vertical(from, motion == Motion::Down, goal_x)?;
@@ -231,6 +223,7 @@ impl EditSession {
                             }),
                         },
                         scalar: 0,
+                        upstream: false,
                     },
                     _ => from.clone(),
                 }
@@ -269,6 +262,7 @@ impl EditSession {
             self.rhwp_caret(&EditPosition {
                 target: p.target.clone(),
                 scalar: *scalar,
+                upstream: false,
             })
             .is_ok_and(|caret| same_line(&caret))
         });
@@ -294,6 +288,7 @@ impl EditSession {
                 let position = EditPosition {
                     target: target.clone(),
                     scalar,
+                    upstream: false,
                 };
                 let Ok(caret) = self.rhwp_caret(&position) else {
                     continue;
@@ -326,26 +321,6 @@ impl EditSession {
         Ok((position, x))
     }
 
-    fn line(&self, p: &EditPosition) -> Result<Value, EditError> {
-        let t = &p.target;
-        let json = match &t.cell {
-            Some(c) => self.core.get_line_info_in_cell_native(
-                t.section as usize,
-                t.paragraph as usize,
-                c.control as usize,
-                c.cell as usize,
-                c.paragraph as usize,
-                p.scalar as usize,
-            ),
-            None => self.core.get_line_info_native(
-                t.section as usize,
-                t.paragraph as usize,
-                p.scalar as usize,
-            ),
-        };
-        serde_json::from_str(&json?).map_err(|_| EditError::RenderFailed)
-    }
-
     /// One line up or down, crossing paragraphs, pages and cell edges. Positions the editor
     /// cannot address (text boxes, nested tables) keep the caret where it is.
     fn vertical(
@@ -357,6 +332,16 @@ impl EditSession {
         // A paragraph with stops moves between its own lines, and leaves from its first
         // (or last) position, which rhwp's line queries place right.
         let mut from = p.clone();
+        // From a wrapped line's end, move from its last character, at the caret's column.
+        let mut goal_x = goal_x;
+        if p.upstream && p.scalar > 0 {
+            goal_x = goal_x.or(Some(self.caret(self.revision, p)?.x));
+            from = EditPosition {
+                scalar: p.scalar - 1,
+                upstream: false,
+                ..p.clone()
+            };
+        }
         if let Some(stops) = self.paragraph_stops(&p.target) {
             if let Some((first, last)) = stops::line(&stops, p.scalar) {
                 let x = goal_x.unwrap_or(stops[&p.scalar].x);
@@ -373,7 +358,14 @@ impl EditSession {
                         .map(|(k, _)| *k)
                         .ok_or(EditError::RenderFailed)?;
                     let target = p.target.clone();
-                    return Ok((EditPosition { target, scalar }, x));
+                    return Ok((
+                        EditPosition {
+                            target,
+                            scalar,
+                            upstream: false,
+                        },
+                        x,
+                    ));
                 }
                 from.scalar = if down {
                     logical::length(get(self.core.document(), &p.target)?)
@@ -388,7 +380,14 @@ impl EditSession {
             let line = self.rhwp_caret(&moved)?;
             if let Some(scalar) = stops::nearest(&stops, line.page, x, line.y + line.height / 2.0) {
                 let target = moved.target;
-                return Ok((EditPosition { target, scalar }, x));
+                return Ok((
+                    EditPosition {
+                        target,
+                        scalar,
+                        upstream: false,
+                    },
+                    x,
+                ));
             }
         }
         Ok((moved, x))
@@ -458,7 +457,11 @@ impl EditSession {
         let position = target
             .filter(|t| get(self.core.document(), t).is_ok())
             .zip(field("charOffset"))
-            .map(|(target, scalar)| EditPosition { target, scalar });
+            .map(|(target, scalar)| EditPosition {
+                target,
+                scalar,
+                upstream: false,
+            });
         Ok((position.unwrap_or_else(|| p.clone()), x))
     }
 
@@ -497,6 +500,7 @@ impl EditSession {
                 let at = |scalar| EditPosition {
                     target: target.clone(),
                     scalar,
+                    upstream: false,
                 };
                 Some(EditSelection {
                     anchor: at(logical::position(para, start, true)),
@@ -528,6 +532,7 @@ impl EditSession {
                     let page = self.rhwp_caret(&EditPosition {
                         target: target.clone(),
                         scalar: 0,
+                        upstream: false,
                     });
                     if let (Ok(caret), Some(hf)) = (page, &mut target.header_footer) {
                         hf.page = caret.page;
@@ -536,6 +541,7 @@ impl EditSession {
                         let at = |scalar| EditPosition {
                             target: target.clone(),
                             scalar,
+                            upstream: false,
                         };
                         results.push(EditSelection {
                             anchor: at(start),

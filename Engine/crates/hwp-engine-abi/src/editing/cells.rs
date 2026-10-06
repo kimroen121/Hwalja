@@ -162,6 +162,7 @@ impl EditSession {
                 ..t.clone()
             },
             scalar: 0,
+            upstream: false,
         }))
     }
     pub(super) fn validate_cells(&self, command: &EditCommand) -> Result<(), EditError> {

@@ -787,16 +787,32 @@ impl EditSession {
         let mut seen = std::collections::HashSet::new();
         'paragraphs: for (i, p) in all.iter().enumerate().take(e + 1).skip(s) {
             let len = p.text.chars().count();
-            let from = if i == s { logical::spot(p, start.scalar).text } else { 0 };
-            let to = if i == e { logical::spot(p, end.scalar).text } else { len };
+            let from = if i == s {
+                logical::spot(p, start.scalar).text
+            } else {
+                0
+            };
+            let to = if i == e {
+                logical::spot(p, end.scalar).text
+            } else {
+                len
+            };
             // A shape starts at a UTF-16 offset; `char_offsets` maps characters to them.
             let char_at = |unit: u32| match p.char_offsets.is_empty() {
                 true => (unit as usize).min(len),
-                false => p.char_offsets.iter().position(|&o| o >= unit).unwrap_or(len),
+                false => p
+                    .char_offsets
+                    .iter()
+                    .position(|&o| o >= unit)
+                    .unwrap_or(len),
             };
             for (k, run) in p.char_shapes.iter().enumerate() {
                 let first = char_at(run.start_pos).max(from);
-                let last = p.char_shapes.get(k + 1).map_or(len, |n| char_at(n.start_pos)).min(to);
+                let last = p
+                    .char_shapes
+                    .get(k + 1)
+                    .map_or(len, |n| char_at(n.start_pos))
+                    .min(to);
                 if first >= last || !seen.insert(run.char_shape_id) {
                     continue;
                 }

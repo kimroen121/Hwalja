@@ -32,7 +32,7 @@ impl Stop {
             height: self.height,
         }
     }
-    fn same_line(&self, other: &Stop) -> bool {
+    pub(super) fn same_line(&self, other: &Stop) -> bool {
         self.page == other.page && (self.y - other.y).abs() < 0.5
     }
 }
@@ -241,6 +241,20 @@ impl EditSession {
         cache.pages.insert(page, layout.clone());
         Some(layout)
     }
+    /// The right edge of the paragraph's text laid out on the line of caret `at`.
+    pub(super) fn line_right(&self, t: &EditTarget, at: &PageRect) -> Option<f64> {
+        let layout = self.layout(at.page)?;
+        layout
+            .runs
+            .iter()
+            .filter(|r| belongs(r, t))
+            .filter_map(|r| {
+                let (x, y, h) = (number(r, "x")?, number(r, "y")?, number(r, "h")?);
+                let end = r["charX"].as_array()?.last()?.as_f64()?;
+                (y < at.y + at.height && at.y < y + h).then_some(x + end)
+            })
+            .reduce(f64::max)
+    }
     /// Whether the paragraph at `t` has its own stops: an object in the line, in the body or a cell.
     pub(super) fn has_stops(&self, t: &EditTarget) -> bool {
         commands::body_or_cell(t).is_ok()
@@ -267,6 +281,12 @@ impl EditSession {
         if !self.has_stops(t) {
             return None;
         }
+        self.drawn_stops(t)
+    }
+    /// The stops of any paragraph of the body or a cell, as drawn: rhwp's line records
+    /// can disagree with the layout.
+    pub(super) fn drawn_stops(&self, t: &EditTarget) -> Option<Rc<Stops>> {
+        commands::body_or_cell(t).ok()?;
         if let Some(stops) = self.layouts().paragraphs.get(t) {
             return stops.clone();
         }
@@ -279,6 +299,7 @@ impl EditSession {
             .rhwp_caret(&EditPosition {
                 target: t.clone(),
                 scalar: 0,
+                upstream: false,
             })
             .ok()?
             .page;

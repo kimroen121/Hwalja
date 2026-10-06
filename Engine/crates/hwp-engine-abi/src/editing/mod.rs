@@ -252,6 +252,7 @@ impl EditSession {
                 Some(EditPosition {
                     target: cell.clone(),
                     scalar: 0,
+                    upstream: false,
                 })
             }
             EditCommand::SetObject { object, .. }
@@ -270,6 +271,7 @@ impl EditSession {
                     header_footer: None,
                 },
                 scalar: 0,
+                upstream: false,
             }),
             EditCommand::SetPage { .. }
             | EditCommand::SetColumns { .. }

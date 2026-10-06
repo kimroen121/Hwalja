@@ -126,6 +126,10 @@ impl EditSession {
         let scalar = logical::length(get(self.core.document(), &target)?)
             .checked_sub(rest)
             .ok_or(EditError::RenderFailed)?;
-        Ok(EditSelection::caret(EditPosition { target, scalar }))
+        Ok(EditSelection::caret(EditPosition {
+            target,
+            scalar,
+            upstream: false,
+        }))
     }
 }

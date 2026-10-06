@@ -39,6 +39,25 @@ struct EditTarget: Codable, Hashable, Sendable {
 struct EditPosition: Codable, Hashable, Sendable {
     var target: EditTarget
     var scalar: UInt32
+    /// At the end of a wrapped line rather than the start of the next, the same scalar.
+    var upstream = false
+
+    private enum CodingKeys: String, CodingKey { case target, scalar, upstream }
+    init(target: EditTarget, scalar: UInt32, upstream: Bool = false) {
+        (self.target, self.scalar, self.upstream) = (target, scalar, upstream)
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = try c.decode(EditTarget.self, forKey: .target)
+        scalar = try c.decode(UInt32.self, forKey: .scalar)
+        upstream = try c.decodeIfPresent(Bool.self, forKey: .upstream) ?? false
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(target, forKey: .target)
+        try c.encode(scalar, forKey: .scalar)
+        if upstream { try c.encode(upstream, forKey: .upstream) }
+    }
 }
 
 struct EditSelection: Codable, Hashable, Sendable {

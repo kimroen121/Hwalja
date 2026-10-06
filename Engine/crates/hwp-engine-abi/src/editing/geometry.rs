@@ -86,6 +86,7 @@ impl EditSession {
         let rhwp = EditPosition {
             target,
             scalar: field(&hit, "charOffset")?,
+            upstream: false,
         };
         // A line of objects alone is the objects' paragraph, wherever rhwp's answer went.
         let target = match self.object_line(page, x, y) {
@@ -103,7 +104,38 @@ impl EditSession {
             Some(stops) => stops::nearest(&stops, page, x, y).ok_or(EditError::RenderFailed)?,
             None => rhwp.scalar,
         };
-        Ok(EditPosition { target, scalar })
+        Ok(self.wrap_end(
+            EditPosition {
+                target,
+                scalar,
+                upstream: false,
+            },
+            page,
+            x,
+            y,
+        ))
+    }
+    /// A point on a wrapped line past the middle of its last character is at the line's end.
+    fn wrap_end(&self, p: EditPosition, page: u32, x: f64, y: f64) -> EditPosition {
+        let Some(stops) = self.drawn_stops(&p.target) else {
+            return p;
+        };
+        for k in [p.scalar, p.scalar + 1] {
+            let (Some(next), Some((_, last))) = (stops.get(&k), stops.range(..k).next_back())
+            else {
+                continue;
+            };
+            let on_line = last.page == page && (last.y..=last.y + last.height).contains(&y);
+            let right = self.line_right(&p.target, &last.rect()).unwrap_or(last.x);
+            if !last.same_line(next) && on_line && x > (last.x + right) / 2.0 {
+                return EditPosition {
+                    scalar: k,
+                    upstream: true,
+                    ..p
+                };
+            }
+        }
+        p
     }
     /// A position in the 머리말 or 꼬리말 shown on `page`, when the point is on its text.
     fn hit_test_header_footer(
@@ -146,6 +178,7 @@ impl EditSession {
             return Ok(Some(EditPosition {
                 target,
                 scalar: field(&hit, "charOffset")?,
+                upstream: false,
             }));
         }
         Ok(None)
@@ -185,6 +218,7 @@ impl EditSession {
         Ok(Some(EditPosition {
             target,
             scalar: field(&hit, "charOffset")?,
+            upstream: false,
         }))
     }
     /// Where the 각주 holding `t` is listed on `page`.
@@ -207,11 +241,21 @@ impl EditSession {
     /// Caret rectangle (96 dpi, top-left origin) for a position at the current revision.
     pub fn caret(&self, revision: u64, p: &EditPosition) -> Result<PageRect, EditError> {
         self.check_revision(revision)?;
-        if let Some(stop) = self
-            .paragraph_stops(&p.target)
-            .and_then(|stops| stops.get(&p.scalar).copied())
-        {
-            return Ok(stop.rect());
+        let drawn = self.drawn_stops(&p.target);
+        if let Some(stops) = &drawn {
+            // At a wrapped line's end: after the last character of the line before.
+            if p.upstream {
+                if let Some((_, before)) = stops.range(..p.scalar).next_back() {
+                    let line = before.rect();
+                    return Ok(PageRect {
+                        x: self.line_right(&p.target, &line).unwrap_or(line.x),
+                        ..line
+                    });
+                }
+            }
+            if let Some(stop) = stops.get(&p.scalar) {
+                return Ok(stop.rect());
+            }
         }
         self.rhwp_caret(p)
     }
@@ -365,6 +409,7 @@ impl EditSession {
                     let at = |scalar| EditPosition {
                         target: target.clone(),
                         scalar,
+                        upstream: false,
                     };
                     rects.extend(self.selection_rects(
                         revision,

@@ -358,6 +358,7 @@ impl EditSession {
                 self.validate_position(&EditPosition {
                     target: at_index(&position.target, index(&position.target) - 1),
                     scalar: 0,
+                    upstream: false,
                 })
             }
             EditCommand::FormatText { selection, style } => {
@@ -489,7 +490,9 @@ impl EditSession {
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
-                if (object.cell.is_some() && object.kind == ObjectKind::Table) || object.note.is_some() {
+                if (object.cell.is_some() && object.kind == ObjectKind::Table)
+                    || object.note.is_some()
+                {
                     return Err(EditError::UnsupportedTarget);
                 }
                 self.validate_object(object, &ObjectProps::default())
@@ -544,6 +547,7 @@ impl EditSession {
                     header_footer: None,
                 },
                 scalar: 0,
+                upstream: false,
             })
         })
     }
@@ -704,6 +708,7 @@ impl EditSession {
             return Ok(EditPosition {
                 target: p.target.clone(),
                 scalar: p.scalar + 1,
+                upstream: false,
             });
         }
         let after = self.transplant(&host, control, p)?;
@@ -777,6 +782,7 @@ impl EditSession {
                     &EditPosition {
                         target: next.clone(),
                         scalar: 0,
+                        upstream: false,
                     },
                     count,
                 )?;
@@ -895,6 +901,7 @@ impl EditSession {
         Ok(EditPosition {
             target: at_index(t, index(t) + 1),
             scalar: 0,
+            upstream: false,
         })
     }
     /// Runs a validated command and returns the selection that follows it.
@@ -949,6 +956,7 @@ impl EditSession {
                     return Ok(EditSelection::caret(EditPosition {
                         target: at_index(&start.target, paragraph as usize),
                         scalar,
+                        upstream: false,
                     }));
                 }
                 self.delete_range(start, end)?;
@@ -974,6 +982,7 @@ impl EditSession {
                 Ok(EditSelection::caret(EditPosition {
                     target: previous,
                     scalar,
+                    upstream: false,
                 }))
             }
             EditCommand::FormatText { selection, style } => {
@@ -1031,6 +1040,7 @@ impl EditSession {
                 Ok(EditSelection::caret(EditPosition {
                     target: at_index(t, index(t) + 1),
                     scalar: 0,
+                    upstream: false,
                 }))
             }
             EditCommand::InsertTable {
@@ -1067,6 +1077,7 @@ impl EditSession {
                         header_footer: None,
                     },
                     scalar: 0,
+                    upstream: false,
                 }))
             }
             EditCommand::InsertPicture {
@@ -1146,7 +1157,11 @@ impl EditSession {
                 };
                 // After the number and the space that follows it.
                 let scalar = self.length(&target)?;
-                Ok(EditSelection::caret(EditPosition { target, scalar }))
+                Ok(EditSelection::caret(EditPosition {
+                    target,
+                    scalar,
+                    upstream: false,
+                }))
             }
             EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
             EditCommand::SetPage { section, page } => {
@@ -1255,6 +1270,7 @@ impl EditSession {
                         header_footer: None,
                     },
                     scalar: 0,
+                    upstream: false,
                 }))
             }
             EditCommand::Order { object, order } => {

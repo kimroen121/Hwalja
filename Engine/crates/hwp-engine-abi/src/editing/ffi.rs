@@ -187,9 +187,10 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             revision,
             position,
             from,
-        } => {
-            HwpEditResult::ok(session.format(revision, &position, from.as_ref())?, Vec::new())
-        }
+        } => HwpEditResult::ok(
+            session.format(revision, &position, from.as_ref())?,
+            Vec::new(),
+        ),
         Request::ObjectAt {
             revision,
             page,

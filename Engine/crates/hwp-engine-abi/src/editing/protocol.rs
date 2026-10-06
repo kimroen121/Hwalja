@@ -44,6 +44,9 @@ pub struct EditTarget {
 pub struct EditPosition {
     pub target: EditTarget,
     pub scalar: u32,
+    /// At the end of a wrapped line rather than the start of the next, the same scalar.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub upstream: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
