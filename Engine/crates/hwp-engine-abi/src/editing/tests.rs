@@ -392,6 +392,58 @@ fn header_footer_replace_spans_paragraphs_and_failed_edits_roll_back() {
     );
     assert_eq!((s.paragraph(&first).unwrap().text, s.revision), (before, revision));
 }
+
+#[test]
+fn header_footer_text_and_format_round_trip_hwp_and_hwpx() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut prepared = EditSession::blank().unwrap();
+        run(
+            &mut prepared,
+            EditCommand::HeaderFooter {
+                section: 0,
+                footer: false,
+                page_number: Some(Placement::Center),
+            },
+        )
+        .unwrap();
+        prepared.core.create_header_footer_native(0, true, 1).unwrap();
+        prepared.core.insert_text_in_header_footer_native(0, true, 1, 0, 0, "짝수 e\u{301}")
+            .unwrap();
+        prepared.core.create_header_footer_native(0, false, 2).unwrap();
+        prepared.core.insert_text_in_header_footer_native(0, false, 2, 0, 0, "홀수 👋")
+            .unwrap();
+        let source = prepared.export(format).unwrap();
+        let mut s = EditSession::open(&source).unwrap();
+        let even = header_footer_target(false, 1, 0);
+        replace(&mut s, even.clone(), 0, 2, "교정").unwrap();
+        run(
+            &mut s,
+            EditCommand::FormatParagraphs {
+                selection: EditSelection::caret(point(even.clone(), 0)),
+                style: ParaStyle {
+                    alignment: Some(Alignment::Center),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        let bytes = s.export(format).unwrap();
+        let reopened = EditSession::open(&bytes).unwrap();
+        assert_eq!(reopened.paragraph(&even).unwrap().text, "교정 e\u{301}");
+        assert_eq!(
+            reopened.format(0, &point(even, 1)).unwrap().paragraph.alignment,
+            Some(Alignment::Center)
+        );
+        assert!(reopened.core.render_page_svg_native(0).unwrap().contains(">1<"));
+        assert_eq!(
+            reopened
+                .paragraph(&header_footer_target(true, 2, 0))
+                .unwrap()
+                .text,
+            "홀수 👋"
+        );
+    }
+}
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
     EditPosition { target, scalar }
 }
