@@ -654,7 +654,7 @@ index c455a55..aa4e690 100644
              composed,
              &rebuild_input,
 diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
-index 4b1109c..5efc290 100644
+index 4b1109c..4472819 100644
 --- a/src/renderer/composer/line_breaking.rs
 +++ b/src/renderer/composer/line_breaking.rs
 @@ -2481,6 +2481,39 @@ fn apply_inline_control_line_height(seg: &mut LineSeg, height_hwp: i32) {
@@ -697,7 +697,7 @@ index 4b1109c..5efc290 100644
  fn apply_inline_control_frame_height(metrics: &mut FrameRowMetrics, height_hwp: i32) {
      if height_hwp > metrics.line_height {
          metrics.line_height = height_hwp;
-@@ -3469,30 +3502,36 @@ fn reflow_line_segs_impl(
+@@ -3469,30 +3502,38 @@ fn reflow_line_segs_impl(
                  }
                  Some((start, ctrl))
              })
@@ -725,10 +725,12 @@ index 4b1109c..5efc290 100644
                  }
                  line_width += ctrl_width;
 -                line_height = line_height.max(ctrl_height);
++                // A picture stands on the baseline like a character, its bottom on it.
 +                let baseline = match ctrl {
 +                    Control::Equation(equation) if equation.baseline > 0 => {
 +                        Some(ctrl_height.saturating_mul(i32::from(equation.baseline)) / 100)
 +                    }
++                    Control::Picture(_) => Some(ctrl_height),
 +                    _ => None,
 +                };
 +                line_objects.push((ctrl_height, baseline));
@@ -743,7 +745,7 @@ index 4b1109c..5efc290 100644
                  line_specs.into_iter().enumerate()
              {
                  let mut seg = make_line_seg(start_pos, 0.0);
-@@ -3512,7 +3551,9 @@ fn reflow_line_segs_impl(
+@@ -3512,7 +3553,9 @@ fn reflow_line_segs_impl(
                          seg.tag
                      };
                  }
@@ -754,7 +756,7 @@ index 4b1109c..5efc290 100644
                  new_line_segs.push(seg);
              }
  
-@@ -3535,8 +3576,8 @@ fn reflow_line_segs_impl(
+@@ -3535,8 +3578,8 @@ fn reflow_line_segs_impl(
              if let Some(template) = orig.as_ref() {
                  seg.vertical_pos = template.vertical_pos;
              }
@@ -765,7 +767,7 @@ index 4b1109c..5efc290 100644
              }
              para.replace_line_segs(vec![seg]);
          }
-@@ -3754,16 +3795,15 @@ fn reflow_line_segs_impl(
+@@ -3754,16 +3797,15 @@ fn reflow_line_segs_impl(
              let (_, height_hwp) = forced_inline_line.expect("checked inline control");
              apply_inline_control_line_height(&mut text_seg, height_hwp);
          }
@@ -791,7 +793,7 @@ index 4b1109c..5efc290 100644
          }
          new_line_segs.push(text_seg);
  
-@@ -3788,10 +3828,37 @@ fn reflow_line_segs_impl(
+@@ -3788,10 +3830,37 @@ fn reflow_line_segs_impl(
      }
  
      if forced_inline_line.is_none() && inline_controls.is_empty() {
@@ -1261,10 +1263,26 @@ index 0e273b2..82dd9b6 100644
          if ch == '-' && next == '>' {
              self.pos += 2;
 diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
-index 6f91926..91c6f1a 100644
+index 6f91926..2d89d75 100644
 --- a/src/renderer/layout/paragraph_layout.rs
 +++ b/src/renderer/layout/paragraph_layout.rs
-@@ -3278,7 +3278,9 @@ impl LayoutEngine {
+@@ -936,11 +936,14 @@ fn tac_offsets_for_line(
+     };
+     let start = line.char_start;
+     let end = composed_line_char_end(comp, line_idx);
++    // HwpStudio: 글자 없는 문단의 마지막 빈 줄은 그 뒤 개체를 모두 담는다 — 글자가 없으면
++    // 개체 위치가 0, 1, 2… 로 이어 매겨져 `pos == start` 인 첫 개체만 남았다.
++    let last_empty_line = line.runs.is_empty() && comp.lines.get(line_idx + 1).is_none();
+     tac_offsets_px
+         .iter()
+         .copied()
+         .filter(|(pos, _, _)| {
+-            char_pos_in_line(*pos, start, end)
++            (char_pos_in_line(*pos, start, end) || (last_empty_line && *pos >= start))
+                 // [#5727] 앞선 빈 줄(개체 자기 줄)이 소유한 경계 TAC 는 제외
+                 && !tac_owned_by_prior_empty_line(comp, line_idx, *pos)
+         })
+@@ -3278,7 +3281,9 @@ impl LayoutEngine {
          // (3252633 국가유산수리 감리대가 기준 2·3쪽: 저장 cs=0 sw=48188 인데 수식 x=75.6 =
          // 본문 좌측, 가운데라면 269.6). `column_start > 0` 인 줄은 한컴이 흐름 x 를 적어 둔
          // 경우이므로 #1256/#1308 계약대로 그 값을 존중한다.
@@ -1275,7 +1293,7 @@ index 6f91926..91c6f1a 100644
              match alignment {
                  Alignment::Center | Alignment::Distribute => {
                      (available_width - line_tac_width).max(0.0) / 2.0
-@@ -3939,8 +3941,57 @@ impl LayoutEngine {
+@@ -3939,8 +3944,57 @@ impl LayoutEngine {
          // 올라가, 테두리가 글자를 가로지른다(3143955 제목: 줄 상자 아래 171.6px, 전진 y
          // 162.0px, 실제로 그려진 선 159.7/163.7).
          let mut last_line_box_bottom: Option<f64> = None;
@@ -1333,7 +1351,7 @@ index 6f91926..91c6f1a 100644
              let mut current_line_reserved_tac_picture_height: Option<f64> = None;
              let mut endnote_used_auto_wrap_y = false;
              // [#6545] 감긴 첫 걸음을 지난 지점에서 기준을 늦게 잡는다 — 이 줄의 흐름 y 가
-@@ -5693,7 +5744,9 @@ impl LayoutEngine {
+@@ -5693,7 +5747,9 @@ impl LayoutEngine {
              y += spacing_after;
          }
  
@@ -1344,6 +1362,30 @@ index 6f91926..91c6f1a 100644
      }
  
      /// [#2003 추출] 줄의 run 방출 루프 — TextRun/글리프/탭/밑줄/인라인 개체 방출.
+diff --git a/src/renderer/layout/shape_layout.rs b/src/renderer/layout/shape_layout.rs
+index f2bbec4..5ba58fc 100644
+--- a/src/renderer/layout/shape_layout.rs
++++ b/src/renderer/layout/shape_layout.rs
+@@ -672,6 +672,19 @@ impl LayoutEngine {
+             if inline_pos.is_some() {
+                 return;
+             }
++            // HwpStudio: 쪽을 넘는 문단의 글자처럼 취급 수식은 자기 줄이 있는 쪽에서만
++            // 그린다. 이 쪽에서 같은 문단의 다른 개체만 줄에 놓였다면 이 수식의 줄은
++            // 다른 쪽에 있다.
++            if eq.common.treat_as_char
++                && (0..para.controls.len()).any(|other| {
++                    other != control_index
++                        && tree
++                            .get_inline_shape_position(section_index, para_index, other, None)
++                            .is_some()
++                })
++            {
++                return;
++            }
+ 
+             // 인라인 좌표 없으면 기존 방식 (정렬 기반 단독 배치)
+             let eq_w = hwpunit_to_px(eq.common.width as i32, self.dpi);
 diff --git a/src/renderer/layout/table_layout.rs b/src/renderer/layout/table_layout.rs
 index 775b47e..29a6351 100644
 --- a/src/renderer/layout/table_layout.rs
