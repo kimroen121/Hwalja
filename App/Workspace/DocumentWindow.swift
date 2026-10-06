@@ -71,8 +71,26 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
             if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
         }
+        .background(ClearTitleBar())
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
+    }
+}
+
+/// Makes the title bar clear and drops its line, so the window's color runs on from it into
+/// the tool box.
+private struct ClearTitleBar: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Watcher() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Watcher: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
+        }
     }
 }
 
