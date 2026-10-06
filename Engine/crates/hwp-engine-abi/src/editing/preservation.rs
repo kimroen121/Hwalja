@@ -200,7 +200,8 @@ pub(super) fn check(
         EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
         EditCommand::MergeCells { selection }
         | EditCommand::SplitCells { selection, .. }
-        | EditCommand::EqualizeCells { selection, .. } => {
+        | EditCommand::EqualizeCells { selection, .. }
+        | EditCommand::CalculateBlock { selection, .. } => {
             return check_table(before, after, &selection.anchor.target)
         }
         EditCommand::InsertNote { position, .. } => {

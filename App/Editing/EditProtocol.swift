@@ -74,6 +74,8 @@ enum EditCommand: Encodable, Sendable {
     case deleteObject(ObjectRef)
     /// 순서: a drawing object of the body among the section's drawing objects.
     case order(ObjectRef, Order)
+    /// 블록 합계, 블록 평균 or 블록 곱 over the block `selection` covers.
+    case calculateBlock(EditSelection, BlockFunction)
     /// 개체 풀기.
     case ungroup(ObjectRef)
     /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
@@ -98,7 +100,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -205,6 +207,10 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .calculateBlock(selection, function):
+            try c.encode("calculateBlock", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(function, forKey: .function)
         case let .ungroup(object):
             try c.encode("ungroup", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -230,6 +236,10 @@ enum EditCommand: Encodable, Sendable {
 
 enum Placement: String, Encodable, Sendable {
     case left, center, right
+}
+
+enum BlockFunction: String, Encodable, Sendable {
+    case sum, average, product
 }
 
 /// 맨 앞으로, 앞으로, 맨 뒤로, 뒤로.

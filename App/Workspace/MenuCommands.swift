@@ -88,6 +88,10 @@ struct MenuItems {
         }
     }
 
+    static let blockFunctions: [(title: String, function: BlockFunction)] = [
+        ("블록 합계", .sum), ("블록 평균", .average), ("블록 곱", .product),
+    ]
+
     /// 빠른 메뉴 (right click), in Hancom Office Web's order and names, for what the
     /// selection is: text, an object, or cells.
     static func quickMenu(_ viewer: Viewer, _ context: EditingContext) -> [Choice?] {
@@ -138,6 +142,9 @@ struct MenuItems {
                 Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block) {
                     viewer.editCells { .mergeCells($0) }
                 },
+                Choice(title: "블록 계산식", enabled: block, submenu: blockFunctions.map { function in
+                    Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
+                }),
                 Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
                 Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, submenu: [
                     Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
@@ -381,6 +388,11 @@ struct MenuItems {
             item("셀 합치기", Icon.mergeCells) { viewer?.editCells { .mergeCells($0) } }
             Button("셀 높이를 같게") { viewer?.editCells { .equalizeCells($0, height: true) } }
             Button("셀 너비를 같게") { viewer?.editCells { .equalizeCells($0, height: false) } }
+            Menu {
+                ForEach(Self.blockFunctions, id: \.title) { function in
+                    Button(function.title) { viewer?.editCells { .calculateBlock($0, function.function) } }
+                }
+            } label: { Text("블록 계산식") }
         }
         .disabled(!context.cellBlock)
     }

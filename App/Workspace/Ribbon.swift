@@ -195,6 +195,11 @@ struct ToolRow: View {
             ToolTile("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
             ToolTile("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
             ToolTile("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
+            ToolTile("블록 계산식", Icon.blockCalculation, choices: {
+                MenuItems.blockFunctions.map { function in
+                    Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
+                }
+            })
         }
         .disabled(!context.cellBlock)
     }
@@ -267,6 +272,7 @@ enum Icon {
     static let selectAll = "selection.pin.in.out", zoom = "plus.magnifyingglass", pageLayout = "rectangle.split.2x1"
     static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
+    static let blockCalculation = "sum"
     static func placement(_ placement: Placement?) -> String {
         switch placement {
         case nil: "rectangle"

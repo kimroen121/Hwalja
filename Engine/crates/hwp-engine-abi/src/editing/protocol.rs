@@ -207,6 +207,11 @@ pub enum EditCommand {
         selection: EditSelection,
         height: bool,
     },
+    /// 블록 합계, 블록 평균 or 블록 곱 over the block `selection` covers.
+    CalculateBlock {
+        selection: EditSelection,
+        function: BlockFunction,
+    },
     /// Paper and margins of one section.
     SetPage {
         section: u32,
@@ -229,6 +234,13 @@ pub enum Placement {
     Left,
     Center,
     Right,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BlockFunction {
+    Sum,
+    Average,
+    Product,
 }
 /// 맨 앞으로, 앞으로, 맨 뒤로, 뒤로.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

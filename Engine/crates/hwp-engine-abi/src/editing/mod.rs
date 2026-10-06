@@ -228,7 +228,8 @@ impl EditSession {
             }
             EditCommand::MergeCells { selection }
             | EditCommand::SplitCells { selection, .. }
-            | EditCommand::EqualizeCells { selection, .. } => Some(selection.anchor.clone()),
+            | EditCommand::EqualizeCells { selection, .. }
+            | EditCommand::CalculateBlock { selection, .. } => Some(selection.anchor.clone()),
             EditCommand::Split { position }
             | EditCommand::MergePrevious { position }
             | EditCommand::Break { position, .. }

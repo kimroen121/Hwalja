@@ -442,7 +442,8 @@ impl EditSession {
             EditCommand::SetObject { object, props } => self.validate_object(object, props),
             EditCommand::MergeCells { .. }
             | EditCommand::SplitCells { .. }
-            | EditCommand::EqualizeCells { .. } => self.validate_cells(command),
+            | EditCommand::EqualizeCells { .. }
+            | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
                 if object.cell.is_some() && object.kind == ObjectKind::Table {
@@ -1067,7 +1068,8 @@ impl EditSession {
             }
             EditCommand::MergeCells { .. }
             | EditCommand::SplitCells { .. }
-            | EditCommand::EqualizeCells { .. } => self.edit_cells(command),
+            | EditCommand::EqualizeCells { .. }
+            | EditCommand::CalculateBlock { .. } => self.edit_cells(command),
             EditCommand::SetObject { object, props } => {
                 self.set_object(object, props)?;
                 Ok(self.kept(object.section))

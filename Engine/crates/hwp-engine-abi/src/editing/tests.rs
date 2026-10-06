@@ -3329,3 +3329,51 @@ fn text_goes_into_drawing_objects_and_groups_come_apart() {
         assert_eq!(reopened.placed(0).unwrap().len(), 2, "{format:?}");
     }
 }
+
+#[test]
+fn block_calculations_fill_the_empty_cells_to_the_right_and_below() {
+    for (function, expected) in [
+        (BlockFunction::Sum, ["3", "7", "4", "6", "10"]),
+        (BlockFunction::Average, ["1.5", "3.5", "2", "3", "2.5"]),
+        (BlockFunction::Product, ["2", "12", "3", "8", "24"]),
+    ] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 3,
+            columns: 3,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let at = |s: &EditSession, row: u16, col: u16| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            let cell = t
+                .cells
+                .iter()
+                .position(|c| (c.row, c.col) == (row, col))
+                .unwrap();
+            let mut target = caret.target.clone();
+            target.cell.as_mut().unwrap().cell = cell as u32;
+            target
+        };
+        for (row, col, value) in [(0, 0, "1"), (0, 1, "2"), (1, 0, "3"), (1, 1, "4")] {
+            let cell = at(&s, row, col);
+            replace(&mut s, cell, 0, 0, value).unwrap();
+        }
+        let block = |s: &EditSession, to: (u16, u16)| EditCommand::CalculateBlock {
+            selection: EditSelection {
+                anchor: point(at(s, 0, 0), 0),
+                focus: point(at(s, to.0, to.1), 0),
+            },
+            function,
+        };
+        // Without an empty cell there is nowhere to write.
+        assert!(s.validate_command(&block(&s, (1, 1))).is_err());
+        let whole = block(&s, (2, 2));
+        run(&mut s, whole).unwrap();
+        let text = |s: &EditSession, row, col| s.paragraph(&at(s, row, col)).unwrap().text;
+        let cells = [(0, 2), (1, 2), (2, 0), (2, 1), (2, 2)];
+        let found: Vec<String> = cells.iter().map(|&(r, c)| text(&s, r, c)).collect();
+        assert_eq!(found, expected, "{function:?}");
+        assert_eq!(text(&s, 1, 1), "4");
+    }
+}

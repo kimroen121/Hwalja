@@ -179,6 +179,10 @@ impl EditSession {
                     && (1..=256).contains(columns)
                     && (*rows > 1 || *columns > 1 || *merge_first)
             }
+            EditCommand::CalculateBlock {
+                selection,
+                function,
+            } => !self.results(selection, *function)?.is_empty(),
             EditCommand::EqualizeCells { selection, height } => {
                 let b = self.block(selection)?;
                 if *height {
@@ -198,7 +202,8 @@ impl EditSession {
     pub(super) fn edit_cells(&mut self, command: &EditCommand) -> Result<EditSelection, EditError> {
         let (EditCommand::MergeCells { selection }
         | EditCommand::SplitCells { selection, .. }
-        | EditCommand::EqualizeCells { selection, .. }) = command
+        | EditCommand::EqualizeCells { selection, .. }
+        | EditCommand::CalculateBlock { selection, .. }) = command
         else {
             return Err(EditError::UnsupportedTarget);
         };
@@ -254,9 +259,68 @@ impl EditSession {
                 self.equalize(t, b, *height)?;
                 return Ok(selection.clone());
             }
+            EditCommand::CalculateBlock { function, .. } => {
+                for (row, col, formula) in self.results(selection, *function)? {
+                    self.core
+                        .evaluate_table_formula(s, p, control, row, col, &formula, true)?;
+                }
+                return Ok(selection.clone());
+            }
             _ => {}
         }
         self.caret_in_cell(t, r0, c0)
+    }
+    /// Where 블록 계산식 writes, as Hancom fills the empty cells to the right and below:
+    /// each empty cell of the block's last column takes the result over the rest of its
+    /// row, and each empty cell of its last row the result over the rest of its column
+    /// (the corner last, over the results above it).
+    fn results(
+        &self,
+        selection: &EditSelection,
+        function: BlockFunction,
+    ) -> Result<Vec<(usize, usize, String)>, EditError> {
+        let b = self.block(selection)?;
+        let table = commands::table(self.core.document(), &selection.anchor.target)
+            .ok_or(EditError::UnsupportedTarget)?;
+        let empty = |row: u16, col: u16| {
+            table.cells.iter().any(|c| {
+                (c.row, c.col) == (row, col)
+                    && c.paragraphs.iter().all(|p| p.text.trim().is_empty())
+            })
+        };
+        let name = match function {
+            BlockFunction::Sum => "SUM",
+            BlockFunction::Average => "AVG",
+            BlockFunction::Product => "PRODUCT",
+        };
+        let cell = |row: u16, col: u16| {
+            let mut letters = String::new();
+            let mut n = col as u32 + 1;
+            while n > 0 {
+                letters.insert(0, (b'A' + ((n - 1) % 26) as u8) as char);
+                n = (n - 1) / 26;
+            }
+            format!("{letters}{}", row + 1)
+        };
+        let ((r0, r1), (c0, c1)) = (b.rows, b.cols);
+        let mut results = Vec::new();
+        if c0 < c1 {
+            for row in r0..=r1 {
+                if empty(row, c1) && !(r0 < r1 && row == r1) {
+                    let range = format!("{}:{}", cell(row, c0), cell(row, c1 - 1));
+                    results.push((row as usize, c1 as usize, format!("{name}({range})")));
+                }
+            }
+        }
+        if r0 < r1 {
+            for col in c0..=c1 {
+                if empty(r1, col) {
+                    let range = format!("{}:{}", cell(r0, col), cell(r1 - 1, col));
+                    results.push((r1 as usize, col as usize, format!("{name}({range})")));
+                }
+            }
+        }
+        Ok(results)
     }
     /// 셀 높이를 같게 or 셀 너비를 같게: shares the block's total height (or width)
     /// evenly among its rows (or columns).
