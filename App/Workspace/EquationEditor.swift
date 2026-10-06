@@ -41,9 +41,10 @@ struct EquationItem: Hashable {
     let script: String
 }
 
-/// The palettes, in Hancom's order.
+/// The palettes, in the order of 한글's 수식 편집 tool rows.
 enum EquationPalette {
-    /// Each palette with the sample its button shows.
+    /// The first row: templates, each with the sample its button shows. A palette of one
+    /// item is a plain button.
     static let templates: [(face: String, items: [EquationItem])] = [
         ("{x}^{2}", [
             EquationItem(sample: "{x}^{2}", script: "{}^{}"),
@@ -53,14 +54,8 @@ enum EquationPalette {
         ("bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
             EquationItem(sample: "\($0) a", script: "\($0) {}")
         }),
-        ("{a} over {b}", [
-            EquationItem(sample: "{a} over {b}", script: "{} over {}"),
-            EquationItem(sample: "{a} atop {b}", script: "{} atop {}"),
-        ]),
-        ("sqrt {x}", [
-            EquationItem(sample: "sqrt {x}", script: "sqrt {}"),
-            EquationItem(sample: "root {n} of {x}", script: "root {} of {}"),
-        ]),
+        ("{a} over {b}", [EquationItem(sample: "{a} over {b}", script: "{} over {}")]),
+        ("sqrt {x}", [EquationItem(sample: "sqrt {x}", script: "sqrt {}")]),
         ("sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
             EquationItem(sample: "\($0) from {i} to {n}", script: "\($0) from {} to {}")
         }),
@@ -79,22 +74,23 @@ enum EquationPalette {
             EquationItem(sample: "left \($0.0) a right \($0.1)", script: "left \($0.0) {} right \($0.1)")
         }),
         ("cases{a # b}", [EquationItem(sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
-        ("pile{a # b}", ["pile", "lpile", "rpile"].map {
-            EquationItem(sample: "\($0){a # bb}", script: "\($0){ # }")
-        }),
+        ("pile{a # b}", [EquationItem(sample: "pile{a # bb}", script: "pile{ # }")]),
         ("matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
             EquationItem(sample: "\($0){a & b # c & d}", script: "\($0){ & # & }")
         }),
     ]
+    /// 칸 맞춤 and 줄 바꿈, after the templates: what each shows and puts.
+    static let marks: [(face: String, script: String)] = [("&", "&"), ("↵", "#")]
 
-    static let symbols: [[EquationItem]] = [
-        group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω"),
-        group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω"),
-        group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω"),
-        group("SUM ∑ PROD ∏ COPROD ∐ INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ EMPTYSET ∅"),
-        group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ LNOT ¬ FORALL ∀ EXIST ∃ THEREFORE ∴ BECAUSE ∵ PARTIAL ∂ nabla ∇ VDASH ⊢ MODELS ⊨"),
-        group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪"),
-        group("INF ∞ DEG ° prime ′ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇"),
+    /// The second row: symbol groups, each with the glyph its button shows.
+    static let symbols: [(face: String, items: [EquationItem])] = [
+        ("Λ", group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω")),
+        ("λ", group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω")),
+        ("ℵ", group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω")),
+        ("≤", group("NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ VDASH ⊢ MODELS ⊨")),
+        ("±", group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ LNOT ¬ FORALL ∀ EXIST ∃")),
+        ("⇔", group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪")),
+        ("Δ", group("INF ∞ DEG ° prime ′ PARTIAL ∂ nabla ∇ THEREFORE ∴ BECAUSE ∵ EMPTYSET ∅ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇")),
     ]
 
     /// "keyword glyph keyword glyph …" as items that show the glyph and put the keyword.
@@ -181,6 +177,7 @@ struct PaletteGrid: View {
                     ForEach(items[start..<min(start + columns, items.count)], id: \.self) { item in
                         Button { pick(item) } label: {
                             PaletteFace(item: item, renderer: renderer, symbols: symbols)
+                                .fixedSize()
                                 .padding(.horizontal, symbols ? 4 : 6)
                                 .padding(.vertical, symbols ? 2 : 4)
                                 .frame(minWidth: symbols ? 22 : 30, minHeight: symbols ? 22 : 30)
@@ -202,38 +199,47 @@ private struct PaletteFace: View {
     let symbols: Bool
     var body: some View {
         if symbols {
-            Text(item.sample).font(.custom("Times New Roman", size: 16))
+            SymbolGlyph(item.sample)
         } else {
             Sample(script: item.sample, renderer: renderer, zoom: 1.1)
         }
     }
 }
 
-/// One palette in the editor's tool row: its first sample, opening a grid of all of them.
+/// A symbol as text, in a math face so that every symbol is drawn at its size.
+private struct SymbolGlyph: View {
+    let glyph: String
+    init(_ glyph: String) { self.glyph = glyph }
+    var body: some View { Text(glyph).font(.custom("STIX Two Math", size: 17)) }
+}
+
+/// A button of the tool rows: a palette's sample opening a grid of all of them, or, for a
+/// palette of one, putting that one in at once.
 private struct PaletteButton: View {
-    /// The button's sample; the first item's when nil.
-    var face: String?
+    /// The button's sample, rendered (templates) or as text (symbols).
+    let face: String
     let items: [EquationItem]
     let renderer: EquationRenderer
-    /// Symbols show their glyph as text; templates show the rendered sample.
     let symbols: Bool
     let pick: (EquationItem) -> Void
     @State private var open = false
 
     var body: some View {
-        Button { open = true } label: {
-            HStack(spacing: 2) {
+        Button { items.count == 1 ? pick(items[0]) : (open = true) } label: {
+            HStack(spacing: 3) {
                 Group {
-                    if let face { Sample(script: face, renderer: renderer, zoom: 1.1) } else { self.face(items[0]) }
+                    if symbols { SymbolGlyph(face) } else { Sample(script: face, renderer: renderer, zoom: 1.1) }
                 }
                 .frame(minWidth: 22, minHeight: 22)
-                Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold))
+                if items.count > 1 {
+                    Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 4)
             .frame(height: 30)
         }
         .buttonStyle(ToolButtonStyle(on: open))
-        .help(face ?? items[0].script)
+        .help(items.count == 1 ? items[0].script : "")
         .popover(isPresented: $open, arrowEdge: .bottom) {
             PaletteGrid(items: items, renderer: renderer, symbols: symbols) {
                 open = false
@@ -241,13 +247,10 @@ private struct PaletteButton: View {
             }
         }
     }
-
-    private func face(_ item: EquationItem) -> some View {
-        PaletteFace(item: item, renderer: renderer, symbols: symbols)
-    }
 }
 
-/// 수식: palettes and size above, the script, and the preview below it.
+/// 수식 편집, laid out as 한글's: two tool rows, the preview, and the script under it. The
+/// preview follows every keystroke.
 struct EquationEditor: View {
     let viewer: Viewer
     let renderer: EquationRenderer
@@ -267,7 +270,7 @@ struct EquationEditor: View {
     }
 
     var body: some View {
-        DialogFrame("수식", canConfirm: valid) {
+        DialogFrame("수식 편집", canConfirm: valid) {
             editor
         } confirm: {
             viewer.commit(edit)
@@ -281,44 +284,53 @@ struct EquationEditor: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 1) {
                 ForEach(EquationPalette.templates, id: \.face) { palette in
                     PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: false) {
                         script.insert($0.script)
                     }
                 }
+                RowDivider()
+                ForEach(EquationPalette.marks, id: \.script) { mark in
+                    Button { script.insert(mark.script) } label: {
+                        Text(mark.face).font(.system(size: 16)).frame(minWidth: 26, minHeight: 30)
+                    }
+                    .buttonStyle(ToolButtonStyle())
+                    .help(mark.script)
+                }
             }
             HStack(spacing: 1) {
-                ForEach(EquationPalette.symbols, id: \.self) { items in
-                    PaletteButton(items: items, renderer: renderer, symbols: true) {
+                ForEach(EquationPalette.symbols, id: \.face) { palette in
+                    PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
                     }
                 }
                 Spacer(minLength: 16)
-                LabeledField("글자 크기") {
-                    SpinField(value: $edit.fontSize, unit: "pt", range: 1...127)
-                }
-                LabeledField("글자 색") {
-                    ColorWell(hex: Binding { Self.hex(edit.color) } set: { edit.color = Self.color($0) })
-                }
-                .padding(.leading, 8)
+                SpinField(value: $edit.fontSize, unit: "pt", range: 1...127)
+                    .accessibilityLabel("글자 크기")
+                ColorWell(hex: Binding { Self.hex(edit.color) } set: { edit.color = Self.color($0) })
+                    .accessibilityLabel("글자 색")
+                    .padding(.leading, 8)
             }
-            ScriptView(text: $edit.script, proxy: script)
-                .frame(height: 110)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
-            ScrollView([.horizontal, .vertical]) {
-                EquationGlyph(display: preview, zoom: 1.5)
-                    .padding(14)
-                    .frame(minWidth: 648, minHeight: 112, alignment: .center)
+            .padding(.bottom, 8)
+            VStack(spacing: 0) {
+                ScrollView([.horizontal, .vertical]) {
+                    EquationGlyph(display: preview, zoom: 1.5)
+                        .padding(16)
+                        .frame(minWidth: 820, minHeight: 230, alignment: .center)
+                }
+                .frame(height: 230)
+                .background(Color(nsColor: .underPageBackgroundColor))
+                .environment(\.colorScheme, .light)
+                Divider()
+                ScriptView(text: $edit.script, proxy: script)
+                    .frame(height: 170)
             }
-            .frame(height: 140)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
-            .environment(\.colorScheme, .light)
         }
-        .frame(width: 680)
+        .frame(width: 820)
     }
 
     /// 0x00bbggrr and `#rrggbb`.

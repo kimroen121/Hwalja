@@ -1096,10 +1096,20 @@ struct DocumentTests {
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),
-            ("symbols", AnyView(PaletteGrid(items: EquationPalette.symbols[4], renderer: EquationRenderer(document: document),
-                                            symbols: true) { _ in })),
-            ("templates", AnyView(PaletteGrid(items: EquationPalette.templates[1].items,
-                                              renderer: EquationRenderer(document: document), symbols: false) { _ in })),
+            ("symbols", AnyView(VStack(alignment: .leading) {
+                ForEach(EquationPalette.symbols.indices, id: \.self) { index in
+                    PaletteGrid(items: EquationPalette.symbols[index].items, renderer: EquationRenderer(document: document),
+                                symbols: true) { _ in }
+                    Divider()
+                }
+            })),
+            ("templates", AnyView(VStack(alignment: .leading) {
+                ForEach(EquationPalette.templates.indices, id: \.self) { index in
+                    PaletteGrid(items: EquationPalette.templates[index].items,
+                                renderer: EquationRenderer(document: document), symbols: false) { _ in }
+                    Divider()
+                }
+            })),
             ("object", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                                                                    props: ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
                                                                                       textWrap: "Square", caption: "None")),

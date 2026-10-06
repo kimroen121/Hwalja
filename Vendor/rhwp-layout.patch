@@ -873,7 +873,7 @@ index 648ce9f..a5b0cbc 100644
          "END" => return EqCommandClass::EndEnv,
          "SQRT" | "ROOT" => return EqCommandClass::Sqrt,
 diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
-index d8ecae2..fc63c2b 100644
+index d8ecae2..90bbc11 100644
 --- a/src/renderer/equation/layout.rs
 +++ b/src/renderer/equation/layout.rs
 @@ -193,6 +193,31 @@ pub(crate) const AXIS_HEIGHT: f64 = 0.25;
@@ -955,6 +955,15 @@ index d8ecae2..fc63c2b 100644
          } else {
              fs * 0.05
          };
+@@ -361,7 +406,7 @@ impl EqLayout {
+                 x: 0.0,
+                 y: 0.0,
+                 // Task #1233: 첨자 없는 bare 적분도 뒤 피연산자와 trailing 간격 유지.
+-                width: geom.width + fs * BIG_OP_TRAIL_PAD,
++                width: integral_width(fs, text).max(geom.width) + fs * BIG_OP_TRAIL_PAD,
+                 height: op_fs,
+                 baseline: op_fs * 0.7, // 적분 기호 baseline: 기호 높이의 70%
+                 kind: LayoutKind::MathSymbol(text.to_string()),
 @@ -549,7 +594,8 @@ impl EqLayout {
          let b = self.layout_node(base, fs);
          let s = self.layout_node(sub, fs * SCRIPT_SCALE);
@@ -965,7 +974,102 @@ index d8ecae2..fc63c2b 100644
          let total_h = (b.height).max(sub_shift + s.height);
  
          let mut base_box = b;
-@@ -815,6 +861,65 @@ impl EqLayout {
+@@ -597,7 +643,10 @@ impl EqLayout {
+ 
+             let mut base_box = b;
+             base_box.x = 0.0;
+-            base_box.width = geom.width; // 글리프 advance = path 폭
++            base_box.width = match base {
++                EqNode::MathSymbol(s) => integral_width(fs, s),
++                _ => geom.width,
++            }; // 글리프 advance = path 폭
+ 
+             // 글리프 기준 첨자 세로 위치(박스 상단 원점) — 컴팩트(글리프 상·하단 근처).
+             let sup_dy = geom.top_y - sp.height * 0.30; // 상한: 최상단 근처
+@@ -758,6 +807,9 @@ impl EqLayout {
+     }
+ 
+     /// 적분 기호 레이아웃: 큰 기호 + 오른쪽 위/아래 첨자 (nolimits 스타일)
++    /// HwpStudio: 적분 기호는 그리는 경로(`integral_geom`)의 크기로 놓고, 첨자를 그 오른쪽
++    /// 위(위 끝)와 아래(아래 끝)에 붙인다 — 종전의 글꼴 기준 크기는 경로보다 작아 기호가
++    /// 잘렸다.
+     fn layout_integral(
+         &self,
+         symbol: &str,
+@@ -765,48 +817,45 @@ impl EqLayout {
+         sup: &Option<Box<EqNode>>,
+         fs: f64,
+     ) -> LayoutBox {
+-        let op_fs = fs * BIG_OP_SCALE;
+-        let op_w = estimate_text_width(symbol, op_fs, false);
+-        let op_h = op_fs;
+-
+-        let sub_box = sub.as_ref().map(|s| self.layout_node(s, fs * SCRIPT_SCALE));
+-        let sup_box = sup.as_ref().map(|s| self.layout_node(s, fs * SCRIPT_SCALE));
+-
+-        // 기호 기준선: 기호 높이의 60% (중앙보다 약간 위)
+-        let op_baseline = op_h * 0.6;
+-
+-        // 위첨자: 기호 오른쪽 위
+-        let sup_shift = op_h * 0.1; // 기호 상단에서 약간 아래
+-                                    // 아래첨자: 기호 오른쪽 아래
+-        let sub_shift = op_h * 0.55; // 기호 중앙 아래
+-
+-        let script_x = op_w; // 첨자는 기호 오른쪽에 배치
+-
++        let op_h = fs * INTEGRAL_SCALE;
++        let geom = integral_geom(fs);
++        let op_w = integral_width(fs, symbol);
++        let script_x = op_w + fs * 0.22;
+         let mut total_w = op_w;
+-        let mut total_h = op_h;
+-
+-        let sup_laid = sup_box.map(|mut b| {
++        let sup_laid = sup.as_ref().map(|s| {
++            let mut b = self.layout_node(s, fs * SCRIPT_SCALE);
+             b.x = script_x;
+-            b.y = sup_shift;
++            b.y = geom.top_y - b.height * 0.30;
+             total_w = total_w.max(script_x + b.width);
+             b
+         });
+-
+-        let sub_laid = sub_box.map(|mut b| {
++        let sub_laid = sub.as_ref().map(|s| {
++            let mut b = self.layout_node(s, fs * SCRIPT_SCALE);
+             b.x = script_x;
+-            b.y = sub_shift;
++            b.y = geom.bottom_y - b.height * 0.72;
+             total_w = total_w.max(script_x + b.width);
+-            total_h = total_h.max(sub_shift + b.height);
+             b
+         });
+-
++        // 위 끝이 기호 위로 나가면 그만큼 모두 내린다.
++        let lift = sup_laid.as_ref().map_or(0.0, |b| (-b.y).max(0.0));
++        let (sup_laid, sub_laid) = (
++            sup_laid.map(|mut b| {
++                b.y += lift;
++                b
++            }),
++            sub_laid.map(|mut b| {
++                b.y += lift;
++                b
++            }),
++        );
++        let total_h = (op_h + lift).max(sub_laid.as_ref().map_or(0.0, |b| b.y + b.height));
+         LayoutBox {
+             x: 0.0,
+             y: 0.0,
+             // Task #1233: 적분 뒤 피연산자(예: f(x)dx)가 첨자에 붙지 않도록 trailing 간격.
+             width: total_w + fs * BIG_OP_TRAIL_PAD,
+             height: total_h,
+-            baseline: op_baseline,
++            baseline: lift + op_h * 0.7,
+             kind: LayoutKind::BigOp {
+                 symbol: symbol.to_string(),
+                 sub: sub_laid.map(Box::new),
+@@ -815,6 +864,65 @@ impl EqLayout {
          }
      }
  
@@ -1031,9 +1135,29 @@ index d8ecae2..fc63c2b 100644
      fn layout_limit(&self, is_upper: bool, sub: &Option<Box<EqNode>>, fs: f64) -> LayoutBox {
          let name = if is_upper { "Lim" } else { "lim" };
          let name_w = estimate_text_width(name, fs, false);
-@@ -1215,27 +1320,37 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
+@@ -1214,28 +1322,57 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
+     matches!(symbol, "∫" | "∬" | "∭" | "∮" | "∯" | "∰")
  }
  
++/// HwpStudio: 적분 기호의 줄기 수와 고리(선적분) 여부.
++pub(crate) fn integral_strokes(symbol: &str) -> (usize, bool) {
++    match symbol {
++        "∬" => (2, false),
++        "∭" => (3, false),
++        "∮" => (1, true),
++        "∯" => (2, true),
++        "∰" => (3, true),
++        _ => (1, false),
++    }
++}
++/// HwpStudio: 겹친 줄기 사이 (글자 크기 배수).
++pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.3;
++/// HwpStudio: 줄기 수만큼 넓힌 적분 기호의 폭.
++pub(crate) fn integral_width(fs: f64, symbol: &str) -> f64 {
++    let (strokes, _) = integral_strokes(symbol);
++    integral_geom(fs).width + (strokes - 1) as f64 * fs * INTEGRAL_STROKE_STEP
++}
++
  /// 텍스트 폭 추정
 +/// HwpStudio: Times 로만의 글자 폭 (1/1000 em, ASCII 32–126, Adobe Times-Roman AFM).
 +/// 수식은 Times New Roman 으로 그리므로 그 폭으로 잰다.
@@ -1184,7 +1308,7 @@ index 99c9ee9..767143f 100644
      fn parse_limit(&mut self, is_upper: bool) -> EqNode {
          let mut sub = None;
 diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
-index 7fc0b71..c3d8cf6 100644
+index 7fc0b71..764f320 100644
 --- a/src/renderer/equation/svg_render.rs
 +++ b/src/renderer/equation/svg_render.rs
 @@ -12,7 +12,9 @@ use super::symbols::{DecoKind, FontStyleKind};
@@ -1198,9 +1322,12 @@ index 7fc0b71..c3d8cf6 100644
  
  /// 수식을 SVG 조각 문자열로 렌더링
  ///
-@@ -103,12 +105,23 @@ fn render_box(
+@@ -101,14 +103,25 @@ fn render_box(
+             // 폰트 미임베딩 SVG 에서 뷰어 대체 폰트의 글리프 bbox 편차로 상·하한이
+             // 어긋나던 문제를, 폰트 독립·결정적 path 로 해소한다(geom SSOT).
              if super::layout::is_integral_symbol(text) {
-                 svg.push_str(&integral_path(x, y, fs, color));
+-                svg.push_str(&integral_path(x, y, fs, color));
++                svg.push_str(&integral_path(x, y, fs, color, text));
              } else {
 -                let text_x = x;
 +                // HwpStudio: 줄이 둘레를 띄운 기호도 제자리에 오도록 상자 가운데에 둔다.
@@ -1225,6 +1352,109 @@ index 7fc0b71..c3d8cf6 100644
                  ));
              }
          }
+@@ -245,7 +258,9 @@ fn render_box(
+             if is_integral {
+                 // 적분: 기호는 왼쪽, 첨자는 오른쪽 위/아래 (nolimits).
+                 // Task #1317: 폰트 `<text>` 대신 stroke path 로 렌더(geom SSOT).
+-                svg.push_str(&integral_path(x, y, fs, color));
++                // 위 끝이 기호 위로 나간 만큼 내려 놓은 기호(`layout_integral`).
++                let lift = lb.baseline - fs * super::layout::INTEGRAL_SCALE * 0.7;
++                svg.push_str(&integral_path(x, y + lift, fs, color, symbol));
+             } else {
+                 // ∑, ∏ 등: 기호는 중앙, 첨자는 위/아래 (limits)
+                 let sup_h = sup.as_ref().map(|b| b.height + fs * 0.05).unwrap_or(0.0);
+@@ -413,7 +428,30 @@ fn render_box(
+ /// S-곡선(bottom-left → top-right, 양끝 갈고리)을 그린다. 폰트에 의존하지 않으므로
+ /// SVG 뷰어/환경에 무관하게 동일한 visual bbox 를 보장하며, layout 의 상·하한
+ /// attach point(동일 geom)와 정합한다.
+-fn integral_path(x: f64, y: f64, fs: f64, color: &str) -> String {
++fn integral_path(x: f64, y: f64, fs: f64, color: &str, symbol: &str) -> String {
++    // HwpStudio: ∬·∭ 은 줄기를 겹쳐 긋고, ∮ 계열은 가운데에 고리를 두른다.
++    let (strokes, contour) = super::layout::integral_strokes(symbol);
++    let step = fs * super::layout::INTEGRAL_STROKE_STEP;
++    let mut out: String = (0..strokes)
++        .map(|k| integral_stroke(x + k as f64 * step, y, fs, color))
++        .collect();
++    if contour {
++        let g = integral_geom(fs);
++        let total = g.width + (strokes - 1) as f64 * step;
++        out.push_str(&format!(
++            "<ellipse cx=\"{:.2}\" cy=\"{:.2}\" rx=\"{:.2}\" ry=\"{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++            x + total / 2.0,
++            y + (g.top_y + g.bottom_y) / 2.0,
++            total / 2.0 * 0.85,
++            fs * 0.22,
++            color,
++            g.stroke_w * 0.7,
++        ));
++    }
++    out
++}
++
++fn integral_stroke(x: f64, y: f64, fs: f64, color: &str) -> String {
+     let g = integral_geom(fs);
+     let h = g.bottom_y - g.top_y;
+     // 하단 갈고리 끝(좌하) → 상단 갈고리 끝(우상). 하부는 우측, 상부는 좌측으로
+@@ -644,12 +682,55 @@ fn draw_decoration(
+                 mid_x - half_w, uy, mid_x + half_w, uy, color, stroke_w,
+             ));
+         }
+-        _ => {
+-            // Check, Acute, Grave, Dyad, Arch, StrikeThrough 등 간략 처리
++        // HwpStudio: 남은 장식도 제 모양으로 (종전에는 모두 짧은 가로선이었다).
++        DecoKind::Check => {
++            svg.push_str(&format!(
++                "<path d=\"M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++                mid_x - half_w * 0.6, y,
++                mid_x, y + fs * 0.15,
++                mid_x + half_w * 0.6, y,
++                color, stroke_w,
++            ));
++        }
++        DecoKind::Acute | DecoKind::Grave => {
++            let lean = if kind == DecoKind::Acute { 1.0 } else { -1.0 };
++            svg.push_str(&format!(
++                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++                mid_x - lean * fs * 0.08, y + fs * 0.16,
++                mid_x + lean * fs * 0.08, y,
++                color, stroke_w,
++            ));
++        }
++        DecoKind::Dyad => {
++            let arrow_y = y + fs * 0.05;
++            svg.push_str(&format!(
++                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++                mid_x - half_w, arrow_y, mid_x + half_w, arrow_y, color, stroke_w,
++            ));
++            for (tip, back) in [(mid_x + half_w, -1.0), (mid_x - half_w, 1.0)] {
++                svg.push_str(&format!(
++                    "<path d=\"M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++                    tip + back * fs * 0.1, arrow_y - fs * 0.06,
++                    tip, arrow_y,
++                    tip + back * fs * 0.1, arrow_y + fs * 0.06,
++                    color, stroke_w,
++                ));
++            }
++        }
++        DecoKind::Arch => {
++            svg.push_str(&format!(
++                "<path d=\"M{:.2},{:.2} Q{:.2},{:.2} {:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
++                mid_x - half_w, y + fs * 0.14,
++                mid_x, y - fs * 0.06,
++                mid_x + half_w, y + fs * 0.14,
++                color, stroke_w,
++            ));
++        }
++        DecoKind::StrikeThrough => {
+             svg.push_str(&format!(
+                 "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
+-                mid_x - half_w * 0.5, y + fs * 0.1,
+-                mid_x + half_w * 0.5, y + fs * 0.1,
++                mid_x - half_w * 0.7, y + fs * 1.05,
++                mid_x + half_w * 0.7, y + fs * 0.2,
+                 color, stroke_w,
+             ));
+         }
 diff --git a/src/renderer/equation/symbols.rs b/src/renderer/equation/symbols.rs
 index 595ea2a..485611e 100644
 --- a/src/renderer/equation/symbols.rs
@@ -1239,10 +1469,28 @@ index 595ea2a..485611e 100644
          ("MINUSPLUS", "∓"),
          ("MP", "∓"),
 diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenizer.rs
-index 0e273b2..82dd9b6 100644
+index 0e273b2..40aac1b 100644
 --- a/src/renderer/equation/tokenizer.rs
 +++ b/src/renderer/equation/tokenizer.rs
-@@ -306,6 +306,19 @@ impl Tokenizer {
+@@ -169,10 +169,16 @@ impl Tokenizer {
+             }
+         }
+ 
++        // HwpStudio: 단어 전체가 수식 키워드(`SIMEQ`, `itimes`…)면 앞부분을 떼지 않는다.
++        let word: String = self.chars[self.pos..]
++            .iter()
++            .take_while(|c| c.is_ascii_alphanumeric())
++            .collect();
++        let whole_keyword = is_eq_keyword(&word);
+         for kw in [
+             "bold", "it", "rm", "times", "sim", "TIMES", "SIM", "RM", "IT", "BOLD",
+         ] {
+-            if self.matches_at(kw) {
++            if !whole_keyword && self.matches_at(kw) {
+                 let after = self.peek(kw.len());
+                 if matches!(after, Some(c) if c.is_ascii_alphanumeric()) {
+                     self.pos += kw.len();
+@@ -306,6 +312,19 @@ impl Tokenizer {
              return Some(Token::new(TokenType::Symbol, s, start));
          }
  
@@ -1262,6 +1510,25 @@ index 0e273b2..82dd9b6 100644
          // -> (화살표 축약)
          if ch == '-' && next == '>' {
              self.pos += 2;
+@@ -487,6 +506,18 @@ impl Tokenizer {
+         loop {
+             let mut token = self.next_token();
+             token.space_before = self.last_had_space;
++            // HwpStudio: 한컴 수식의 `from` / `to` 는 `_` / `^` 처럼 아래·위 끝을 붙인다
++            // (`sum from {i=1} to {n}`). LaTeX 의 `\to`(화살표)는 그대로 둔다.
++            if token.ty == TokenType::Command
++                && self.chars.get(token.pos) != Some(&'\\')
++                && (token.pos == 0 || self.chars.get(token.pos - 1) != Some(&'\\'))
++            {
++                if token.value.eq_ignore_ascii_case("from") {
++                    token.ty = TokenType::Subscript;
++                } else if token.value.eq_ignore_ascii_case("to") {
++                    token.ty = TokenType::Superscript;
++                }
++            }
+             let is_eof = token.ty == TokenType::Eof;
+             tokens.push(token);
+             if is_eof {
 diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
 index 6f91926..2d89d75 100644
 --- a/src/renderer/layout/paragraph_layout.rs

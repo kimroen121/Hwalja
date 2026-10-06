@@ -1292,6 +1292,20 @@ fn equation_shorthands_and_underover_draw_as_hancom_does() {
     ] {
         assert!(svg(script).contains(symbol), "{script}");
     }
+    // 한글's limits: `from` and `to`, not words; LaTeX's `\to` stays an arrow.
+    for script in [
+        "sum from {i=1} to {n} i",
+        "int from a to b x",
+        "lim from {x -> 0} f",
+    ] {
+        let drawn = svg(script);
+        assert!(
+            !drawn.contains(">from<") && !drawn.contains(">to<"),
+            "{script}"
+        );
+        assert!(!drawn.contains(">→<") || script.contains("->"), "{script}");
+    }
+    assert!(svg("x \\to y").contains("→"));
     // The limits go under and over the base, not after it as text.
     let under = svg("UNDEROVER {max}_{[-1,1]}^{} q");
     assert!(!under.contains("UNDEROVER"));
