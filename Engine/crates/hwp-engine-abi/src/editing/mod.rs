@@ -247,6 +247,8 @@ impl EditSession {
             | EditCommand::MoveObject { object, .. }
             | EditCommand::DeleteObject { object }
             | EditCommand::Order { object, .. }
+            | EditCommand::Ungroup { object }
+            | EditCommand::SetTextBox { object, .. }
             | EditCommand::ResizeTable { table: object, .. } => Some(EditPosition {
                 target: EditTarget {
                     section: object.section,

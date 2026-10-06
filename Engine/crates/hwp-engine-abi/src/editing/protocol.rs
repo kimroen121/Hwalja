@@ -167,6 +167,16 @@ pub enum EditCommand {
         object: ObjectRef,
         order: Order,
     },
+    /// 개체 풀기: a group of drawing objects of the body into its members.
+    Ungroup {
+        object: ObjectRef,
+    },
+    /// 도형 안에 글자 넣기 (or, without `attach`, 글상자 속성 없애기) for a drawing object of
+    /// the body. Put in, the caret moves into the new text.
+    SetTextBox {
+        object: ObjectRef,
+        attach: bool,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,
@@ -268,6 +278,12 @@ pub struct TableLine {
 pub struct PlacedObject {
     pub object: ObjectRef,
     pub rect: PageRect,
+    /// A group of drawing objects, for 개체 풀기.
+    pub group: bool,
+    /// A drawing object that can hold text, and whether it does (도형 안에 글자 넣기,
+    /// 글상자 속성 없애기).
+    #[serde(rename = "textBox")]
+    pub text_box: Option<bool>,
 }
 /// Object properties in rhwp's names and units (lengths in HWPUNIT). As a query result
 /// the fields the object has are set; as a change, unset fields stay.

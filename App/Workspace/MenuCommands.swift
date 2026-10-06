@@ -108,13 +108,21 @@ struct MenuItems {
                 Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t") { viewer.editingParaShape = true },
             ]
         }
-        if context.object == .shape {
+        if let shape = viewer.document?.object, shape.object.kind == .shape {
             items += [nil, Choice(title: "순서", submenu: [
-                Choice(title: "맨 앞으로") { viewer.order(.front) },
-                Choice(title: "앞으로") { viewer.order(.forward) },
-                Choice(title: "맨 뒤로") { viewer.order(.back) },
-                Choice(title: "뒤로") { viewer.order(.backward) },
+                Choice(title: "맨 앞으로") { viewer.change { .order($0, .front) } },
+                Choice(title: "앞으로") { viewer.change { .order($0, .forward) } },
+                Choice(title: "맨 뒤로") { viewer.change { .order($0, .back) } },
+                Choice(title: "뒤로") { viewer.change { .order($0, .backward) } },
             ])]
+            if shape.group {
+                items.append(Choice(title: "개체 풀기") { viewer.change { .ungroup($0) } })
+            }
+            switch shape.textBox {
+            case false?: items.append(Choice(title: "도형 안에 글자 넣기") { viewer.change { .setTextBox($0, attach: true) } })
+            case true?: items.append(Choice(title: "글상자 속성 없애기") { viewer.change { .setTextBox($0, attach: false) } })
+            case nil: break
+            }
         }
         if context.inTable, context.object == nil {
             let block = context.cellBlock

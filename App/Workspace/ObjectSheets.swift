@@ -96,9 +96,10 @@ extension Viewer {
         guard let object = document?.object?.object else { return }
         document?.edit(undoManager) { _ in .deleteObject(object) }
     }
-    func order(_ order: Order) {
+    /// 순서, 개체 풀기, 도형 안에 글자 넣기 and 글상자 속성 없애기, for the selected object.
+    func change(_ command: @escaping (ObjectRef) -> EditCommand) {
         guard let object = document?.object?.object else { return }
-        document?.edit(undoManager) { _ in .order(object, order) }
+        document?.edit(undoManager) { _ in command(object) }
     }
 }
 

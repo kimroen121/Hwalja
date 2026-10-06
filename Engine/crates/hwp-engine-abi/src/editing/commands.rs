@@ -451,12 +451,13 @@ impl EditSession {
                 self.validate_object(object, &ObjectProps::default())
             }
             EditCommand::MoveObject { object, to } => self.validate_move(object, to),
-            EditCommand::Order { object, .. } => {
-                if object.kind != ObjectKind::Shape || object.cell.is_some() {
-                    return Err(EditError::UnsupportedTarget);
-                }
-                self.validate_object(object, &ObjectProps::default())
+            EditCommand::Order { object, .. } => self.validate_drawing(object, |_| true),
+            EditCommand::Ungroup { object } => {
+                self.validate_drawing(object, |s| matches!(s, ShapeObject::Group(_)))
             }
+            EditCommand::SetTextBox { object, attach } => self.validate_drawing(object, |s| {
+                s.drawing().is_some_and(|d| d.text_box.is_some() != *attach)
+            }),
             EditCommand::ResizeTable { .. } => self.validate_resize(command),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
@@ -1081,6 +1082,44 @@ impl EditSession {
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;
                 Ok(self.kept(object.section))
+            }
+            EditCommand::Ungroup { object } => {
+                self.core.ungroup_shape_native(
+                    object.section as usize,
+                    object.paragraph as usize,
+                    object.control as usize,
+                )?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::SetTextBox { object, attach } => {
+                let doc = self.core.document();
+                // rhwp counts the body's paragraphs across sections.
+                let before: usize = doc.sections[..object.section as usize]
+                    .iter()
+                    .map(|s| s.paragraphs.len())
+                    .sum();
+                self.core.set_text_box_at(
+                    before + object.paragraph as usize,
+                    object.control as usize,
+                    *attach,
+                )?;
+                if !attach {
+                    return Ok(self.kept(object.section));
+                }
+                Ok(EditSelection::caret(EditPosition {
+                    target: EditTarget {
+                        section: object.section,
+                        paragraph: object.paragraph,
+                        cell: Some(CellTarget {
+                            control: object.control,
+                            cell: 0,
+                            paragraph: 0,
+                        }),
+                        note: None,
+                        header_footer: None,
+                    },
+                    scalar: 0,
+                }))
             }
             EditCommand::Order { object, order } => {
                 let operation = match order {

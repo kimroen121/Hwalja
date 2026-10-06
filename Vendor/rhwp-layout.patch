@@ -474,6 +474,85 @@ index 9352fff..0df9b4d 100644
          &self,
          section_idx: usize,
          start_para_idx: usize,
+diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queries/hwpctrl_sets.rs
+index db57b8f..26fb6f9 100644
+--- a/src/document_core/queries/hwpctrl_sets.rs
++++ b/src/document_core/queries/hwpctrl_sets.rs
+@@ -15,7 +15,7 @@ use crate::document_core::DocumentCore;
+ use crate::error::HwpError;
+ use crate::model::control::{AutoNumber, AutoNumberType, Control};
+ use crate::model::page::ColumnDef;
+-use crate::model::paragraph::{ColumnBreakType, Paragraph};
++use crate::model::paragraph::{CharShapeRef, ColumnBreakType, LineSeg, Paragraph};
+ use crate::model::shape::{Caption, ShapeObject, TextBox};
+ use crate::model::style::{Alignment, HeadType, LineSpacingType, UnderlineType};
+ 
+@@ -1646,9 +1646,13 @@ impl DocumentCore {
+             .paragraphs
+             .get_mut(para_idx)
+             .ok_or_else(|| HwpError::InvalidField(format!("문단 {} 없음", para_idx)))?;
++        // 새 글자는 개체가 놓인 문단의 모양을 잇는다 — 글상자를 새로 그릴 때와 같다.
++        let char_shape_id = para.char_shape_id_at(0).unwrap_or(0);
++        let para_shape_id = para.para_shape_id;
+         let Some(Control::Shape(shape)) = para.controls.get_mut(control_index) else {
+             return Ok(r#"{"ok":false,"reason":"그리기 개체가 아니다"}"#.to_string());
+         };
++        let width = shape.common().width;
+         let Some(drawing) = shape.drawing_mut() else {
+             return Ok(r#"{"ok":false,"reason":"글상자를 담을 수 없는 개체다"}"#.to_string());
+         };
+@@ -1656,9 +1660,41 @@ impl DocumentCore {
+             if drawing.text_box.is_some() {
+                 false
+             } else {
+-                drawing.text_box = Some(TextBox {
+-                    paragraphs: vec![Paragraph::new_empty()],
++                // 그리기 개체 만들기(`create_shape_control_native`)의 글상자와 같은 구성.
++                let mut raw_header_extra = vec![0u8; 10];
++                raw_header_extra[0..2].copy_from_slice(&1u16.to_le_bytes());
++                raw_header_extra[4..6].copy_from_slice(&1u16.to_le_bytes());
++                let inner = Paragraph {
++                    char_count: 1,
++                    char_count_msb: true,
++                    para_shape_id,
++                    char_shapes: vec![CharShapeRef {
++                        start_pos: 0,
++                        char_shape_id,
++                    }],
++                    line_segs: vec![LineSeg {
++                        line_height: 1000,
++                        text_height: 1000,
++                        baseline_distance: 850,
++                        line_spacing: 600,
++                        segment_width: width.saturating_sub(1020) as i32,
++                        tag: LineSeg::TAG_SINGLE_SEGMENT_LINE,
++                        ..Default::default()
++                    }],
++                    raw_header_extra,
+                     ..Default::default()
++                };
++                drawing.text_box = Some(TextBox {
++                    list_attr: 0x20,
++                    vertical_all: false,
++                    vertical_align: crate::model::table::VerticalAlign::Top,
++                    margin_left: 283,
++                    margin_right: 283,
++                    margin_top: 283,
++                    margin_bottom: 283,
++                    max_width: width,
++                    raw_list_header_extra: vec![0u8; 13],
++                    paragraphs: vec![inner],
+                 });
+                 true
+             }
+@@ -1667,6 +1703,7 @@ impl DocumentCore {
+         };
+         if changed {
+             section.raw_stream = None;
++            self.rebuild_section(sec);
+         }
+         Ok(format!("{{\"ok\":{}}}", changed))
+     }
 diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
 index 7bfcef5..e71604d 100644
 --- a/src/model/paragraph.rs

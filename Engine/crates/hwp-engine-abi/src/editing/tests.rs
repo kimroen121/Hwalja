@@ -3253,3 +3253,79 @@ fn the_caret_passes_an_equation_in_a_cell() {
         point(cell, 2)
     );
 }
+
+#[test]
+fn text_goes_into_drawing_objects_and_groups_come_apart() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        for i in 0..2 {
+            run(
+                &mut s,
+                EditCommand::InsertShape {
+                    position: point(body(), 0),
+                    shape: "rectangle".into(),
+                    x: 10_000,
+                    y: 20_000 + i * 8_000,
+                    width: 14_000,
+                    height: 6_000,
+                    flip: false,
+                },
+            )
+            .unwrap();
+        }
+        let rectangle = s.placed(0).unwrap()[0].object.clone();
+        // 도형 안에 글자 넣기: the caret goes into the new text, which saves.
+        let caret = run(
+            &mut s,
+            EditCommand::SetTextBox {
+                object: rectangle.clone(),
+                attach: true,
+            },
+        )
+        .unwrap()
+        .selection
+        .unwrap()
+        .focus;
+        assert_eq!(caret.target.cell.as_ref().map(|c| c.cell), Some(0));
+        replace(&mut s, caret.target.clone(), 0, 0, "도형 글").unwrap();
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(
+            reopened.paragraph(&caret.target).unwrap().text,
+            "도형 글",
+            "{format:?}"
+        );
+        let again = EditCommand::SetTextBox {
+            object: rectangle.clone(),
+            attach: true,
+        };
+        assert_eq!(
+            s.validate_command(&again).unwrap_err(),
+            EditError::UnsupportedTarget
+        );
+        // 글상자 속성 없애기.
+        run(
+            &mut s,
+            EditCommand::SetTextBox {
+                object: rectangle.clone(),
+                attach: false,
+            },
+        )
+        .unwrap();
+        assert!(s.paragraph(&caret.target).is_err());
+
+        // 개체 풀기 takes a group apart into its members, and only a group.
+        let ungroup = |object: &ObjectRef| EditCommand::Ungroup {
+            object: object.clone(),
+        };
+        assert!(s.validate_command(&ungroup(&rectangle)).is_err());
+        let p = body().paragraph as usize;
+        s.core.group_shapes_native(0, &[(p, 0), (p, 1)]).unwrap();
+        let group = s.placed(0).unwrap()[0].object.clone();
+        assert_eq!(s.placed(0).unwrap().len(), 1);
+        assert!(s.object_props(&group).unwrap().width.is_some());
+        run(&mut s, ungroup(&group)).unwrap();
+        assert_eq!(s.placed(0).unwrap().len(), 2);
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(reopened.placed(0).unwrap().len(), 2, "{format:?}");
+    }
+}

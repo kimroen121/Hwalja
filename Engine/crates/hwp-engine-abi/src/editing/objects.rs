@@ -215,7 +215,7 @@ impl EditSession {
                 let kind = match c["type"].as_str()? {
                     "image" => ObjectKind::Picture,
                     "equation" => ObjectKind::Equation,
-                    "shape" | "line" => ObjectKind::Shape,
+                    "shape" | "line" | "group" => ObjectKind::Shape,
                     _ => return None,
                 };
                 // Objects in notes, headers and nested cells are not selectable yet.
@@ -251,8 +251,15 @@ impl EditSession {
                     control,
                     cell,
                 };
-                self.control(&object).ok()?;
+                let shape = match self.control(&object).ok()? {
+                    Control::Shape(s) => Some(&**s),
+                    _ => None,
+                };
                 Some(PlacedObject {
+                    group: matches!(shape, Some(ShapeObject::Group(_))),
+                    text_box: shape
+                        .and_then(ShapeObject::drawing)
+                        .map(|d| d.text_box.is_some()),
                     object,
                     rect: PageRect {
                         page,
@@ -594,6 +601,19 @@ impl EditSession {
             (ObjectKind::Shape, None) => self.core.delete_shape_control_native(s, p, c),
         }?;
         Ok(())
+    }
+    /// A drawing object of the body for which `test` holds.
+    pub(super) fn validate_drawing(
+        &self,
+        o: &ObjectRef,
+        test: impl Fn(&ShapeObject) -> bool,
+    ) -> Result<(), EditError> {
+        match self.control(o)? {
+            Control::Shape(s) if o.kind == ObjectKind::Shape && o.cell.is_none() && test(s) => {
+                Ok(())
+            }
+            _ => Err(EditError::UnsupportedTarget),
+        }
     }
     pub(super) fn validate_shape(&self, command: &EditCommand) -> Result<(), EditError> {
         let EditCommand::InsertShape {

@@ -74,6 +74,10 @@ enum EditCommand: Encodable, Sendable {
     case deleteObject(ObjectRef)
     /// 순서: a drawing object of the body among the section's drawing objects.
     case order(ObjectRef, Order)
+    /// 개체 풀기.
+    case ungroup(ObjectRef)
+    /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
+    case setTextBox(ObjectRef, attach: Bool)
     /// Moves an equation to another place in the text.
     case moveObject(ObjectRef, to: EditPosition)
     /// Moves a table border: column `line` becomes `size` wide (or, with `row`, row `line` that high).
@@ -94,7 +98,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -201,6 +205,13 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .ungroup(object):
+            try c.encode("ungroup", forKey: .kind)
+            try c.encode(object, forKey: .object)
+        case let .setTextBox(object, attach):
+            try c.encode("setTextBox", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(attach, forKey: .attach)
         case let .order(object, order):
             try c.encode("order", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -257,6 +268,10 @@ struct TableLine: Decodable, Hashable, Sendable {
 struct PlacedObject: Decodable, Hashable, Sendable {
     var object: ObjectRef
     var rect: PageRect
+    /// A group of drawing objects, for 개체 풀기.
+    var group: Bool
+    /// A drawing object that can hold text, and whether it does.
+    var textBox: Bool?
 }
 
 /// Object properties in the engine's names and units (lengths in HWPUNIT). As a query

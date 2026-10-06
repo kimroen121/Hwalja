@@ -225,6 +225,8 @@ pub(super) fn check(
         }
         EditCommand::SetObject { object, .. }
         | EditCommand::DeleteObject { object }
+        | EditCommand::Ungroup { object }
+        | EditCommand::SetTextBox { object, .. }
         | EditCommand::ResizeTable { table: object, .. } => {
             return check_host(before, after, object.section, object.paragraph)
         }
