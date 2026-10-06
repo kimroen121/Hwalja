@@ -489,7 +489,7 @@ impl EditSession {
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::DeleteObject { object } => {
-                if object.cell.is_some() && object.kind == ObjectKind::Table {
+                if (object.cell.is_some() && object.kind == ObjectKind::Table) || object.note.is_some() {
                     return Err(EditError::UnsupportedTarget);
                 }
                 self.validate_object(object, &ObjectProps::default())

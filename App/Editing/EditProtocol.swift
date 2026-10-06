@@ -298,6 +298,8 @@ struct ObjectRef: Codable, Hashable, Sendable {
     var paragraph: UInt32
     var control: UInt32
     var cell: CellTarget? = nil
+    /// The 미주 paragraph holding an equation.
+    var note: NoteTarget? = nil
 }
 
 /// A table border on a page that can be dragged: the right border of column `line` (or

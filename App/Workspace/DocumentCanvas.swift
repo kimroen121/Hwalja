@@ -652,7 +652,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var resizable: Bool {
         [.picture, .shape].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true && lineEnds == nil
     }
-    private var movable: Bool { [.picture, .shape, .equation].contains(model?.object?.object.kind) }
+    /// An equation in a 미주 has only its properties to change.
+    private var movable: Bool {
+        [.picture, .shape, .equation].contains(model?.object?.object.kind) && model?.object?.object.note == nil
+    }
 
     private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
         guard resizable else { return nil }

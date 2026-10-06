@@ -1191,6 +1191,7 @@ fn objects_are_found_changed_and_deleted() {
         paragraph: 2,
         control: 0,
         cell: None,
+        note: None,
     };
     let change = ObjectProps {
         repeat_header: Some(true),
@@ -2899,6 +2900,7 @@ fn an_equation_moves_within_the_text() {
             paragraph: host as u32,
             control,
             cell: None,
+            note: None,
         };
         for to in [point(body(), 0), point(commands::at_index(&body(), 0), 0)] {
             let target = to.target.paragraph as usize;
@@ -2979,6 +2981,65 @@ fn an_equation_in_a_table_cell_is_an_object() {
     run(&mut s, EditCommand::Undo).unwrap();
     run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(s.object_props(&object).unwrap().font_size, Some(1000));
+}
+
+#[test]
+fn an_equation_in_an_endnote_is_an_object_for_its_properties() {
+    // An endnote whose paragraph an equation was put in.
+    let mut core = DocumentCore::new_empty();
+    core.create_blank_document_native().unwrap();
+    let mut doc = core.document().clone();
+    let mut para = doc.sections[0].paragraphs[0].clone();
+    para.controls.clear();
+    doc.sections[0].paragraphs.push(para);
+    core.set_document(doc);
+    core.insert_equation_native(0, 0, 0, "x^2", 1000, 0)
+        .unwrap();
+    core.insert_endnote_native(0, 1, 0).unwrap();
+    let mut doc = core.document().clone();
+    let paragraphs = &mut doc.sections[0].paragraphs;
+    let with_equation = paragraphs.remove(0);
+    let Some(Control::Endnote(note)) = paragraphs[0]
+        .controls
+        .iter_mut()
+        .find(|c| matches!(c, Control::Endnote(_)))
+    else {
+        panic!()
+    };
+    note.paragraphs[0] = with_equation;
+    core.set_document(doc);
+    let mut s = EditSession::open(&core.export_hwpx_native().unwrap()).unwrap();
+    let object = s
+        .placed(0)
+        .unwrap()
+        .into_iter()
+        .find(|o| o.object.note.is_some())
+        .expect("the equation in the endnote")
+        .object;
+    assert_eq!(object.kind, ObjectKind::Equation);
+    let props = ObjectProps {
+        script: Some("y^3".into()),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: object.clone(),
+            props,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.object_props(&object).unwrap().script.as_deref(), Some("y^3"));
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+    assert_eq!(reopened.object_props(&object).unwrap().script.as_deref(), Some("y^3"));
+    // Only its properties: it does not move, copy or go.
+    let delete = EditCommand::DeleteObject {
+        object: object.clone(),
+    };
+    assert!(run(&mut s, delete).is_err());
+    assert!(s.copy_object(&object).is_err());
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(s.object_props(&object).unwrap().script.as_deref(), Some("x^2"));
 }
 
 /// A 1×1 PNG put in at `position`, 100 px square.
@@ -3216,6 +3277,7 @@ fn captions_are_written_and_edited() {
         paragraph: 2,
         control: 0,
         cell: None,
+        note: None,
     };
     let props = ObjectProps {
         caption: Some("Top".into()),

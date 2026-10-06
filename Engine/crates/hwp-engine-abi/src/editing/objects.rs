@@ -126,19 +126,14 @@ pub(super) fn is_script(script: &str) -> bool {
 impl EditSession {
     /// The control `o` names, checked to be of its kind.
     fn control(&self, o: &ObjectRef) -> Result<&Control, EditError> {
-        let control = commands::get(
-            self.core.document(),
-            &EditTarget {
-                section: o.section,
-                paragraph: o.paragraph,
-                cell: o.cell.clone(),
-                note: None,
-                header_footer: None,
-            },
-        )?
-        .controls
-        .get(o.control as usize)
-        .ok_or(EditError::InvalidInput)?;
+        let control = commands::get(self.core.document(), &Self::host(o))?
+            .controls
+            .get(o.control as usize)
+            .ok_or(EditError::InvalidInput)?;
+        // In a note rhwp reaches only equations, and only their properties.
+        if o.note.is_some() && (o.kind != ObjectKind::Equation || o.cell.is_some()) {
+            return Err(EditError::UnsupportedTarget);
+        }
         // In a cell rhwp reaches only plain pictures, and the one equation of a table cell's paragraph.
         if let Some(c) = &o.cell {
             let reachable = match o.kind {
@@ -164,6 +159,25 @@ impl EditSession {
             Ok(control)
         } else {
             Err(EditError::UnsupportedTarget)
+        }
+    }
+    /// rhwp's name for the kind of note holding `o`, and the paragraph in it.
+    fn note_of<'a>(&self, o: &'a ObjectRef) -> Result<(&'static str, &'a NoteTarget), EditError> {
+        let n = o.note.as_ref().ok_or(EditError::UnsupportedTarget)?;
+        let host = commands::get(
+            self.core.document(),
+            &EditTarget {
+                section: o.section,
+                paragraph: o.paragraph,
+                cell: None,
+                note: None,
+                header_footer: None,
+            },
+        )?;
+        match host.controls.get(n.control as usize) {
+            Some(Control::Footnote(_)) => Ok(("footnote", n)),
+            Some(Control::Endnote(_)) => Ok(("endnote", n)),
+            _ => Err(EditError::UnsupportedTarget),
         }
     }
     /// The control index of the only equation in a table cell's paragraph.
@@ -218,9 +232,41 @@ impl EditSession {
                     "shape" | "line" | "group" => ObjectKind::Shape,
                     _ => return None,
                 };
-                // Objects in notes, headers and nested cells are not selectable yet.
-                if c.get("noteRef").is_some() || c.get("headerFooter").is_some() {
+                // Objects in headers and nested cells, and those of notes other than
+                // equations, are not selectable yet.
+                if c.get("headerFooter").is_some() {
                     return None;
+                }
+                if let Some(r) = c.get("noteRef") {
+                    if kind != ObjectKind::Equation {
+                        return None;
+                    }
+                    let object = ObjectRef {
+                        kind,
+                        section: index(r, "sectionIdx")?,
+                        paragraph: index(r, "paraIdx")?,
+                        control: index(r, "innerControlIdx")?,
+                        cell: None,
+                        note: Some(NoteTarget {
+                            control: index(r, "controlIdx")?,
+                            paragraph: index(r, "noteParaIdx")?,
+                        }),
+                    };
+                    self.control(&object).ok()?;
+                    let rect = PageRect {
+                        page,
+                        x: number(c, "x")?,
+                        y: number(c, "y")?,
+                        width: number(c, "w")?,
+                        height: number(c, "h")?,
+                    };
+                    return Some(PlacedObject {
+                        ends: None,
+                        group: false,
+                        text_box: None,
+                        object,
+                        rect,
+                    });
                 }
                 let (section, paragraph) = (index(c, "secIdx")?, index(c, "paraIdx")?);
                 let (cell, control) = match (c.get("cellPath"), c.get("cellIdx"), kind) {
@@ -250,6 +296,7 @@ impl EditSession {
                     paragraph,
                     control,
                     cell,
+                    note: None,
                 };
                 let shape = match self.control(&object).ok()? {
                     Control::Shape(s) => Some(&**s),
@@ -343,6 +390,17 @@ impl EditSession {
         self.control(o)?;
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         let json: Value = match (o.kind, &o.cell) {
+            (ObjectKind::Equation, None) if o.note.is_some() => {
+                let (kind, n) = self.note_of(o)?;
+                parse(self.core.get_note_equation_properties_native(
+                    kind,
+                    s,
+                    p,
+                    n.control as usize,
+                    n.paragraph as usize,
+                    c,
+                ))?
+            }
             (ObjectKind::Picture, Some(cell)) => parse(
                 self.core
                     .get_cell_picture_properties_by_path_native(s, p, &cell_path(cell), c),
@@ -490,6 +548,19 @@ impl EditSession {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         let mut json = object_json(props);
         write_caption(&mut json, o.kind == ObjectKind::Table);
+        if o.note.is_some() {
+            let (kind, n) = self.note_of(o)?;
+            self.core.set_note_equation_properties_native(
+                kind,
+                s,
+                p,
+                n.control as usize,
+                n.paragraph as usize,
+                c,
+                &Value::Object(json).to_string(),
+            )?;
+            return Ok(());
+        }
         let core = &mut self.core;
         match (o.kind, &o.cell) {
             (ObjectKind::Picture, Some(cell)) => core.set_cell_picture_properties_by_path_native(
@@ -547,13 +618,16 @@ impl EditSession {
             section: o.section,
             paragraph: o.paragraph,
             cell: o.cell.clone(),
-            note: None,
+            note: o.note.clone(),
             header_footer: None,
         }
     }
     /// An object in the line (글자처럼 취급) moves to another place in the text.
     pub(super) fn validate_move(&self, o: &ObjectRef, to: &EditPosition) -> Result<(), EditError> {
-        if !self.control(o)?.is_treat_as_char_object() || o.kind == ObjectKind::Table {
+        if !self.control(o)?.is_treat_as_char_object()
+            || o.kind == ObjectKind::Table
+            || o.note.is_some()
+        {
             return Err(EditError::UnsupportedTarget);
         }
         let t = &to.target;
@@ -610,6 +684,9 @@ impl EditSession {
     /// Copies object `o` to the engine's clipboard, for 붙이기 in this document.
     pub fn copy_object(&mut self, o: &ObjectRef) -> Result<clipboard::Copied, EditError> {
         self.validate_object(o, &ObjectProps::default())?;
+        if o.note.is_some() {
+            return Err(EditError::UnsupportedTarget);
+        }
         let t = Self::host(o);
         self.core.copy_control_native(
             t.section as usize,
@@ -644,6 +721,9 @@ impl EditSession {
     }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
+        if o.note.is_some() {
+            return Err(EditError::UnsupportedTarget);
+        }
         match (o.kind, &o.cell) {
             (_, Some(_)) => return self.delete_control(&Self::host(o), c),
             (ObjectKind::Picture, None) => self.core.delete_picture_control_native(s, p, c),

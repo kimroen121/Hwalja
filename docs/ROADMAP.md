@@ -37,7 +37,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 - [ ] 머리말·꼬리말 안 쪽 번호 넣기, 그림 속성: `insert_field_in_hf`, `get/set_header_footer_picture_properties`. 빈 머리말·꼬리말에는 아직 들어갈 수 없다.
 - [ ] 각주·머리말 안 개체, 셀 안 도형, 중첩 표 셀 안 개체 선택, 중첩 표 셀 편집, 그리기 개체 캡션 글자: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 칸 문단에 수식이 둘 이상이면 rhwp의 칸 수식 함수가 첫 수식만 찾는다. 도형의 칸 0은 글상자라 캡션을 가리킬 경로가 없다.
-- [ ] 주석 안 수식 고치기: `get/set_note_equation_properties`.
+- [ ] 각주 안 수식 고치기: rhwp 쪽 배치가 미주 수식에만 위치(`noteRef`)를 준다. 주석 안 수식은 속성만 바꾸고 옮기기·지우기·복사는 아직 안 된다.
 - [ ] 여러 문단 선택 지우기에서 사이 문단의 컨트롤 처리: `capture_delete_range`/`restore_delete_fragment`, `delete_range_native`.
 
 ### 2. 웹 한글 메뉴의 남은 항목 중 rhwp가 지원하는 것
