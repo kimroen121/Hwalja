@@ -152,27 +152,27 @@ struct MenuItems {
             let block = context.cellBlock
             items += [
                 nil,
-                Choice(title: "표/셀 속성…", symbol: Icon.objectProps, enabled: context.canEditTable) { viewer.showObjectProperties() },
-                Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block && context.canEditTable) {
+                Choice(title: "표/셀 속성…", symbol: Icon.objectProps) { viewer.showObjectProperties() },
+                Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
                     viewer.editCells { .equalizeCells($0, height: true) }
                 },
-                Choice(title: "셀 너비를 같게", key: "w", modifiers: [], enabled: block && context.canEditTable) {
+                Choice(title: "셀 너비를 같게", key: "w", modifiers: [], enabled: block) {
                     viewer.editCells { .equalizeCells($0, height: false) }
                 },
-                Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block && context.canEditTable) {
+                Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block) {
                     viewer.editCells { .mergeCells($0) }
                 },
-                Choice(title: "블록 계산식", enabled: block && context.canEditTable, submenu: blockFunctions.map { function in
+                Choice(title: "블록 계산식", enabled: block, submenu: blockFunctions.map { function in
                     Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
                 }),
-                Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: [], enabled: context.canEditTable) { viewer.splittingCells = true },
-                Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, enabled: context.canEditTable, submenu: [
+                Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
+                Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, submenu: [
                     Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
                     Choice(title: "아래쪽에 줄 추가하기") { viewer.editTable(.insertRowBelow) },
                     Choice(title: "왼쪽에 칸 추가하기") { viewer.editTable(.insertColumnLeft) },
                     Choice(title: "오른쪽에 칸 추가하기") { viewer.editTable(.insertColumnRight) },
                 ]),
-                Choice(title: "줄/칸 지우기", symbol: Icon.deleteRow, enabled: context.canEditTable, submenu: [
+                Choice(title: "줄/칸 지우기", symbol: Icon.deleteRow, submenu: [
                     Choice(title: "줄 지우기") { viewer.editTable(.deleteRow) },
                     Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) },
                 ]),
@@ -273,16 +273,16 @@ struct MenuItems {
                 self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
             }
         } label: { Label("도형", systemImage: Icon.shape) }
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         item("그림…", Icon.picture) { viewer?.insertPicture() }
             .disabled(!context.canPicture)
         Group {
             item("표…", Icon.table) { viewer?.insertingTable = true }
             item("글상자", Icon.textbox) { viewer?.draw("textbox") }
         }
-        .disabled(!context.canEditBody)
+        .disabled(!context.inBody)
         item("수식…", Icon.equation) { viewer?.newEquation() }
-            .disabled(!context.canEquation)
+            .disabled(!context.canPicture)
         Group {
             Divider()
             item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
@@ -292,7 +292,7 @@ struct MenuItems {
                 item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
                 item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
             } label: { Label("주석", systemImage: Icon.footnote) }
-                .disabled(!context.canEditBody)
+                .disabled(!context.inBody)
             Menu {
                 ForEach(Captions.all, id: \.value) { caption in
                     if caption.value == "None" { Divider() }
@@ -375,7 +375,7 @@ struct MenuItems {
             item("단 나누기", Icon.columnBreak) { viewer?.insertBreak(column: true) }
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
         }
-        .disabled(!context.canEditBody)
+        .disabled(!context.inBody)
         Menu {
             ForEach(Array(["하나", "둘", "셋"].enumerated()), id: \.offset) { index, title in
                 Button(title) { viewer?.setColumns(UInt16(index + 1)) }
@@ -393,9 +393,9 @@ struct MenuItems {
 
     @ViewBuilder var table: some View {
         item("표 만들기…", Icon.table) { viewer?.insertingTable = true }
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         item("표/셀 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
-            .disabled(!context.canEditTable)
+            .disabled(!context.inTable)
         Divider()
         Group {
             Menu {
@@ -413,7 +413,7 @@ struct MenuItems {
             Divider()
             item("셀 나누기…", Icon.splitCells) { viewer?.splittingCells = true }
         }
-        .disabled(!context.canEditTable)
+        .disabled(!context.inTable)
         Group {
             item("셀 합치기", Icon.mergeCells) { viewer?.editCells { .mergeCells($0) } }
             Button("셀 높이를 같게") { viewer?.editCells { .equalizeCells($0, height: true) } }

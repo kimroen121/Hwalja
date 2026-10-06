@@ -67,11 +67,11 @@ struct ToolRow: View {
         find
         RowDivider()
         ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             .disabled(!context.canPicture)
         ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         RowDivider()
         notes(context)
         RowDivider()
@@ -126,16 +126,16 @@ struct ToolRow: View {
 
     @ViewBuilder private func insert(_ context: EditingContext) -> some View {
         ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             .disabled(!context.canPicture)
         Group {
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
             ToolTile("글상자", Icon.textbox) { viewer.draw("textbox") }
         }
-        .disabled(!context.canEditBody)
+        .disabled(!context.inBody)
         ToolTile("수식", Icon.equation) { viewer.newEquation() }
-            .disabled(!context.canEquation)
+            .disabled(!context.canPicture)
         ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
             .disabled(!context.hasSelection)
         RowDivider()
@@ -169,14 +169,14 @@ struct ToolRow: View {
             ToolTile("쪽 나누기", Icon.pageBreak) { viewer.insertBreak(column: false) }
             ToolTile("단 나누기", Icon.columnBreak) { viewer.insertBreak(column: true) }
         }
-        .disabled(!context.canEditBody)
+        .disabled(!context.inBody)
     }
 
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
         ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-            .disabled(!context.canEditBody)
+            .disabled(!context.inBody)
         ToolTile("표/셀 속성", Icon.objectProps) { viewer.showObjectProperties() }
-            .disabled(!context.canEditTable)
+            .disabled(!context.inTable)
         RowDivider()
         Group {
             ToolTile("줄/칸 추가하기", Icon.insertRow, choices: {
@@ -192,7 +192,7 @@ struct ToolRow: View {
             RowDivider()
             ToolTile("셀 나누기", Icon.splitCells) { viewer.splittingCells = true }
         }
-        .disabled(!context.canEditTable)
+        .disabled(!context.inTable)
         Group {
             ToolTile("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
             ToolTile("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
@@ -224,7 +224,7 @@ struct ToolRow: View {
             ToolTile("각주", Icon.footnote) { viewer.insertNote(endnote: false) }
             ToolTile("미주", Icon.endnote) { viewer.insertNote(endnote: true) }
         }
-        .disabled(!context.canEditBody)
+        .disabled(!context.inBody)
     }
     @ViewBuilder private func shapes(_ context: EditingContext) -> some View {
         Group {

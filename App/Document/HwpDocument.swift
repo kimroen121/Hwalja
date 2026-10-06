@@ -64,14 +64,8 @@ struct EditingContext: Equatable {
     var canApplyStyle: Bool { canFormat && !inNote && !inHeaderFooter }
     /// The document is read-only (배포용 문서); editing commands are off.
     var locked = false
-    /// A picture can be put at the caret: in the body or in a table cell.
-    var canPicture: Bool { (inBody || inTable) && !locked }
-    /// An equation can be put at the caret: in the body or in a table cell.
-    var canEquation: Bool { (inBody || inTable) && !locked }
-    /// Commands that mutate body structure, such as tables, notes and breaks.
-    var canEditBody: Bool { inBody && !locked }
-    /// Commands that mutate the table containing the caret.
-    var canEditTable: Bool { inTable && !locked }
+    /// A picture or an equation can be put at the caret: in the body or in a table cell.
+    var canPicture: Bool { inBody || inTable }
     /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
     var canCaption: Bool {
         !locked && (object == .picture || object == .table || (inTable && object == nil))
@@ -555,17 +549,19 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         presented.send()
         if format != self.format { self.format = format }
         let block = selection?.isCellBlock ?? false
+        // A 배포용 문서 has no body or table to edit.
+        let editable = reply.locked != true
         let context = EditingContext(hasSelection: selection != nil,
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
-                              inTable: selection?.focus.target.cell != nil && format?.textBox != true,
+                              inTable: editable && selection?.focus.target.cell != nil && format?.textBox != true,
                               inNote: selection?.focus.target.note != nil,
                               inHeaderFooter: selection?.focus.target.headerFooter != nil,
-                              inBody: reply.locked != true && (selection.map {
+                              inBody: editable && (selection.map {
                                   $0.focus.target.cell == nil && $0.focus.target.note == nil && $0.focus.target.headerFooter == nil
                               } ?? false),
                               inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
-                              canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind,
+                              canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: editable && block, object: object?.object.kind,
                               locked: reply.locked == true)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }

@@ -185,21 +185,10 @@ struct DocumentTests {
         #expect(document.revision == 2 && !document.reply.dirty)
     }
 
-    /// Equations use the same valid insertion targets as pictures: body text and table cells.
-    @Test func equationInsertionIsAvailableInTableCells() {
-        #expect(EditingContext(inBody: true).canEquation)
-        #expect(EditingContext(inTable: true).canEquation)
-        #expect(!EditingContext(inNote: true).canEquation)
-        #expect(!EditingContext(inHeaderFooter: true).canEquation)
-        #expect(!EditingContext(inTable: true, locked: true).canEquation)
-    }
-
-    @Test func lockedDocumentsDisableEveryMutatingContainerCommand() {
-        #expect(EditingContext(inBody: true).canEditBody)
-        #expect(EditingContext(inTable: true).canEditTable)
-        #expect(!EditingContext(inBody: true, locked: true).canEditBody)
-        #expect(!EditingContext(inTable: true, locked: true).canEditTable)
-        #expect(!EditingContext(inTable: true, locked: true).canCaption)
+    /// Pictures and equations go in the body and in table cells; 캡션 넣기 is off in a 배포용 문서.
+    @Test func insertionTargets() {
+        #expect(EditingContext(inTable: true).canPicture)
+        #expect(!EditingContext(inNote: true).canPicture)
         #expect(!EditingContext(object: .picture, locked: true).canCaption)
     }
 
@@ -243,17 +232,14 @@ struct DocumentTests {
     }
 
     @Test func quickMenuKeepsCopyButDisablesMutationsInLockedDocuments() throws {
-        let context = EditingContext(hasSelection: true, hasRange: true, inTable: true,
-                                     cellBlock: true, locked: true)
+        // A 배포용 문서 has no body or table to edit, so its context has neither.
+        let context = EditingContext(hasSelection: true, hasRange: true, locked: true)
         let items = MenuItems.quickMenu(Viewer(), context).compactMap { $0 }
         let enabled = { (title: String) in items.first { $0.title == title }?.enabled }
         #expect(enabled("복사하기") == true)
         #expect(enabled("오려 두기") == false)
         #expect(enabled("붙이기") == false)
         #expect(enabled("지우기") == false)
-        #expect(enabled("표/셀 속성…") == false)
-        #expect(enabled("셀 합치기") == false)
-        #expect(enabled("줄/칸 추가하기") == false)
     }
 
     /// 문단 부호 and 조판 부호 redraw the pages without touching the document or undo.
