@@ -7,7 +7,7 @@
 - limits the workspace to the library crates;
 - fixes missing line geometry around flow/inline pictures in table cells (anchoring, text exclusion, row height, duplicated prefix text);
 - tries the installed `Pretendard Variable` before unrelated fallbacks for regular weight;
-- makes `get_selection_rects_native`, `move_vertical_native` and the line-info queries public for the editor caret;
+- makes `get_selection_rects_native`, `move_vertical_native` and the line-info queries public for the editor caret, and `show_transparent_borders` for 투명 선;
 - builds the PDF font database once, maps each font file once, and remembers font picks per font specification (page PDF ~0.5 s → ~27 ms with the svg2pdf patch);
 - exposes that font database (`default_fontdb`, `fontdb`) so the editor's display lists pick the faces PDF export picks.
 - lets text go in after the controls standing at an offset (`set_insert_skip`, `Paragraph::insert_text_after_controls`), so typing right after an inline picture or equation stays after it;

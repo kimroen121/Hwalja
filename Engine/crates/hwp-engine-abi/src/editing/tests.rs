@@ -2225,7 +2225,7 @@ fn marks_show_on_pages_but_not_in_the_pdf() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
     let plain = s.core.render_page_svg_native(0).unwrap();
     let pdf = s.export(SaveFormat::Pdf).unwrap();
-    let reply = s.show_marks(true, true).unwrap();
+    let reply = s.show_marks(true, true, false).unwrap();
     assert_eq!(reply.changed_pages, [0]);
     assert!(!reply.dirty && !reply.can_undo);
     let marked = s.core.render_page_svg_native(0).unwrap();
@@ -2233,7 +2233,44 @@ fn marks_show_on_pages_but_not_in_the_pdf() {
     assert!(display::build(&marked).is_some(), "{marked}");
     assert_eq!(s.export(SaveFormat::Pdf).unwrap().len(), pdf.len());
     assert!(s.core.show_paragraph_marks);
-    s.show_marks(false, false).unwrap();
+    s.show_marks(false, false, false).unwrap();
+    assert_eq!(s.core.render_page_svg_native(0).unwrap(), plain);
+}
+#[test]
+fn transparent_lines_show_on_pages_but_not_in_the_pdf() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertTable {
+        position: point(body(), 0),
+        rows: 2,
+        columns: 2,
+    };
+    let cell = run(&mut s, insert).unwrap().selection.unwrap().focus.target;
+    // A table without lines, laid out again by an edit in it.
+    let doc = s.core.document_mut();
+    let mut none = doc.doc_info.border_fills[0].clone();
+    for line in &mut none.borders {
+        line.line_type = rhwp::model::style::BorderLineType::None;
+    }
+    none.raw_data = None;
+    doc.doc_info.border_fills.push(none);
+    let id = doc.doc_info.border_fills.len() as u16;
+    let host = &mut doc.sections[0].paragraphs[cell.paragraph as usize];
+    let Control::Table(table) = &mut host.controls[cell.cell.as_ref().unwrap().control as usize]
+    else {
+        panic!("no table")
+    };
+    for c in &mut table.cells {
+        c.border_fill_id = id;
+    }
+    replace(&mut s, cell, 0, 0, "가").unwrap();
+    let plain = s.core.render_page_svg_native(0).unwrap();
+    let pdf = s.export(SaveFormat::Pdf).unwrap();
+    s.show_marks(false, false, true).unwrap();
+    let lined = s.core.render_page_svg_native(0).unwrap();
+    assert_ne!(lined, plain);
+    assert_eq!(s.export(SaveFormat::Pdf).unwrap().len(), pdf.len());
+    assert_eq!(s.core.render_page_svg_native(0).unwrap(), lined);
+    s.show_marks(false, false, false).unwrap();
     assert_eq!(s.core.render_page_svg_native(0).unwrap(), plain);
 }
 #[test]

@@ -140,6 +140,9 @@ final class Viewer: ObservableObject {
     @Published var showsParagraphMarks = false {
         didSet { showMarks() }
     }
+    @Published var showsTransparentLines = false {
+        didSet { showMarks() }
+    }
     @Published var showsGrid = false {
         didSet { canvas.editor.showsGrid = showsGrid }
     }
@@ -207,7 +210,7 @@ final class Viewer: ObservableObject {
     }
 
     private func showMarks() {
-        document?.showMarks(paragraph: showsParagraphMarks, control: showsControlCodes)
+        document?.showMarks(paragraph: showsParagraphMarks, control: showsControlCodes, borders: showsTransparentLines)
     }
 
     /// 모양 복사 in one button: applies the copied format to selected text, otherwise

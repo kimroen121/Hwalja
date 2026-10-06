@@ -84,6 +84,9 @@ enum Request {
     ShowMarks {
         paragraph: bool,
         control: bool,
+        /// 투명 선.
+        #[serde(default)]
+        borders: bool,
     },
     /// Paper and margins of a section.
     PageSetup {
@@ -196,8 +199,12 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             )
         }
         Request::Styles => HwpEditResult::ok(session.styles(), Vec::new()),
-        Request::ShowMarks { paragraph, control } => {
-            session.show_marks(paragraph, control)?;
+        Request::ShowMarks {
+            paragraph,
+            control,
+            borders,
+        } => {
+            session.show_marks(paragraph, control, borders)?;
             state(session)
         }
         Request::PageSetup { section } => {

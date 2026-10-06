@@ -308,12 +308,18 @@ impl EditSession {
     }
     /// Shows or hides 문단 부호 and 조판 부호 on the pages. Neither is printed or
     /// exported, saved, or undone.
-    pub fn show_marks(&mut self, paragraph: bool, control: bool) -> Result<EditReply, EditError> {
+    pub fn show_marks(
+        &mut self,
+        paragraph: bool,
+        control: bool,
+        borders: bool,
+    ) -> Result<EditReply, EditError> {
         if self.locked {
             return Err(EditError::Locked);
         }
         self.core.show_paragraph_marks = paragraph;
         self.core.show_control_codes = control;
+        self.core.show_transparent_borders = borders;
         let rendered = self.render(0, u32::MAX)?;
         self.publish(rendered, self.selection.clone());
         Ok(self.reply())

@@ -34,10 +34,22 @@ impl EditSession {
             SaveFormat::Pdf => {
                 // Marks shown on screen stay off paper.
                 let core = &mut self.core;
-                let marks = (core.show_paragraph_marks, core.show_control_codes);
-                (core.show_paragraph_marks, core.show_control_codes) = (false, false);
+                let marks = (
+                    core.show_paragraph_marks,
+                    core.show_control_codes,
+                    core.show_transparent_borders,
+                );
+                (
+                    core.show_paragraph_marks,
+                    core.show_control_codes,
+                    core.show_transparent_borders,
+                ) = (false, false, false);
                 let pdf = core.render_document_pdf_native();
-                (core.show_paragraph_marks, core.show_control_codes) = marks;
+                (
+                    core.show_paragraph_marks,
+                    core.show_control_codes,
+                    core.show_transparent_borders,
+                ) = marks;
                 return pdf.map_err(|_| EditError::RenderFailed);
             }
             SaveFormat::Hwp => self.core.export_hwp_native(),

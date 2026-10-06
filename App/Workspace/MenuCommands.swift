@@ -234,6 +234,7 @@ struct MenuItems {
             Menu {
                 toggle("조판 부호", viewer.showsControlCodes) { viewer.showsControlCodes.toggle() }
                 toggle("문단 부호", viewer.showsParagraphMarks) { viewer.showsParagraphMarks.toggle() }
+                toggle("투명 선", viewer.showsTransparentLines) { viewer.showsTransparentLines.toggle() }
                 toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
             } label: { Label("표시/숨기기", systemImage: Icon.paragraphMarks) }
             Divider()

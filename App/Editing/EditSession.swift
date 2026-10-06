@@ -90,8 +90,8 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.styles))
     }
     /// Shows or hides 문단 부호 and 조판 부호; the pages that change come back.
-    func showMarks(paragraph: Bool, control: Bool) async throws -> Output {
-        try await send(.showMarks(paragraph: paragraph, control: control), Output.init)
+    func showMarks(paragraph: Bool, control: Bool, borders: Bool) async throws -> Output {
+        try await send(.showMarks(paragraph: paragraph, control: control, borders: borders), Output.init)
     }
     /// The topmost picture or equation under a page point.
     func objectAt(revision: UInt64, page: UInt32, x: Double, y: Double) async throws -> PlacedObject? {

@@ -621,13 +621,14 @@ enum EngineRequest: Encodable, Sendable {
     case objectProps(ObjectRef)
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
-    case showMarks(paragraph: Bool, control: Bool)
+    /// 문단 부호, 조판 부호 and 투명 선.
+    case showMarks(paragraph: Bool, control: Bool, borders: Bool)
     case styles
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
-             includeHeaderFooter,
+             includeHeaderFooter, borders,
              object, cell, script, fontSize, color, paragraph, control
     }
     private struct Apply: Encodable {
@@ -705,10 +706,11 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(color, forKey: .color)
         case .styles:
             try c.encode("styles", forKey: .op)
-        case let .showMarks(paragraph, control):
+        case let .showMarks(paragraph, control, borders):
             try c.encode("showMarks", forKey: .op)
             try c.encode(paragraph, forKey: .paragraph)
             try c.encode(control, forKey: .control)
+            try c.encode(borders, forKey: .borders)
         case let .export(format):
             try c.encode("export", forKey: .op)
             try c.encode(format, forKey: .format)
