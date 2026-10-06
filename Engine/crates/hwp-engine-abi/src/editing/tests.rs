@@ -2135,6 +2135,42 @@ fn notes_are_inserted_and_edited() {
             .unwrap();
             replace(&mut s, note.clone(), 4, 5, "").unwrap();
             assert_eq!(s.paragraph(&note).unwrap().text, "  주석글", "{label}");
+            // 글자 모양 and 문단 모양 work in the note as in the body.
+            let words = EditSelection {
+                anchor: point(note.clone(), 2),
+                focus: point(note.clone(), 4),
+            };
+            run(
+                &mut s,
+                EditCommand::FormatText {
+                    selection: words.clone(),
+                    style: CharStyle {
+                        bold: Some(true),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+            run(
+                &mut s,
+                EditCommand::FormatParagraphs {
+                    selection: words,
+                    style: ParaStyle {
+                        alignment: Some(Alignment::Center),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap();
+            let shown = s.format(s.revision, &point(note.clone(), 4)).unwrap();
+            assert_eq!(shown.text.bold, Some(true), "{label}");
+            assert_eq!(
+                shown.paragraph.alignment,
+                Some(Alignment::Center),
+                "{label}"
+            );
+            let plain = s.format(s.revision, &point(note.clone(), 5)).unwrap();
+            assert_eq!(plain.text.bold, Some(false), "{label}");
             // The body keeps its text; the caret and a click find the note again.
             assert_eq!(
                 s.paragraph(&body()).unwrap().text,
@@ -2176,7 +2212,7 @@ fn notes_are_inserted_and_edited() {
                 reopened.paragraph(&note).unwrap().text.contains("주석"),
                 "{label}"
             );
-            for _ in 0..5 {
+            for _ in 0..7 {
                 run(&mut s, EditCommand::Undo).unwrap();
             }
             assert!(commands::get(s.core.document(), &note).is_err(), "{label}");

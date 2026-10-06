@@ -41,9 +41,7 @@ struct EditingContext: Equatable {
     var hasRange = false
     /// The caret is in a table cell (not a 글상자).
     var inTable = false
-    /// The caret is in a 각주 or 미주.
-    var inNote = false
-    /// The caret is in the body text (not a cell, 글상자 or note), where objects and breaks go.
+    /// The caret is in the body text (not a cell, 글상자, note, 머리말 or 꼬리말), where objects and breaks go.
     var inBody = false
     /// The paragraph at the caret is a 글머리표, 문단 번호 or 개요 item.
     var inList = false
@@ -54,8 +52,10 @@ struct EditingContext: Equatable {
     var cellBlock = false
     /// The kind of the selected object.
     var object: ObjectKind?
-    /// Formats can be read and changed here (not yet inside notes).
-    var canFormat: Bool { hasSelection && !inNote && !locked }
+    /// The caret is in a note, 머리말 or 꼬리말, where 스타일 do not apply.
+    var aside = false
+    /// Formats can be read and changed here.
+    var canFormat: Bool { hasSelection && !locked }
     /// The document is read-only (배포용 문서); editing commands are off.
     var locked = false
     /// A picture can be put at the caret: in the body or in a table cell.
@@ -495,11 +495,13 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         let context = EditingContext(hasSelection: selection != nil,
                               hasRange: !block && selection.map { $0.anchor != $0.focus } ?? false,
                               inTable: selection?.focus.target.cell != nil && format?.textBox != true,
-                              inNote: selection?.focus.target.note != nil,
-                              inBody: reply.locked != true && (selection.map { $0.focus.target.cell == nil && $0.focus.target.note == nil } ?? false),
+                              inBody: reply.locked != true && (selection.map {
+                                  $0.focus.target.cell == nil && $0.focus.target.note == nil && !$0.focus.target.isHeaderFooter
+                              } ?? false),
                               inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: block, object: object?.object.kind,
+                              aside: selection.map { $0.focus.target.note != nil || $0.focus.target.isHeaderFooter } ?? false,
                               locked: reply.locked == true)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }

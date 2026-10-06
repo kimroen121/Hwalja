@@ -499,6 +499,18 @@ impl EditSession {
         to: u32,
         props: &str,
     ) -> Result<(), EditError> {
+        if let Some(n) = &t.note {
+            self.core.apply_char_format_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                from as usize,
+                to as usize,
+                props,
+            )?;
+            return Ok(());
+        }
         match (&t.header_footer, &t.cell) {
             (Some(hf), _) => self.core.apply_char_format_in_header_footer_native(
                 t.section as usize,
@@ -535,6 +547,16 @@ impl EditSession {
         t: &EditTarget,
         props: &str,
     ) -> Result<(), EditError> {
+        if let Some(n) = &t.note {
+            self.core.apply_para_format_in_footnote_native(
+                t.section as usize,
+                t.paragraph as usize,
+                n.control as usize,
+                n.paragraph as usize,
+                props,
+            )?;
+            return Ok(());
+        }
         match (&t.header_footer, &t.cell) {
             (Some(hf), _) => self.core.apply_para_format_in_hf_native(
                 t.section as usize,
@@ -578,14 +600,28 @@ impl EditSession {
             return Err(EditError::StaleRevision);
         }
         let para = get(self.core.document(), &p.target)?;
-        super::commands::not_in_note(&p.target)?;
         let t = &p.target;
         let offset = logical::spot(para, p.scalar).text.saturating_sub(1);
         let parse = |text: Result<String, rhwp::error::HwpError>| -> Result<Value, EditError> {
             serde_json::from_str(&text?).map_err(|_| EditError::RenderFailed)
         };
-        let (text, para) = match (&t.header_footer, &t.cell) {
-            (Some(hf), _) => (
+        let (text, para) = match (&t.note, &t.header_footer, &t.cell) {
+            (Some(n), _, _) => (
+                self.core.get_char_properties_in_footnote_native(
+                    t.section as usize,
+                    t.paragraph as usize,
+                    n.control as usize,
+                    n.paragraph as usize,
+                    offset,
+                ),
+                self.core.get_para_properties_in_footnote_native(
+                    t.section as usize,
+                    t.paragraph as usize,
+                    n.control as usize,
+                    n.paragraph as usize,
+                ),
+            ),
+            (None, Some(hf), _) => (
                 self.core.get_char_properties_in_header_footer_native(
                     t.section as usize,
                     !hf.footer,
@@ -600,7 +636,7 @@ impl EditSession {
                     index(t),
                 ),
             ),
-            (None, Some(c)) => (
+            (None, None, Some(c)) => (
                 self.core.get_cell_char_properties_at_native(
                     t.section as usize,
                     t.paragraph as usize,
@@ -617,7 +653,7 @@ impl EditSession {
                     index(t),
                 ),
             ),
-            (None, None) => (
+            (None, None, None) => (
                 self.core
                     .get_char_properties_at_native(t.section as usize, index(t), offset),
                 self.core

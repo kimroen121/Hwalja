@@ -202,13 +202,6 @@ pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> 
     }
 }
 /// Formatting inside notes is not supported yet.
-pub(super) fn not_in_note(t: &EditTarget) -> Result<(), EditError> {
-    if t.note.is_some() {
-        Err(EditError::UnsupportedTarget)
-    } else {
-        Ok(())
-    }
-}
 /// Not a note, 머리말 or 꼬리말.
 pub(super) fn body_or_cell(t: &EditTarget) -> Result<(), EditError> {
     if t.note.is_some() || t.header_footer.is_some() {
@@ -345,7 +338,6 @@ impl EditSession {
             }
             EditCommand::FormatText { selection, style } => {
                 self.validate_range(selection)?;
-                not_in_note(&selection.anchor.target)?;
                 let (start, end) = ordered(selection);
                 if start == end {
                     return Err(EditError::InvalidInput);
@@ -356,7 +348,6 @@ impl EditSession {
             EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
-                not_in_note(&selection.anchor.target)?;
                 super::format::validate_para(style)
             }
             EditCommand::InsertNote { position, .. } => {

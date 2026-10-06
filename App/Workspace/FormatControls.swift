@@ -78,6 +78,7 @@ struct FormatRow: View {
                     Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
                         .lineLimit(1).frame(width: 84, alignment: .leading)
                 }
+                .disabled(context.aside)
                 FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(text?.font, editor) }) {
                     Text(text?.font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
                 }

@@ -24,10 +24,94 @@ index 3aef940..fcfe070 100644
              source_format,
              hml_metadata,
 diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
-index 763b020..a7a7e9c 100644
+index 763b020..a48ff3d 100644
 --- a/src/document_core/commands/footnote_ops.rs
 +++ b/src/document_core/commands/footnote_ops.rs
-@@ -521,9 +521,10 @@ impl DocumentCore {
+@@ -1,9 +1,10 @@
+ //! 각주 내용 편집 관련 native 메서드
+ 
+ use super::super::helpers::{
+-    build_tab_def_from_json, json_has_border_keys, json_has_tab_keys, parse_json_i16_array,
+-    parse_para_shape_mods,
++    build_tab_def_from_json, json_has_border_keys, json_has_tab_keys, parse_char_shape_mods,
++    parse_json_i16_array, parse_para_shape_mods,
+ };
++use super::formatting::char_shape_mods_affect_text_flow;
+ use crate::document_core::DocumentCore;
+ use crate::error::HwpError;
+ use crate::model::control::Control;
+@@ -452,6 +453,70 @@ impl DocumentCore {
+         Ok("{\"ok\":true}".to_string())
+     }
+ 
++    /// 각주/미주 내부 문단의 글자 속성 조회.
++    pub fn get_char_properties_in_footnote_native(
++        &self,
++        section_idx: usize,
++        para_idx: usize,
++        control_idx: usize,
++        fn_para_idx: usize,
++        char_offset: usize,
++    ) -> Result<String, HwpError> {
++        let para = self
++            .get_footnote_paragraph_ref(section_idx, para_idx, control_idx, fn_para_idx)
++            .ok_or_else(|| HwpError::RenderError("각주/미주 문단을 찾을 수 없음".to_string()))?;
++        if char_offset > para.text.chars().count() {
++            return Err(HwpError::RenderError("각주/미주 문자 범위 초과".to_string()));
++        }
++        Ok(self.build_char_properties_json(para, char_offset))
++    }
++
++    /// 각주/미주 내부 문단의 글자 범위에 글자 서식을 적용한다.
++    #[allow(clippy::too_many_arguments)]
++    pub fn apply_char_format_in_footnote_native(
++        &mut self,
++        section_idx: usize,
++        para_idx: usize,
++        control_idx: usize,
++        fn_para_idx: usize,
++        start_offset: usize,
++        end_offset: usize,
++        props_json: &str,
++    ) -> Result<String, HwpError> {
++        let len = self
++            .get_footnote_paragraph_ref(section_idx, para_idx, control_idx, fn_para_idx)
++            .ok_or_else(|| HwpError::RenderError("각주/미주 문단을 찾을 수 없음".to_string()))?
++            .text
++            .chars()
++            .count();
++        if start_offset >= end_offset || end_offset > len {
++            return Err(HwpError::RenderError("각주/미주 문자 범위 초과".to_string()));
++        }
++        let mut mods = parse_char_shape_mods(props_json);
++        if json_has_border_keys(props_json) {
++            mods.border_fill_id = Some(self.create_border_fill_from_json(props_json));
++        }
++        let base_id = self
++            .get_footnote_paragraph_ref(section_idx, para_idx, control_idx, fn_para_idx)
++            .and_then(|p| p.char_shape_id_at(start_offset))
++            .unwrap_or(0);
++        let new_id = self.document.find_or_create_char_shape(base_id, &mods);
++        self.get_footnote_paragraph_mut(section_idx, para_idx, control_idx, fn_para_idx)?
++            .apply_char_shape_range(start_offset, end_offset, new_id);
++        if char_shape_mods_affect_text_flow(&mods) {
++            self.reflow_footnote_paragraph(section_idx, para_idx, control_idx, fn_para_idx);
++        }
++        self.document.sections[section_idx].raw_stream = None;
++        self.rebuild_section(section_idx);
++        self.event_log.push(DocumentEvent::CharFormatChanged {
++            section: section_idx,
++            para: para_idx,
++            start: start_offset,
++            end: end_offset,
++        });
++        Ok("{\"ok\":true}".to_string())
++    }
++
+     /// 각주 문단 정보를 반환한다.
+     /// JSON: `{"ok":true,"paraCount":N,"textLen":N,"text":"..."}`
+     pub fn get_footnote_info_native(
+@@ -521,9 +586,10 @@ impl DocumentCore {
          text: &str,
      ) -> Result<String, HwpError> {
          let new_chars_count = text.chars().count();

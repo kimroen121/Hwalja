@@ -750,7 +750,7 @@ struct DocumentTests {
         viewer.insertNote(endnote: false)
         await document.settle()
         let caret = try #require(document.selection?.focus)
-        #expect(caret.target.note != nil && document.context.inNote && !document.context.canFormat)
+        #expect(caret.target.note != nil && !document.context.inBody && document.context.canFormat)
         document.type("각주 내용", nil)
         await document.settle()
         #expect(document.selection?.focus.scalar == caret.scalar + 5)

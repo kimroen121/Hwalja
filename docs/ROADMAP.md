@@ -34,7 +34,7 @@
 | 파일 | 새 문서·열기·최근 문서·저장(⌘S)·다른 이름으로 저장·버전(macOS 기본), PDF로 내보내기(⇧⌘E), 프린트(⌘P), 편집 용지(F7) | `export_hwp(x)_native`, `render_document_pdf_native`, `get/set_page_def_native` | 문서 정보…, 암호 문서 |
 | 편집 | 되돌리기·다시 실행(20단계), 오려 두기·복사하기·붙이기(평문, 그림 붙이기), 모양 복사(⌥⌘C, 글자 모양), 지우기, 모두 선택, 찾기 막대(⌘F, ⌥⌘F, ⌘G/⇧⌘G, ⌘E, 모두 바꾸기는 1단위), 찾아가기(⌥⌘G) | snapshot, Replace, `search_all_text_native` | 서식 있는 복사·붙이기, 조판 부호 지우기 |
 | 보기 | 확대/축소(50–300%, 쪽 맞춤, 폭 맞춤, ⌘/⌃+휠·핀치), 쪽 모양(한 쪽·두 쪽·세 쪽), 표시/숨기기(조판 부호, 문단 부호, 격자 보기 5 mm 점), 도구 상자(기본·서식), 사이드바 | `show_paragraph_marks`, `show_control_codes`(패치로 공개) | 투명 선, 쪽 윤곽, 눈금자 |
-| 입력 | 도형(가로 글상자·직사각형·타원·직선·호, 끌어 그리기), 글상자(안 글자 입력 포함), 그림(모든 그림 파일, 붙이기), 표, 수식(편집기·실시간 미리 보기·더블클릭 고치기), 문자표(macOS 이모티콘 및 기호), 각주·미주(안 글자 편집 포함), 캡션 넣기(9곳) | InsertShape, `insert_picture_native`, `create_table_native`, `insert_equation_native`, InsertNote, SetObject(caption) | 책갈피, 누름틀·필드 입력, 차트 |
+| 입력 | 도형(가로 글상자·직사각형·타원·직선·호, 끌어 그리기), 글상자(안 글자 입력 포함), 그림(모든 그림 파일, 붙이기), 표, 수식(편집기·실시간 미리 보기·더블클릭 고치기), 문자표(macOS 이모티콘 및 기호), 각주·미주(안 글자 편집·글자/문단 모양 포함), 캡션 넣기(9곳) | InsertShape, `insert_picture_native`, `create_table_native`, `insert_equation_native`, InsertNote, SetObject(caption) | 책갈피, 누름틀·필드 입력, 차트 |
 | 서식 | 글자 모양(⌘L: 기본·확장, 테두리·배경), 문단 모양(⌘T: 기본·테두리/배경), 글머리표·문단 번호 매기기와 한 수준 증가/감소, 스타일 상자, 개체 속성(기본·여백/캡션·그림·표·셀), 빠른 메뉴(오른쪽 클릭) | `apply_char/para_format_native`, `apply_style_native`, SetObject, SetCell | 아래 「단계」 2 |
 | 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호, 더블클릭으로 들어가 글자 편집 — 쪽 번호 필드는 지우지 않음), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩) | HeaderFooter, `*_in_header_footer_native`, `insert_page/column_break_native` | 새 번호로 시작, 현재 쪽만 감추기, 단, 다단 설정 나누기 |
 | 표 | 표 만들기(격자·대화상자), 표/셀 속성, 줄/칸 추가하기·지우기, 셀 나누기·합치기, 셀 높이·너비를 같게(셀 블록에서 M·S·H·W), 표 테두리 끌기(칸 오른쪽·줄 아래) | `create_table_native`, `insert/delete_table_row/column_native`, `merge_table_cells_native`, `split_table_cell*_native`, ResizeTable | 셀 테두리/배경, 블록 계산식 |
@@ -51,7 +51,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 키 입력이 닿는 곳을 늘린다. 각각 보존 검사를 먼저 만든다.
 
 - [ ] 머리말·꼬리말 안 쪽 번호 넣기, 그림 속성: `insert_field_in_hf`, `get/set_header_footer_picture_properties`. 빈 머리말·꼬리말에는 아직 들어갈 수 없다.
-- [ ] 주석 안 문단 서식: `apply_para_format_in_footnote`.
 - [ ] 각주·머리말 안 개체, 셀 안 도형, 중첩 표 셀 안 개체 선택, 중첩 표 셀 편집, 그리기 개체 캡션 글자: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 칸 문단에 수식이 둘 이상이면 rhwp의 칸 수식 함수가 첫 수식만 찾는다. 도형의 칸 0은 글상자라 캡션을 가리킬 경로가 없다.
 - [ ] 주석 안 수식 고치기: `get/set_note_equation_properties`.
 - [ ] 여러 문단 선택 삭제에서 사이 문단의 컨트롤 처리: `capture_delete_range`/`restore_delete_fragment`, `delete_range_native`.

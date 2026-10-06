@@ -13,6 +13,7 @@
 - lets text go in after the controls standing at an offset (`set_insert_skip`, `Paragraph::insert_text_after_controls`), so typing right after an inline picture or equation stays after it;
 - moves character shapes back with the text when a control is deleted (they stayed put, shifting formatting after an object by eight units);
 - lets the cell-path delete take an equation or drawing object as well as a picture;
+- adds `get_char_properties_in_footnote_native` and `apply_char_format_in_footnote_native`, as the header and footer have, for 글자 모양 inside notes;
 - writes a new picture caption as `그림 ` + number + space, as table and drawing-object captions are written (it was an empty paragraph).
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
