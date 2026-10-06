@@ -45,7 +45,68 @@ final class DocumentCanvas: NSScrollView {
     }
     @objc private func viewChanged() {
         editor.placeCaret()
+        if showsRuler { needsRulers() }
         onViewChange?()
+    }
+
+    /// 눈금자: rulers counting from the page in view, its body's edges marked.
+    var showsRuler = false {
+        didSet {
+            hasHorizontalRuler = showsRuler
+            hasVerticalRuler = showsRuler
+            rulersVisible = showsRuler
+            needsRulers()
+        }
+    }
+    private var rulersPending = false
+    /// Places the rulers once, after the layout that asked: changing them lays the view out again.
+    private func needsRulers() {
+        guard !rulersPending else { return }
+        rulersPending = true
+        DispatchQueue.main.async { [weak self] in
+            self?.rulersPending = false
+            self?.placeRulers()
+        }
+    }
+    /// The page setup the markers show, with the section and revision it was read at.
+    private var rulerPage: (section: UInt32, revision: UInt64, page: PageSetup)?
+
+    private func placeRulers() {
+        guard showsRuler, let across = horizontalRulerView, let down = verticalRulerView, let model = editor.model else { return }
+        let visible = documentVisibleRect
+        guard let page = editor.frame(ofPage: editor.page(near: NSPoint(x: visible.midX, y: visible.midY))) else { return }
+        // Markers need the view they measure.
+        if across.clientView !== editor { across.clientView = editor }
+        if down.clientView !== editor { down.clientView = editor }
+        across.originOffset = page.minX
+        down.originOffset = page.minY
+        let section = model.selection?.focus.target.section ?? 0
+        guard let setup = rulerPage, setup.section == section, setup.revision == model.revision else {
+            across.markers = nil
+            down.markers = nil
+            let revision = model.revision
+            Task { [weak self] in
+                guard let setup = try? await model.pageSetup(section: section) else { return }
+                self?.rulerPage = (section, revision, setup)
+                self?.needsRulers()
+            }
+            return
+        }
+        // HWPUNIT to points; the body starts below the 머리말 and ends above the 꼬리말.
+        let points = { (units: UInt32) in CGFloat(units) / 100 }
+        let p = setup.page
+        func marker(_ ruler: NSRulerView, _ at: CGFloat, _ symbol: String) -> NSRulerMarker? {
+            guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 8, weight: .regular)) else { return nil }
+            let marker = NSRulerMarker(rulerView: ruler, markerLocation: at, image: image,
+                                       imageOrigin: NSPoint(x: image.size.width / 2, y: 0))
+            marker.isMovable = false
+            return marker
+        }
+        across.markers = [marker(across, points(p.marginLeft + p.marginGutter), "arrowtriangle.down.fill"),
+                          marker(across, page.width - points(p.marginRight), "arrowtriangle.down.fill")].compactMap { $0 }
+        down.markers = [marker(down, points(p.marginTop + p.marginHeader), "arrowtriangle.right.fill"),
+                        marker(down, page.height - points(p.marginBottom + p.marginFooter), "arrowtriangle.right.fill")].compactMap { $0 }
     }
     @objc private func userMagnified() { fit = nil }
 

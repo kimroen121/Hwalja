@@ -169,6 +169,9 @@ final class Viewer: ObservableObject {
     @Published var showsGrid = false {
         didSet { canvas.editor.showsGrid = showsGrid }
     }
+    @Published var showsRuler = false {
+        didSet { canvas.showsRuler = showsRuler }
+    }
     @Published var goingToPage = false
     @Published var insertingTable = false
     @Published var splittingCells = false
