@@ -67,11 +67,11 @@ struct ToolRow: View {
         find
         RowDivider()
         ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            .disabled(!context.inBody)
+            .disabled(!context.canEditBody)
         ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             .disabled(!context.canPicture)
         ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-            .disabled(!context.inBody)
+            .disabled(!context.canEditBody)
         RowDivider()
         notes(context)
         RowDivider()
@@ -82,7 +82,7 @@ struct ToolRow: View {
         RowDivider()
         objectProperties(context)
         RowDivider()
-        headers
+        headers(context)
         MarkTiles(viewer: viewer)
     }
 
@@ -96,7 +96,7 @@ struct ToolRow: View {
         ToolTile("모양 복사", Icon.styleCopy) { viewer.paintFormat() }
             .disabled(!context.canFormat)
         ToolTile("지우기", Icon.delete) { viewer.canvas.editor.doCommand(by: #selector(NSResponder.deleteBackward(_:))) }
-            .disabled(!context.hasRange && context.object == nil)
+            .disabled(context.locked || (!context.hasRange && context.object == nil))
         RowDivider()
         ToolTile("모두 선택", Icon.selectAll) { send(#selector(NSText.selectAll(_:))) }
             .disabled(!context.hasSelection)
@@ -126,15 +126,16 @@ struct ToolRow: View {
 
     @ViewBuilder private func insert(_ context: EditingContext) -> some View {
         ToolTile("도형", Icon.shape, choices: { MenuItems.shapeChoices(viewer) })
-            .disabled(!context.inBody)
+            .disabled(!context.canEditBody)
         ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             .disabled(!context.canPicture)
         Group {
             ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
             ToolTile("글상자", Icon.textbox) { viewer.draw("textbox") }
-            ToolTile("수식", Icon.equation) { viewer.newEquation() }
         }
-        .disabled(!context.inBody)
+        .disabled(!context.canEditBody)
+        ToolTile("수식", Icon.equation) { viewer.newEquation() }
+            .disabled(!context.canEquation)
         ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
             .disabled(!context.hasSelection)
         RowDivider()
@@ -160,21 +161,22 @@ struct ToolRow: View {
 
     @ViewBuilder private func page(_ context: EditingContext) -> some View {
         ToolTile("편집 용지", Icon.pageSetup) { viewer.showPageSetup() }
+            .disabled(context.locked)
         RowDivider()
-        headers
+        headers(context)
         RowDivider()
         Group {
             ToolTile("쪽 나누기", Icon.pageBreak) { viewer.insertBreak(column: false) }
             ToolTile("단 나누기", Icon.columnBreak) { viewer.insertBreak(column: true) }
         }
-        .disabled(!context.inBody)
+        .disabled(!context.canEditBody)
     }
 
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
         ToolTile("표", Icon.table, action: { viewer.insertingTable = true }, panel: AnyView(TableGrid(viewer: viewer)))
-            .disabled(!context.inBody)
+            .disabled(!context.canEditBody)
         ToolTile("표/셀 속성", Icon.objectProps) { viewer.showObjectProperties() }
-            .disabled(!context.inTable)
+            .disabled(!context.canEditTable)
         RowDivider()
         Group {
             ToolTile("줄/칸 추가하기", Icon.insertRow, choices: {
@@ -190,7 +192,7 @@ struct ToolRow: View {
             RowDivider()
             ToolTile("셀 나누기", Icon.splitCells) { viewer.splittingCells = true }
         }
-        .disabled(!context.inTable)
+        .disabled(!context.canEditTable)
         Group {
             ToolTile("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
             ToolTile("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
@@ -208,11 +210,11 @@ struct ToolRow: View {
 
     @ViewBuilder private func clipboard(_ context: EditingContext) -> some View {
         ToolTile("오려 두기", Icon.cut) { send(#selector(NSText.cut(_:))) }
-            .disabled(!context.hasRange && context.object == nil)
+            .disabled(context.locked || (!context.hasRange && context.object == nil))
         ToolTile("복사하기", Icon.copy) { send(#selector(NSText.copy(_:))) }
             .disabled(!context.hasRange && context.object == nil)
         ToolTile("붙이기", Icon.paste) { send(#selector(NSText.paste(_:))) }
-            .disabled(!context.hasSelection)
+            .disabled(!context.hasSelection || context.locked)
     }
     private var find: some View {
         ToolTile("찾기", Icon.find, action: { viewer.showFind(replace: false) }, choices: { MenuItems.findChoices(viewer) })
@@ -222,7 +224,7 @@ struct ToolRow: View {
             ToolTile("각주", Icon.footnote) { viewer.insertNote(endnote: false) }
             ToolTile("미주", Icon.endnote) { viewer.insertNote(endnote: true) }
         }
-        .disabled(!context.inBody)
+        .disabled(!context.canEditBody)
     }
     @ViewBuilder private func shapes(_ context: EditingContext) -> some View {
         Group {
@@ -233,11 +235,14 @@ struct ToolRow: View {
     }
     private func objectProperties(_ context: EditingContext) -> some View {
         ToolTile("개체 속성", Icon.objectProps) { viewer.showObjectProperties() }
-            .disabled(context.object == nil && !context.inTable)
+            .disabled(context.locked || (context.object == nil && !context.inTable))
     }
-    @ViewBuilder private var headers: some View {
-        ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
-        ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
+    @ViewBuilder private func headers(_ context: EditingContext) -> some View {
+        Group {
+            ToolTile("머리말", Icon.header, choices: { MenuItems.headerChoices(viewer, footer: false) })
+            ToolTile("꼬리말", Icon.footer, choices: { MenuItems.headerChoices(viewer, footer: true) })
+        }
+        .disabled(context.locked)
     }
 }
 

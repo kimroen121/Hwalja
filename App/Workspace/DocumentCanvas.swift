@@ -1094,13 +1094,15 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let hasRange = model?.selection.map { $0.anchor != $0.focus } ?? false
+        let locked = model?.context.locked == true
         switch item.action {
         case #selector(copyFont(_:)): return model?.format != nil
-        case #selector(pasteFont(_:)): return hasRange && Self.copiedStyle != nil
-        case #selector(copy(_:)), #selector(cut(_:)): return hasRange || model?.object != nil
-        case #selector(delete(_:)): return hasRange
+        case #selector(pasteFont(_:)): return !locked && hasRange && Self.copiedStyle != nil
+        case #selector(copy(_:)): return hasRange || model?.object != nil
+        case #selector(cut(_:)): return !locked && (hasRange || model?.object != nil)
+        case #selector(delete(_:)): return !locked && hasRange
         case #selector(paste(_:)):
-            return model?.selection != nil
+            return !locked && model?.selection != nil
                 && (pasteboard.availableType(from: [Self.copyType, .html, .string]) != nil || NSImage.canInit(with: pasteboard))
         case #selector(selectAll(_:)): return model?.selection != nil
         default: return responds(to: item.action)

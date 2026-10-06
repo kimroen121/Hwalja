@@ -66,8 +66,16 @@ struct EditingContext: Equatable {
     var locked = false
     /// A picture can be put at the caret: in the body or in a table cell.
     var canPicture: Bool { (inBody || inTable) && !locked }
+    /// An equation can be put at the caret: in the body or in a table cell.
+    var canEquation: Bool { (inBody || inTable) && !locked }
+    /// Commands that mutate body structure, such as tables, notes and breaks.
+    var canEditBody: Bool { inBody && !locked }
+    /// Commands that mutate the table containing the caret.
+    var canEditTable: Bool { inTable && !locked }
     /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
-    var canCaption: Bool { object == .picture || object == .table || (inTable && object == nil) }
+    var canCaption: Bool {
+        !locked && (object == .picture || object == .table || (inTable && object == nil))
+    }
 }
 
 /// One open HWP/HWPX document: the engine session plus the state views render.

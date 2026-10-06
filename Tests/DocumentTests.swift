@@ -185,6 +185,24 @@ struct DocumentTests {
         #expect(document.revision == 2 && !document.reply.dirty)
     }
 
+    /// Equations use the same valid insertion targets as pictures: body text and table cells.
+    @Test func equationInsertionIsAvailableInTableCells() {
+        #expect(EditingContext(inBody: true).canEquation)
+        #expect(EditingContext(inTable: true).canEquation)
+        #expect(!EditingContext(inNote: true).canEquation)
+        #expect(!EditingContext(inHeaderFooter: true).canEquation)
+        #expect(!EditingContext(inTable: true, locked: true).canEquation)
+    }
+
+    @Test func lockedDocumentsDisableEveryMutatingContainerCommand() {
+        #expect(EditingContext(inBody: true).canEditBody)
+        #expect(EditingContext(inTable: true).canEditTable)
+        #expect(!EditingContext(inBody: true, locked: true).canEditBody)
+        #expect(!EditingContext(inTable: true, locked: true).canEditTable)
+        #expect(!EditingContext(inTable: true, locked: true).canCaption)
+        #expect(!EditingContext(object: .picture, locked: true).canCaption)
+    }
+
     /// The equation inserted at `body`, found the way the canvas finds what was clicked.
     @Test func objectsAreSelectedChangedAndDeleted() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
@@ -222,6 +240,20 @@ struct DocumentTests {
         let picture = titles(EditingContext(hasSelection: true, object: .picture))
         #expect(picture.contains("원래 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))
         #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
+    }
+
+    @Test func quickMenuKeepsCopyButDisablesMutationsInLockedDocuments() throws {
+        let context = EditingContext(hasSelection: true, hasRange: true, inTable: true,
+                                     cellBlock: true, locked: true)
+        let items = MenuItems.quickMenu(Viewer(), context).compactMap { $0 }
+        let enabled = { (title: String) in items.first { $0.title == title }?.enabled }
+        #expect(enabled("복사하기") == true)
+        #expect(enabled("오려 두기") == false)
+        #expect(enabled("붙이기") == false)
+        #expect(enabled("지우기") == false)
+        #expect(enabled("표/셀 속성…") == false)
+        #expect(enabled("셀 합치기") == false)
+        #expect(enabled("줄/칸 추가하기") == false)
     }
 
     /// 문단 부호 and 조판 부호 redraw the pages without touching the document or undo.
