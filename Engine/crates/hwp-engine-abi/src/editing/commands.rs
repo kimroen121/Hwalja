@@ -126,7 +126,7 @@ pub(super) fn ordered(s: &EditSelection) -> (&EditPosition, &EditPosition) {
     }
 }
 /// Whether two targets address paragraphs of the same container.
-fn same_container(a: &EditTarget, b: &EditTarget) -> bool {
+pub(super) fn same_container(a: &EditTarget, b: &EditTarget) -> bool {
     a.section == b.section
         && a.header_footer == b.header_footer
         && match (&a.cell, &b.cell) {

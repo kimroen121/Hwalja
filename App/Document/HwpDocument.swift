@@ -516,7 +516,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             if selection.anchor != selection.focus {
                 highlight = (try? await session.selectionRects(revision: revision, for: selection)) ?? []
             }
-            format = try? await session.format(revision: revision, at: selection.ordered.end)
+            format = try? await session.format(revision: revision, at: selection.ordered.end,
+                                               from: selection.anchor == selection.focus ? nil : selection.ordered.start)
         }
         if styles.isEmpty, let list = try? await session.styles() { styles = list }
         // A pending style lasts while the caret stays put or composition continues there.

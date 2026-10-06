@@ -36,9 +36,12 @@ enum Request {
         revision: u64,
         selection: EditSelection,
     },
+    /// The format at `position`; with `from`, of the characters selected between them.
     Format {
         revision: u64,
         position: EditPosition,
+        #[serde(default)]
+        from: Option<EditPosition>,
     },
     #[serde(rename_all = "camelCase")]
     Navigate {
@@ -180,8 +183,12 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             session.navigate(revision, &position, motion, goal_x)?,
             Vec::new(),
         ),
-        Request::Format { revision, position } => {
-            HwpEditResult::ok(session.format(revision, &position)?, Vec::new())
+        Request::Format {
+            revision,
+            position,
+            from,
+        } => {
+            HwpEditResult::ok(session.format(revision, &position, from.as_ref())?, Vec::new())
         }
         Request::ObjectAt {
             revision,

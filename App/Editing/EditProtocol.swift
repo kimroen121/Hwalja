@@ -662,7 +662,8 @@ enum EngineRequest: Encodable, Sendable {
     case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double, includeHeaderFooter: Bool)
     case caret(revision: UInt64, EditPosition)
     case selectionRects(revision: UInt64, EditSelection)
-    case format(revision: UInt64, EditPosition)
+    /// With `from`, of the characters selected between the two positions.
+    case format(revision: UInt64, EditPosition, from: EditPosition?)
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
@@ -684,7 +685,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control
+             object, cell, script, fontSize, color, paragraph, control, from
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -716,10 +717,11 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("selectionRects", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(selection, forKey: .selection)
-        case let .format(revision, position):
+        case let .format(revision, position, from):
             try c.encode("format", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(position, forKey: .position)
+            try c.encodeIfPresent(from, forKey: .from)
         case let .navigate(revision, position, motion, goalX):
             try c.encode("navigate", forKey: .op)
             try c.encode(revision, forKey: .revision)

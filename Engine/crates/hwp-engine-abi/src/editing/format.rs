@@ -741,7 +741,14 @@ impl EditSession {
             .ok_or(EditError::RenderFailed)
     }
     /// Format of the text before the caret (what typing continues with) and its paragraph.
-    pub fn format(&self, revision: u64, p: &EditPosition) -> Result<Format, EditError> {
+    /// The format at `p`: of the character before it, and its paragraph. With `from`, the
+    /// character attributes that differ across the characters between them are unset.
+    pub fn format(
+        &self,
+        revision: u64,
+        p: &EditPosition,
+        from: Option<&EditPosition>,
+    ) -> Result<Format, EditError> {
         if self.locked {
             return Err(EditError::Locked);
         }
@@ -749,8 +756,66 @@ impl EditSession {
             return Err(EditError::StaleRevision);
         }
         let para = get(self.core.document(), &p.target)?;
-        let t = &p.target;
         let offset = logical::spot(para, p.scalar).text.saturating_sub(1);
+        let mut format = self.format_at(&p.target, offset)?;
+        if let Some(from) = from {
+            self.unset_mixed(&mut format.text, from, p)?;
+        }
+        Ok(format)
+    }
+    /// Unsets the attributes of `text` that differ across the characters from `a` to `b`,
+    /// looking at one character of each character shape among them.
+    fn unset_mixed(
+        &self,
+        text: &mut CharStyle,
+        a: &EditPosition,
+        b: &EditPosition,
+    ) -> Result<(), EditError> {
+        let (start, end) = if (index(&a.target), a.scalar) <= (index(&b.target), b.scalar) {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        if start == end || !super::commands::same_container(&start.target, &end.target) {
+            return Ok(());
+        }
+        let all = super::commands::paragraphs(self.core.document(), &start.target)?;
+        let (s, e) = (index(&start.target), index(&end.target));
+        let Ok(Value::Object(mut kept)) = serde_json::to_value(&*text) else {
+            return Err(EditError::RenderFailed);
+        };
+        let mut seen = std::collections::HashSet::new();
+        'paragraphs: for (i, p) in all.iter().enumerate().take(e + 1).skip(s) {
+            let len = p.text.chars().count();
+            let from = if i == s { logical::spot(p, start.scalar).text } else { 0 };
+            let to = if i == e { logical::spot(p, end.scalar).text } else { len };
+            // A shape starts at a UTF-16 offset; `char_offsets` maps characters to them.
+            let char_at = |unit: u32| match p.char_offsets.is_empty() {
+                true => (unit as usize).min(len),
+                false => p.char_offsets.iter().position(|&o| o >= unit).unwrap_or(len),
+            };
+            for (k, run) in p.char_shapes.iter().enumerate() {
+                let first = char_at(run.start_pos).max(from);
+                let last = p.char_shapes.get(k + 1).map_or(len, |n| char_at(n.start_pos)).min(to);
+                if first >= last || !seen.insert(run.char_shape_id) {
+                    continue;
+                }
+                // ponytail: 32 shapes looked at; enough for a toolbar, a whole-file scan if not.
+                if seen.len() > 32 {
+                    break 'paragraphs;
+                }
+                let other = self.format_at(&super::commands::at_index(&start.target, i), first)?;
+                let Ok(Value::Object(other)) = serde_json::to_value(&other.text) else {
+                    return Err(EditError::RenderFailed);
+                };
+                kept.retain(|key, value| other.get(key) == Some(value));
+            }
+        }
+        *text = serde_json::from_value(Value::Object(kept)).map_err(|_| EditError::RenderFailed)?;
+        Ok(())
+    }
+    /// The format of character `offset` of the paragraph at `t`, and of the paragraph.
+    fn format_at(&self, t: &EditTarget, offset: usize) -> Result<Format, EditError> {
         let parse = |text: Result<String, rhwp::error::HwpError>| -> Result<Value, EditError> {
             serde_json::from_str(&text?).map_err(|_| EditError::RenderFailed)
         };

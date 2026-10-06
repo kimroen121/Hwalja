@@ -73,8 +73,9 @@ final class EditSession: @unchecked Sendable {
     func navigate(revision: UInt64, from position: EditPosition, _ motion: Motion, goalX: Double?) async throws -> Navigation {
         try await decode(send(.navigate(revision: revision, position, motion, goalX: goalX)))
     }
-    func format(revision: UInt64, at position: EditPosition) async throws -> Format {
-        try await decode(send(.format(revision: revision, position)))
+    /// The format at `position`; with `from`, unset where the characters between them differ.
+    func format(revision: UInt64, at position: EditPosition, from: EditPosition? = nil) async throws -> Format {
+        try await decode(send(.format(revision: revision, position, from: from)))
     }
 
     /// Every match of `query` the editor can select, in document order.

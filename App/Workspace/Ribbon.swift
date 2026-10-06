@@ -15,7 +15,7 @@ struct ToolRow: View {
     var body: some View {
         let context = document.context
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 17) {
+            HStack(spacing: 18) {
                 ForEach(Self.tabs, id: \.self) { name in
                     Button { withAnimation(.snappy(duration: 0.25)) { tab = name } } label: {
                         Text(name)
@@ -29,7 +29,7 @@ struct ToolRow: View {
                                         .frame(height: 3)
                                         .padding(.horizontal, hovered == name ? -4 : 0)
                                         .matchedGeometryEffect(id: "underline", in: underline)
-                                        .offset(y: 2)
+                                        .offset(y: 1.5)
                                 }
                             }
                             .contentShape(Rectangle())

@@ -468,7 +468,8 @@ pub struct EditReply {
     pub dirty: bool,
     pub locked: bool,
 }
-/// Character format: as a query result every field is set; as a change, unset fields stay.
+/// Character format: as a query result every field is set, except those that differ across
+/// a selection's characters; as a change, unset fields stay.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CharStyle {

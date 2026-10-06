@@ -344,13 +344,13 @@ fn header_footer_replaces_splits_merges_formats_and_undoes_atomically() {
         },
     )
     .unwrap();
-    let format = s.format(s.revision, &point(target.clone(), 1)).unwrap();
+    let format = s.format(s.revision, &point(target.clone(), 1), None).unwrap();
     assert_eq!(format.text.bold, Some(true));
     assert_eq!(format.paragraph.alignment, Some(Alignment::Center));
 
     command(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(
-        s.format(s.revision, &point(target, 1))
+        s.format(s.revision, &point(target, 1), None)
             .unwrap()
             .paragraph
             .alignment,
@@ -476,7 +476,7 @@ fn header_footer_text_and_format_round_trip_hwp_and_hwpx() {
         assert_eq!(reopened.paragraph(&even).unwrap().text, "교정 e\u{301}");
         assert_eq!(
             reopened
-                .format(0, &point(even, 1))
+                .format(0, &point(even, 1), None)
                 .unwrap()
                 .paragraph
                 .alignment,
@@ -1347,12 +1347,12 @@ fn formats_text_and_paragraphs_and_saves() {
         )
         .unwrap();
         assert_eq!(reply.selection, Some(selection.clone()));
-        let at = s.format(1, &point(body(), 1)).unwrap();
+        let at = s.format(1, &point(body(), 1), None).unwrap();
         assert_eq!(at.text.font.as_deref(), Some("Apple SD Gothic Neo"));
         assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
         assert_eq!(at.text.color.as_deref(), Some("#ff0000"));
         assert!(!at.fonts.is_empty());
-        let after = s.format(1, &point(body(), 3)).unwrap();
+        let after = s.format(1, &point(body(), 3), None).unwrap();
         assert_eq!(after.text.bold, Some(false));
 
         let style = ParaStyle {
@@ -1362,7 +1362,7 @@ fn formats_text_and_paragraphs_and_saves() {
             ..Default::default()
         };
         run(&mut s, EditCommand::FormatParagraphs { selection, style }).unwrap();
-        let at = s.format(2, &point(body(), 0)).unwrap();
+        let at = s.format(2, &point(body(), 0), None).unwrap();
         assert_eq!(at.paragraph.alignment, Some(Alignment::Center));
         assert_eq!(at.paragraph.line_spacing, Some(200.0));
 
@@ -1374,7 +1374,7 @@ fn formats_text_and_paragraphs_and_saves() {
             })
             .unwrap();
         let reopened = EditSession::open(&saved).unwrap();
-        let at = reopened.format(0, &point(body(), 1)).unwrap();
+        let at = reopened.format(0, &point(body(), 1), None).unwrap();
         assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
         assert_eq!(at.paragraph.alignment, Some(Alignment::Center));
     }
@@ -1421,7 +1421,7 @@ fn borders_and_backgrounds_are_set_read_and_saved() {
         };
         run(&mut s, command).unwrap();
         let check = |s: &EditSession| {
-            let at = s.format(s.revision, &point(body(), 1)).unwrap();
+            let at = s.format(s.revision, &point(body(), 1), None).unwrap();
             let t = &at.text;
             assert_eq!(
                 (t.border_line, t.border_width, t.border_color.as_deref()),
@@ -1585,7 +1585,7 @@ fn later_formats_keep_earlier_ones() {
         })
         .unwrap();
     }
-    let at = s.format(3, &point(body(), 1)).unwrap();
+    let at = s.format(3, &point(body(), 1), None).unwrap();
     assert_eq!(at.text.color.as_deref(), Some("#ff0000"));
     assert_eq!((at.text.size, at.text.bold), (Some(20.0), Some(true)));
 }
@@ -1614,8 +1614,8 @@ fn formatting_a_span_keeps_each_runs_other_attributes() {
         ..Default::default()
     };
     s.apply(request(1, 12, big)).unwrap();
-    let first = s.format(2, &point(body(), 1)).unwrap();
-    let later = s.format(2, &point(body(), 12)).unwrap();
+    let first = s.format(2, &point(body(), 1), None).unwrap();
+    let later = s.format(2, &point(body(), 12), None).unwrap();
     assert_eq!(
         (first.text.color.as_deref(), first.text.size),
         (Some("#ff0000"), Some(20.0))
@@ -1624,6 +1624,15 @@ fn formatting_a_span_keeps_each_runs_other_attributes() {
         (later.text.color.as_deref(), later.text.size),
         (Some("#000000"), Some(20.0))
     );
+    // Over both runs the color is mixed; the size is not.
+    let span = s
+        .format(2, &point(body(), 12), Some(&point(body(), 0)))
+        .unwrap();
+    assert_eq!((span.text.color, span.text.size), (None, Some(20.0)));
+    let red = s
+        .format(2, &point(body(), 0), Some(&point(body(), 1)))
+        .unwrap();
+    assert_eq!(red.text.color.as_deref(), Some("#ff0000"));
 }
 fn wrapped_document() -> EditSession {
     let mut core = DocumentCore::new_empty();
@@ -2031,7 +2040,7 @@ fn full_char_and_para_formats_round_trip() {
             },
         )
         .unwrap();
-        let at = s.format(s.revision, &point(body(), 1)).unwrap();
+        let at = s.format(s.revision, &point(body(), 1), None).unwrap();
         let t = at.text;
         assert_eq!(
             (
@@ -2163,14 +2172,14 @@ fn notes_are_inserted_and_edited() {
                 },
             )
             .unwrap();
-            let shown = s.format(s.revision, &point(note.clone(), 4)).unwrap();
+            let shown = s.format(s.revision, &point(note.clone(), 4), None).unwrap();
             assert_eq!(shown.text.bold, Some(true), "{label}");
             assert_eq!(
                 shown.paragraph.alignment,
                 Some(Alignment::Center),
                 "{label}"
             );
-            let plain = s.format(s.revision, &point(note.clone(), 5)).unwrap();
+            let plain = s.format(s.revision, &point(note.clone(), 5), None).unwrap();
             assert_eq!(plain.text.bold, Some(false), "{label}");
             // The body keeps its text; the caret and a click find the note again.
             assert_eq!(
@@ -2432,7 +2441,7 @@ fn line_break_units_are_set_and_read() {
     };
     let selection = EditSelection::caret(point(body(), 0));
     run(&mut s, EditCommand::FormatParagraphs { selection, style }).unwrap();
-    let format = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    let format = s.format(s.revision, &point(body(), 0), None).unwrap().paragraph;
     assert_eq!(
         (format.korean_break_unit, format.english_break_unit),
         (Some(0), Some(2))
@@ -2458,7 +2467,7 @@ fn styles_apply_to_paragraphs() {
         )
         .unwrap();
         for p in [body(), commands::at_index(&body(), 2)] {
-            assert_eq!(s.format(s.revision, &point(p, 0)).unwrap().style, 2);
+            assert_eq!(s.format(s.revision, &point(p, 0), None).unwrap().style, 2);
         }
         let cell = EditTarget {
             section: 0,
@@ -2480,9 +2489,9 @@ fn styles_apply_to_paragraphs() {
             },
         )
         .unwrap();
-        assert_eq!(s.format(s.revision, &point(cell, 0)).unwrap().style, 1);
+        assert_eq!(s.format(s.revision, &point(cell, 0), None).unwrap().style, 1);
         let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
-        assert_eq!(reopened.format(0, &point(body(), 0)).unwrap().style, 2);
+        assert_eq!(reopened.format(0, &point(body(), 0), None).unwrap().style, 2);
         run(&mut s, EditCommand::Undo).unwrap();
         let wrong = EditCommand::ApplyStyle {
             selection: EditSelection::caret(point(body(), 0)),
@@ -2530,7 +2539,7 @@ fn numbering_and_bullets_head_paragraphs() {
     };
     let text = apply(&mut s, deeper);
     assert!(text.starts_with("가.가"), "{text}");
-    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    let now = s.format(s.revision, &point(body(), 0), None).unwrap().paragraph;
     assert_eq!((now.head.as_deref(), now.level), (Some("Number"), Some(1)));
     assert_eq!(now.numbering, Some(0));
     // ① (ㄱ) (a) 1): its second level counts ㄱ, ㄴ.
@@ -2553,7 +2562,7 @@ fn numbering_and_bullets_head_paragraphs() {
     };
     let text = apply(&mut s, restart);
     assert!(text.starts_with("⑤가") && text.contains("⑥보존"), "{text}");
-    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    let now = s.format(s.revision, &point(body(), 0), None).unwrap().paragraph;
     assert_eq!((now.restart, now.start_number), (Some(2), Some(5)));
     let bullet = ParaStyle {
         head: Some("Bullet".into()),
@@ -2561,12 +2570,12 @@ fn numbering_and_bullets_head_paragraphs() {
         ..Default::default()
     };
     assert!(apply(&mut s, bullet).contains('■'));
-    let now = s.format(s.revision, &point(body(), 0)).unwrap().paragraph;
+    let now = s.format(s.revision, &point(body(), 0), None).unwrap().paragraph;
     assert_eq!(now.bullet.as_deref(), Some("■"));
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         let head = reopened
-            .format(0, &point(body(), 0))
+            .format(0, &point(body(), 0), None)
             .unwrap()
             .paragraph
             .head;
@@ -2728,7 +2737,7 @@ fn text_boxes_take_text() {
         caret.y > r.y && caret.y < r.y + r.height,
         "{caret:?} in {r:?}"
     );
-    let format = s.format(s.revision, &point(second.clone(), 1)).unwrap();
+    let format = s.format(s.revision, &point(second.clone(), 1), None).unwrap();
     assert!(format.text_box);
     let rects = s
         .selection_rects(
@@ -3667,7 +3676,7 @@ fn copies_paste_with_their_formats() {
     assert_eq!(s.paragraph(&second).unwrap().text, "셋 넷하나 둘");
     assert_eq!(s.paragraph(&third).unwrap().text, "셋");
     assert_eq!(caret, point(third.clone(), 1));
-    let pasted = s.format(s.revision, &point(second.clone(), 5)).unwrap();
+    let pasted = s.format(s.revision, &point(second.clone(), 5), None).unwrap();
     assert_eq!(pasted.text.bold, Some(true));
     // An unknown copy is refused; HTML from elsewhere keeps its formats.
     assert!(s
@@ -3679,7 +3688,7 @@ fn copies_paste_with_their_formats() {
     )
     .unwrap();
     assert_eq!(s.paragraph(&third).unwrap().text, "셋기울");
-    let html = s.format(s.revision, &point(third.clone(), 3)).unwrap();
+    let html = s.format(s.revision, &point(third.clone(), 3), None).unwrap();
     assert_eq!(html.text.italic, Some(true));
     // A picture in the line comes along.
     run(&mut s, picture_at(point(body(), 1))).unwrap();
@@ -3848,9 +3857,9 @@ fn each_language_keeps_its_own_font_and_scale() {
             style,
         };
         run(s, command).unwrap();
-        s.format(s.revision, &point(body(), 4)).unwrap().languages
+        s.format(s.revision, &point(body(), 4), None).unwrap().languages
     };
-    let before = s.format(s.revision, &point(body(), 4)).unwrap().languages;
+    let before = s.format(s.revision, &point(body(), 4), None).unwrap().languages;
     // 영문 only.
     let latin = format(
         &mut s,
@@ -3879,7 +3888,7 @@ fn each_language_keeps_its_own_font_and_scale() {
     assert_eq!(all[1].ratio, Some(80.0));
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
-        let languages = reopened.format(0, &point(body(), 4)).unwrap().languages;
+        let languages = reopened.format(0, &point(body(), 4), None).unwrap().languages;
         assert_eq!(languages[1].ratio, Some(80.0), "{format:?}");
         assert_eq!(languages[1].font.as_deref(), Some("돋움"), "{format:?}");
     }
