@@ -334,7 +334,13 @@ impl EditSession {
                 }
                 super::format::validate_char(style)
             }
-            EditCommand::ApplyStyle { selection, style } => self.validate_style(selection, *style),
+            EditCommand::ApplyStyle { selection, style } => {
+                if selection.anchor.target.header_footer.is_some() {
+                    Err(EditError::UnsupportedTarget)
+                } else {
+                    self.validate_style(selection, *style)
+                }
+            }
             EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
@@ -642,7 +648,14 @@ impl EditSession {
     }
     /// Joins the paragraph at `t` onto the previous one.
     fn merge(&mut self, t: &EditTarget) -> Result<(), EditError> {
-        if let Some(n) = &t.note {
+        if let Some(hf) = &t.header_footer {
+            self.core.merge_paragraph_in_header_footer_native(
+                t.section as usize,
+                !hf.footer,
+                hf.apply_to,
+                t.paragraph as usize,
+            )?;
+        } else if let Some(n) = &t.note {
             self.core.merge_paragraph_in_footnote_native(
                 t.section as usize,
                 t.paragraph as usize,
@@ -771,7 +784,16 @@ impl EditSession {
     fn split(&mut self, p: &EditPosition) -> Result<EditPosition, EditError> {
         let t = &p.target;
         let at = self.spot(p)?.split(get(self.core.document(), t)?);
-        if let Some(n) = &t.note {
+        if let Some(hf) = &t.header_footer {
+            self.core.split_paragraph_in_header_footer_native(
+                t.section as usize,
+                !hf.footer,
+                hf.apply_to,
+                t.paragraph as usize,
+                at,
+                None,
+            )?;
+        } else if let Some(n) = &t.note {
             self.core.split_paragraph_in_footnote_native(
                 t.section as usize,
                 t.paragraph as usize,
@@ -804,13 +826,38 @@ impl EditSession {
         match command {
             EditCommand::Replace { selection, text } => {
                 let (start, end) = ordered(selection);
-                self.delete_range(start, end)?;
-                let mut p = start.clone();
-                // Objects come only from the document.
                 let normalized = text
                     .replace("\r\n", "\n")
                     .replace('\r', "\n")
                     .replace(logical::OBJECT, "");
+                if let Some(hf) = &start.target.header_footer {
+                    let start_at = self.spot(start)?.text;
+                    let end_at = self.spot(end)?.text;
+                    let json = self.core.replace_range_in_header_footer_native(
+                        start.target.section as usize,
+                        !hf.footer,
+                        hf.apply_to,
+                        index(&start.target),
+                        start_at,
+                        index(&end.target),
+                        end_at,
+                        &normalized,
+                    )?;
+                    let result: Value = serde_json::from_str(&json)
+                        .map_err(|_| EditError::RenderFailed)?;
+                    let field = |key| {
+                        result.get(key).and_then(Value::as_u64).map(|v| v as u32)
+                    };
+                    let paragraph = field("hfParaIndex").ok_or(EditError::RenderFailed)?;
+                    let scalar = field("charOffset").ok_or(EditError::RenderFailed)?;
+                    return Ok(EditSelection::caret(EditPosition {
+                        target: at_index(&start.target, paragraph as usize),
+                        scalar,
+                    }));
+                }
+                self.delete_range(start, end)?;
+                let mut p = start.clone();
+                // Objects come only from the document.
                 for (i, part) in normalized.split('\n').enumerate() {
                     if i > 0 {
                         p = self.split(&p)?;

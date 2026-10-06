@@ -499,8 +499,18 @@ impl EditSession {
         to: u32,
         props: &str,
     ) -> Result<(), EditError> {
-        match &t.cell {
-            Some(c) => self.core.apply_char_format_in_cell_native(
+        match (&t.header_footer, &t.cell) {
+            (Some(hf), _) => self.core.apply_char_format_in_header_footer_native(
+                t.section as usize,
+                !hf.footer,
+                hf.apply_to,
+                index(t),
+                from as usize,
+                index(t),
+                to as usize,
+                props,
+            ),
+            (None, Some(c)) => self.core.apply_char_format_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
                 c.control as usize,
@@ -510,7 +520,7 @@ impl EditSession {
                 to as usize,
                 props,
             ),
-            None => self.core.apply_char_format_native(
+            (None, None) => self.core.apply_char_format_native(
                 t.section as usize,
                 t.paragraph as usize,
                 from as usize,
@@ -525,8 +535,15 @@ impl EditSession {
         t: &EditTarget,
         props: &str,
     ) -> Result<(), EditError> {
-        match &t.cell {
-            Some(c) => self.core.apply_para_format_in_cell_native(
+        match (&t.header_footer, &t.cell) {
+            (Some(hf), _) => self.core.apply_para_format_in_hf_native(
+                t.section as usize,
+                !hf.footer,
+                hf.apply_to,
+                index(t),
+                props,
+            ),
+            (None, Some(c)) => self.core.apply_para_format_in_cell_native(
                 t.section as usize,
                 t.paragraph as usize,
                 c.control as usize,
@@ -534,7 +551,7 @@ impl EditSession {
                 c.paragraph as usize,
                 props,
             ),
-            None => {
+            (None, None) => {
                 self.core
                     .apply_para_format_native(t.section as usize, t.paragraph as usize, props)
             }
@@ -567,8 +584,23 @@ impl EditSession {
         let parse = |text: Result<String, rhwp::error::HwpError>| -> Result<Value, EditError> {
             serde_json::from_str(&text?).map_err(|_| EditError::RenderFailed)
         };
-        let (text, para) = match &t.cell {
-            Some(c) => (
+        let (text, para) = match (&t.header_footer, &t.cell) {
+            (Some(hf), _) => (
+                self.core.get_char_properties_in_header_footer_native(
+                    t.section as usize,
+                    !hf.footer,
+                    hf.apply_to,
+                    index(t),
+                    offset,
+                ),
+                self.core.get_para_properties_in_hf_native(
+                    t.section as usize,
+                    !hf.footer,
+                    hf.apply_to,
+                    index(t),
+                ),
+            ),
+            (None, Some(c)) => (
                 self.core.get_cell_char_properties_at_native(
                     t.section as usize,
                     t.paragraph as usize,
@@ -585,7 +617,7 @@ impl EditSession {
                     index(t),
                 ),
             ),
-            None => (
+            (None, None) => (
                 self.core
                     .get_char_properties_at_native(t.section as usize, index(t), offset),
                 self.core

@@ -248,6 +248,150 @@ fn header_footer_selection_rejects_different_definitions() {
         EditError::UnsupportedTarget
     );
 }
+
+#[test]
+fn header_footer_replaces_splits_merges_formats_and_undoes_atomically() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 0, "학교 머리말")
+        .unwrap();
+    let target = header_footer_target(false, 0, 0);
+    let replaced = run(
+        &mut s,
+        EditCommand::Replace {
+            selection: EditSelection {
+                anchor: point(target.clone(), 0),
+                focus: point(target.clone(), 2),
+            },
+            text: "우리👋".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&target).unwrap().text, "우리👋 머리말");
+    assert_eq!(replaced.selection, Some(EditSelection::caret(point(target.clone(), 3))));
+
+    let split = run(
+        &mut s,
+        EditCommand::Split {
+            position: point(target.clone(), 3),
+        },
+    )
+    .unwrap();
+    let second = header_footer_target(false, 0, 1);
+    assert_eq!(split.selection, Some(EditSelection::caret(point(second.clone(), 0))));
+    assert_eq!(s.paragraph(&second).unwrap().text, " 머리말");
+    run(
+        &mut s,
+        EditCommand::MergePrevious {
+            position: point(second, 0),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&target).unwrap().text, "우리👋 머리말");
+
+    let selection = EditSelection {
+        anchor: point(target.clone(), 0),
+        focus: point(target.clone(), 2),
+    };
+    run(
+        &mut s,
+        EditCommand::FormatText {
+            selection: selection.clone(),
+            style: CharStyle {
+                bold: Some(true),
+                ..Default::default()
+            },
+        },
+    )
+    .unwrap();
+    run(
+        &mut s,
+        EditCommand::FormatParagraphs {
+            selection,
+            style: ParaStyle {
+                alignment: Some(Alignment::Center),
+                ..Default::default()
+            },
+        },
+    )
+    .unwrap();
+    let format = s.format(s.revision, &point(target.clone(), 1)).unwrap();
+    assert_eq!(format.text.bold, Some(true));
+    assert_eq!(format.paragraph.alignment, Some(Alignment::Center));
+
+    command(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(
+        s.format(s.revision, &point(target, 1))
+            .unwrap()
+            .paragraph
+            .alignment,
+        Some(Alignment::Justify)
+    );
+}
+
+#[test]
+fn header_footer_find_returns_each_definition_once() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 0, "과제 이름 과제")
+        .unwrap();
+    let hits = s.find("과제", true).unwrap();
+    let header_hits: Vec<_> = hits
+        .iter()
+        .filter(|hit| hit.anchor.target.header_footer.is_some())
+        .collect();
+    assert_eq!(header_hits.len(), 2);
+    assert_eq!(header_hits[0].anchor, point(header_footer_target(false, 0, 0), 0));
+    assert_eq!(header_hits[0].focus.scalar, 2);
+    assert_eq!(header_hits[1].anchor.scalar, 6);
+    assert_eq!(header_hits[1].focus.scalar, 8);
+}
+
+#[test]
+fn header_footer_replace_spans_paragraphs_and_failed_edits_roll_back() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, false, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, false, 0, 0, 0, "첫 문단")
+        .unwrap();
+    s.core
+        .split_paragraph_in_header_footer_native(0, false, 0, 0, 2, None)
+        .unwrap();
+    let first = header_footer_target(true, 0, 0);
+    let second = header_footer_target(true, 0, 1);
+    run(
+        &mut s,
+        EditCommand::Replace {
+            selection: EditSelection {
+                anchor: point(first.clone(), 1),
+                focus: point(second.clone(), 1),
+            },
+            text: "새\n꼬리".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&first).unwrap().text, "첫새");
+    assert_eq!(s.paragraph(&second).unwrap().text, "꼬리단");
+
+    s.core.document_mut().sections[0].paragraphs[0]
+        .controls
+        .iter_mut()
+        .find_map(|control| match control {
+            Control::Footer(footer) => Some(&mut footer.paragraphs[0].text),
+            _ => None,
+        })
+        .unwrap()
+        .insert(3, '\u{0015}');
+    let before = s.paragraph(&first).unwrap().text;
+    let revision = s.revision;
+    assert_eq!(
+        replace(&mut s, first.clone(), 0, 2, "금지").unwrap_err(),
+        EditError::UnsupportedTarget
+    );
+    assert_eq!((s.paragraph(&first).unwrap().text, s.revision), (before, revision));
+}
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
     EditPosition { target, scalar }
 }

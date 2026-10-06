@@ -26,6 +26,31 @@ fn segments(text: &str) -> Vec<(u32, u32, bool)> {
         .collect()
 }
 
+fn text_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(u32, u32)> {
+    let text: Vec<char> = text.chars().collect();
+    let query: Vec<char> = query.chars().collect();
+    if query.is_empty() || query.len() > text.len() {
+        return Vec::new();
+    }
+    let equal = |a: &[char], b: &[char]| {
+        if case_sensitive {
+            a == b
+        } else {
+            a.iter().flat_map(|c| c.to_lowercase()).eq(b.iter().flat_map(|c| c.to_lowercase()))
+        }
+    };
+    text.windows(query.len())
+        .enumerate()
+        .filter(|(_, window)| {
+            !window
+                .iter()
+                .any(|c| matches!(c, '\u{0015}' | '\u{0016}' | '\u{0017}'))
+                && equal(window, &query)
+        })
+        .map(|(start, _)| (start as u32, (start + query.len()) as u32))
+        .collect()
+}
+
 impl EditSession {
     /// Where `motion` takes a caret at `from`. `goal_x` is the column vertical motions keep
     /// (page units); the reply carries the column to pass to the next vertical motion.
@@ -410,7 +435,7 @@ impl EditSession {
             .search_all_text_native(query, case_sensitive, true)?;
         let hits: Vec<Value> = serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
         let doc = self.core.document();
-        Ok(hits
+        let mut results: Vec<_> = hits
             .iter()
             .filter(|hit| hit.get("cellPath").is_none() && hit.get("equationControl").is_none())
             .filter_map(|hit| {
@@ -443,6 +468,52 @@ impl EditSession {
                     focus: at(logical::position(para, end, false)),
                 })
             })
-            .collect())
+            .collect();
+        use rhwp::model::{control::Control, header_footer::HeaderFooterApply};
+        for (section, value) in doc.sections.iter().enumerate() {
+            for control in value.paragraphs.iter().flat_map(|p| &p.controls) {
+                let (footer, apply, paragraphs) = match control {
+                    Control::Header(value) => (false, value.apply_to, &value.paragraphs),
+                    Control::Footer(value) => (true, value.apply_to, &value.paragraphs),
+                    _ => continue,
+                };
+                let apply_to = match apply {
+                    HeaderFooterApply::Both => 0,
+                    HeaderFooterApply::Even => 1,
+                    HeaderFooterApply::Odd => 2,
+                };
+                for (paragraph, value) in paragraphs.iter().enumerate() {
+                    let mut target = EditTarget {
+                        section: section as u32,
+                        paragraph: paragraph as u32,
+                        cell: None,
+                        note: None,
+                        header_footer: Some(HeaderFooterTarget {
+                            footer,
+                            apply_to,
+                            page: 0,
+                        }),
+                    };
+                    let position = EditPosition {
+                        target: target.clone(),
+                        scalar: 0,
+                    };
+                    if let Ok(caret) = self.rhwp_caret(&position) {
+                        target.header_footer.as_mut().unwrap().page = caret.page;
+                    }
+                    for (start, end) in text_matches(&logical::text(value), query, case_sensitive) {
+                        let at = |scalar| EditPosition {
+                            target: target.clone(),
+                            scalar,
+                        };
+                        results.push(EditSelection {
+                            anchor: at(start),
+                            focus: at(end),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(results)
     }
 }
