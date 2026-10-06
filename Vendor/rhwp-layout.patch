@@ -12,7 +12,7 @@ index 1d6474f..3317b8d 100644
  resolver = "2"
  
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 3aef940..fcfe070 100644
+index 3aef940..3bf0e64 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
 @@ -269,6 +269,7 @@ impl DocumentCore {
@@ -23,6 +23,22 @@ index 3aef940..fcfe070 100644
              para_offset: Vec::new(),
              source_format,
              hml_metadata,
+@@ -1232,7 +1233,14 @@ impl DocumentCore {
+     ///
+     /// 이 함수는 `reflow_linesegs_on_demand` 에서만 사용되며, 자동 파싱 경로에는 영향 없음.
+     fn needs_reflow_broadly(para: &crate::model::paragraph::Paragraph) -> bool {
+-        if !para.text.is_empty() && para.line_segs.is_empty() {
++        // HwpStudio: a paragraph holding only an object in the line (a display equation)
++        // has no text, and still needs its line laid out to the object's height.
++        let holds_inline_object = para.controls.iter().any(|c| match c {
++            Control::Equation(e) => e.common.treat_as_char,
++            Control::Picture(p) => p.common.treat_as_char,
++            _ => false,
++        });
++        if (!para.text.is_empty() || holds_inline_object) && para.line_segs.is_empty() {
+             return true;
+         }
+         if Self::needs_line_seg_reflow(para, false) {
 diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
 index 763b020..a48ff3d 100644
 --- a/src/document_core/commands/footnote_ops.rs
@@ -637,6 +653,249 @@ index c455a55..aa4e690 100644
          recompose_stored_lines_in_frame(
              composed,
              &rebuild_input,
+diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
+index 8bcc337..0972cdf 100644
+--- a/src/renderer/equation/ast.rs
++++ b/src/renderer/equation/ast.rs
+@@ -80,6 +80,13 @@ pub enum EqNode {
+         sup: Option<Box<EqNode>>,
+     },
+ 
++    /// HwpStudio: 아래·위 첨자를 밑글자 아래·위에 놓는다: UNDEROVER {max}_{a}^{b}
++    UnderOver {
++        base: Box<EqNode>,
++        under: Option<Box<EqNode>>,
++        over: Option<Box<EqNode>>,
++    },
++
+     /// 극한: lim_{x→0}
+     Limit {
+         is_upper: bool, // Lim vs lim
+diff --git a/src/renderer/equation/dispatch.rs b/src/renderer/equation/dispatch.rs
+index 648ce9f..a5b0cbc 100644
+--- a/src/renderer/equation/dispatch.rs
++++ b/src/renderer/equation/dispatch.rs
+@@ -38,6 +38,8 @@ pub(crate) enum EqCommandClass {
+     BigOperator,
+     /// `lim`/`Lim`. 원문 대소문자를 구분한다.
+     Limit,
++    /// HwpStudio: `UNDEROVER` — 첨자를 밑글자 아래·위에.
++    UnderOver,
+     /// `MATRIX`/`PMATRIX`/`BMATRIX`/`DMATRIX`. `VMATRIX` 는 여기 넣지 않는다.
+     Matrix,
+     /// 조건식.
+@@ -94,6 +96,7 @@ pub(crate) fn classify_command(cmd: &str) -> EqCommandClass {
+         }
+         "OVERSET" | "STACKREL" => return EqCommandClass::Overset,
+         "UNDERSET" => return EqCommandClass::Underset,
++        "UNDEROVER" => return EqCommandClass::UnderOver,
+         "BEGIN" => return EqCommandClass::BeginEnv,
+         "END" => return EqCommandClass::EndEnv,
+         "SQRT" | "ROOT" => return EqCommandClass::Sqrt,
+diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
+index d8ecae2..9ffd564 100644
+--- a/src/renderer/equation/layout.rs
++++ b/src/renderer/equation/layout.rs
+@@ -220,6 +220,7 @@ impl EqLayout {
+             EqNode::SubSup { base, sub, sup } => self.layout_subsup(base, sub, sup, fs),
+             EqNode::BigOp { symbol, sub, sup } => self.layout_big_op(symbol, sub, sup, fs),
+             EqNode::Limit { is_upper, sub } => self.layout_limit(*is_upper, sub, fs),
++            EqNode::UnderOver { base, under, over } => self.layout_under_over(base, under, over, fs),
+             EqNode::Matrix { rows, style } => self.layout_matrix(rows, *style, fs),
+             EqNode::Cases { rows } => self.layout_cases(rows, fs),
+             EqNode::EqAlign { rows } => self.layout_eqalign(rows, fs),
+@@ -815,6 +816,65 @@ impl EqLayout {
+         }
+     }
+ 
++    /// HwpStudio: 밑글자를 가운데, 첨자를 작게 그 위·아래에 (빈 첨자는 자리를 차지하지 않는다).
++    fn layout_under_over(
++        &self,
++        base: &EqNode,
++        under: &Option<Box<EqNode>>,
++        over: &Option<Box<EqNode>>,
++        fs: f64,
++    ) -> LayoutBox {
++        let gap = fs * 0.05;
++        let script = |node: &Option<Box<EqNode>>| {
++            node.as_ref()
++                .map(|n| self.layout_node(n, fs * SCRIPT_SCALE))
++                .filter(|b| b.width > 0.0)
++        };
++        let mut base_box = self.layout_node(base, fs);
++        let (mut over_box, mut under_box) = (script(over), script(under));
++        let width = [Some(&base_box), over_box.as_ref(), under_box.as_ref()]
++            .into_iter()
++            .flatten()
++            .map(|b| b.width)
++            .fold(0.0, f64::max);
++        let mut y = 0.0;
++        if let Some(o) = over_box.as_mut() {
++            o.x = (width - o.width) / 2.0;
++            o.y = 0.0;
++            y += o.height + gap;
++        }
++        base_box.x = (width - base_box.width) / 2.0;
++        base_box.y = y;
++        let baseline = y + base_box.baseline;
++        y += base_box.height;
++        if let Some(u) = under_box.as_mut() {
++            y += gap;
++            u.x = (width - u.width) / 2.0;
++            u.y = y;
++            y += u.height;
++        }
++        let empty = LayoutBox {
++            x: 0.0,
++            y: 0.0,
++            width: 0.0,
++            height: 0.0,
++            baseline: 0.0,
++            kind: LayoutKind::Empty,
++        };
++        LayoutBox {
++            x: 0.0,
++            y: 0.0,
++            width,
++            height: y,
++            baseline,
++            kind: LayoutKind::Rel {
++                arrow: Box::new(base_box),
++                over: Box::new(over_box.unwrap_or(empty)),
++                under: under_box.map(Box::new),
++            },
++        }
++    }
++
+     fn layout_limit(&self, is_upper: bool, sub: &Option<Box<EqNode>>, fs: f64) -> LayoutBox {
+         let name = if is_upper { "Lim" } else { "lim" };
+         let name_w = estimate_text_width(name, fs, false);
+diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
+index 99c9ee9..55e32e3 100644
+--- a/src/renderer/equation/parser.rs
++++ b/src/renderer/equation/parser.rs
+@@ -10,6 +10,20 @@ use super::symbols::{
+ };
+ use super::tokenizer::{tokenize, Token, TokenType};
+ 
++/// HwpStudio: 두 글자 이상의 기호(`<=`, `+-`, `->` …)는 그것이 뜻하는 기호로 그린다.
++fn symbol_node(val: String) -> EqNode {
++    if val == "->" {
++        return EqNode::MathSymbol("→".to_string());
++    }
++    match (val.chars().count() > 1)
++        .then(|| super::symbols::lookup_symbol(&val))
++        .flatten()
++    {
++        Some(symbol) => EqNode::MathSymbol(symbol.to_string()),
++        None => EqNode::Symbol(val),
++    }
++}
++
+ /// 수식 중첩 깊이 상한.
+ ///
+ /// 적대적으로 깊게 중첩된 입력(`{{{…}}}`, `sqrt sqrt …`, `LEFT ( LEFT ( …`,
+@@ -233,12 +247,7 @@ impl EqParser {
+             }
+             TokenType::Symbol => {
+                 self.pos += 1;
+-                // -> 는 →로 변환
+-                if val == "->" {
+-                    EqNode::MathSymbol("→".to_string())
+-                } else {
+-                    EqNode::Symbol(val)
+-                }
++                symbol_node(val)
+             }
+             TokenType::Text => {
+                 self.pos += 1;
+@@ -370,6 +379,7 @@ impl EqParser {
+                 self.parse_big_op(symbol)
+             }
+             EqCommandClass::Limit => self.parse_limit(cmd == "Lim"),
++            EqCommandClass::UnderOver => self.parse_under_over(),
+             EqCommandClass::Matrix => self.parse_matrix(matrix_style(cu)),
+             EqCommandClass::Cases => self.parse_cases(),
+             EqCommandClass::EqAlign => self.parse_eqalign(),
+@@ -714,7 +724,7 @@ impl EqParser {
+             TokenType::Number => EqNode::Number(val),
+             TokenType::Text => EqNode::Text(val),
+             TokenType::Quoted => EqNode::Quoted(val),
+-            TokenType::Symbol => EqNode::Symbol(val),
++            TokenType::Symbol => symbol_node(val),
+             _ => EqNode::Text(val),
+         }
+     }
+@@ -749,12 +759,7 @@ impl EqParser {
+         while self.is_tight_relational() {
+             let sym = self.current_value().to_string();
+             self.pos += 1;
+-            // `->` 는 화살표 기호로 변환 (parse_element 와 동일)
+-            if sym == "->" {
+-                items.push(EqNode::MathSymbol("→".to_string()));
+-            } else {
+-                items.push(EqNode::Symbol(sym));
+-            }
++            items.push(symbol_node(sym));
+             items.push(self.parse_single_or_group());
+         }
+         EqNode::Row(items).simplify()
+@@ -1259,6 +1264,24 @@ impl EqParser {
+         EqNode::BigOp { symbol, sub, sup }
+     }
+ 
++    /// HwpStudio: UNDEROVER 밑글자 _ 아래 ^ 위
++    fn parse_under_over(&mut self) -> EqNode {
++        let base = Box::new(self.parse_single_or_group());
++        let (mut under, mut over) = (None, None);
++        while !self.at_end() {
++            if self.current_type() == TokenType::Subscript && under.is_none() {
++                self.pos += 1;
++                under = Some(Box::new(self.parse_script_operand()));
++            } else if self.current_type() == TokenType::Superscript && over.is_none() {
++                self.pos += 1;
++                over = Some(Box::new(self.parse_single_or_group()));
++            } else {
++                break;
++            }
++        }
++        EqNode::UnderOver { base, under, over }
++    }
++
+     /// 극한 파싱
+     fn parse_limit(&mut self, is_upper: bool) -> EqNode {
+         let mut sub = None;
+diff --git a/src/renderer/equation/symbols.rs b/src/renderer/equation/symbols.rs
+index 595ea2a..485611e 100644
+--- a/src/renderer/equation/symbols.rs
++++ b/src/renderer/equation/symbols.rs
+@@ -134,6 +134,8 @@ static OPERATORS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(
+         ("DIV", "÷"),
+         ("DIVDE", "÷"),
+         ("PLUSMINUS", "±"),
++        ("+-", "±"),
++        ("-+", "∓"),
+         ("PM", "±"),
+         ("MINUSPLUS", "∓"),
+         ("MP", "∓"),
+diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenizer.rs
+index 0e273b2..e5b9d01 100644
+--- a/src/renderer/equation/tokenizer.rs
++++ b/src/renderer/equation/tokenizer.rs
+@@ -306,6 +306,13 @@ impl Tokenizer {
+             return Some(Token::new(TokenType::Symbol, s, start));
+         }
+ 
++        // HwpStudio: +- (±), -+ (∓)
++        if (ch == '+' && next == '-') || (ch == '-' && next == '+') {
++            self.pos += 2;
++            let s: String = [ch, next].iter().collect();
++            return Some(Token::new(TokenType::Symbol, s, start));
++        }
++
+         // -> (화살표 축약)
+         if ch == '-' && next == '>' {
+             self.pos += 2;
 diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
 index 6f91926..15d6c0e 100644
 --- a/src/renderer/layout/paragraph_layout.rs

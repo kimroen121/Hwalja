@@ -1136,6 +1136,20 @@ struct DocumentTests {
         let rep = try #require(editor.bitmapImageRepForCachingDisplay(in: page))
         editor.cacheDisplay(in: page, to: rep)
         try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "marks.png"))
+        // HWP_SNAPSHOT_DOC=<file>: its pages too, as the canvas draws them.
+        if let path = ProcessInfo.processInfo.environment["HWP_SNAPSHOT_DOC"] {
+            let other = try HwpDocument(data: Data(contentsOf: URL(fileURLWithPath: path)))
+            viewer.canvas.bind(other)
+            viewer.showsControlCodes = false
+            viewer.showsGrid = false
+            editor.layoutPages(force: true)
+            for index in other.pages.indices {
+                let page = try #require(editor.frame(ofPage: index))
+                let rep = try #require(editor.bitmapImageRepForCachingDisplay(in: page))
+                editor.cacheDisplay(in: page, to: rep)
+                try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "page-\(index + 1).png"))
+            }
+        }
     }
 
     private static func findCanvas(_ window: NSWindow) -> DocumentCanvas? {

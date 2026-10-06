@@ -1277,6 +1277,75 @@ fn objects_are_found_changed_and_deleted() {
 }
 
 #[test]
+fn equation_shorthands_and_underover_draw_as_hancom_does() {
+    let core = DocumentCore::new_empty();
+    let svg = |script: &str| {
+        core.render_equation_preview_native(script, 1_000, 0)
+            .unwrap()
+    };
+    for (script, symbol) in [
+        ("p=+-T_n", "±"),
+        ("a-+b", "∓"),
+        ("x<=1", "≤"),
+        ("x>=1", "≥"),
+        ("a!=b", "≠"),
+    ] {
+        assert!(svg(script).contains(symbol), "{script}");
+    }
+    // The limits go under and over the base, not after it as text.
+    let under = svg("UNDEROVER {max}_{[-1,1]}^{} q");
+    assert!(!under.contains("UNDEROVER"));
+    let y = |text: &str| {
+        let at = under.find(&format!(">{text}<")).unwrap();
+        let tag = &under[under[..at].rfind("<text").unwrap()..at];
+        let y = &tag[tag.find(" y=\"").unwrap() + 4..];
+        y[..y.find('"').unwrap()].parse::<f64>().unwrap()
+    };
+    assert!(y("1") > y("max"));
+}
+
+/// A file written without line records (by another program) is laid out on opening, its
+/// lines as tall as the equations in them.
+#[test]
+fn paragraphs_without_line_records_are_laid_out_with_their_equations() {
+    let mut core = DocumentCore::new_empty();
+    core.create_blank_document_native().unwrap();
+    core.insert_text_native(0, 0, 0, "앞 글자 뒤").unwrap();
+    core.insert_equation_native(0, 0, 2, "{a+b} over {c+d}", 1000, 0)
+        .unwrap();
+    core.split_paragraph_native(0, 0, 6, None).unwrap();
+    core.insert_text_native(0, 1, 0, "다음 문단").unwrap();
+    let mut doc = core.document().clone();
+    for p in &mut doc.sections[0].paragraphs {
+        p.line_segs.clear();
+    }
+    core.set_document(doc);
+    let s = EditSession::open(&core.export_hwp_native().unwrap()).unwrap();
+    assert!(s.core.document().sections[0]
+        .paragraphs
+        .iter()
+        .all(|p| !p.line_segs.is_empty()));
+    let controls: serde_json::Value =
+        serde_json::from_str(&s.core.get_page_control_layout_native(0).unwrap()).unwrap();
+    let equation = controls["controls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "equation")
+        .unwrap();
+    let runs: serde_json::Value =
+        serde_json::from_str(&s.core.get_page_text_layout_native(0).unwrap()).unwrap();
+    let next = runs["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["paraIdx"] == 1)
+        .unwrap();
+    let bottom = equation["y"].as_f64().unwrap() + equation["h"].as_f64().unwrap();
+    assert!(next["y"].as_f64().unwrap() >= bottom - 0.5);
+}
+
+#[test]
 fn replace_spans_paragraphs() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();
@@ -1496,6 +1565,19 @@ fn format_rejects_empty_changes() {
 }
 
 /// Opt-in typing latency on a private document; prints durations only:
+/// `HWP_RENDER=<file> HWP_RENDER_DIR=<folder> cargo test render_pages -- --ignored`: each
+/// page as rhwp draws it, for a look.
+#[test]
+#[ignore]
+fn render_pages() {
+    let bytes = std::fs::read(std::env::var("HWP_RENDER").unwrap()).unwrap();
+    let folder = std::path::PathBuf::from(std::env::var("HWP_RENDER_DIR").unwrap());
+    let s = EditSession::open(&bytes).unwrap();
+    for page in 0..s.core.page_count() {
+        let svg = s.core.render_page_svg_native(page).unwrap();
+        std::fs::write(folder.join(format!("page-{}.svg", page + 1)), svg).unwrap();
+    }
+}
 /// `HWP_BENCH=<file> cargo test --release bench_typing -- --ignored --nocapture`
 #[test]
 #[ignore]

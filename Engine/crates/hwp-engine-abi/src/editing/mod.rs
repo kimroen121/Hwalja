@@ -84,7 +84,17 @@ impl EditSession {
                 _ => EditError::InvalidInput,
             });
         }
-        let core = DocumentCore::from_bytes(bytes)?;
+        let mut core = DocumentCore::from_bytes(bytes)?;
+        // A file another program wrote can leave its lines to the reader, without line
+        // records; 한글 lays those paragraphs out on opening, objects in the line included.
+        let unlaid = core.document().sections.iter().any(|s| {
+            s.paragraphs
+                .iter()
+                .any(|p| p.line_segs.is_empty() && (!p.text.is_empty() || !p.controls.is_empty()))
+        });
+        if unlaid {
+            core.reflow_linesegs_on_demand();
+        }
         let mut session = Self {
             core,
             original: bytes.to_vec(),
