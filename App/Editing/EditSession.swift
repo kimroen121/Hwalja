@@ -59,8 +59,10 @@ final class EditSession: @unchecked Sendable {
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await decode(send(.paragraph(target)))
     }
-    func hitTest(revision: UInt64, page: UInt32, x: Double, y: Double) async throws -> EditPosition {
-        try await decode(send(.hitTest(revision: revision, page: page, x: x, y: y)))
+    func hitTest(revision: UInt64, page: UInt32, x: Double, y: Double,
+                 includeHeaderFooter: Bool = false) async throws -> EditPosition {
+        try await decode(send(.hitTest(revision: revision, page: page, x: x, y: y,
+                                       includeHeaderFooter: includeHeaderFooter)))
     }
     func caret(revision: UInt64, at position: EditPosition) async throws -> PageRect {
         try await decode(send(.caret(revision: revision, position)))

@@ -25,6 +25,8 @@ enum Request {
         page: u32,
         x: f64,
         y: f64,
+        #[serde(default, rename = "includeHeaderFooter")]
+        include_header_footer: bool,
     },
     Caret {
         revision: u64,
@@ -138,7 +140,11 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             page,
             x,
             y,
-        } => HwpEditResult::ok(session.hit_test(revision, page, x, y)?, Vec::new()),
+            include_header_footer,
+        } => HwpEditResult::ok(
+            session.hit_test(revision, page, x, y, include_header_footer)?,
+            Vec::new(),
+        ),
         Request::Caret { revision, position } => {
             HwpEditResult::ok(session.caret(revision, &position)?, Vec::new())
         }

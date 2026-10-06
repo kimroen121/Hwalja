@@ -45,10 +45,16 @@ impl EditSession {
         page: u32,
         x: f64,
         y: f64,
+        include_header_footer: bool,
     ) -> Result<EditPosition, EditError> {
         self.check_revision(revision)?;
         if page >= self.core.page_count() {
             return Err(EditError::InvalidInput);
+        }
+        if include_header_footer {
+            if let Some(position) = self.hit_test_header_footer(page, x, y)? {
+                return Ok(position);
+            }
         }
         if let Some(position) = self.hit_test_footnote(page, x, y)? {
             return Ok(position);
@@ -98,6 +104,40 @@ impl EditSession {
             None => rhwp.scalar,
         };
         Ok(EditPosition { target, scalar })
+    }
+    /// A position in the visible header/footer definition, when its text owns the point.
+    fn hit_test_header_footer(
+        &self,
+        page: u32,
+        x: f64,
+        y: f64,
+    ) -> Result<Option<EditPosition>, EditError> {
+        for footer in [false, true] {
+            let hit = parse(
+                self.core
+                    .hit_test_in_header_footer_native(page, !footer, x, y),
+            )?;
+            if hit.get("hit") != Some(&Value::Bool(true)) {
+                continue;
+            }
+            let target = EditTarget {
+                section: field(&hit, "sectionIndex")?,
+                paragraph: field(&hit, "paraIndex")?,
+                cell: None,
+                note: None,
+                header_footer: Some(HeaderFooterTarget {
+                    footer,
+                    apply_to: field(&hit, "applyTo")? as u8,
+                    page,
+                }),
+            };
+            commands::get(self.core.document(), &target)?;
+            return Ok(Some(EditPosition {
+                target,
+                scalar: field(&hit, "charOffset")?,
+            }));
+        }
+        Ok(None)
     }
     /// A position in the 각주 area at the foot of the page, if the point falls there.
     fn hit_test_footnote(
@@ -168,6 +208,19 @@ impl EditSession {
     pub(super) fn rhwp_caret(&self, p: &EditPosition) -> Result<PageRect, EditError> {
         commands::get(self.core.document(), &p.target)?;
         let t = &p.target;
+        if let Some(hf) = &t.header_footer {
+            let get = |page| {
+                self.core.get_cursor_rect_in_header_footer_native(
+                    t.section as usize,
+                    !hf.footer,
+                    hf.apply_to,
+                    t.paragraph as usize,
+                    p.scalar as usize,
+                    page,
+                )
+            };
+            return rect(&parse(get(hf.page as i32)).or_else(|_| parse(get(-1)))?);
+        }
         if let Some(n) = &t.note {
             return rect(&parse(self.core.get_cursor_rect_in_note_native(
                 t.section as usize,
@@ -206,6 +259,7 @@ impl EditSession {
         }
         let (a, b) = (&selection.anchor, &selection.focus);
         if a.target.section != b.target.section
+            || a.target.header_footer != b.target.header_footer
             || a.target.cell.as_ref().map(|c| (c.control, c.cell))
                 != b.target.cell.as_ref().map(|c| (c.control, c.cell))
             || a.target.note.as_ref().map(|n| n.control)
@@ -224,7 +278,19 @@ impl EditSession {
         if t.note.is_none() && (s..=e).any(|i| self.has_stops(&commands::at_index(t, i))) {
             return self.rects_by_paragraph(revision, start, end);
         }
-        let json = parse(if t.note.is_some() {
+        let json = parse(if let Some(hf) = &t.header_footer {
+            let page = self.caret(revision, start)?.page;
+            self.core.get_selection_rects_in_header_footer_native(
+                t.section as usize,
+                !hf.footer,
+                hf.apply_to,
+                page,
+                commands::index(&start.target),
+                start.scalar as usize,
+                commands::index(&end.target),
+                end.scalar as usize,
+            )
+        } else if t.note.is_some() {
             let page = self.caret(revision, start)?.page;
             self.core.get_selection_rects_in_footnote_native(
                 page,

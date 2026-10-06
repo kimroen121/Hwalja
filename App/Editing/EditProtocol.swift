@@ -3,7 +3,7 @@ import Foundation
 // Mirrors Engine/crates/hwp-engine-abi/src/editing/protocol.rs.
 
 enum EditProtocolVersion {
-    static let current: UInt32 = 2
+    static let current: UInt32 = 3
 }
 // Offsets (`scalar`) count Unicode scalars, not UTF-16 units.
 
@@ -22,11 +22,18 @@ struct NoteTarget: Codable, Hashable, Sendable {
     var paragraph: UInt32
 }
 
+struct HeaderFooterTarget: Codable, Hashable, Sendable {
+    var footer: Bool
+    var applyTo: UInt8
+    var page: UInt32
+}
+
 struct EditTarget: Codable, Hashable, Sendable {
     var section: UInt32
     var paragraph: UInt32
     var cell: CellTarget?
     var note: NoteTarget?
+    var headerFooter: HeaderFooterTarget? = nil
 }
 
 struct EditPosition: Codable, Hashable, Sendable {
@@ -559,7 +566,7 @@ enum SaveFormat: String, Encodable, Sendable {
 enum EngineRequest: Encodable, Sendable {
     case apply(revision: UInt64, EditCommand, amend: Bool)
     case paragraph(EditTarget)
-    case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double)
+    case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double, includeHeaderFooter: Bool)
     case caret(revision: UInt64, EditPosition)
     case selectionRects(revision: UInt64, EditSelection)
     case format(revision: UInt64, EditPosition)
@@ -578,6 +585,7 @@ enum EngineRequest: Encodable, Sendable {
 
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
+             includeHeaderFooter,
              object, cell, script, fontSize, color, paragraph, control
     }
     private struct Apply: Encodable {
@@ -595,12 +603,13 @@ enum EngineRequest: Encodable, Sendable {
         case let .paragraph(target):
             try c.encode("paragraph", forKey: .op)
             try c.encode(target, forKey: .target)
-        case let .hitTest(revision, page, x, y):
+        case let .hitTest(revision, page, x, y, includeHeaderFooter):
             try c.encode("hitTest", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(page, forKey: .page)
             try c.encode(x, forKey: .x)
             try c.encode(y, forKey: .y)
+            try c.encode(includeHeaderFooter, forKey: .includeHeaderFooter)
         case let .caret(revision, position):
             try c.encode("caret", forKey: .op)
             try c.encode(revision, forKey: .revision)

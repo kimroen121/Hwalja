@@ -340,8 +340,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         goalX = motion.isVertical ? moved.goalX : nil
         return moved
     }
-    func hitTest(page: Int, x: Double, y: Double) async throws -> EditPosition {
-        try await session.hitTest(revision: revision, page: UInt32(page), x: x, y: y)
+    func hitTest(page: Int, x: Double, y: Double, includeHeaderFooter: Bool = false) async throws -> EditPosition {
+        try await session.hitTest(revision: revision, page: UInt32(page), x: x, y: y,
+                                  includeHeaderFooter: includeHeaderFooter)
     }
     func caret(at position: EditPosition) async throws -> PageRect {
         try await session.caret(revision: revision, at: position)

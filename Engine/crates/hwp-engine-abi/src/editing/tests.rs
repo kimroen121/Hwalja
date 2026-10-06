@@ -138,6 +138,60 @@ fn header_footer_ranges_preserve_field_markers() {
         );
     }
 }
+
+#[test]
+fn header_footer_hit_testing_requires_opt_in_and_geometry_round_trips() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 0, "학교 머리말")
+        .unwrap();
+    let cursor: serde_json::Value = serde_json::from_str(
+        &s.core
+            .get_cursor_rect_in_header_footer_native(0, true, 0, 0, 2, 0)
+            .unwrap(),
+    )
+    .unwrap();
+    let x = cursor["x"].as_f64().unwrap();
+    let y = cursor["y"].as_f64().unwrap() + cursor["height"].as_f64().unwrap() / 2.0;
+
+    let ordinary = s.hit_test(0, 0, x, y, false).unwrap();
+    assert!(ordinary.target.header_footer.is_none());
+    let hit = s.hit_test(0, 0, x, y, true).unwrap();
+    assert_eq!(
+        hit.target.header_footer,
+        Some(HeaderFooterTarget {
+            footer: false,
+            apply_to: 0,
+            page: 0,
+        })
+    );
+    assert_eq!(hit.target.section, 0);
+    assert_eq!(hit.target.paragraph, 0);
+
+    let caret = s.caret(0, &hit).unwrap();
+    assert_eq!(caret.page, 0);
+    assert!(caret.height > 0.0 && caret.x.is_finite() && caret.y.is_finite());
+    let round_trip = s
+        .hit_test(
+            0,
+            caret.page,
+            caret.x + 0.2,
+            caret.y + caret.height / 2.0,
+            true,
+        )
+        .unwrap();
+    assert_eq!(round_trip.target, hit.target);
+    assert!(round_trip.scalar.abs_diff(hit.scalar) <= 1);
+    let selection = EditSelection {
+        anchor: point(hit.target.clone(), 0),
+        focus: point(hit.target.clone(), 2),
+    };
+    assert!(!s.selection_rects(0, &selection).unwrap().is_empty());
+    let word_end = s.navigate(0, &hit, Motion::WordEnd, None).unwrap();
+    assert_eq!(word_end.position.target, hit.target);
+    assert!(word_end.position.scalar >= hit.scalar);
+}
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
     EditPosition { target, scalar }
 }
@@ -435,7 +489,13 @@ fn hit_test_and_caret_round_trip() {
     let mut s = EditSession::open(&plain_document("hwp", true)).unwrap();
     let caret = s.caret(0, &point(body(), 1)).unwrap();
     let hit = s
-        .hit_test(0, caret.page, caret.x + 0.5, caret.y + caret.height / 2.0)
+        .hit_test(
+            0,
+            caret.page,
+            caret.x + 0.5,
+            caret.y + caret.height / 2.0,
+            false,
+        )
         .unwrap();
     assert_eq!(hit, point(body(), 1));
     replace(&mut s, body(), 0, 0, "x").unwrap();
@@ -1785,6 +1845,7 @@ fn notes_are_inserted_and_edited() {
                         rect.page,
                         rect.x + 1.0,
                         rect.y + rect.height / 2.0,
+                        false,
                     )
                     .unwrap();
                 assert_eq!(hit.target, note, "{label}");
@@ -2218,7 +2279,9 @@ fn text_boxes_take_text() {
         header_footer: None,
     };
     let r = &placed.rect;
-    let hit = s.hit_test(s.revision, 0, r.x + 10.0, r.y + 10.0).unwrap();
+    let hit = s
+        .hit_test(s.revision, 0, r.x + 10.0, r.y + 10.0, false)
+        .unwrap();
     assert_eq!(hit.target, inside);
     replace(&mut s, inside.clone(), 0, 0, "글상자").unwrap();
     run(
@@ -2550,7 +2613,11 @@ fn objects_in_the_line_are_positions_of_their_own() {
         );
         assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
         let y = r.y + r.height - 2.0;
-        let hit = |x| s.hit_test(s.revision, r.page, x, y).unwrap().scalar;
+        let hit = |x| {
+            s.hit_test(s.revision, r.page, x, y, false)
+                .unwrap()
+                .scalar
+        };
         assert_eq!(
             (hit(r.x - 2.0), hit(r.x + r.width + 2.0)),
             (1, 2),
@@ -2677,7 +2744,13 @@ fn captions_are_written_and_edited() {
     let rect = s.caret(s.revision, &point(caption.clone(), 4)).unwrap();
     assert!(rect.y > r.y + r.height);
     let hit = s
-        .hit_test(s.revision, 0, rect.x + 1.0, rect.y + rect.height / 2.0)
+        .hit_test(
+            s.revision,
+            0,
+            rect.x + 1.0,
+            rect.y + rect.height / 2.0,
+            false,
+        )
         .unwrap();
     assert_eq!(hit.target, caption);
     let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
@@ -2752,7 +2825,13 @@ fn every_line_after_an_object_keeps_its_positions() {
         let r = s.caret(s.revision, &point(second(), at)).unwrap();
         lines.insert((r.y * 10.0) as i64);
         let hit = s
-            .hit_test(s.revision, r.page, r.x + 0.3, r.y + r.height / 2.0)
+            .hit_test(
+                s.revision,
+                r.page,
+                r.x + 0.3,
+                r.y + r.height / 2.0,
+                false,
+            )
             .unwrap();
         assert_eq!(hit, point(second(), at));
     }
@@ -2814,7 +2893,8 @@ fn the_caret_passes_an_equation_in_a_cell() {
     assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
     let y = r.y + r.height / 2.0;
     assert_eq!(
-        s.hit_test(s.revision, 0, r.x + r.width + 1.0, y).unwrap(),
+        s.hit_test(s.revision, 0, r.x + r.width + 1.0, y, false)
+            .unwrap(),
         point(cell, 2)
     );
 }
