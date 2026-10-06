@@ -278,7 +278,11 @@ impl EditSession {
     }
     /// Like `validate_range`; `whole` lets paragraphs that are read-only (fields, title
     /// marks) lie between the ends, as when a replacement removes them entirely.
-    fn validate_span(&self, selection: &EditSelection, whole: bool) -> Result<(), EditError> {
+    pub(super) fn validate_span(
+        &self,
+        selection: &EditSelection,
+        whole: bool,
+    ) -> Result<(), EditError> {
         let (start, end) = ordered(selection);
         if !same_container(&start.target, &end.target) {
             return Err(EditError::UnsupportedTarget);
@@ -325,6 +329,11 @@ impl EditSession {
                 }
                 Ok(())
             }
+            EditCommand::Paste {
+                selection,
+                copy,
+                html,
+            } => self.validate_paste(selection, *copy, html.as_ref()),
             EditCommand::Split { position } => self.validate_position(position),
             EditCommand::MergePrevious { position } => {
                 self.validate_position(position)?;
@@ -724,7 +733,11 @@ impl EditSession {
         Ok(())
     }
     /// Deletes from `start` to `end` (ordered, same container), joining the paragraphs.
-    fn delete_range(&mut self, start: &EditPosition, end: &EditPosition) -> Result<(), EditError> {
+    pub(super) fn delete_range(
+        &mut self,
+        start: &EditPosition,
+        end: &EditPosition,
+    ) -> Result<(), EditError> {
         let (s, e) = (index(&start.target), index(&end.target));
         if s == e {
             return match end.scalar - start.scalar {
@@ -871,6 +884,9 @@ impl EditSession {
     /// Runs a validated command and returns the selection that follows it.
     pub(super) fn execute(&mut self, command: &EditCommand) -> Result<EditSelection, EditError> {
         match command {
+            EditCommand::Paste {
+                selection, html, ..
+            } => self.paste(selection, html.as_deref()),
             EditCommand::Replace { selection, text } => {
                 let (start, end) = ordered(selection);
                 let normalized = text

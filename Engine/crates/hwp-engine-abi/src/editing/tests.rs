@@ -3471,37 +3471,184 @@ fn headers_go_page_to_page_and_are_deleted() {
     };
     run(&mut s, new_page).unwrap();
     assert!(s.core.page_count() >= 2);
-    let on = |page| point(
-        EditTarget {
-            section: 0,
-            paragraph: 0,
-            cell: None,
-            note: None,
-            header_footer: Some(HeaderFooterTarget {
-                footer: false,
-                apply_to: 0,
-                page,
-            }),
-        },
-        0,
-    );
+    let on = |page| {
+        point(
+            EditTarget {
+                section: 0,
+                paragraph: 0,
+                cell: None,
+                note: None,
+                header_footer: Some(HeaderFooterTarget {
+                    footer: false,
+                    apply_to: 0,
+                    page,
+                }),
+            },
+            0,
+        )
+    };
     let go = |s: &EditSession, from: &EditPosition, motion| {
         s.navigate(s.revision, from, motion, None).unwrap()
     };
     let next = go(&s, &on(0), Motion::NextHeaderFooter);
     assert_eq!(next.position, on(1));
     assert_eq!(next.caret.page, 1);
-    assert_eq!(go(&s, &next.position, Motion::PreviousHeaderFooter).position, on(0));
+    assert_eq!(
+        go(&s, &next.position, Motion::PreviousHeaderFooter).position,
+        on(0)
+    );
     let last = on(s.core.page_count() - 1);
     assert_eq!(go(&s, &last, Motion::NextHeaderFooter).position, last);
 
     // 머리말/꼬리말 지우기 leaves the caret in the body.
     replace(&mut s, on(0).target, 0, 0, "머리").unwrap();
-    let reply = run(&mut s, EditCommand::DeleteHeaderFooter { target: on(0).target }).unwrap();
-    assert!(reply.selection.unwrap().focus.target.header_footer.is_none());
+    let reply = run(
+        &mut s,
+        EditCommand::DeleteHeaderFooter {
+            target: on(0).target,
+        },
+    )
+    .unwrap();
+    assert!(reply
+        .selection
+        .unwrap()
+        .focus
+        .target
+        .header_footer
+        .is_none());
     assert!(s.paragraph(&on(0).target).is_err());
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         assert!(reopened.paragraph(&on(0).target).is_err(), "{format:?}");
     }
+}
+
+#[test]
+fn copies_paste_with_their_formats() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, all, "하나 둘\n셋 넷").unwrap();
+    let second = EditTarget {
+        paragraph: body().paragraph + 1,
+        ..body()
+    };
+    let range = |from: EditPosition, to: EditPosition| EditSelection {
+        anchor: from,
+        focus: to,
+    };
+    let bold = EditCommand::FormatText {
+        selection: range(point(body(), 0), point(body(), 2)),
+        style: CharStyle {
+            bold: Some(true),
+            ..Default::default()
+        },
+    };
+    run(&mut s, bold).unwrap();
+    // 둘\n셋, from the middle of one paragraph to the middle of the next.
+    let copied = s
+        .copy(
+            s.revision,
+            &range(point(body(), 0), point(second.clone(), 1)),
+        )
+        .unwrap();
+    assert!(
+        copied.html.contains("하나") && copied.html.contains('셋'),
+        "{}",
+        copied.html
+    );
+    let paste = |at: EditPosition, copy: Option<u64>, html: Option<&str>| EditCommand::Paste {
+        selection: EditSelection::caret(at),
+        copy,
+        html: html.map(str::to_string),
+    };
+    let caret = run(
+        &mut s,
+        paste(point(second.clone(), 3), Some(copied.copy), None),
+    )
+    .unwrap()
+    .selection
+    .unwrap()
+    .focus;
+    let third = EditTarget {
+        paragraph: body().paragraph + 2,
+        ..second.clone()
+    };
+    assert_eq!(s.paragraph(&second).unwrap().text, "셋 넷하나 둘");
+    assert_eq!(s.paragraph(&third).unwrap().text, "셋");
+    assert_eq!(caret, point(third.clone(), 1));
+    let pasted = s.format(s.revision, &point(second.clone(), 5)).unwrap();
+    assert_eq!(pasted.text.bold, Some(true));
+    // An unknown copy is refused; HTML from elsewhere keeps its formats.
+    assert!(s
+        .validate_command(&paste(point(body(), 0), Some(copied.copy + 1), None))
+        .is_err());
+    run(
+        &mut s,
+        paste(point(third.clone(), 1), None, Some("<p><i>기울</i></p>")),
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&third).unwrap().text, "셋기울");
+    let html = s.format(s.revision, &point(third.clone(), 3)).unwrap();
+    assert_eq!(html.text.italic, Some(true));
+    // A picture in the line comes along.
+    run(&mut s, picture_at(point(body(), 1))).unwrap();
+    let with_picture = s
+        .copy(s.revision, &range(point(body(), 0), point(body(), 3)))
+        .unwrap();
+    run(
+        &mut s,
+        paste(point(body(), 0), Some(with_picture.copy), None),
+    )
+    .unwrap();
+    assert_eq!(
+        s.paragraph(&body()).unwrap().text,
+        "하\u{FFFC}나하\u{FFFC}나 둘"
+    );
+    // Into a table cell too.
+    let cell = run(
+        &mut s,
+        EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 1,
+            columns: 1,
+        },
+    )
+    .unwrap()
+    .selection
+    .unwrap()
+    .focus
+    .target;
+    // The latest copy replaces the one before.
+    assert!(s
+        .validate_command(&paste(point(cell.clone(), 0), Some(copied.copy), None))
+        .is_err());
+    run(
+        &mut s,
+        paste(point(cell.clone(), 0), Some(with_picture.copy), None),
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&cell).unwrap().text, "하\u{FFFC}나");
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert_eq!(
+            reopened.paragraph(&cell).unwrap().text,
+            "하\u{FFFC}나",
+            "{format:?}"
+        );
+    }
+    // A selected object copies by itself.
+    let picture = s
+        .placed(0)
+        .unwrap()
+        .into_iter()
+        .find(|o| o.object.kind == ObjectKind::Picture && o.object.cell.is_none())
+        .unwrap()
+        .object;
+    let copied = s.copy_object(&picture).unwrap();
+    run(
+        &mut s,
+        paste(point(cell.clone(), 3), Some(copied.copy), None),
+    )
+    .unwrap();
+    assert_eq!(s.paragraph(&cell).unwrap().text, "하\u{FFFC}나\u{FFFC}");
 }

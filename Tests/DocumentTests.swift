@@ -527,6 +527,31 @@ struct DocumentTests {
         #expect(document.marked == nil)
     }
 
+    @Test func copiesPasteWithTheirFormats() async throws {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        canvas.bind(document)
+        let editor = canvas.editor
+        let pasteboard = NSPasteboard.withUniqueName()
+        editor.pasteboard = pasteboard
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type("굵은 글", nil)
+        await document.settle()
+        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: EditPosition(target: body, scalar: 2))
+        document.formatText(CharStyle(bold: true), nil)
+        await document.settle()
+        editor.copy(nil)
+        for _ in 0..<200 where pasteboard.string(forType: PageEditor.copyType) == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(pasteboard.string(forType: .html)?.contains("굵은") == true)
+        document.selection = .caret(EditPosition(target: body, scalar: 4))
+        editor.paste(nil)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "굵은 글굵은")
+        #expect(try await document.session(formatAt: EditPosition(target: body, scalar: 6)).text.bold == true)
+    }
+
     @Test func compositionThenNewlineSplitsAfterCommittedText() async throws {
         let (document, editor, _) = await editorComposingGreeting()
         editor.doCommand(by: NSSelectorFromString("insertNewline:"))

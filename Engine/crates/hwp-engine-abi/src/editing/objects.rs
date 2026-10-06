@@ -546,6 +546,8 @@ impl EditSession {
     ) -> Result<EditPosition, EditError> {
         let (s, p) = (from.section as usize, from.paragraph as usize);
         self.core.copy_control_native(s, p, &path(from), control)?;
+        // The clipboard no longer holds what was copied.
+        self.copied = 0;
         // Where `to` is once the control has left its place.
         let mut to = to.clone();
         if *from == to.target {
@@ -567,6 +569,18 @@ impl EditSession {
         }?;
         to.scalar += 1;
         Ok(to)
+    }
+    /// Copies object `o` to the engine's clipboard, for 붙이기 in this document.
+    pub fn copy_object(&mut self, o: &ObjectRef) -> Result<clipboard::Copied, EditError> {
+        self.validate_object(o, &ObjectProps::default())?;
+        let t = Self::host(o);
+        self.core.copy_control_native(
+            t.section as usize,
+            t.paragraph as usize,
+            &path(&t),
+            o.control as usize,
+        )?;
+        Ok(self.copied())
     }
     /// Deletes control `control` of the paragraph at `t`, closing its place in the text.
     pub(super) fn delete_control(

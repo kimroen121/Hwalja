@@ -66,6 +66,15 @@ pub enum EditCommand {
         selection: EditSelection,
         text: String,
     },
+    /// Replaces the selection with copy `copy` (see `Copied`) while the engine holds it,
+    /// or with `html`, keeping their formats.
+    Paste {
+        selection: EditSelection,
+        #[serde(default)]
+        copy: Option<u64>,
+        #[serde(default)]
+        html: Option<String>,
+    },
     Split {
         position: EditPosition,
     },

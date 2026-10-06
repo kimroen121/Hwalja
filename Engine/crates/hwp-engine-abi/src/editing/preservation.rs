@@ -166,6 +166,7 @@ pub(super) fn check(
                     .count(),
             )
         }
+        EditCommand::Paste { selection, .. } => return check_pasted(before, after, selection),
         EditCommand::FormatText { selection, .. }
         | EditCommand::FormatParagraphs { selection, .. }
         | EditCommand::ApplyStyle { selection, .. } => {
@@ -642,6 +643,29 @@ fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), E
         }
     }
     same_rest(&mut a, &mut b, section)
+}
+/// A paste replaced the paragraphs the selection spanned with others, and may have
+/// added to DocInfo (shapes, pictures); nothing else changed.
+fn check_pasted(
+    before: &Document,
+    after: &Document,
+    selection: &EditSelection,
+) -> Result<(), EditError> {
+    let (start, end) = commands::ordered(selection);
+    let t = &start.target;
+    let s = commands::index(t);
+    let old = commands::index(&end.target) - s + 1;
+    let mut a = before.clone();
+    let mut b = after.clone();
+    let grown =
+        edited_paragraphs(&mut b, t)?.len() as isize - edited_paragraphs(&mut a, t)?.len() as isize;
+    let new = usize::try_from(old as isize + grown).map_err(|_| EditError::PreservationFailed)?;
+    remove(&mut a, t, s, old)?;
+    remove(&mut b, t, s, new)?;
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    same_rest(&mut a, &mut b, t.section)
 }
 /// Only the section's 단 정의 changed.
 fn check_columns(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {

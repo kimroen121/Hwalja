@@ -83,6 +83,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     private(set) var pages: [RenderedPage]
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
     private(set) var reply: EditReply
+    /// Marks this document's copies on the pasteboard, so a paste here takes them from the engine.
+    let copyID = UUID().uuidString
     var selection: EditSelection? {
         didSet {
             if let selection, !selection.focus.target.isHeaderFooter { bodySelection = selection }
@@ -320,6 +322,39 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                 document.selection = selection
                 document.object = nil
             }
+        }
+    }
+    /// The selection's text, and where the engine can say it, its HTML and copy number,
+    /// after queued edits. The plain text leaves objects out.
+    func copy(_ selection: EditSelection) async throws -> (text: String, copied: Copied?) {
+        await settle()
+        let text = try await text(of: selection)
+        return (text, try? await session.copy(revision: revision, selection))
+    }
+    /// Copies the selected object to the engine's clipboard, after queued edits.
+    func copyObject(_ object: ObjectRef) async throws -> Copied {
+        await settle()
+        return try await session.copyObject(object)
+    }
+    /// Pastes copy `copy` of this document while the engine holds it, else `html`, else `text`,
+    /// each keeping what formats it carries.
+    func paste(copy: UInt64?, html: String?, text: String?, _ undoManager: UndoManager?) {
+        enqueue { document in
+            guard let selection = document.selection else { return }
+            document.goalX = nil
+            let tries: [EditCommand] = [copy.map { .paste(selection, copy: $0, html: nil) },
+                                        html.map { .paste(selection, copy: nil, html: $0) },
+                                        text.map { .replace(selection, text: $0) }].compactMap { $0 }
+            guard !tries.isEmpty else { return }
+            for (index, command) in tries.enumerated() {
+                do {
+                    try await document.run(command)
+                    break
+                } catch where index < tries.count - 1 {
+                    continue
+                }
+            }
+            document.registerHistory(.undo, undoManager)
         }
     }
     /// 닫기: from a 머리말 or 꼬리말 back to where the caret was before.

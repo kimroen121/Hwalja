@@ -82,6 +82,12 @@ final class EditSession: @unchecked Sendable {
         try await decode(send(.find(query: query, caseSensitive: false)))
     }
 
+    func copyObject(_ object: ObjectRef) async throws -> Copied {
+        try await decode(send(.copyObject(object)))
+    }
+    func copy(revision: UInt64, _ selection: EditSelection) async throws -> Copied {
+        try await decode(send(.copy(revision: revision, selection)))
+    }
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await decode(send(.pageSetup(section: section)))
     }

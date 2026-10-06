@@ -98,6 +98,15 @@ enum Request {
         query: String,
         case_sensitive: bool,
     },
+    /// 복사하기 with formats: the selection to the engine's clipboard, and as HTML.
+    Copy {
+        revision: u64,
+        selection: EditSelection,
+    },
+    /// 복사하기 for a selected object.
+    CopyObject {
+        object: ObjectRef,
+    },
     /// Verified HWP/HWPX bytes, or the whole-document PDF, in `data`.
     Export {
         format: SaveFormat,
@@ -138,6 +147,13 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             state(session)
         }
         Request::Paragraph { target } => HwpEditResult::ok(session.paragraph(&target)?, Vec::new()),
+        Request::Copy {
+            revision,
+            selection,
+        } => HwpEditResult::ok(session.copy(revision, &selection)?, Vec::new()),
+        Request::CopyObject { object } => {
+            HwpEditResult::ok(session.copy_object(&object)?, Vec::new())
+        }
         Request::HitTest {
             revision,
             page,

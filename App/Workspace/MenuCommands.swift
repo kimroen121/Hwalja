@@ -98,8 +98,8 @@ struct MenuItems {
         let editor = viewer.canvas.editor
         let selected = context.hasRange || context.object != nil
         var items: [Choice?] = [
-            Choice(title: "오려 두기", symbol: Icon.cut, key: "x", enabled: context.hasRange) { send(#selector(PageEditor.cut(_:))) },
-            Choice(title: "복사하기", symbol: Icon.copy, key: "c", enabled: context.hasRange) { send(#selector(PageEditor.copy(_:))) },
+            Choice(title: "오려 두기", symbol: Icon.cut, key: "x", enabled: selected) { send(#selector(PageEditor.cut(_:))) },
+            Choice(title: "복사하기", symbol: Icon.copy, key: "c", enabled: selected) { send(#selector(PageEditor.copy(_:))) },
             Choice(title: "붙이기", symbol: Icon.paste, key: "v", enabled: context.hasSelection) { send(#selector(PageEditor.paste(_:))) },
         ]
         if selected {

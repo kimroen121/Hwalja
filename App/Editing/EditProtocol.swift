@@ -49,6 +49,8 @@ struct EditSelection: Codable, Hashable, Sendable {
 
 enum EditCommand: Encodable, Sendable {
     case replace(EditSelection, text: String)
+    /// Replaces the selection with copy `copy` while the engine holds it, or with `html`.
+    case paste(EditSelection, copy: UInt64?, html: String?)
     case split(EditPosition)
     case mergePrevious(EditPosition)
     /// 스타일 `style` (an index into the document's styles) for the selected paragraphs.
@@ -104,7 +106,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -113,6 +115,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("replace", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(text, forKey: .text)
+        case let .paste(selection, copy, html):
+            try c.encode("paste", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encodeIfPresent(copy, forKey: .copy)
+            try c.encodeIfPresent(html, forKey: .html)
         case let .split(position):
             try c.encode("split", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -251,6 +258,12 @@ enum Placement: String, Encodable, Sendable {
 
 enum BlockFunction: String, Encodable, Sendable {
     case sum, average, product
+}
+
+/// 복사하기 with formats: the selection as HTML, and the copy's number in the engine.
+struct Copied: Decodable, Sendable {
+    var html: String
+    var copy: UInt64
 }
 
 /// 맨 앞으로, 앞으로, 맨 뒤로, 뒤로.
@@ -635,6 +648,10 @@ enum EngineRequest: Encodable, Sendable {
     /// 문단 부호, 조판 부호 and 투명 선.
     case showMarks(paragraph: Bool, control: Bool, borders: Bool)
     case styles
+    /// 복사하기 with formats: the selection to the engine's clipboard, and as HTML.
+    case copy(revision: UInt64, EditSelection)
+    /// 복사하기 for a selected object.
+    case copyObject(ObjectRef)
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
@@ -717,6 +734,13 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(color, forKey: .color)
         case .styles:
             try c.encode("styles", forKey: .op)
+        case let .copyObject(object):
+            try c.encode("copyObject", forKey: .op)
+            try c.encode(object, forKey: .object)
+        case let .copy(revision, selection):
+            try c.encode("copy", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(selection, forKey: .selection)
         case let .showMarks(paragraph, control, borders):
             try c.encode("showMarks", forKey: .op)
             try c.encode(paragraph, forKey: .paragraph)

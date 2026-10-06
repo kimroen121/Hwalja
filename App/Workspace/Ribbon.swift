@@ -208,9 +208,9 @@ struct ToolRow: View {
 
     @ViewBuilder private func clipboard(_ context: EditingContext) -> some View {
         ToolTile("오려 두기", Icon.cut) { send(#selector(NSText.cut(_:))) }
-            .disabled(!context.hasRange)
+            .disabled(!context.hasRange && context.object == nil)
         ToolTile("복사하기", Icon.copy) { send(#selector(NSText.copy(_:))) }
-            .disabled(!context.hasRange)
+            .disabled(!context.hasRange && context.object == nil)
         ToolTile("붙이기", Icon.paste) { send(#selector(NSText.paste(_:))) }
             .disabled(!context.hasSelection)
     }

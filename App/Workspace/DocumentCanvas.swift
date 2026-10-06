@@ -976,12 +976,18 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     @objc func copy(_ sender: Any?) { copySelection(cut: false) }
     @objc func cut(_ sender: Any?) { copySelection(cut: true) }
-    /// Pastes text, or else an image as a picture.
+    /// This document's copy number on the pasteboard, as `copyID:number`.
+    static let copyType = NSPasteboard.PasteboardType("app.hwpstudio.mac.copy")
+    /// Pastes with formats (a copy of this document, else HTML), or text, or else an image
+    /// as a picture.
     @objc func paste(_ sender: Any?) {
         commitComposition()
         let board = pasteboard
-        if let text = board.string(forType: .string) {
-            replaceSelection(with: text)
+        let mark = board.string(forType: Self.copyType)?.split(separator: ":")
+        let copy = mark.flatMap { $0.count == 2 && String($0[0]) == model?.copyID ? UInt64($0[1]) : nil }
+        let html = board.string(forType: .html), text = board.string(forType: .string)
+        if copy != nil || html != nil || text != nil {
+            model?.paste(copy: copy, html: html, text: text, undoManager)
         } else if let image = NSImage(pasteboard: board), let data = image.tiffRepresentation {
             model?.insertPicture(data, name: "", undoManager)
         } else {
@@ -1001,11 +1007,24 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     private func copySelection(cut: Bool) {
+        if let model, let object = model.object?.object {
+            Task {
+                guard let copied = try? await model.copyObject(object) else { return NSSound.beep() }
+                pasteboard.clearContents()
+                pasteboard.setString("\(model.copyID):\(copied.copy)", forType: Self.copyType)
+                if cut, model.object?.object == object { model.edit(undoManager) { _ in .deleteObject(object) } }
+            }
+            return
+        }
         guard let model, let selection = model.selection, selection.anchor != selection.focus else { return NSSound.beep() }
         Task {
-            guard let text = try? await model.text(of: selection) else { return NSSound.beep() }
+            guard let (text, copied) = try? await model.copy(selection) else { return NSSound.beep() }
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
+            if let copied {
+                pasteboard.setString(copied.html, forType: .html)
+                pasteboard.setString("\(model.copyID):\(copied.copy)", forType: Self.copyType)
+            }
             // The selection may have moved while the text was read; never cut another range.
             if cut, model.selection == selection { replaceSelection(with: "") }
         }
@@ -1027,9 +1046,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         switch item.action {
         case #selector(copyFont(_:)): return model?.format != nil
         case #selector(pasteFont(_:)): return hasRange && Self.copiedStyle != nil
-        case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return hasRange
+        case #selector(copy(_:)), #selector(cut(_:)): return hasRange || model?.object != nil
+        case #selector(delete(_:)): return hasRange
         case #selector(paste(_:)):
-            return model?.selection != nil && (pasteboard.string(forType: .string) != nil || NSImage.canInit(with: pasteboard))
+            return model?.selection != nil
+                && (pasteboard.availableType(from: [Self.copyType, .html, .string]) != nil || NSImage.canInit(with: pasteboard))
         case #selector(selectAll(_:)): return model?.selection != nil
         default: return responds(to: item.action)
         }

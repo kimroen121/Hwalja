@@ -1,4 +1,5 @@
 mod cells;
+mod clipboard;
 mod commands;
 mod display;
 pub mod ffi;
@@ -56,6 +57,9 @@ pub struct EditSession {
     next_state: u64,
     /// Page layouts the caret stops are read from, for the current revision.
     layouts: std::cell::RefCell<stops::Layouts>,
+    /// Copies made, and the one rhwp's clipboard holds (0 for none).
+    copies: u64,
+    copied: u64,
     #[cfg(test)]
     fail_render: bool,
 }
@@ -96,6 +100,8 @@ impl EditSession {
             state: 0,
             next_state: 1,
             layouts: Default::default(),
+            copies: 0,
+            copied: 0,
             #[cfg(test)]
             fail_render: false,
         };
@@ -221,6 +227,7 @@ impl EditSession {
         let before = self.core.document().clone();
         let start = match &request.command {
             EditCommand::Replace { selection, .. }
+            | EditCommand::Paste { selection, .. }
             | EditCommand::FormatText { selection, .. }
             | EditCommand::FormatParagraphs { selection, .. }
             | EditCommand::ApplyStyle { selection, .. } => {

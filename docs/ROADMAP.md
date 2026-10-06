@@ -32,7 +32,7 @@
 | 메뉴 | 기능 | 엔진 | 남은 것 |
 |---|---|---|---|
 | 파일 | 새 문서·열기·최근 문서·저장(⌘S)·다른 이름으로 저장·버전(macOS 기본), PDF로 내보내기(⇧⌘E), 프린트(⌘P), 편집 용지(F7) | `export_hwp(x)_native`, `render_document_pdf_native`, `get/set_page_def_native` | 문서 정보…, 암호 문서 |
-| 편집 | 되돌리기·다시 실행(20단계), 오려 두기·복사하기·붙이기(평문, 그림 붙이기), 모양 복사(⌥⌘C, 글자 모양), 지우기, 모두 선택, 찾기 막대(⌘F, ⌥⌘F, ⌘G/⇧⌘G, ⌘E, 모두 바꾸기는 1단위), 찾아가기(⌥⌘G) | snapshot, Replace, `search_all_text_native` | 서식 있는 복사·붙이기, 조판 부호 지우기 |
+| 편집 | 되돌리기·다시 실행(20단계), 오려 두기·복사하기·붙이기(본문·표 칸은 서식 있게: 같은 문서는 표·그림까지, 다른 문서·앱과는 HTML; 주석·머리말은 평문; 선택한 개체; 그림 붙이기), 모양 복사(⌥⌘C, 글자 모양), 지우기, 모두 선택, 찾기 막대(⌘F, ⌥⌘F, ⌘G/⇧⌘G, ⌘E, 모두 바꾸기는 1단위), 찾아가기(⌥⌘G) | snapshot, Replace, `copy_selection`·`paste_internal`·`export_selection_html`·`paste_html`(셀은 `*_in_cell`), `search_all_text_native` | 조판 부호 지우기 |
 | 보기 | 확대/축소(50–300%, 쪽 맞춤, 폭 맞춤, ⌘/⌃+휠·핀치), 쪽 모양(한 쪽·두 쪽·세 쪽), 표시/숨기기(조판 부호, 문단 부호, 투명 선, 격자 보기 5 mm 점), 도구 상자(기본·서식), 사이드바 | `show_paragraph_marks`, `show_control_codes`, `show_transparent_borders`(패치로 공개) | 쪽 윤곽, 눈금자 |
 | 입력 | 도형(가로 글상자·직사각형·타원·직선·호, 끌어 그리기), 글상자(안 글자 입력 포함), 그림(모든 그림 파일, 붙이기), 표, 수식(편집기·실시간 미리 보기·더블클릭 고치기), 문자표(macOS 이모티콘 및 기호), 각주·미주(안 글자 편집·글자/문단 모양 포함), 캡션 넣기(9곳) | InsertShape, `insert_picture_native`, `create_table_native`, `insert_equation_native`, InsertNote, SetObject(caption) | 책갈피, 누름틀·필드 입력, 차트 |
 | 서식 | 글자 모양(⌘L: 기본·확장, 테두리·배경), 문단 모양(⌘T: 기본·테두리/배경), 글머리표·문단 번호 매기기, 글머리표 모양…·문단 번호 모양…(글머리표 17종, 문단 번호 10종, 본문의 시작 번호 방식), 한 수준 증가/감소, 스타일 상자, 개체 속성(기본·여백/캡션·그림·표·셀), 빠른 메뉴(오른쪽 클릭) | `apply_char/para_format_native`, `apply_style_native`, `set_numbering_restart_native`, SetObject, SetCell | 아래 「단계」 2 |
@@ -64,7 +64,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
   - [ ] 암호가 걸린 문서 열기·저장: `from_bytes_with_password`, `export_hwpx_native_with_password`, `export_hwp_with_adapter_with_password`. 지금은 `PasswordRequired`로 열기를 거부한다.
   - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`.
 - 편집
-  - [ ] 서식 있는 오려 두기·복사하기·붙이기: 앱 안에서는 `copy_selection`/`paste_internal`(셀은 `*_in_cell`), 다른 앱으로는 `export_selection_html`, 다른 앱에서는 `paste_html`(표 포함). 개체는 `copy_control`/`paste_control`.
   - [ ] 조판 부호 지우기: `delete_control_native`.
 - 보기
   - [ ] 쪽 윤곽, 문서 창 › 눈금자: 앱만으로 가능(편집 용지 여백·들여쓰기).
