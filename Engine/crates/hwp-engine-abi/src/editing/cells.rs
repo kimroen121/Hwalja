@@ -158,6 +158,7 @@ impl EditSession {
                     paragraph: 0,
                 }),
                 note: None,
+                header_footer: None,
                 ..t.clone()
             },
             scalar: 0,
@@ -392,6 +393,7 @@ impl EditSession {
                 paragraph: 0,
             }),
             note: None,
+            header_footer: None,
         };
         if o.kind != ObjectKind::Table {
             return Err(EditError::UnsupportedTarget);

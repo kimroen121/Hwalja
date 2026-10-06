@@ -22,6 +22,9 @@ pub(super) fn paragraphs<'a>(
         .sections
         .get(t.section as usize)
         .ok_or(EditError::InvalidInput)?;
+    if t.header_footer.is_some() {
+        return header_footer::paragraphs(doc, t);
+    }
     if let Some(c) = &t.cell {
         let host = section
             .paragraphs
@@ -125,6 +128,7 @@ pub(super) fn ordered(s: &EditSelection) -> (&EditPosition, &EditPosition) {
 /// Whether two targets address paragraphs of the same container.
 fn same_container(a: &EditTarget, b: &EditTarget) -> bool {
     a.section == b.section
+        && a.header_footer == b.header_footer
         && match (&a.cell, &b.cell) {
             (None, None) => true,
             (Some(x), Some(y)) => {
@@ -139,7 +143,11 @@ fn same_container(a: &EditTarget, b: &EditTarget) -> bool {
         }
 }
 pub(super) fn get<'a>(doc: &'a Document, t: &EditTarget) -> Result<&'a Paragraph, EditError> {
-    if t.cell.is_some() && t.note.is_some() {
+    if usize::from(t.cell.is_some())
+        + usize::from(t.note.is_some())
+        + usize::from(t.header_footer.is_some())
+        > 1
+    {
         return Err(EditError::UnsupportedTarget);
     }
     paragraphs(doc, t)?
@@ -248,7 +256,11 @@ impl EditSession {
     }
     pub(super) fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {
         let para = get(self.core.document(), &p.target)?;
-        if !editable(para) {
+        if p.target.header_footer.is_some() {
+            if !header_footer::range_is_editable(para, p.scalar, p.scalar) {
+                return Err(EditError::UnsupportedTarget);
+            }
+        } else if !editable(para) {
             return Err(EditError::UnsupportedTarget);
         }
         boundary(&logical::text(para), p.scalar)
@@ -269,7 +281,20 @@ impl EditSession {
         let all = paragraphs(self.core.document(), &start.target)?;
         let (s, e) = (index(&start.target), index(&end.target));
         let checked = if whole { &[] } else { &all[s..=e] };
-        if checked.iter().any(|p| !editable(p)) {
+        if start.target.header_footer.is_some() {
+            for (i, paragraph) in all[s..=e].iter().enumerate() {
+                let index = s + i;
+                let from = if index == s { start.scalar } else { 0 };
+                let to = if index == e {
+                    end.scalar
+                } else {
+                    logical::length(paragraph)
+                };
+                if !header_footer::range_is_editable(paragraph, from, to) {
+                    return Err(EditError::UnsupportedTarget);
+                }
+            }
+        } else if checked.iter().any(|p| !editable(p)) {
             return Err(EditError::UnsupportedTarget);
         }
         Ok(())
@@ -438,6 +463,7 @@ impl EditSession {
                     paragraph: 0,
                     cell: None,
                     note: None,
+                    header_footer: None,
                 },
                 scalar: 0,
             })
@@ -886,6 +912,7 @@ impl EditSession {
                             paragraph: 0,
                         }),
                         note: None,
+                        header_footer: None,
                     },
                     scalar: 0,
                 }))
@@ -962,6 +989,7 @@ impl EditSession {
                         control,
                         paragraph: 0,
                     }),
+                    header_footer: None,
                     ..t.clone()
                 };
                 // After the number and the space that follows it.

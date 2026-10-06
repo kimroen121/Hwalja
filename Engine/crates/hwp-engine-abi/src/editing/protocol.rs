@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,6 +16,14 @@ pub struct NoteTarget {
     pub control: u32,
     pub paragraph: u32,
 }
+/// A paragraph inside one semantic header/footer definition, displayed on `page`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HeaderFooterTarget {
+    pub footer: bool,
+    pub apply_to: u8,
+    pub page: u32,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditTarget {
@@ -24,6 +32,12 @@ pub struct EditTarget {
     pub cell: Option<CellTarget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<NoteTarget>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "headerFooter"
+    )]
+    pub header_footer: Option<HeaderFooterTarget>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

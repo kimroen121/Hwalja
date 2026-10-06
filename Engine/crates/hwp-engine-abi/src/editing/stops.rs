@@ -342,6 +342,7 @@ impl EditSession {
                     paragraph,
                     cell,
                     note: None,
+                    header_footer: None,
                 };
                 let across = if x < ox {
                     ox - x

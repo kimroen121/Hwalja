@@ -4,6 +4,7 @@ mod display;
 pub mod ffi;
 mod format;
 mod geometry;
+mod header_footer;
 mod logical;
 mod navigation;
 mod objects;
@@ -251,6 +252,7 @@ impl EditSession {
                     paragraph: object.paragraph,
                     cell: None,
                     note: None,
+                    header_footer: None,
                 },
                 scalar: 0,
             }),

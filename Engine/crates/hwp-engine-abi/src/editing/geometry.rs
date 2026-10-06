@@ -61,6 +61,7 @@ impl EditSession {
                 paragraph: field(&hit, "paragraphIndex")?,
                 cell: None,
                 note: None,
+                header_footer: None,
             },
             Some(path) if path.len() == 1 => EditTarget {
                 section,
@@ -71,6 +72,7 @@ impl EditSession {
                     paragraph: field(&hit, "cellParaIndex")?,
                 }),
                 note: None,
+                header_footer: None,
             },
             Some(_) => return Err(EditError::UnsupportedTarget),
         };
@@ -126,6 +128,7 @@ impl EditSession {
                 control: field(&source, "controlIdx")?,
                 paragraph: field(&hit, "fnParaIndex")?,
             }),
+            header_footer: None,
         };
         commands::get(self.core.document(), &target)?;
         Ok(Some(EditPosition {

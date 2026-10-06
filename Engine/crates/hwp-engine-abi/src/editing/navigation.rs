@@ -286,6 +286,7 @@ impl EditSession {
                 paragraph,
                 cell: None,
                 note: None,
+                header_footer: None,
             }),
             (Some(section), _, Some(parent)) => match (
                 field("controlIndex"),
@@ -301,6 +302,7 @@ impl EditSession {
                         paragraph,
                     }),
                     note: None,
+                    header_footer: None,
                 }),
                 _ => None,
             },
@@ -339,6 +341,7 @@ impl EditSession {
                         None => None,
                     },
                     note: None,
+                    header_footer: None,
                 };
                 // Drops text boxes, which share the cell coordinates.
                 let para = get(doc, &target).ok()?;

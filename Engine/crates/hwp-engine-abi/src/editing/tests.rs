@@ -1,5 +1,12 @@
 use super::*;
-use rhwp::{model::control::Control, DocumentCore};
+use rhwp::{
+    model::{
+        control::Control,
+        header_footer::{Footer, Header, HeaderFooterApply},
+        paragraph::Paragraph,
+    },
+    DocumentCore,
+};
 
 fn plain_document(format: &str, table: bool) -> Vec<u8> {
     let mut core = DocumentCore::new_empty();
@@ -29,6 +36,106 @@ fn body() -> EditTarget {
         paragraph: 1,
         cell: None,
         note: None,
+        header_footer: None,
+    }
+}
+
+fn header_footer_target(footer: bool, apply_to: u8, paragraph: u32) -> EditTarget {
+    EditTarget {
+        section: 0,
+        paragraph,
+        cell: None,
+        note: None,
+        header_footer: Some(HeaderFooterTarget {
+            footer,
+            apply_to,
+            page: 0,
+        }),
+    }
+}
+
+fn text_paragraph(text: &str) -> Paragraph {
+    Paragraph {
+        text: text.into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn header_footer_target_resolves_each_apply_kind_and_rejects_mixed_containers() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let host = &mut s.core.document_mut().sections[0].paragraphs[0];
+    host.controls.extend([
+        Control::Header(Box::new(Header {
+            apply_to: HeaderFooterApply::Both,
+            paragraphs: vec![text_paragraph("양쪽 머리말")],
+            ..Default::default()
+        })),
+        Control::Header(Box::new(Header {
+            apply_to: HeaderFooterApply::Even,
+            paragraphs: vec![text_paragraph("짝수 머리말")],
+            ..Default::default()
+        })),
+        Control::Footer(Box::new(Footer {
+            apply_to: HeaderFooterApply::Odd,
+            paragraphs: vec![text_paragraph("홀수 꼬리말")],
+            ..Default::default()
+        })),
+    ]);
+
+    assert_eq!(
+        s.paragraph(&header_footer_target(false, 0, 0))
+            .unwrap()
+            .text,
+        "양쪽 머리말"
+    );
+    assert_eq!(
+        s.paragraph(&header_footer_target(false, 1, 0))
+            .unwrap()
+            .text,
+        "짝수 머리말"
+    );
+    assert_eq!(
+        s.paragraph(&header_footer_target(true, 2, 0)).unwrap().text,
+        "홀수 꼬리말"
+    );
+
+    let mut mixed = header_footer_target(false, 0, 0);
+    mixed.cell = Some(CellTarget {
+        control: 0,
+        cell: 0,
+        paragraph: 0,
+    });
+    assert_eq!(
+        s.paragraph(&mixed).unwrap_err(),
+        EditError::UnsupportedTarget
+    );
+}
+
+#[test]
+fn header_footer_ranges_preserve_field_markers() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    s.core.document_mut().sections[0].paragraphs[0]
+        .controls
+        .push(Control::Footer(Box::new(Footer {
+            apply_to: HeaderFooterApply::Both,
+            paragraphs: vec![text_paragraph("앞\u{0015}중\u{0016}뒤\u{0017}")],
+            ..Default::default()
+        })));
+    let target = header_footer_target(true, 0, 0);
+    let selection = |start, end| EditSelection {
+        anchor: point(target.clone(), start),
+        focus: point(target.clone(), end),
+    };
+
+    assert!(s.validate_range(&selection(1, 1)).is_ok());
+    assert!(s.validate_range(&selection(2, 2)).is_ok());
+    for range in [1..2, 3..4, 5..6] {
+        assert_eq!(
+            s.validate_range(&selection(range.start, range.end))
+                .unwrap_err(),
+            EditError::UnsupportedTarget
+        );
     }
 }
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
@@ -61,7 +168,7 @@ fn protocol_version_accepts_current_and_rejects_previous() {
     };
     assert!(s
         .apply(EditRequest {
-            version: 2,
+            version: 3,
             revision: 0,
             command: command("새"),
             amend: false,
@@ -69,7 +176,7 @@ fn protocol_version_accepts_current_and_rejects_previous() {
         .is_ok());
     assert!(matches!(
         s.apply(EditRequest {
-            version: 1,
+            version: 2,
             revision: 1,
             command: command("옛"),
             amend: false,
@@ -94,6 +201,7 @@ fn replace_preserves_other_content() {
                 paragraph: 0,
             }),
             note: None,
+            header_footer: None,
         };
         replace(&mut s, cell.clone(), 0, 1, "셀").unwrap();
         assert_eq!(s.paragraph(&cell).unwrap().text, "셀 내용");
@@ -117,6 +225,7 @@ fn rejects_unsupported_target() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let request = EditRequest {
         version: PROTOCOL_VERSION,
@@ -222,6 +331,7 @@ fn inline_metadata_and_vertical_cells_are_read_only() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     assert_eq!(
         replace(&mut s, cell, 0, 0, "x").unwrap_err(),
@@ -355,7 +465,7 @@ fn ffi_round_trip_owns_results() {
         assert_eq!(data[0], 1);
         assert!(!data.windows(5).any(|w| w == b"%PDF-"));
         hwp_edit_result_free(opened);
-        let request = br#"{"op":"apply","request":{"version":2,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
+        let request = br#"{"op":"apply","request":{"version":3,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
         let applied = hwp_edit_request(session, request.as_ptr(), request.len());
         assert_eq!(hwp_edit_result_status(applied), 0, "{}", json(applied));
         assert!(json(applied).contains("\"revision\":1"));
@@ -423,6 +533,7 @@ fn first_paragraph_with_section_definition_is_editable() {
         paragraph: 0,
         cell: None,
         note: None,
+        header_footer: None,
     };
     let controls = format!("{:?}", s.core.document().sections[0].paragraphs[0].controls);
     assert!(controls.contains("SectionDef"));
@@ -748,6 +859,7 @@ fn objects_are_found_changed_and_deleted() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let change = CellProps {
         vertical_align: Some(1),
@@ -1028,6 +1140,7 @@ fn bench_typing() {
             paragraph,
             cell: None,
             note: None,
+            header_footer: None,
         })
         .find(|t| commands::get(s.core.document(), t).is_ok_and(commands::editable))
         .unwrap();
@@ -1168,6 +1281,7 @@ fn horizontal_and_word_motions() {
         paragraph: 0,
         cell: None,
         note: None,
+        header_footer: None,
     };
     let second = EditTarget {
         paragraph: 1,
@@ -1212,6 +1326,7 @@ fn vertical_motion_keeps_its_column_and_lines_have_edges() {
         paragraph: 0,
         cell: None,
         note: None,
+        header_footer: None,
     };
     let start = point(first.clone(), 5);
     let down = go(&s, start.clone(), Motion::Down, None);
@@ -1238,6 +1353,7 @@ fn find_reports_body_and_cell_matches() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let hits = s.find("내용", true).unwrap();
     assert_eq!(hits.len(), 1);
@@ -1329,6 +1445,7 @@ fn edits_table_rows_and_columns() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     for (change, shape) in [
         (TableChange::InsertRowBelow, (2, 2, 4)),
@@ -1426,6 +1543,7 @@ fn structure_edits_on_corpus() {
                             paragraph: 0,
                         }),
                         note: None,
+                        header_footer: None,
                     })
                 })
             });
@@ -1912,6 +2030,7 @@ fn styles_apply_to_paragraphs() {
                 paragraph: 0,
             }),
             note: None,
+            header_footer: None,
         };
         let selection = EditSelection::caret(point(cell.clone(), 0));
         run(
@@ -2096,6 +2215,7 @@ fn text_boxes_take_text() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let r = &placed.rect;
     let hit = s.hit_test(s.revision, 0, r.x + 10.0, r.y + 10.0).unwrap();
@@ -2497,6 +2617,7 @@ fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let object = s.placed(0).unwrap()[0].object.clone();
     run(
@@ -2592,6 +2713,7 @@ fn captions_are_written_and_edited() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let end = s.paragraph(&caption).unwrap().text.chars().count() as u32;
     replace(&mut s, caption.clone(), end, end, "목록").unwrap();
@@ -2677,6 +2799,7 @@ fn the_caret_passes_an_equation_in_a_cell() {
             paragraph: 0,
         }),
         note: None,
+        header_footer: None,
     };
     let equation = EditCommand::InsertEquation {
         position: point(cell.clone(), 1),

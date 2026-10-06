@@ -133,6 +133,7 @@ impl EditSession {
                 paragraph: o.paragraph,
                 cell: o.cell.clone(),
                 note: None,
+                header_footer: None,
             },
         )?
         .controls
@@ -174,6 +175,7 @@ impl EditSession {
                 paragraph,
                 cell: None,
                 note: None,
+                header_footer: None,
             },
         )
         .ok()?;
@@ -188,6 +190,7 @@ impl EditSession {
             paragraph,
             cell: Some(c.clone()),
             note: None,
+            header_footer: None,
         };
         let controls = &commands::get(self.core.document(), &target).ok()?.controls;
         let mut equations = controls
@@ -501,6 +504,7 @@ impl EditSession {
             paragraph: o.paragraph,
             cell: o.cell.clone(),
             note: None,
+            header_footer: None,
         }
     }
     /// An object in the line (글자처럼 취급) moves to another place in the text.
