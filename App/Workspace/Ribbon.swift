@@ -8,21 +8,35 @@ struct ToolRow: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
     @AppStorage("toolTab") private var tab = "기본"
+    @State private var hovered: String?
+    @Namespace private var underline
     static let tabs = ["기본", "편집", "보기", "입력", "서식", "쪽", "표"]
 
     var body: some View {
         let context = document.context
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 18) {
+            HStack(spacing: 17) {
                 ForEach(Self.tabs, id: \.self) { name in
-                    Button { tab = name } label: {
+                    Button { withAnimation(.snappy(duration: 0.25)) { tab = name } } label: {
                         Text(name)
                             .font(.system(size: 13, weight: tab == name ? .semibold : .regular))
                             .foregroundStyle(tab == name ? .primary : .secondary)
                             .padding(.vertical, 4)
+                            .overlay(alignment: .bottom) {
+                                // As in Word: a line under the selected tab, a little longer under the pointer.
+                                if tab == name {
+                                    Capsule()
+                                        .frame(height: 3)
+                                        .padding(.horizontal, hovered == name ? -4 : 0)
+                                        .matchedGeometryEffect(id: "underline", in: underline)
+                                        .offset(y: 2)
+                                }
+                            }
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
+                    .animation(.easeOut(duration: 0.15), value: hovered)
                 }
             }
             .padding(.horizontal, 16)
