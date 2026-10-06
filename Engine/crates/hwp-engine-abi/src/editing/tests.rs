@@ -1566,7 +1566,7 @@ fn format_rejects_empty_changes() {
 
 /// Opt-in typing latency on a private document; prints durations only:
 /// `HWP_RENDER=<file> HWP_RENDER_DIR=<folder> cargo test render_pages -- --ignored`: each
-/// page as rhwp draws it, for a look.
+/// page as rhwp draws it, and the PDF, for a look.
 #[test]
 #[ignore]
 fn render_pages() {
@@ -1577,6 +1577,8 @@ fn render_pages() {
         let svg = s.core.render_page_svg_native(page).unwrap();
         std::fs::write(folder.join(format!("page-{}.svg", page + 1)), svg).unwrap();
     }
+    let mut s = s;
+    std::fs::write(folder.join("pages.pdf"), s.export(SaveFormat::Pdf).unwrap()).unwrap();
 }
 /// `HWP_BENCH=<file> cargo test --release bench_typing -- --ignored --nocapture`
 #[test]

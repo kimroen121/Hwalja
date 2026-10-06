@@ -654,7 +654,7 @@ index c455a55..aa4e690 100644
              composed,
              &rebuild_input,
 diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
-index 4b1109c..765c315 100644
+index 4b1109c..5efc290 100644
 --- a/src/renderer/composer/line_breaking.rs
 +++ b/src/renderer/composer/line_breaking.rs
 @@ -2481,6 +2481,39 @@ fn apply_inline_control_line_height(seg: &mut LineSeg, height_hwp: i32) {
@@ -791,6 +791,46 @@ index 4b1109c..765c315 100644
          }
          new_line_segs.push(text_seg);
  
+@@ -3788,10 +3828,37 @@ fn reflow_line_segs_impl(
+     }
+ 
+     if forced_inline_line.is_none() && inline_controls.is_empty() {
+-        if let Some(height_hwp) = inline_control_line_height_hwp(para) {
++        if inline_control_line_height_hwp(para).is_some() {
+             // 기존 인라인 TAC 개체는 해당 문단의 최초 line box에 남긴다.
+             if let Some(seg) = new_line_segs.first_mut() {
+-                apply_inline_control_line_height(seg, height_hwp);
++                // HwpStudio: 수식은 자기 기준선에 선다.
++                for (height_hwp, baseline_hwp) in inline_control_metrics_hwp(para) {
++                    apply_inline_control_line_metrics(seg, height_hwp, baseline_hwp);
++                }
++            }
++        }
++    } else if forced_inline_line.is_none() {
++        // HwpStudio: 마지막 글자 뒤에 놓인 개체(`, ` 뒤 수식 등)는 `FlowInlineControl` 에
++        // 들지 않지만 마지막 줄에 서므로 그 줄을 키운다.
++        let trailing: Vec<(i32, Option<i32>)> = para
++            .controls
++            .iter()
++            .zip(para.control_text_positions())
++            .filter(|(_, position)| *position >= text_len)
++            .filter_map(|(control, _)| {
++                let (_, height) = inline_control_size_hwp(control)?;
++                let baseline = match control {
++                    Control::Equation(equation) if equation.baseline > 0 => {
++                        Some(height.saturating_mul(i32::from(equation.baseline)) / 100)
++                    }
++                    _ => None,
++                };
++                Some((height, baseline))
++            })
++            .collect();
++        if let Some(seg) = new_line_segs.last_mut() {
++            for (height_hwp, baseline_hwp) in trailing {
++                apply_inline_control_line_metrics(seg, height_hwp, baseline_hwp);
+             }
+         }
+     }
 diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
 index 8bcc337..0972cdf 100644
 --- a/src/renderer/equation/ast.rs
@@ -831,10 +871,42 @@ index 648ce9f..a5b0cbc 100644
          "END" => return EqCommandClass::EndEnv,
          "SQRT" | "ROOT" => return EqCommandClass::Sqrt,
 diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
-index d8ecae2..9ffd564 100644
+index d8ecae2..fc63c2b 100644
 --- a/src/renderer/equation/layout.rs
 +++ b/src/renderer/equation/layout.rs
-@@ -220,6 +220,7 @@ impl EqLayout {
+@@ -193,6 +193,31 @@ pub(crate) const AXIS_HEIGHT: f64 = 0.25;
+ /// 텍스트 기본 baseline 비율 (상단에서 baseline까지)
+ const TEXT_BASELINE: f64 = 0.8;
+ 
++/// HwpStudio: 아래첨자 기준선이 밑글자 기준선보다 내려가는 거리 (글자 크기 배수).
++const SUB_DROP: f64 = 0.25;
++/// HwpStudio: 관계 기호 둘레 (글자 크기 배수, 한쪽).
++const RELATION_SPACE: f64 = 0.28;
++/// HwpStudio: 이항 연산 기호 둘레 (글자 크기 배수, 한쪽).
++const BINARY_SPACE: f64 = 0.22;
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++enum OperatorClass {
++    Relation,
++    Binary,
++}
++
++/// HwpStudio: 둘레를 띄우는 기호의 갈래.
++fn operator_class(text: &str) -> Option<OperatorClass> {
++    match text {
++        "=" | "<" | ">" | ":=" | "≤" | "≥" | "≠" | "≡" | "≈" | "∼" | "≃" | "≅" | "∝" | "≪"
++        | "≫" | "∈" | "∉" | "∋" | "⊂" | "⊃" | "⊆" | "⊇" | "→" | "←" | "↔" | "⇒" | "⇐"
++        | "⇔" | "↦" => Some(OperatorClass::Relation),
++        "+" | "−" | "-" | "×" | "÷" | "±" | "∓" | "·" | "∘" | "∪" | "∩" | "⊕" | "⊖" | "⊗"
++        | "⊙" | "∧" | "∨" => Some(OperatorClass::Binary),
++        _ => None,
++    }
++}
++
+ impl EqLayout {
+     pub fn new(font_size: f64) -> Self {
+         Self { font_size }
+@@ -220,6 +245,7 @@ impl EqLayout {
              EqNode::SubSup { base, sub, sup } => self.layout_subsup(base, sub, sup, fs),
              EqNode::BigOp { symbol, sub, sup } => self.layout_big_op(symbol, sub, sup, fs),
              EqNode::Limit { is_upper, sub } => self.layout_limit(*is_upper, sub, fs),
@@ -842,7 +914,56 @@ index d8ecae2..9ffd564 100644
              EqNode::Matrix { rows, style } => self.layout_matrix(rows, *style, fs),
              EqNode::Cases { rows } => self.layout_cases(rows, fs),
              EqNode::EqAlign { rows } => self.layout_eqalign(rows, fs),
-@@ -815,6 +816,65 @@ impl EqLayout {
+@@ -278,6 +304,25 @@ impl EqLayout {
+             };
+         }
+ 
++        // HwpStudio: 한컴처럼 관계 기호 둘레는 넓게, 이항 연산 둘레는 그보다 좁게 띄운다.
++        // 앞에 피연산자가 없는 +, − 등은 단항이라 붙인다.
++        let mut operand_before = false;
++        for b in &mut boxes {
++            let class = match &b.kind {
++                LayoutKind::Symbol(t) | LayoutKind::MathSymbol(t) => operator_class(t),
++                _ => None,
++            };
++            b.width += 2.0
++                * match class {
++                    Some(OperatorClass::Relation) => fs * RELATION_SPACE,
++                    Some(OperatorClass::Binary) if operand_before => fs * BINARY_SPACE,
++                    _ => 0.0,
++                };
++            operand_before = class.is_none()
++                && !matches!(&b.kind, LayoutKind::Symbol(t) if matches!(t.as_str(), "(" | "[" | "{" | "," | "|"))
++                && !matches!(b.kind, LayoutKind::Space(_) | LayoutKind::Newline);
++        }
++
+         // 기준선 정렬: 가장 높은 baseline과 가장 깊은 descent
+         let max_ascent = boxes.iter().map(|b| b.baseline).fold(0.0f64, f64::max);
+         let max_descent = boxes
+@@ -335,9 +380,9 @@ impl EqLayout {
+ 
+     fn layout_symbol(&self, text: &str, fs: f64) -> LayoutBox {
+         let w = estimate_text_width(text, fs, false);
+-        // 연산자 좌우 여백
+-        let pad = if matches!(text, "+" | "-" | "=" | "<" | ">" | "×" | "÷") {
+-            fs * 0.15
++        // 연산자 좌우 여백은 줄(`layout_row`)이 앞뒤를 보고 정한다.
++        let pad = if operator_class(text).is_some() {
++            0.0
+         } else {
+             fs * 0.05
+         };
+@@ -549,7 +594,8 @@ impl EqLayout {
+         let b = self.layout_node(base, fs);
+         let s = self.layout_node(sub, fs * SCRIPT_SCALE);
+ 
+-        let sub_shift = b.baseline * 0.4;
++        // HwpStudio: 한컴처럼 아래첨자의 기준선을 밑글자 기준선보다 글자 크기의 1/4 아래에.
++        let sub_shift = (b.baseline + fs * SUB_DROP - s.baseline).max(0.0);
+         let total_h = (b.height).max(sub_shift + s.height);
+ 
+         let mut base_box = b;
+@@ -815,6 +861,65 @@ impl EqLayout {
          }
      }
  
@@ -908,11 +1029,64 @@ index d8ecae2..9ffd564 100644
      fn layout_limit(&self, is_upper: bool, sub: &Option<Box<EqNode>>, fs: f64) -> LayoutBox {
          let name = if is_upper { "Lim" } else { "lim" };
          let name_w = estimate_text_width(name, fs, false);
+@@ -1215,27 +1320,37 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
+ }
+ 
+ /// 텍스트 폭 추정
++/// HwpStudio: Times 로만의 글자 폭 (1/1000 em, ASCII 32–126, Adobe Times-Roman AFM).
++/// 수식은 Times New Roman 으로 그리므로 그 폭으로 잰다.
++const TIMES_ROMAN: [u16; 95] = [
++    250, 333, 408, 500, 500, 833, 778, 180, 333, 333, 500, 564, 250, 333, 250, 278, 500, 500, 500,
++    500, 500, 500, 500, 500, 500, 500, 278, 278, 564, 564, 564, 444, 921, 722, 667, 667, 722, 611,
++    556, 722, 722, 333, 389, 722, 611, 889, 722, 722, 556, 722, 667, 556, 611, 722, 722, 944, 722,
++    722, 611, 333, 278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500,
++    278, 778, 500, 500, 500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541,
++];
++/// HwpStudio: Times 이탤릭의 글자 폭 (A–Z, a–z, Adobe Times-Italic AFM).
++const TIMES_ITALIC_UPPER: [u16; 26] = [
++    611, 611, 667, 722, 611, 611, 722, 722, 333, 444, 667, 556, 833, 667, 722, 611, 722, 611, 500,
++    556, 722, 611, 833, 611, 556, 556,
++];
++const TIMES_ITALIC_LOWER: [u16; 26] = [
++    500, 500, 444, 500, 444, 278, 500, 500, 278, 278, 444, 278, 722, 500, 500, 500, 500, 389, 389,
++    278, 500, 444, 667, 444, 444, 389,
++];
++
+ pub(crate) fn estimate_text_width(text: &str, font_size: f64, italic: bool) -> f64 {
+     let mut w = 0.0;
+     for ch in text.chars() {
+-        let ratio = if ch.is_ascii() {
+-            if ch.is_ascii_uppercase() {
+-                0.65
+-            } else if ch.is_ascii_lowercase() {
+-                0.55
+-            } else if ch.is_ascii_digit() {
+-                0.55
+-            } else {
+-                0.5
+-            }
+-        } else {
+-            estimate_unicode_char_width(ch)
++        let ratio = match ch {
++            'A'..='Z' if italic => TIMES_ITALIC_UPPER[ch as usize - 'A' as usize] as f64 / 1000.0,
++            'a'..='z' if italic => TIMES_ITALIC_LOWER[ch as usize - 'a' as usize] as f64 / 1000.0,
++            ' '..='~' => TIMES_ROMAN[ch as usize - ' ' as usize] as f64 / 1000.0,
++            '−' => 0.564,
++            _ => estimate_unicode_char_width(ch),
+         };
+         w += font_size * ratio;
+     }
+-    if italic {
+-        w *= 1.05;
+-    }
+     w
+ }
+ 
 diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
-index 99c9ee9..55e32e3 100644
+index 99c9ee9..767143f 100644
 --- a/src/renderer/equation/parser.rs
 +++ b/src/renderer/equation/parser.rs
-@@ -10,6 +10,20 @@ use super::symbols::{
+@@ -10,6 +10,24 @@ use super::symbols::{
  };
  use super::tokenizer::{tokenize, Token, TokenType};
  
@@ -920,6 +1094,10 @@ index 99c9ee9..55e32e3 100644
 +fn symbol_node(val: String) -> EqNode {
 +    if val == "->" {
 +        return EqNode::MathSymbol("→".to_string());
++    }
++    // 한컴은 빼기를 하이픈이 아니라 빼기 기호로 그린다.
++    if val == "-" {
++        return EqNode::Symbol("−".to_string());
 +    }
 +    match (val.chars().count() > 1)
 +        .then(|| super::symbols::lookup_symbol(&val))
@@ -933,7 +1111,7 @@ index 99c9ee9..55e32e3 100644
  /// 수식 중첩 깊이 상한.
  ///
  /// 적대적으로 깊게 중첩된 입력(`{{{…}}}`, `sqrt sqrt …`, `LEFT ( LEFT ( …`,
-@@ -233,12 +247,7 @@ impl EqParser {
+@@ -233,12 +251,7 @@ impl EqParser {
              }
              TokenType::Symbol => {
                  self.pos += 1;
@@ -947,7 +1125,7 @@ index 99c9ee9..55e32e3 100644
              }
              TokenType::Text => {
                  self.pos += 1;
-@@ -370,6 +379,7 @@ impl EqParser {
+@@ -370,6 +383,7 @@ impl EqParser {
                  self.parse_big_op(symbol)
              }
              EqCommandClass::Limit => self.parse_limit(cmd == "Lim"),
@@ -955,7 +1133,7 @@ index 99c9ee9..55e32e3 100644
              EqCommandClass::Matrix => self.parse_matrix(matrix_style(cu)),
              EqCommandClass::Cases => self.parse_cases(),
              EqCommandClass::EqAlign => self.parse_eqalign(),
-@@ -714,7 +724,7 @@ impl EqParser {
+@@ -714,7 +728,7 @@ impl EqParser {
              TokenType::Number => EqNode::Number(val),
              TokenType::Text => EqNode::Text(val),
              TokenType::Quoted => EqNode::Quoted(val),
@@ -964,7 +1142,7 @@ index 99c9ee9..55e32e3 100644
              _ => EqNode::Text(val),
          }
      }
-@@ -749,12 +759,7 @@ impl EqParser {
+@@ -749,12 +763,7 @@ impl EqParser {
          while self.is_tight_relational() {
              let sym = self.current_value().to_string();
              self.pos += 1;
@@ -978,7 +1156,7 @@ index 99c9ee9..55e32e3 100644
              items.push(self.parse_single_or_group());
          }
          EqNode::Row(items).simplify()
-@@ -1259,6 +1264,24 @@ impl EqParser {
+@@ -1259,6 +1268,24 @@ impl EqParser {
          EqNode::BigOp { symbol, sub, sup }
      }
  
@@ -1003,6 +1181,48 @@ index 99c9ee9..55e32e3 100644
      /// 극한 파싱
      fn parse_limit(&mut self, is_upper: bool) -> EqNode {
          let mut sub = None;
+diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
+index 7fc0b71..c3d8cf6 100644
+--- a/src/renderer/equation/svg_render.rs
++++ b/src/renderer/equation/svg_render.rs
+@@ -12,7 +12,9 @@ use super::symbols::{DecoKind, FontStyleKind};
+ /// Cambria Math 는 Windows 에서 "볼드 인상" 을 유발해 제외. Pretendard 는 산세리프라 수식 부적합으로 제외. (Task #280)
+ pub const DEFAULT_EQUATION_FONT_FAMILY_ATTR: &str =
+     "font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
+-const EQ_FONT_FAMILY: &str = " font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
++// HwpStudio: 한컴 수식 글꼴(HancomEQN)에 가까운 Times New Roman을 먼저, 그 글꼴에 없는
++// 기호는 수학 글꼴로.
++const EQ_FONT_FAMILY: &str = " font-family=\"'Times New Roman', 'Times', 'STIX Two Text', 'STIX Two Math', 'Latin Modern Math', serif\"";
+ 
+ /// 수식을 SVG 조각 문자열로 렌더링
+ ///
+@@ -103,12 +105,23 @@ fn render_box(
+             if super::layout::is_integral_symbol(text) {
+                 svg.push_str(&integral_path(x, y, fs, color));
+             } else {
+-                let text_x = x;
++                // HwpStudio: 줄이 둘레를 띄운 기호도 제자리에 오도록 상자 가운데에 둔다.
++                let text_x = x + lb.width / 2.0;
+                 let text_y = y + lb.baseline;
+                 let esc = escape_xml(text);
++                // HwpStudio: 한컴은 그리스 소문자를 변수처럼 기울여 쓴다.
++                let greek = text
++                    .chars()
++                    .all(|c| matches!(c, 'α'..='ω' | 'ϑ' | 'ϕ' | 'ϖ' | 'ϵ' | 'ϱ'));
+                 svg.push_str(&format!(
+-                    "<text x=\"{:.2}\" y=\"{:.2}\" font-size=\"{:.2}\" fill=\"{}\"{}>{}</text>\n",
+-                    text_x, text_y, fs, color, EQ_FONT_FAMILY, esc,
++                    "<text x=\"{:.2}\" y=\"{:.2}\" font-size=\"{:.2}\" fill=\"{}\" text-anchor=\"middle\"{}{}>{}</text>\n",
++                    text_x,
++                    text_y,
++                    fs,
++                    color,
++                    if greek && italic { " font-style=\"italic\"" } else { "" },
++                    EQ_FONT_FAMILY,
++                    esc,
+                 ));
+             }
+         }
 diff --git a/src/renderer/equation/symbols.rs b/src/renderer/equation/symbols.rs
 index 595ea2a..485611e 100644
 --- a/src/renderer/equation/symbols.rs
@@ -1017,13 +1237,19 @@ index 595ea2a..485611e 100644
          ("MINUSPLUS", "∓"),
          ("MP", "∓"),
 diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenizer.rs
-index 0e273b2..e5b9d01 100644
+index 0e273b2..82dd9b6 100644
 --- a/src/renderer/equation/tokenizer.rs
 +++ b/src/renderer/equation/tokenizer.rs
-@@ -306,6 +306,13 @@ impl Tokenizer {
+@@ -306,6 +306,19 @@ impl Tokenizer {
              return Some(Token::new(TokenType::Symbol, s, start));
          }
  
++        // HwpStudio: := (정의)
++        if ch == ':' && next == '=' {
++            self.pos += 2;
++            return Some(Token::new(TokenType::Symbol, ":=", start));
++        }
++
 +        // HwpStudio: +- (±), -+ (∓)
 +        if (ch == '+' && next == '-') || (ch == '-' && next == '+') {
 +            self.pos += 2;
@@ -1035,10 +1261,21 @@ index 0e273b2..e5b9d01 100644
          if ch == '-' && next == '>' {
              self.pos += 2;
 diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
-index 6f91926..15d6c0e 100644
+index 6f91926..91c6f1a 100644
 --- a/src/renderer/layout/paragraph_layout.rs
 +++ b/src/renderer/layout/paragraph_layout.rs
-@@ -3939,8 +3939,57 @@ impl LayoutEngine {
+@@ -3278,7 +3278,9 @@ impl LayoutEngine {
+         // (3252633 국가유산수리 감리대가 기준 2·3쪽: 저장 cs=0 sw=48188 인데 수식 x=75.6 =
+         // 본문 좌측, 가운데라면 269.6). `column_start > 0` 인 줄은 한컴이 흐름 x 를 적어 둔
+         // 경우이므로 #1256/#1308 계약대로 그 값을 존중한다.
+-        let align_offset = if cell_ctx.is_some() || comp_line.column_start == 0 {
++        // HwpStudio: 다시 조판한 줄의 시작이 반올림으로 몇 HWPUNIT 어긋난 것(1px 미만)은
++        // 흐름 x 가 아니다.
++        let align_offset = if cell_ctx.is_some() || comp_line.column_start.abs() < 75 {
+             match alignment {
+                 Alignment::Center | Alignment::Distribute => {
+                     (available_width - line_tac_width).max(0.0) / 2.0
+@@ -3939,8 +3941,57 @@ impl LayoutEngine {
          // 올라가, 테두리가 글자를 가로지른다(3143955 제목: 줄 상자 아래 171.6px, 전진 y
          // 162.0px, 실제로 그려진 선 159.7/163.7).
          let mut last_line_box_bottom: Option<f64> = None;
@@ -1096,7 +1333,7 @@ index 6f91926..15d6c0e 100644
              let mut current_line_reserved_tac_picture_height: Option<f64> = None;
              let mut endnote_used_auto_wrap_y = false;
              // [#6545] 감긴 첫 걸음을 지난 지점에서 기준을 늦게 잡는다 — 이 줄의 흐름 y 가
-@@ -5693,7 +5742,9 @@ impl LayoutEngine {
+@@ -5693,7 +5744,9 @@ impl LayoutEngine {
              y += spacing_after;
          }
  

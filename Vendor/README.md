@@ -18,7 +18,9 @@
 - draws 문단 번호 shape 10 (ㄱ, ㄴ, ㄷ), which fell back to digits;
 - writes a new picture caption as `그림 ` + number + space, as table and drawing-object captions are written (it was an empty paragraph).
 - lays out a paragraph saved without line records that holds only an object in the line (a display equation), as it does one with text, and stands each equation of a re-laid line on its own baseline (the line takes the larger part above and below it);
-- reads the equation shorthands `+-` (±) and `-+` (∓), draws `<=`, `>=`, `!=` and the other two-character symbols as their signs, and puts `UNDEROVER`'s limits under and over its base.
+- reads the equation shorthands `+-` (±), `-+` (∓) and `:=`, draws `<=`, `>=`, `!=` and the other two-character symbols as their signs, and puts `UNDEROVER`'s limits under and over its base;
+- draws equations as 한글 does: a minus sign for `-`, space around relations and binary operators (none for a sign), subscripts a quarter of the size below the baseline, lowercase Greek in italic, Times New Roman first and Times widths for spacing;
+- grows the last line for an object after the paragraph's last character, and aligns an object-only line that was re-laid as its paragraph says.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 
