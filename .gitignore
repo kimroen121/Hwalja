@@ -3,5 +3,9 @@ build/
 Engine/target/
 Engine/include/HwpEngineABI.h
 .swiftpm/
+DerivedData/
+FoundationDerivedData/
+Generated/
+HwpStudio.xcodeproj/
 Tests/PrivateFixtures/
 .DS_Store

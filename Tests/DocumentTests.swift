@@ -608,6 +608,38 @@ struct DocumentTests {
         #expect(document.format?.text.bold == false)
     }
 
+    @Test func boldFormattingChangesTheRenderedFontFace() async throws {
+        let document = HwpDocument()
+        let start = EditPosition(target: body, scalar: 0)
+        document.selection = .caret(start)
+        document.type("안녕하세요", nil)
+        await document.settle()
+
+        func textFaces(_ page: RenderedPage) -> Set<PageDisplay.Face> {
+            guard case .display(let display) = page else { return [] }
+            return Set(display.ops.compactMap { op in
+                guard case .text(let text) = op,
+                      text.runs.contains(where: { $0.text.contains("안") }),
+                      let run = text.runs.first(where: { $0.text.contains("안") })
+                else { return nil }
+                return display.fonts[run.font]
+            })
+        }
+
+        let regular = textFaces(try #require(document.pages.first))
+        document.selection = EditSelection(
+            anchor: start,
+            focus: EditPosition(target: body, scalar: 5)
+        )
+        document.formatText(CharStyle(bold: true), nil)
+        await document.settle()
+        let bold = textFaces(try #require(document.pages.first))
+
+        #expect(!regular.isEmpty)
+        #expect(!bold.isEmpty)
+        #expect(bold != regular)
+    }
+
     @Test func pagesArePatchedInPlace() async throws {
         let document = HwpDocument()
         let first = document.pages[0].id
@@ -775,6 +807,11 @@ struct DocumentTests {
         document.selection = .caret(EditPosition(target: target, scalar: 0))
         document.type("학교 ", nil)
         await document.settle()
+        #expect(!document.context.inBody)
+        #expect(!document.context.canPicture)
+        #expect(document.context.canFormat)
+        #expect(document.context.inHeaderFooter)
+        #expect(!document.context.canApplyStyle)
         let paragraph = try await document.paragraph(target)
         #expect(paragraph.text.hasPrefix("학교 "))
         let selection = EditSelection(

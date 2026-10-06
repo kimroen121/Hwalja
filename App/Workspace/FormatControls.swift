@@ -73,11 +73,12 @@ struct FormatRow: View {
             ToolIcon("다시 실행", symbol: Icon.redo) { send(Selector(("redo:"))) }
                 .disabled(!context.canRedo)
             RowDivider()
+            FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
+                Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
+                    .lineLimit(1).frame(width: 84, alignment: .leading)
+            }
+            .disabled(!context.canApplyStyle)
             Group {
-                FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
-                    Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
-                        .lineLimit(1).frame(width: 84, alignment: .leading)
-                }
                 FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(text?.font, editor) }) {
                     Text(text?.font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
                 }
