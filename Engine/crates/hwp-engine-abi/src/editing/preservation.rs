@@ -85,13 +85,8 @@ fn edited_paragraphs<'a>(
         .get_mut(t.section as usize)
         .ok_or(EditError::PreservationFailed)?;
     Ok(if let Some(hf) = &t.header_footer {
-        use rhwp::model::header_footer::HeaderFooterApply;
-        let apply = match hf.apply_to {
-            0 => HeaderFooterApply::Both,
-            1 => HeaderFooterApply::Even,
-            2 => HeaderFooterApply::Odd,
-            _ => return Err(EditError::PreservationFailed),
-        };
+        let apply =
+            super::header_footer::apply(hf.apply_to).ok_or(EditError::PreservationFailed)?;
         section
             .paragraphs
             .iter_mut()

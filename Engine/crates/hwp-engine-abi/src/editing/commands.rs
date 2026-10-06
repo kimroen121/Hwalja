@@ -157,12 +157,19 @@ pub(super) fn get<'a>(doc: &'a Document, t: &EditTarget) -> Result<&'a Paragraph
 /// Paragraphs whose text can change around their controls (tables, pictures, notes…),
 /// which stay in place. Fields and title marks index the text and stay read-only.
 pub(super) fn editable(p: &Paragraph) -> bool {
+    editable_with(p, &[])
+}
+/// Like `editable`, letting the control characters in `allowed` stand in the text.
+pub(super) fn editable_with(p: &Paragraph, allowed: &[char]) -> bool {
     p.title_marks.is_empty()
         && p.field_ranges.is_empty()
         && p.range_tags.is_empty()
         && p.orphan_field_ends.is_empty()
         && p.ctrl_data_records.len() <= p.controls.len()
-        && !p.text.chars().any(|c| c.is_control() && c != '\t')
+        && !p
+            .text
+            .chars()
+            .any(|c| c.is_control() && c != '\t' && !allowed.contains(&c))
 }
 /// Where the header (or footer) for every page of section `s` sits: paragraph and control.
 pub(super) fn header_footer_at(doc: &Document, s: usize, footer: bool) -> Option<(usize, usize)> {
@@ -202,12 +209,19 @@ pub(super) fn not_in_note(t: &EditTarget) -> Result<(), EditError> {
         Ok(())
     }
 }
-pub(super) fn body_only(t: &EditTarget) -> Result<(), EditError> {
-    if t.cell.is_some() || t.note.is_some() {
+/// Not a note, 머리말 or 꼬리말.
+pub(super) fn body_or_cell(t: &EditTarget) -> Result<(), EditError> {
+    if t.note.is_some() || t.header_footer.is_some() {
         Err(EditError::UnsupportedTarget)
     } else {
         Ok(())
     }
+}
+pub(super) fn body_only(t: &EditTarget) -> Result<(), EditError> {
+    if t.cell.is_some() {
+        return Err(EditError::UnsupportedTarget);
+    }
+    body_or_cell(t)
 }
 fn validate_page(page: &PageSetup) -> Result<(), EditError> {
     let (width, height) = if page.landscape {
@@ -256,11 +270,11 @@ impl EditSession {
     }
     pub(super) fn validate_position(&self, p: &EditPosition) -> Result<(), EditError> {
         let para = get(self.core.document(), &p.target)?;
-        if p.target.header_footer.is_some() {
-            if !header_footer::range_is_editable(para, p.scalar, p.scalar) {
-                return Err(EditError::UnsupportedTarget);
-            }
-        } else if !editable(para) {
+        let editable = match p.target.header_footer {
+            Some(_) => header_footer::editable(para, p.scalar, p.scalar),
+            None => editable(para),
+        };
+        if !editable {
             return Err(EditError::UnsupportedTarget);
         }
         boundary(&logical::text(para), p.scalar)
@@ -280,21 +294,25 @@ impl EditSession {
         self.validate_position(end)?;
         let all = paragraphs(self.core.document(), &start.target)?;
         let (s, e) = (index(&start.target), index(&end.target));
-        let checked = if whole { &[] } else { &all[s..=e] };
-        if start.target.header_footer.is_some() {
-            for (i, paragraph) in all[s..=e].iter().enumerate() {
-                let index = s + i;
-                let from = if index == s { start.scalar } else { 0 };
-                let to = if index == e {
+        // In a 머리말 the fields in each paragraph must stay whole.
+        let ok = |(i, p): (usize, &Paragraph)| match start.target.header_footer {
+            Some(_) => header_footer::editable(
+                p,
+                if i == s { start.scalar } else { 0 },
+                if i == e {
                     end.scalar
                 } else {
-                    logical::length(paragraph)
-                };
-                if !header_footer::range_is_editable(paragraph, from, to) {
-                    return Err(EditError::UnsupportedTarget);
-                }
-            }
-        } else if checked.iter().any(|p| !editable(p)) {
+                    logical::length(p)
+                },
+            ),
+            None => whole || editable(p),
+        };
+        if !all[s..=e]
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (s + i, p))
+            .all(ok)
+        {
             return Err(EditError::UnsupportedTarget);
         }
         Ok(())
@@ -334,13 +352,7 @@ impl EditSession {
                 }
                 super::format::validate_char(style)
             }
-            EditCommand::ApplyStyle { selection, style } => {
-                if selection.anchor.target.header_footer.is_some() {
-                    Err(EditError::UnsupportedTarget)
-                } else {
-                    self.validate_style(selection, *style)
-                }
-            }
+            EditCommand::ApplyStyle { selection, style } => self.validate_style(selection, *style),
             EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
@@ -381,7 +393,7 @@ impl EditSession {
                 extension,
                 description,
             } => {
-                not_in_note(&position.target)?;
+                body_or_cell(&position.target)?;
                 self.validate_position(position)?;
                 if data.len() > 7 * 1024 * 1024 {
                     return Err(EditError::ResourceLimit);
@@ -410,7 +422,7 @@ impl EditSession {
                 font_size,
                 color,
             } => {
-                not_in_note(&position.target)?;
+                body_or_cell(&position.target)?;
                 self.validate_position(position)?;
                 if !objects::is_script(script)
                     || !(400..=7_200).contains(font_size)
@@ -843,11 +855,9 @@ impl EditSession {
                         end_at,
                         &normalized,
                     )?;
-                    let result: Value = serde_json::from_str(&json)
-                        .map_err(|_| EditError::RenderFailed)?;
-                    let field = |key| {
-                        result.get(key).and_then(Value::as_u64).map(|v| v as u32)
-                    };
+                    let result: Value =
+                        serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
+                    let field = |key| result.get(key).and_then(Value::as_u64).map(|v| v as u32);
                     let paragraph = field("hfParaIndex").ok_or(EditError::RenderFailed)?;
                     let scalar = field("charOffset").ok_or(EditError::RenderFailed)?;
                     return Ok(EditSelection::caret(EditPosition {

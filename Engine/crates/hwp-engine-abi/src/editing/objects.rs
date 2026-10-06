@@ -513,11 +513,11 @@ impl EditSession {
             return Err(EditError::UnsupportedTarget);
         }
         let t = &to.target;
-        // Not into a note, nor into the object's own caption.
+        // Not into a note, 머리말 or 꼬리말, nor into the object's own caption.
         let inside = o.cell.is_none()
             && t.paragraph == o.paragraph
             && t.cell.as_ref().is_some_and(|c| c.control == o.control);
-        if t.note.is_some() || inside {
+        if commands::body_or_cell(t).is_err() || inside {
             return Err(EditError::UnsupportedTarget);
         }
         self.validate_position(to)

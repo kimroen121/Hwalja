@@ -33,7 +33,7 @@ impl EditSession {
         style: u32,
     ) -> Result<(), EditError> {
         self.validate_range(selection)?;
-        commands::not_in_note(&selection.anchor.target)?;
+        commands::body_or_cell(&selection.anchor.target)?;
         if (style as usize) < self.core.document().doc_info.styles.len() {
             Ok(())
         } else {

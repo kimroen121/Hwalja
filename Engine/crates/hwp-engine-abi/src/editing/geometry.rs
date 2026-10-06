@@ -105,7 +105,7 @@ impl EditSession {
         };
         Ok(EditPosition { target, scalar })
     }
-    /// A position in the visible header/footer definition, when its text owns the point.
+    /// A position in the 머리말 or 꼬리말 shown on `page`, when the point is on its text.
     fn hit_test_header_footer(
         &self,
         page: u32,
@@ -120,20 +120,15 @@ impl EditSession {
             if hit.get("hit") != Some(&Value::Bool(true)) {
                 continue;
             }
-            // rhwp deliberately snaps a header/footer hit to its nearest line. Entry into
-            // edit mode must still require clicking visible text rather than anywhere on
-            // the page, so discard that nearest-line fallback when the pointer is outside
-            // the returned caret line.
-            let cursor = hit.get("cursorRect").ok_or(EditError::RenderFailed)?;
-            let line_y = cursor
-                .get("y")
-                .and_then(Value::as_f64)
-                .ok_or(EditError::RenderFailed)?;
-            let height = cursor
-                .get("height")
-                .and_then(Value::as_f64)
-                .ok_or(EditError::RenderFailed)?;
-            if y < line_y - 2.0 || y > line_y + height + 2.0 {
+            // rhwp takes the nearest line from anywhere on the page; only its text counts.
+            let line = hit.get("cursorRect").ok_or(EditError::RenderFailed)?;
+            let number = |key| {
+                line.get(key)
+                    .and_then(Value::as_f64)
+                    .ok_or(EditError::RenderFailed)
+            };
+            let (top, height) = (number("y")?, number("height")?);
+            if y < top - 2.0 || y > top + height + 2.0 {
                 continue;
             }
             let target = EditTarget {

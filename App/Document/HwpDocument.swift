@@ -393,9 +393,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             let upper = index == end.target.index ? end.scalar : UInt32(text.unicodeScalars.count)
             lines.append(text.scalars(lower..<max(lower, upper)))
         }
-        // Objects in the line stand in the text as U+FFFC; copied text leaves them out.
-        let hidden: Set<Character> = ["\u{FFFC}", "\u{0015}", "\u{0016}", "\u{0017}"]
-        return lines.joined(separator: "\n").filter { !hidden.contains($0) }
+        // Objects in the line (U+FFFC) and 머리말·꼬리말 fields (U+0015–0017) stand in the
+        // text; copied text leaves them out.
+        return lines.joined(separator: "\n").filter { !"\u{FFFC}\u{15}\u{16}\u{17}".contains($0) }
     }
 
     // MARK: Running

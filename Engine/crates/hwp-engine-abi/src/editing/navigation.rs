@@ -1,6 +1,7 @@
 //! Caret motions, resolved against the engine's own line layout.
 use super::commands::{at_index, get, index, paragraphs};
 use super::*;
+use rhwp::model::control::Control;
 use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -26,6 +27,7 @@ fn segments(text: &str) -> Vec<(u32, u32, bool)> {
         .collect()
 }
 
+/// Where `query` stands in `text`, never across a field.
 fn text_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(u32, u32)> {
     let text: Vec<char> = text.chars().collect();
     let query: Vec<char> = query.chars().collect();
@@ -36,16 +38,15 @@ fn text_matches(text: &str, query: &str, case_sensitive: bool) -> Vec<(u32, u32)
         if case_sensitive {
             a == b
         } else {
-            a.iter().flat_map(|c| c.to_lowercase()).eq(b.iter().flat_map(|c| c.to_lowercase()))
+            a.iter()
+                .flat_map(|c| c.to_lowercase())
+                .eq(b.iter().flat_map(|c| c.to_lowercase()))
         }
     };
     text.windows(query.len())
         .enumerate()
         .filter(|(_, window)| {
-            !window
-                .iter()
-                .any(|c| matches!(c, '\u{0015}' | '\u{0016}' | '\u{0017}'))
-                && equal(window, &query)
+            !window.iter().any(|c| header_footer::FIELDS.contains(c)) && equal(window, &query)
         })
         .map(|(start, _)| (start as u32, (start + query.len()) as u32))
         .collect()
@@ -148,11 +149,8 @@ impl EditSession {
                 )
             }
             Motion::Up | Motion::Down if from.target.header_footer.is_some() => {
-                let (moved, x) = self.header_footer_vertical(
-                    from,
-                    motion == Motion::Down,
-                    goal_x,
-                )?;
+                let (moved, x) =
+                    self.header_footer_vertical(from, motion == Motion::Down, goal_x)?;
                 goal = Some(x);
                 moved
             }
@@ -276,16 +274,17 @@ impl EditSession {
                 }
             }
         }
-        let Some(nearest_y) = candidates.iter().map(|(_, _, dy)| *dy).min_by(f64::total_cmp)
+        let Some(nearest_y) = candidates
+            .iter()
+            .map(|(_, _, dy)| *dy)
+            .min_by(f64::total_cmp)
         else {
             return Ok((p.clone(), x));
         };
         let position = candidates
             .into_iter()
             .filter(|(_, _, dy)| (*dy - nearest_y).abs() <= current.height * 0.5)
-            .min_by(|(_, a, _), (_, b, _)| {
-                (a.x - x).abs().total_cmp(&(b.x - x).abs())
-            })
+            .min_by(|(_, a, _), (_, b, _)| (a.x - x).abs().total_cmp(&(b.x - x).abs()))
             .map(|(position, _, _)| position)
             .unwrap_or_else(|| p.clone());
         Ok((position, x))
@@ -469,18 +468,13 @@ impl EditSession {
                 })
             })
             .collect();
-        use rhwp::model::{control::Control, header_footer::HeaderFooterApply};
+        // rhwp's search leaves out 머리말 and 꼬리말.
         for (section, value) in doc.sections.iter().enumerate() {
             for control in value.paragraphs.iter().flat_map(|p| &p.controls) {
                 let (footer, apply, paragraphs) = match control {
                     Control::Header(value) => (false, value.apply_to, &value.paragraphs),
                     Control::Footer(value) => (true, value.apply_to, &value.paragraphs),
                     _ => continue,
-                };
-                let apply_to = match apply {
-                    HeaderFooterApply::Both => 0,
-                    HeaderFooterApply::Even => 1,
-                    HeaderFooterApply::Odd => 2,
                 };
                 for (paragraph, value) in paragraphs.iter().enumerate() {
                     let mut target = EditTarget {
@@ -490,16 +484,17 @@ impl EditSession {
                         note: None,
                         header_footer: Some(HeaderFooterTarget {
                             footer,
-                            apply_to,
+                            apply_to: header_footer::apply_to(apply),
                             page: 0,
                         }),
                     };
-                    let position = EditPosition {
+                    // Shown on the first page it falls on.
+                    let page = self.rhwp_caret(&EditPosition {
                         target: target.clone(),
                         scalar: 0,
-                    };
-                    if let Ok(caret) = self.rhwp_caret(&position) {
-                        target.header_footer.as_mut().unwrap().page = caret.page;
+                    });
+                    if let (Ok(caret), Some(hf)) = (page, &mut target.header_footer) {
+                        hf.page = caret.page;
                     }
                     for (start, end) in text_matches(&logical::text(value), query, case_sensitive) {
                         let at = |scalar| EditPosition {

@@ -137,6 +137,25 @@ fn header_footer_ranges_preserve_field_markers() {
             EditError::UnsupportedTarget
         );
     }
+    // Inserts that only reach the body never land in it from a 꼬리말 position.
+    for command in [
+        EditCommand::InsertTable {
+            position: point(target.clone(), 0),
+            rows: 1,
+            columns: 1,
+        },
+        EditCommand::InsertEquation {
+            position: point(target.clone(), 0),
+            script: "x".into(),
+            font_size: 1000,
+            color: 0,
+        },
+    ] {
+        assert_eq!(
+            s.validate_command(&command).unwrap_err(),
+            EditError::UnsupportedTarget
+        );
+    }
 }
 
 #[test]
@@ -212,7 +231,10 @@ fn header_footer_navigation_stays_in_its_definition() {
     let right = s
         .navigate(0, &point(first.clone(), 1), Motion::Right, None)
         .unwrap();
-    assert_eq!(right.position.scalar, 8, "가족 emoji must remain one grapheme");
+    assert_eq!(
+        right.position.scalar, 8,
+        "가족 emoji must remain one grapheme"
+    );
     assert_eq!(right.position.target, first);
 
     let line_end = s
@@ -269,7 +291,10 @@ fn header_footer_replaces_splits_merges_formats_and_undoes_atomically() {
     )
     .unwrap();
     assert_eq!(s.paragraph(&target).unwrap().text, "우리👋 머리말");
-    assert_eq!(replaced.selection, Some(EditSelection::caret(point(target.clone(), 3))));
+    assert_eq!(
+        replaced.selection,
+        Some(EditSelection::caret(point(target.clone(), 3)))
+    );
 
     let split = run(
         &mut s,
@@ -279,7 +304,10 @@ fn header_footer_replaces_splits_merges_formats_and_undoes_atomically() {
     )
     .unwrap();
     let second = header_footer_target(false, 0, 1);
-    assert_eq!(split.selection, Some(EditSelection::caret(point(second.clone(), 0))));
+    assert_eq!(
+        split.selection,
+        Some(EditSelection::caret(point(second.clone(), 0)))
+    );
     assert_eq!(s.paragraph(&second).unwrap().text, " 머리말");
     run(
         &mut s,
@@ -343,7 +371,10 @@ fn header_footer_find_returns_each_definition_once() {
         .filter(|hit| hit.anchor.target.header_footer.is_some())
         .collect();
     assert_eq!(header_hits.len(), 2);
-    assert_eq!(header_hits[0].anchor, point(header_footer_target(false, 0, 0), 0));
+    assert_eq!(
+        header_hits[0].anchor,
+        point(header_footer_target(false, 0, 0), 0)
+    );
     assert_eq!(header_hits[0].focus.scalar, 2);
     assert_eq!(header_hits[1].anchor.scalar, 6);
     assert_eq!(header_hits[1].focus.scalar, 8);
@@ -390,7 +421,10 @@ fn header_footer_replace_spans_paragraphs_and_failed_edits_roll_back() {
         replace(&mut s, first.clone(), 0, 2, "금지").unwrap_err(),
         EditError::UnsupportedTarget
     );
-    assert_eq!((s.paragraph(&first).unwrap().text, s.revision), (before, revision));
+    assert_eq!(
+        (s.paragraph(&first).unwrap().text, s.revision),
+        (before, revision)
+    );
 }
 
 #[test]
@@ -406,11 +440,21 @@ fn header_footer_text_and_format_round_trip_hwp_and_hwpx() {
             },
         )
         .unwrap();
-        prepared.core.create_header_footer_native(0, true, 1).unwrap();
-        prepared.core.insert_text_in_header_footer_native(0, true, 1, 0, 0, "짝수 e\u{301}")
+        prepared
+            .core
+            .create_header_footer_native(0, true, 1)
             .unwrap();
-        prepared.core.create_header_footer_native(0, false, 2).unwrap();
-        prepared.core.insert_text_in_header_footer_native(0, false, 2, 0, 0, "홀수 👋")
+        prepared
+            .core
+            .insert_text_in_header_footer_native(0, true, 1, 0, 0, "짝수 e\u{301}")
+            .unwrap();
+        prepared
+            .core
+            .create_header_footer_native(0, false, 2)
+            .unwrap();
+        prepared
+            .core
+            .insert_text_in_header_footer_native(0, false, 2, 0, 0, "홀수 👋")
             .unwrap();
         let source = prepared.export(format).unwrap();
         let mut s = EditSession::open(&source).unwrap();
@@ -431,10 +475,18 @@ fn header_footer_text_and_format_round_trip_hwp_and_hwpx() {
         let reopened = EditSession::open(&bytes).unwrap();
         assert_eq!(reopened.paragraph(&even).unwrap().text, "교정 e\u{301}");
         assert_eq!(
-            reopened.format(0, &point(even, 1)).unwrap().paragraph.alignment,
+            reopened
+                .format(0, &point(even, 1))
+                .unwrap()
+                .paragraph
+                .alignment,
             Some(Alignment::Center)
         );
-        assert!(reopened.core.render_page_svg_native(0).unwrap().contains(">1<"));
+        assert!(reopened
+            .core
+            .render_page_svg_native(0)
+            .unwrap()
+            .contains(">1<"));
         assert_eq!(
             reopened
                 .paragraph(&header_footer_target(true, 2, 0))
@@ -2865,11 +2917,7 @@ fn objects_in_the_line_are_positions_of_their_own() {
         );
         assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
         let y = r.y + r.height - 2.0;
-        let hit = |x| {
-            s.hit_test(s.revision, r.page, x, y, false)
-                .unwrap()
-                .scalar
-        };
+        let hit = |x| s.hit_test(s.revision, r.page, x, y, false).unwrap().scalar;
         assert_eq!(
             (hit(r.x - 2.0), hit(r.x + r.width + 2.0)),
             (1, 2),
@@ -3077,13 +3125,7 @@ fn every_line_after_an_object_keeps_its_positions() {
         let r = s.caret(s.revision, &point(second(), at)).unwrap();
         lines.insert((r.y * 10.0) as i64);
         let hit = s
-            .hit_test(
-                s.revision,
-                r.page,
-                r.x + 0.3,
-                r.y + r.height / 2.0,
-                false,
-            )
+            .hit_test(s.revision, r.page, r.x + 0.3, r.y + r.height / 2.0, false)
             .unwrap();
         assert_eq!(hit, point(second(), at));
     }

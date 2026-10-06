@@ -241,9 +241,9 @@ impl EditSession {
         cache.pages.insert(page, layout.clone());
         Some(layout)
     }
-    /// Whether the paragraph at `t` has its own stops: an object in the line, outside notes.
+    /// Whether the paragraph at `t` has its own stops: an object in the line, in the body or a cell.
     pub(super) fn has_stops(&self, t: &EditTarget) -> bool {
-        t.note.is_none()
+        commands::body_or_cell(t).is_ok()
             && commands::get(self.core.document(), t)
                 .is_ok_and(|p| p.controls.iter().any(Control::is_logical_inline))
     }

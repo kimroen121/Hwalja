@@ -11,7 +11,7 @@
 
 - 원본 파일에는 명시적인 「저장」 전까지 쓰지 않는다. 저장은 원자적으로 하고, 저장 전에 재파싱으로 검증한다.
 - 화면과 내보내기는 같은 조판 결과를 쓴다.
-- 안전성을 확인할 수 없는 대상(필드·제목 표시가 있는 문단, 세로쓰기 셀, 중첩 표·표 안 글상자, 머리말·꼬리말 안의 글자)은 읽기 전용으로 둔다. 숨은 컨트롤을 평문으로 바꾸지 않는다. 읽기 전용을 풀 때는 그 대상의 보존 검사를 먼저 만든다.
+- 안전성을 확인할 수 없는 대상(필드·제목 표시가 있는 문단, 세로쓰기 셀, 중첩 표·표 안 글상자, 줄 안 개체가 있는 머리말·꼬리말 문단)은 읽기 전용으로 둔다. 숨은 컨트롤을 평문으로 바꾸지 않는다. 읽기 전용을 풀 때는 그 대상의 보존 검사를 먼저 만든다.
 - 조합 중인 글자는 문서에 바로 넣어 문서 글꼴로 보인다. 조합 하나, 붙여넣기, Enter 각각이 실행 취소 1단위다. 엔진이 앞 편집을 처리하는 동안 이어 친 글자는 한 편집(1단위)으로 묶인다. Undo/Redo는 내용·커서·조판을 함께 되돌린다.
 - 빨라야 한다. 키 입력 한 번에 바뀐 쪽만 다시 그린다. 지연과 깜빡임은 버그로 다룬다.
 - 실패한 명령은 롤백한다. 롤백마저 실패하면 세션을 잠그고 마지막 정상 결과를 유지한다.
@@ -36,7 +36,7 @@
 | 보기 | 확대/축소(50–300%, 쪽 맞춤, 폭 맞춤, ⌘/⌃+휠·핀치), 쪽 모양(한 쪽·두 쪽·세 쪽), 표시/숨기기(조판 부호, 문단 부호, 격자 보기 5 mm 점), 도구 상자(기본·서식), 사이드바 | `show_paragraph_marks`, `show_control_codes`(패치로 공개) | 투명 선, 쪽 윤곽, 눈금자 |
 | 입력 | 도형(가로 글상자·직사각형·타원·직선·호, 끌어 그리기), 글상자(안 글자 입력 포함), 그림(모든 그림 파일, 붙이기), 표, 수식(편집기·실시간 미리 보기·더블클릭 고치기), 문자표(macOS 이모티콘 및 기호), 각주·미주(안 글자 편집 포함), 캡션 넣기(9곳) | InsertShape, `insert_picture_native`, `create_table_native`, `insert_equation_native`, InsertNote, SetObject(caption) | 책갈피, 누름틀·필드 입력, 차트 |
 | 서식 | 글자 모양(⌘L: 기본·확장, 테두리·배경), 문단 모양(⌘T: 기본·테두리/배경), 글머리표·문단 번호 매기기와 한 수준 증가/감소, 스타일 상자, 개체 속성(기본·여백/캡션·그림·표·셀), 빠른 메뉴(오른쪽 클릭) | `apply_char/para_format_native`, `apply_style_native`, SetObject, SetCell | 아래 「단계」 2 |
-| 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩) | HeaderFooter, `insert_page/column_break_native` | 새 번호로 시작, 현재 쪽만 감추기, 단, 다단 설정 나누기 |
+| 쪽 | 편집 용지, 머리말·꼬리말(모양 없음, 왼쪽·가운데·오른쪽 쪽 번호, 더블클릭으로 들어가 글자 편집 — 쪽 번호 필드는 지우지 않음), 쪽 나누기(⌘↩), 단 나누기(⇧⌘↩) | HeaderFooter, `*_in_header_footer_native`, `insert_page/column_break_native` | 새 번호로 시작, 현재 쪽만 감추기, 단, 다단 설정 나누기 |
 | 표 | 표 만들기(격자·대화상자), 표/셀 속성, 줄/칸 추가하기·지우기, 셀 나누기·합치기, 셀 높이·너비를 같게(셀 블록에서 M·S·H·W), 표 테두리 끌기(칸 오른쪽·줄 아래) | `create_table_native`, `insert/delete_table_row/column_native`, `merge_table_cells_native`, `split_table_cell*_native`, ResizeTable | 셀 테두리/배경, 블록 계산식 |
 | 개체 | 클릭 선택(표 칸·글상자 안 그림, 표 칸 안 수식 포함), 핸들로 크기 조절(그림 모서리는 비율 유지, Shift로 자유 — 도형은 반대; 크기 고정이면 핸들 없음), 끌어 옮기기(글자처럼 취급 그림·수식은 끄는 동안 놓일 자리를 커서로 보이고 글 사이·표 칸 안으로), 표 칸 안에 그림·수식 넣기, 캡션 넣기와 캡션 글자 고치기(그림·표), Delete로 지우기, 그림 색조 조정·밝기·대비·원래 그림으로 | SetObject, DeleteObject, MoveObject(`copy_control`·`paste_internal`) | 순서, 개체 풀기, 선 끝점 |
 
@@ -50,10 +50,9 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 키 입력이 닿는 곳을 늘린다. 각각 보존 검사를 먼저 만든다.
 
-- [ ] 머리말·꼬리말 안의 글자 편집: 더블클릭으로 들어가 입력·삭제·문단 나누기/합치기·글자/문단 서식. `hit_test_in_header_footer`, `get_cursor_rect_in_header_footer`, `get_selection_rects_in_header_footer`, `insert/delete_text_in_header_footer`, `split/merge_paragraph_in_header_footer`, `apply_char_format_in_header_footer`, `apply_para_format_in_hf`. 쪽 번호 넣기는 `insert_field_in_hf`.
-- [ ] 주석 안 문단 서식과 본문에서 주석 지우기: `apply_para_format_in_footnote`, `delete_footnote`.
-- [ ] 셀 안 도형·중첩 표 셀 안 개체 선택, 중첩 표 셀 편집: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 표 칸·글상자 안 그림과 표 칸 안 수식은 완료.
-- [ ] 머리말·꼬리말 안 그림 속성: `get/set_header_footer_picture_properties`.
+- [ ] 머리말·꼬리말 안 쪽 번호 넣기, 그림 속성: `insert_field_in_hf`, `get/set_header_footer_picture_properties`. 빈 머리말·꼬리말에는 아직 들어갈 수 없다.
+- [ ] 주석 안 문단 서식: `apply_para_format_in_footnote`.
+- [ ] 각주·머리말 안 개체, 셀 안 도형, 중첩 표 셀 안 개체 선택, 중첩 표 셀 편집, 그리기 개체 캡션 글자: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 칸 문단에 수식이 둘 이상이면 rhwp의 칸 수식 함수가 첫 수식만 찾는다. 도형의 칸 0은 글상자라 캡션을 가리킬 경로가 없다.
 - [ ] 주석 안 수식 고치기: `get/set_note_equation_properties`.
 - [ ] 여러 문단 선택 삭제에서 사이 문단의 컨트롤 처리: `capture_delete_range`/`restore_delete_fragment`, `delete_range_native`.
 
@@ -122,11 +121,8 @@ rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자�
 
 ### 5. 검증과 조판 동등성
 
-- 완료(2026-10-05): 저장 장벽(대기 중인 편집을 저장이 기다림), 한글 조합 중 선택·편집 명령 앞 확정, 앱·엔진 프로토콜 버전 2(맞지 않으면 렌더링 전에 열기 거부). 수동 확인: 자동 저장·닫기 저장, ⌘A 후 입력, 수식 옮기기, 문단 모양 대화상자, ⌘F, 아랍어, 그림 옮기기, 한글 입력기 조합·Undo, 도구 상자.
-- 완료(2026-10-06): 위치를 rhwp 커서 방식(줄 안 개체 = 한 칸)으로 통일해 개체 바로 뒤 입력·클릭이 맞게 됨, 개체를 지울 때 뒤 글자 서식이 밀리던 rhwp 문제 수정(`Vendor/README.md`).
-- 남음: 수동 점검과 남은 문제는 `docs/BUG_HANDOFF.md`.
+수동 점검과 남은 문제는 `docs/BUG_HANDOFF.md`.
 
-- [ ] 실제 한글 입력기로 조합·확정·후보창 위치를 수동 검증한다(연속 음절 조합 버그는 수정·테스트함).
 - [ ] 줄 끝 커서의 위치 선택(affinity): 줄바꿈된 줄의 끝은 지금 마지막 글자 앞에 선다.
 - [ ] 글자·문단 테두리와 배경이 쪽에 그려지는 모양을 한컴 뷰어와 비교한다(저장·다시 읽기는 테스트함).
 - [ ] 비교 도구: 한컴 뷰어에서 PDF로 인쇄한 결과와 쪽마다 픽셀 비교한다.
