@@ -231,6 +231,7 @@ pub(super) fn check(
         EditCommand::SetCell { cell, .. } => {
             return check_host(before, after, cell.section, cell.paragraph)
         }
+        EditCommand::Order { object, .. } => return check_order(before, after, object.section),
         EditCommand::HeaderFooter {
             section, footer, ..
         } => return check_header_footer(before, after, *section, *footer),
@@ -560,6 +561,20 @@ fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result
 }
 /// An object edit may only change the body paragraph holding the object, and append
 /// DocInfo entries.
+/// Only the order of the section's drawing objects changed.
+fn check_order(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let paragraphs = &mut doc.sections[section as usize].paragraphs;
+        for c in paragraphs.iter_mut().flat_map(|p| &mut p.controls) {
+            if let Control::Shape(shape) = c {
+                shape.common_mut().z_order = 0;
+            }
+        }
+    }
+    same_rest(&mut a, &mut b, section)
+}
 fn check_host(
     before: &Document,
     after: &Document,

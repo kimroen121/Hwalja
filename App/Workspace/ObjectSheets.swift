@@ -96,6 +96,10 @@ extension Viewer {
         guard let object = document?.object?.object else { return }
         document?.edit(undoManager) { _ in .deleteObject(object) }
     }
+    func order(_ order: Order) {
+        guard let object = document?.object?.object else { return }
+        document?.edit(undoManager) { _ in .order(object, order) }
+    }
 }
 
 /// 개체 속성 (or 표/셀 속성), laid out like Hancom's: 기본 (size, position), 여백/캡션,

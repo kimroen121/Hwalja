@@ -2580,6 +2580,31 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
             "{format:?}"
         );
     }
+    // 순서: 맨 뒤로, then 앞으로 a step.
+    let z = |s: &EditSession| -> Vec<i32> {
+        s.core.document().sections[0]
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.controls)
+            .filter_map(|c| match c {
+                Control::Shape(shape) => Some(shape.z_order()),
+                _ => None,
+            })
+            .collect()
+    };
+    let own = |s: &EditSession| z(s)[shape.control as usize];
+    for (order, rank) in [(Order::Back, 0), (Order::Forward, 1), (Order::Front, 4)] {
+        run(
+            &mut s,
+            EditCommand::Order {
+                object: shape.clone(),
+                order,
+            },
+        )
+        .unwrap();
+        let below = z(&s).iter().filter(|&&other| other < own(&s)).count();
+        assert_eq!(below, rank, "{order:?} {:?}", z(&s));
+    }
     run(&mut s, EditCommand::DeleteObject { object: shape }).unwrap();
     assert_eq!(s.placed(0).unwrap().len(), shapes.len() - 1);
     let bad = EditCommand::InsertShape {

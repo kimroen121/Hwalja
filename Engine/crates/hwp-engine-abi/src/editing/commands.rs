@@ -451,6 +451,12 @@ impl EditSession {
                 self.validate_object(object, &ObjectProps::default())
             }
             EditCommand::MoveObject { object, to } => self.validate_move(object, to),
+            EditCommand::Order { object, .. } => {
+                if object.kind != ObjectKind::Shape || object.cell.is_some() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                self.validate_object(object, &ObjectProps::default())
+            }
             EditCommand::ResizeTable { .. } => self.validate_resize(command),
             EditCommand::Undo | EditCommand::Redo => Err(EditError::UnsupportedTarget),
         }
@@ -1074,6 +1080,21 @@ impl EditSession {
             }
             EditCommand::DeleteObject { object } => {
                 self.delete_object(object)?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::Order { object, order } => {
+                let operation = match order {
+                    Order::Front => "front",
+                    Order::Forward => "forward",
+                    Order::Back => "back",
+                    Order::Backward => "backward",
+                };
+                self.core.change_shape_z_order_native(
+                    object.section as usize,
+                    object.paragraph as usize,
+                    object.control as usize,
+                    operation,
+                )?;
                 Ok(self.kept(object.section))
             }
             EditCommand::ResizeTable { table, .. } => {

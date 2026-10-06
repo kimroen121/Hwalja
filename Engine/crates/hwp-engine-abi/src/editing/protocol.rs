@@ -162,6 +162,11 @@ pub enum EditCommand {
         line: u16,
         size: u32,
     },
+    /// 순서: a drawing object of the body among the section's drawing objects.
+    Order {
+        object: ObjectRef,
+        order: Order,
+    },
     /// A 각주 (or 미주) at `position` in the body; the caret moves into its text.
     InsertNote {
         position: EditPosition,
@@ -214,6 +219,15 @@ pub enum Placement {
     Left,
     Center,
     Right,
+}
+/// 맨 앞으로, 앞으로, 맨 뒤로, 뒤로.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Order {
+    Front,
+    Forward,
+    Back,
+    Backward,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

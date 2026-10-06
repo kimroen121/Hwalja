@@ -72,6 +72,8 @@ enum EditCommand: Encodable, Sendable {
     /// Changes the properties set in `props` of the cell holding `target`.
     case setCell(EditTarget, CellProps)
     case deleteObject(ObjectRef)
+    /// 순서: a drawing object of the body among the section's drawing objects.
+    case order(ObjectRef, Order)
     /// Moves an equation to another place in the text.
     case moveObject(ObjectRef, to: EditPosition)
     /// Moves a table border: column `line` becomes `size` wide (or, with `row`, row `line` that high).
@@ -92,7 +94,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -199,6 +201,10 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteObject(object):
             try c.encode("deleteObject", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .order(object, order):
+            try c.encode("order", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(order, forKey: .order)
         case let .resizeTable(table, row, line, size):
             try c.encode("resizeTable", forKey: .kind)
             try c.encode(table, forKey: .table)
@@ -213,6 +219,11 @@ enum EditCommand: Encodable, Sendable {
 
 enum Placement: String, Encodable, Sendable {
     case left, center, right
+}
+
+/// 맨 앞으로, 앞으로, 맨 뒤로, 뒤로.
+enum Order: String, Encodable, Sendable {
+    case front, forward, back, backward
 }
 
 enum ObjectKind: String, Codable, Sendable {

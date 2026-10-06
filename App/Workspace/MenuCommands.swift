@@ -108,6 +108,14 @@ struct MenuItems {
                 Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t") { viewer.editingParaShape = true },
             ]
         }
+        if context.object == .shape {
+            items += [nil, Choice(title: "순서", submenu: [
+                Choice(title: "맨 앞으로") { viewer.order(.front) },
+                Choice(title: "앞으로") { viewer.order(.forward) },
+                Choice(title: "맨 뒤로") { viewer.order(.back) },
+                Choice(title: "뒤로") { viewer.order(.backward) },
+            ])]
+        }
         if context.inTable, context.object == nil {
             let block = context.cellBlock
             items += [
