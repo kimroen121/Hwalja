@@ -66,6 +66,11 @@ pub enum EditCommand {
         selection: EditSelection,
         text: String,
     },
+    /// 모두 바꾸기: each of `selections` (matches, in document order) that can change, as one edit.
+    ReplaceAll {
+        selections: Vec<EditSelection>,
+        text: String,
+    },
     /// Replaces the selection with copy `copy` (see `Copied`) while the engine holds it,
     /// or with `html`, keeping their formats.
     Paste {

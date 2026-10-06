@@ -167,6 +167,8 @@ pub(super) fn check(
             )
         }
         EditCommand::Paste { selection, .. } => return check_pasted(before, after, selection),
+        // Each replacement is checked as it is made.
+        EditCommand::ReplaceAll { .. } => return Ok(()),
         EditCommand::FormatText { selection, .. }
         | EditCommand::FormatParagraphs { selection, .. }
         | EditCommand::ApplyStyle { selection, .. } => {

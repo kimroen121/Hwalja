@@ -238,14 +238,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// cannot change are skipped.
     func replaceAll(_ query: String, with text: String, _ undoManager: UndoManager?) {
         enqueue { document in
-            var replaced = false
-            // Last first, so earlier matches keep their offsets.
-            for match in try await document.find(query).reversed() {
-                // ponytail: renders after every match; batch in the engine if large documents lag.
-                guard (try? await document.run(.replace(match, text: text), amend: replaced)) != nil else { continue }
-                replaced = true
-            }
-            guard replaced else { return NSSound.beep() }
+            let matches = try await document.find(query)
+            guard !matches.isEmpty else { return NSSound.beep() }
+            try await document.run(.replaceAll(matches, text: text))
             document.goalX = nil
             document.registerHistory(.undo, undoManager)
         }

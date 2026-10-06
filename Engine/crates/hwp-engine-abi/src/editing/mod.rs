@@ -226,6 +226,9 @@ impl EditSession {
         #[cfg(test)]
         let before = self.core.document().clone();
         let start = match &request.command {
+            EditCommand::ReplaceAll { selections, .. } => {
+                selections.first().map(|s| commands::ordered(s).0.clone())
+            }
             EditCommand::Replace { selection, .. }
             | EditCommand::Paste { selection, .. }
             | EditCommand::FormatText { selection, .. }

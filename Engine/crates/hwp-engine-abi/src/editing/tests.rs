@@ -3652,3 +3652,35 @@ fn copies_paste_with_their_formats() {
     .unwrap();
     assert_eq!(s.paragraph(&cell).unwrap().text, "하\u{FFFC}나\u{FFFC}");
 }
+
+#[test]
+fn replace_all_is_one_edit() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, all, "가나 가나\n가나").unwrap();
+    let matches = s.find("가나", true).unwrap();
+    assert_eq!(matches.len(), 3);
+    let undo = s.undo.len();
+    run(
+        &mut s,
+        EditCommand::ReplaceAll {
+            selections: matches,
+            text: "다\n라".into(),
+        },
+    )
+    .unwrap();
+    let text = |s: &EditSession, i| {
+        let t = EditTarget {
+            paragraph: body().paragraph + i,
+            ..body()
+        };
+        s.paragraph(&t).unwrap().text
+    };
+    assert_eq!(
+        (0..5).map(|i| text(&s, i)).collect::<Vec<_>>(),
+        ["다", "라 다", "라", "다", "라"]
+    );
+    assert_eq!(s.undo.len(), undo + 1);
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(text(&s, 0), "가나 가나");
+}

@@ -49,6 +49,8 @@ struct EditSelection: Codable, Hashable, Sendable {
 
 enum EditCommand: Encodable, Sendable {
     case replace(EditSelection, text: String)
+    /// 모두 바꾸기: each of `selections` (in document order) that can change, as one edit.
+    case replaceAll([EditSelection], text: String)
     /// Replaces the selection with copy `copy` while the engine holds it, or with `html`.
     case paste(EditSelection, copy: UInt64?, html: String?)
     case split(EditPosition)
@@ -106,7 +108,7 @@ enum EditCommand: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -114,6 +116,10 @@ enum EditCommand: Encodable, Sendable {
         case let .replace(selection, text):
             try c.encode("replace", forKey: .kind)
             try c.encode(selection, forKey: .selection)
+            try c.encode(text, forKey: .text)
+        case let .replaceAll(selections, text):
+            try c.encode("replaceAll", forKey: .kind)
+            try c.encode(selections, forKey: .selections)
             try c.encode(text, forKey: .text)
         case let .paste(selection, copy, html):
             try c.encode("paste", forKey: .kind)

@@ -109,7 +109,6 @@ rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자�
 ### 4. 화면 성능
 
 - [ ] 남은 엔진 시간(약 20ms): 편집 쪽과 다음 쪽의 SVG(레이아웃 포함), 표시 목록의 XML 파싱. 다음 후보는 rhwp 렌더 트리(`get_page_layer_tree_native`)에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략).
-- [ ] 큰 문서의 모두 바꾸기: 지금은 일치마다 다시 그린다. 엔진에서 한 번에 바꾸고 한 번 그린다(`replace_all_native`).
 - 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchHostedTyping`, 화면 확인 `HWP_SNAPSHOT_DIR=<폴더> swift test --filter snapshots`.
 
 ### 5. 검증과 조판 동등성

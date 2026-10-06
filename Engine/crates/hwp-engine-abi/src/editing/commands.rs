@@ -334,6 +334,21 @@ impl EditSession {
                 copy,
                 html,
             } => self.validate_paste(selection, *copy, html.as_ref()),
+            EditCommand::ReplaceAll { selections, text } => {
+                let replace = |selection: &EditSelection| EditCommand::Replace {
+                    selection: selection.clone(),
+                    text: text.clone(),
+                };
+                if selections.len() <= 100_000
+                    && selections
+                        .iter()
+                        .any(|s| self.validate_command(&replace(s)).is_ok())
+                {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
             EditCommand::Split { position } => self.validate_position(position),
             EditCommand::MergePrevious { position } => {
                 self.validate_position(position)?;
@@ -887,6 +902,25 @@ impl EditSession {
             EditCommand::Paste {
                 selection, html, ..
             } => self.paste(selection, html.as_deref()),
+            EditCommand::ReplaceAll { selections, text } => {
+                // Last first, so the matches before keep their places.
+                let mut caret = None;
+                for selection in selections.iter().rev() {
+                    let replace = EditCommand::Replace {
+                        selection: selection.clone(),
+                        text: text.clone(),
+                    };
+                    if self.validate_command(&replace).is_err() {
+                        continue;
+                    }
+                    #[cfg(test)]
+                    let before = self.core.document().clone();
+                    caret = Some(self.execute(&replace)?);
+                    #[cfg(test)]
+                    super::preservation::check(&before, self.core.document(), &replace)?;
+                }
+                caret.ok_or(EditError::InvalidInput)
+            }
             EditCommand::Replace { selection, text } => {
                 let (start, end) = ordered(selection);
                 let normalized = text
