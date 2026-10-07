@@ -46,7 +46,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 - 파일
   - [ ] 문서 정보…: `get_document_info`(읽기).
-  - [ ] 암호가 걸린 문서 열기·저장: `from_bytes_with_password`, `export_hwpx_native_with_password`, `export_hwp_with_adapter_with_password`. 지금은 `PasswordRequired`로 열기를 거부한다.
   - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`.
 - 편집
   - [ ] 조판 부호 지우기: `delete_control_native`.

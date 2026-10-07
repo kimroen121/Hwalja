@@ -7,6 +7,16 @@ func fixture(_ ext: String) throws -> Data {
 }
 
 struct EditSessionTests {
+    @Test @MainActor func lockedDocumentsAskForTheirPasswordUntilRightOrCancelled() throws {
+        let data = try Data(contentsOf: #require(Bundle.module.url(forResource: "locked", withExtension: "hwp", subdirectory: "Fixtures")))
+        var asked: [Bool] = []
+        let document = try HwpDocument(data: data) { again in
+            asked.append(again)
+            return asked.count == 1 ? "0000" : "1234"
+        }
+        #expect(asked == [false, true] && !document.pages.isEmpty)
+        #expect(throws: CocoaError.self) { try HwpDocument(data: data) { _ in nil } }
+    }
     @Test func headerFooterTargetRoundTripsThroughRequests() throws {
         let target = EditTarget(
             section: 2,

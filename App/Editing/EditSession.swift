@@ -22,10 +22,19 @@ final class EditSession: @unchecked Sendable {
     deinit { hwp_edit_close(handle) }
 
     /// Opens `original` (copied by the engine), or a blank document when `nil`. Blocks.
-    static func open(_ original: Data?) throws -> (EditSession, Output) {
+    /// A document locked with a password opens only with `password`; a wrong one throws
+    /// `passwordRequired`, and saving locks it again.
+    static func open(_ original: Data?, password: String? = nil) throws -> (EditSession, Output) {
         if original?.isEmpty == true { throw EditError.invalidInput }
         var raw: OpaquePointer?
-        let result = if let original {
+        let result = if let original, let password {
+            original.withUnsafeBytes { data in
+                Array(password.utf8).withUnsafeBufferPointer { secret in
+                    hwp_edit_open_password(EditProtocolVersion.current, data.bindMemory(to: UInt8.self).baseAddress, data.count,
+                                           secret.baseAddress, secret.count, &raw)
+                }
+            }
+        } else if let original {
             original.withUnsafeBytes {
                 hwp_edit_open_v2(EditProtocolVersion.current,
                                  $0.bindMemory(to: UInt8.self).baseAddress, $0.count, &raw)

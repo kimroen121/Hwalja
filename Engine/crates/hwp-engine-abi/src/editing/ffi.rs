@@ -298,6 +298,45 @@ pub unsafe extern "C" fn hwp_edit_open_v2(
     }
 }
 
+/// `hwp_edit_open_v2` for a document locked with a password, `password_length` UTF-8 bytes.
+/// A wrong password fails with `PasswordRequired`.
+///
+/// # Safety
+/// `data` must be readable for `length` bytes, `password` for `password_length` bytes, and
+/// `session` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn hwp_edit_open_password(
+    version: u32,
+    data: *const u8,
+    length: usize,
+    password: *const u8,
+    password_length: usize,
+    session: *mut *mut EditSession,
+) -> *mut HwpEditResult {
+    if session.is_null() || data.is_null() || password.is_null() {
+        return HwpEditResult::error(EditError::InvalidInput);
+    }
+    unsafe { *session = std::ptr::null_mut() };
+    if version != PROTOCOL_VERSION {
+        return HwpEditResult::error(EditError::IncompatibleEngine);
+    }
+    let opened = catch_unwind(|| {
+        EditSession::open_with(
+            unsafe { std::slice::from_raw_parts(data, length) },
+            Some(unsafe { std::slice::from_raw_parts(password, password_length) }),
+        )
+    })
+    .unwrap_or(Err(EditError::RenderFailed));
+    match opened {
+        Ok(opened) => {
+            let result = state(&opened);
+            unsafe { *session = Box::into_raw(Box::new(opened)) };
+            result
+        }
+        Err(error) => HwpEditResult::error(error),
+    }
+}
+
 /// # Safety
 /// `session` must come from `hwp_edit_open_v2`; `json` must be readable for `length` bytes.
 #[no_mangle]

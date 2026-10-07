@@ -52,11 +52,21 @@ impl EditSession {
                 ) = marks;
                 return pdf.map_err(|_| EditError::RenderFailed);
             }
-            SaveFormat::Hwp => self.core.export_hwp_native(),
-            SaveFormat::Hwpx => self.core.export_hwpx_native(),
+            SaveFormat::Hwp => match &self.password {
+                Some(password) => self.core.export_hwp_with_adapter_with_password(password),
+                None => self.core.export_hwp_native(),
+            },
+            SaveFormat::Hwpx => match &self.password {
+                Some(password) => self.core.export_hwpx_native_with_password(password),
+                None => self.core.export_hwpx_native(),
+            },
         }
         .map_err(|_| EditError::SaveFailed)?;
-        let reparsed = DocumentCore::from_bytes(&bytes).map_err(|_| EditError::SaveFailed)?;
+        let reparsed = match &self.password {
+            Some(password) => DocumentCore::from_bytes_with_password(&bytes, password),
+            None => DocumentCore::from_bytes(&bytes),
+        }
+        .map_err(|_| EditError::SaveFailed)?;
         if outline(reparsed.document()) != outline(self.core.document()) {
             return Err(EditError::PreservationFailed);
         }

@@ -9,3 +9,6 @@ Regenerate with `HWP_WRITE_FIXTURES=1 cargo test --manifest-path Engine/Cargo.to
 --locked -p hwp-engine-abi generated_hwp_and_hwpx_produce_owned_pdf_snapshots`.
 The engine tests open both serialized formats through the public C ABI and
 validate PDF headers and page counts; hosted Swift tests validate PDFKit parsing.
+
+`locked.hwp` is the engine's plain test document saved locked with the password
+`1234` (regenerate with `HWP_WRITE_FIXTURES=1 cargo test ... a_document_locked`).

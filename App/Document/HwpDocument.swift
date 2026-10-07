@@ -136,7 +136,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     /// New-document failures remain a recovery window, never a process trap.
     nonisolated convenience init() {
-        self.init(blankUsing: EditSession.open)
+        self.init(blankUsing: { try EditSession.open($0) })
     }
     nonisolated init(blankUsing open: (Data?) throws -> (EditSession, EditSession.Output)) {
         do {
@@ -159,10 +159,22 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else { throw CocoaError(.fileReadCorruptFile) }
-        try self.init(data: data)
+        let name = configuration.file.filename ?? ""
+        try self.init(data: data) { again in Self.askPassword(name, again: again) }
     }
-    nonisolated init(data: Data?) throws {
-        let (session, output) = try EditSession.open(data)
+    /// `password` is asked for a document locked with one, again after a wrong one; nil cancels.
+    nonisolated init(data: Data?, password: ((_ again: Bool) -> String?)? = nil) throws {
+        var opened: (EditSession, EditSession.Output)?
+        var given: String?
+        while opened == nil {
+            do {
+                opened = try EditSession.open(data, password: given)
+            } catch EditError.passwordRequired where password != nil {
+                guard let next = password?(given != nil) else { throw CocoaError(.userCancelled) }
+                given = next
+            }
+        }
+        let (session, output) = opened!
         self.sessionResult = .success(session)
         self.creationError = nil
         pages = output.pages
@@ -170,6 +182,23 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         reply = output.reply
         thumbnails = output.pages
         context.pageCount = output.pages.count
+    }
+
+    /// A lock and a secure field, titled with the file's name.
+    private nonisolated static func askPassword(_ name: String, again: Bool) -> String? {
+        let ask = { @MainActor () -> String? in
+            if again { NSSound.beep() }
+            let alert = NSAlert()
+            alert.icon = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil)
+            alert.messageText = name
+            let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 22))
+            alert.accessoryView = field
+            alert.addButton(withTitle: "확인")
+            alert.addButton(withTitle: "취소")
+            alert.window.initialFirstResponder = field
+            return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
+        }
+        return Thread.isMainThread ? MainActor.assumeIsolated(ask) : DispatchQueue.main.sync { MainActor.assumeIsolated(ask) }
     }
 
     nonisolated func snapshot(contentType: UTType) throws -> Data {

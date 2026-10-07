@@ -51,6 +51,8 @@ pub struct EditSession {
     pdf: Vec<u8>,
     selection: Option<EditSelection>,
     locked: bool,
+    /// The password the document was opened with; saving locks it with the same.
+    password: Option<Vec<u8>>,
     undo: Vec<State>,
     redo: Vec<State>,
     state: u64,
@@ -71,20 +73,32 @@ impl EditSession {
         Self::open(&core.export_hwpx_native()?)
     }
     pub fn open(bytes: &[u8]) -> Result<Self, EditError> {
+        Self::open_with(bytes, None)
+    }
+    /// Opens a document locked with `password`; a wrong one is `PasswordRequired` again.
+    pub fn open_with(bytes: &[u8], password: Option<&[u8]>) -> Result<Self, EditError> {
         if bytes.is_empty() {
             return Err(EditError::InvalidInput);
         }
         if bytes.len() > 64 * 1024 * 1024 {
             return Err(EditError::ResourceLimit);
         }
-        if let Err(error) = rhwp::parser::parse_document(bytes) {
-            return Err(match error {
-                rhwp::parser::ParseError::EncryptedDocument => EditError::PasswordRequired,
-                rhwp::parser::ParseError::UnsupportedFormat { .. } => EditError::UnsupportedFormat,
-                _ => EditError::InvalidInput,
-            });
-        }
-        let mut core = DocumentCore::from_bytes(bytes)?;
+        let mut core = match password {
+            Some(password) => DocumentCore::from_bytes_with_password(bytes, password)
+                .map_err(|_| EditError::PasswordRequired)?,
+            None => {
+                if let Err(error) = rhwp::parser::parse_document(bytes) {
+                    return Err(match error {
+                        rhwp::parser::ParseError::EncryptedDocument => EditError::PasswordRequired,
+                        rhwp::parser::ParseError::UnsupportedFormat { .. } => {
+                            EditError::UnsupportedFormat
+                        }
+                        _ => EditError::InvalidInput,
+                    });
+                }
+                DocumentCore::from_bytes(bytes)?
+            }
+        };
         // A file another program wrote can leave its lines to the reader, without line
         // records; 한글 lays those paragraphs out on opening, objects in the line included.
         let unlaid = core.document().sections.iter().any(|s| {
@@ -105,6 +119,7 @@ impl EditSession {
             pdf: Vec::new(),
             selection: None,
             locked: false,
+            password: password.map(<[u8]>::to_vec),
             undo: Vec::new(),
             redo: Vec::new(),
             state: 0,

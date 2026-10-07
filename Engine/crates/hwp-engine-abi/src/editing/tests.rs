@@ -1607,7 +1607,57 @@ fn format_rejects_empty_changes() {
     }
 }
 
-/// Opt-in typing latency on a private document; prints durations only:
+/// `HWP_WRITE_FIXTURES=1` writes the hwp one, locked with 1234, as Tests/Fixtures/locked.hwp.
+#[test]
+fn a_document_locked_with_a_password_opens_with_it_and_saves_locked() {
+    for format in ["hwp", "hwpx"] {
+        let plain = DocumentCore::from_bytes(&plain_document(format, false)).unwrap();
+        let mut core = plain;
+        let locked = if format == "hwp" {
+            core.export_hwp_with_adapter_with_password(b"1234").unwrap()
+        } else {
+            core.export_hwpx_native_with_password(b"1234").unwrap()
+        };
+        assert_eq!(
+            EditSession::open(&locked).err(),
+            Some(EditError::PasswordRequired),
+            "{format}"
+        );
+        assert_eq!(
+            EditSession::open_with(&locked, Some(b"0000")).err(),
+            Some(EditError::PasswordRequired),
+            "{format}"
+        );
+        let mut s = EditSession::open_with(&locked, Some(b"1234")).unwrap();
+        assert!(
+            s.core.document().sections[0].paragraphs[2]
+                .text
+                .contains("보존 문단"),
+            "{format}"
+        );
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        assert_eq!(
+            EditSession::open(&saved).err(),
+            Some(EditError::PasswordRequired),
+            "{format}"
+        );
+        assert!(
+            EditSession::open_with(&saved, Some(b"1234")).is_ok(),
+            "{format}"
+        );
+        if format == "hwp" && std::env::var_os("HWP_WRITE_FIXTURES").is_some() {
+            let folder =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../Tests/Fixtures");
+            std::fs::write(folder.join("locked.hwp"), &locked).unwrap();
+        }
+    }
+}
 /// `HWP_RENDER=<file> HWP_RENDER_DIR=<folder> cargo test render_pages -- --ignored`: each
 /// page as rhwp draws it, and the PDF, for a look.
 #[test]
