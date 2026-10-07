@@ -130,3 +130,129 @@ index b28d053..ac52e8b 100644
          Name(self.as_bytes())
      }
  }
+--- a/src/render/text.rs
++++ b/src/render/text.rs
+@@ -23,6 +23,7 @@
+
+ const SUBSET_TAG_LEN: usize = 6;
+ const IDENTITY_H: &str = "Identity-H";
++const SYNTHETIC_ITALIC_ANGLE_DEGREES: f32 = 12.0;
+
+ const CMAP_NAME: Name = Name(b"Custom");
+ const SYSTEM_INFO: SystemInfo = SystemInfo {
+@@ -221,11 +222,22 @@
+     accumulated_transform: Transform,
+ ) -> Result<()> {
+     let mut font_names = HashMap::new();
++    let requested_styles: Vec<_> = text
++        .chunks()
++        .iter()
++        .flat_map(|chunk| chunk.spans())
++        .filter(|span| span.start() < span.end())
++        .map(|span| span.font().style())
++        .collect();
+
+     // What each glyph needs from its font, resolved once instead of cloning every font
+     // for every text element.
+     let mut resolved = Vec::new();
+-    for span in text.layouted() {
++    for (span_index, span) in text.layouted().iter().enumerate() {
++        let requested_style = requested_styles
++            .get(span_index)
++            .copied()
++            .unwrap_or(usvg::FontStyle::Normal);
+         let glyphs: Vec<_> = span
+             .positioned_glyphs
+             .iter()
+@@ -235,7 +247,12 @@
+                     .entry(font.reference)
+                     .or_insert_with(|| rc.add_font(font.reference))
+                     .clone();
+-                Some((name, font.glyph_remapper.get(glyph.id.0), font.units_per_em))
++                Some((
++                    name,
++                    font.glyph_remapper.get(glyph.id.0),
++                    font.units_per_em,
++                    should_synthesize_italic(requested_style, font.is_italic),
++                ))
+             })
+             .collect();
+         resolved.push(glyphs);
+@@ -248,7 +265,7 @@
+
+         let operation = |content: &mut Content| -> Result<()> {
+             for (glyph, font) in span.positioned_glyphs.iter().zip(glyphs) {
+-                let Some((name, cid, units_per_em)) = font else {
++                let Some((name, cid, units_per_em, synthesize_italic)) = font else {
+                     continue;
+                 };
+
+@@ -257,8 +274,11 @@
+                 // better. There is no way to handle it as a consumer of
+                 // svg2pdf.
+                 let cid = cid.unwrap();
+-                let ts = glyph
+-                    .outline_transform()
++                let mut ts = glyph.outline_transform();
++                if *synthesize_italic {
++                    ts = ts.pre_concat(synthetic_italic_transform());
++                }
++                let ts = ts
+                     .pre_scale(*units_per_em as f32, *units_per_em as f32)
+                     // The glyphs in usvg are already scaled according the font size, but
+                     // we want to leverage the native PDF font size feature instead, so we downscale
+@@ -511,8 +531,18 @@
+     pub face_data: Arc<dyn AsRef<[u8]> + Send + Sync>,
+     pub units_per_em: u16,
+     pub face_index: u32,
++    pub is_italic: bool,
+ }
+
++fn should_synthesize_italic(requested: usvg::FontStyle, actual_is_italic: bool) -> bool {
++    matches!(requested, usvg::FontStyle::Italic | usvg::FontStyle::Oblique)
++        && !actual_is_italic
++}
++
++fn synthetic_italic_transform() -> Transform {
++    Transform::from_skew(SYNTHETIC_ITALIC_ANGLE_DEGREES.to_radians().tan(), 0.0)
++}
++
+ pub fn fill_fonts(
+     group: &Group,
+     ctx: &mut Context,
+@@ -554,6 +584,7 @@
+                                             glyph_set,
+                                             glyph_remapper,
+                                             face_index,
++                                            is_italic: ttf.is_italic(),
+                                         });
+                                     }
+
+@@ -591,3 +622,27 @@
+
+     Ok(())
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn synthetic_italic_is_used_only_for_upright_fallback_faces() {
++        assert!(should_synthesize_italic(usvg::FontStyle::Italic, false));
++        assert!(should_synthesize_italic(usvg::FontStyle::Oblique, false));
++        assert!(!should_synthesize_italic(usvg::FontStyle::Normal, false));
++        assert!(!should_synthesize_italic(usvg::FontStyle::Italic, true));
++    }
++
++    #[test]
++    fn synthetic_italic_shears_without_changing_advance_scale() {
++        let transform = synthetic_italic_transform();
++        assert_eq!(transform.sx, 1.0);
++        assert_eq!(transform.sy, 1.0);
++        assert_eq!(transform.ky, 0.0);
++        assert!(transform.kx > 0.2 && transform.kx < 0.25);
++        assert_eq!(transform.tx, 0.0);
++        assert_eq!(transform.ty, 0.0);
++    }
++}

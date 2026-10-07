@@ -655,30 +655,49 @@ fn fallback(db: &fontdb::Database, c: char, used: &[fontdb::ID]) -> Option<fontd
         let base = db.face(used[0])?;
         let candidates = || {
             db.faces()
-            .filter(|face| !used.contains(&face.id))
-            // LastResort deliberately claims every scalar with a missing-glyph symbol.
-            // Picking it before a real fallback turns emoji into `?` on macOS.
-            .filter(|face| !face.families.iter().any(|(name, _)| name == "LastResort"))
-            .filter(|face| {
-                !(base.style != face.style
-                    && base.weight != face.weight
-                    && base.stretch != face.stretch)
-            })
-            .filter(|face| has_char(db, face.id, c))
+                .filter(|face| !used.contains(&face.id))
+                // LastResort deliberately claims every scalar with a missing-glyph symbol.
+                // Picking it before a real fallback turns emoji into `?` on macOS.
+                .filter(|face| !face.families.iter().any(|(name, _)| name == "LastResort"))
+                .filter(|face| {
+                    !(base.style != face.style
+                        && base.weight != face.weight
+                        && base.stretch != face.stretch)
+                })
+                .filter(|face| has_char(db, face.id, c))
+        };
+        let base_attributes = (base.style, base.weight, base.stretch);
+        let best = |emoji_only: bool| {
+            candidates()
+                .filter(|face| {
+                    !emoji_only
+                        || face
+                            .families
+                            .iter()
+                            .any(|(name, _)| name.to_ascii_lowercase().contains("emoji"))
+                })
+                .min_by_key(|face| {
+                    fallback_score(base_attributes, (face.style, face.weight, face.stretch))
+                })
         };
         let emoji = matches!(c as u32, 0x1F000..=0x1FAFF | 0x2600..=0x27BF);
         emoji
-            .then(|| {
-                candidates().find(|face| {
-                    face.families
-                        .iter()
-                        .any(|(name, _)| name.to_ascii_lowercase().contains("emoji"))
-                })
-            })
+            .then(|| best(true))
             .flatten()
-            .or_else(|| candidates().next())
+            .or_else(|| best(false))
             .map(|face| face.id)
     })
+}
+
+fn fallback_score(
+    base: (fontdb::Style, fontdb::Weight, fontdb::Stretch),
+    candidate: (fontdb::Style, fontdb::Weight, fontdb::Stretch),
+) -> (bool, u16, bool) {
+    (
+        candidate.0 != base.0,
+        candidate.1 .0.abs_diff(base.1 .0),
+        candidate.2 != base.2,
+    )
 }
 
 fn has_char(db: &fontdb::Database, id: fontdb::ID, c: char) -> bool {
@@ -718,6 +737,40 @@ fn transform(text: &str) -> Option<Op> {
     Some(Op::Transform {
         m: [a, b, c, d, e, f],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_score_prefers_matching_style_then_nearest_weight() {
+        let base = (
+            fontdb::Style::Normal,
+            fontdb::Weight::NORMAL,
+            fontdb::Stretch::Normal,
+        );
+        let regular = fallback_score(base, base);
+        let bold = fallback_score(
+            base,
+            (
+                fontdb::Style::Normal,
+                fontdb::Weight::BOLD,
+                fontdb::Stretch::Normal,
+            ),
+        );
+        let italic = fallback_score(
+            base,
+            (
+                fontdb::Style::Italic,
+                fontdb::Weight::NORMAL,
+                fontdb::Stretch::Normal,
+            ),
+        );
+
+        assert!(regular < bold);
+        assert!(bold < italic);
+    }
 }
 /// Fill (black by default), stroke (none by default) and stroke width (1 by default).
 fn paint(n: roxmltree::Node) -> Option<(Option<u32>, Option<u32>, f64)> {

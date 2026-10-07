@@ -1272,6 +1272,27 @@ struct DocumentTests {
             }
         }
     }
+
+    /// Korean fonts commonly have no italic face. The canvas synthesizes the slant,
+    /// so PDF export must do the same without changing glyph advances or pagination.
+    @Test func synthesizedKoreanItalicMatchesPDFExport() async throws {
+        let document = HwpDocument()
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.formatText(CharStyle(size: 32, italic: true), undo)
+        document.type("기울임 한글", undo)
+        await document.settle()
+
+        let pdf = try #require(PDFDocument(data: try await document.pdf()))
+        let page = try #require(document.pages.first)
+        let reference = try #require(pdf.page(at: 0))
+        let native = try #require(raster(page))
+        let exported = try #require(raster(.pdf(reference)))
+        let differing = zip(native, exported).filter { abs(Int($0) - Int($1)) > 96 }.count
+        let ratio = Double(differing) / Double(native.count)
+
+        #expect(ratio < 0.002)
+    }
 }
 
 /// White page bitmap whose y axis points down, `scale` pixels per point.
