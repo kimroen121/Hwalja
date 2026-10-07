@@ -152,15 +152,22 @@ impl EditSession {
             if hit.get("hit") != Some(&Value::Bool(true)) {
                 continue;
             }
-            // rhwp takes the nearest line from anywhere on the page; only its text counts.
+            // rhwp takes the nearest line from anywhere on the page; only its text and the
+            // 머리말 (꼬리말) area count, so an empty one can be entered too.
             let line = hit.get("cursorRect").ok_or(EditError::RenderFailed)?;
-            let number = |key| {
-                line.get(key)
+            let number = |value: &Value, key| {
+                value
+                    .get(key)
                     .and_then(Value::as_f64)
                     .ok_or(EditError::RenderFailed)
             };
-            let (top, height) = (number("y")?, number("height")?);
-            if y < top - 2.0 || y > top + height + 2.0 {
+            let (top, height) = (number(line, "y")?, number(line, "height")?);
+            let info = parse(self.core.get_page_info_native(page))?;
+            let area = &info[if footer { "footerArea" } else { "headerArea" }];
+            let in_area = number(area, "y")
+                .and_then(|top| Ok(top <= y && y <= top + number(area, "height")?))
+                .unwrap_or(false);
+            if !in_area && (y < top - 2.0 || y > top + height + 2.0) {
                 continue;
             }
             let target = EditTarget {
@@ -174,7 +181,10 @@ impl EditSession {
                     page,
                 }),
             };
-            commands::get(self.core.document(), &target)?;
+            // rhwp answers for a 머리말 the page does not have, from its 꼬리말.
+            if commands::get(self.core.document(), &target).is_err() {
+                continue;
+            }
             return Ok(Some(EditPosition {
                 target,
                 scalar: field(&hit, "charOffset")?,

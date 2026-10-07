@@ -1658,6 +1658,23 @@ fn a_document_locked_with_a_password_opens_with_it_and_saves_locked() {
         }
     }
 }
+/// An empty 머리말 is entered anywhere in its area, not only on its one short line; the
+/// body below stays the body.
+#[test]
+fn an_empty_header_is_entered_anywhere_in_its_area() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    // The header area runs from 75.6 to 132.3 px; its empty line ends near 88.
+    let hit = s.hit_test(s.revision, 0, 300.0, 120.0, true).unwrap();
+    assert!(hit.target.header_footer.is_some_and(|hf| !hf.footer));
+    let below = s.hit_test(s.revision, 0, 300.0, 200.0, true).unwrap();
+    assert!(below.target.header_footer.is_none());
+    // With only a 꼬리말, the 머리말 area is the body's.
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    s.core.create_header_footer_native(0, false, 0).unwrap();
+    let hit = s.hit_test(s.revision, 0, 300.0, 120.0, true).unwrap();
+    assert!(hit.target.header_footer.is_none());
+}
 /// `HWP_RENDER=<file> HWP_RENDER_DIR=<folder> cargo test render_pages -- --ignored`: each
 /// page as rhwp draws it, and the PDF, for a look.
 #[test]
