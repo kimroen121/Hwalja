@@ -4131,3 +4131,52 @@ fn each_language_keeps_its_own_font_and_scale() {
         assert_eq!(languages[1].font.as_deref(), Some("돋움"), "{format:?}");
     }
 }
+/// Deleting across a paragraph takes its table with it; ending at the start of the table's
+/// empty paragraph leaves the table.
+#[test]
+fn a_range_through_a_paragraph_takes_its_table() {
+    let at = |paragraph| EditTarget {
+        paragraph,
+        ..body()
+    };
+    let tables = |s: &EditSession| {
+        s.core.document().sections[0]
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.controls)
+            .filter(|c| matches!(c, Control::Table(_)))
+            .count()
+    };
+    // Paragraphs: 1 text, 2 the table alone, 3 empty.
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let to_table = EditSelection {
+        anchor: point(at(1), 1),
+        focus: point(at(2), 0),
+    };
+    run(
+        &mut s,
+        EditCommand::Replace {
+            selection: to_table,
+            text: "X".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(tables(&s), 1);
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let through = EditSelection {
+        anchor: point(at(1), 1),
+        focus: point(at(3), 0),
+    };
+    run(
+        &mut s,
+        EditCommand::Replace {
+            selection: through,
+            text: "X".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(tables(&s), 0);
+    assert_eq!(s.paragraph(&at(1)).unwrap().text, "가X");
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_eq!(tables(&s), 1);
+}

@@ -771,6 +771,10 @@ impl EditSession {
             self.delete(start, tail)?;
         }
         let next = at_index(&start.target, s + 1);
+        // The last paragraph counts as whole when the range reaches the end of its text; an
+        // empty one ends where it starts, before its objects.
+        let last = self.length(&at_index(&start.target, e))?;
+        let whole_last = last > 0 && end.scalar >= last;
         for remaining in (s + 1..=e).rev() {
             let count = if remaining == s + 1 {
                 end.scalar
@@ -786,6 +790,32 @@ impl EditSession {
                     },
                     count,
                 )?;
+            }
+            // Each pass takes the paragraph after the start, the last one on the last pass.
+            // A whole paragraph's objects go with it, those not in its lines too (a table or
+            // picture laid out on its own); they have no place in the text to delete.
+            if next.header_footer.is_none()
+                && next.note.is_none()
+                && (remaining > s + 1 || whole_last)
+            {
+                let objects: Vec<usize> = get(self.core.document(), &next)?
+                    .controls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| {
+                        matches!(
+                            c,
+                            Control::Table(_)
+                                | Control::Picture(_)
+                                | Control::Shape(_)
+                                | Control::Equation(_)
+                        )
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                for control in objects.into_iter().rev() {
+                    self.delete_control(&next, control)?;
+                }
             }
             self.merge(&next)?;
         }

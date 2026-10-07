@@ -311,11 +311,26 @@ fn covered(doc: &Document, selection: &EditSelection) -> Result<Vec<usize>, Edit
         } else {
             logical::length(p)
         };
-        taken.extend(
-            logical::objects(p, from, to)
-                .into_iter()
-                .map(|c| before + c),
-        );
+        let mut objects = logical::objects(p, from, to);
+        // A whole paragraph takes the objects laid out on their own too.
+        let target = commands::at_index(&start.target, i);
+        let whole =
+            i > s && (i < e || (logical::length(p) > 0 && end.scalar >= logical::length(p)));
+        if whole && target.header_footer.is_none() && target.note.is_none() {
+            objects.extend(p.controls.iter().enumerate().filter_map(|(i, c)| {
+                matches!(
+                    c,
+                    Control::Table(_)
+                        | Control::Picture(_)
+                        | Control::Shape(_)
+                        | Control::Equation(_)
+                )
+                .then_some(i)
+            }));
+            objects.sort_unstable();
+            objects.dedup();
+        }
+        taken.extend(objects.into_iter().map(|c| before + c));
         before += p.controls.len();
     }
     Ok(taken)
