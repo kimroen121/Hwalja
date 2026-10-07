@@ -197,8 +197,9 @@ const LATEX_FUNCTIONS: &[&str] = &[
     "Pr", "sec", "sin", "sinh", "sup", "tan", "tanh",
 ];
 
+/// A symbol, or a big operator written on its own (`int` without limits).
 fn symbol(c: &str) -> Option<&'static (&'static str, &'static str, &'static str)> {
-    SYMBOLS.iter().find(|s| s.0 == c)
+    SYMBOLS.iter().chain(BIG_OPERATORS).find(|s| s.0 == c)
 }
 fn big_operator(c: &str) -> Option<&'static (&'static str, &'static str, &'static str)> {
     BIG_OPERATORS.iter().find(|s| s.0 == c)
@@ -846,6 +847,7 @@ mod tests {
             ("int from {} to {}", "\\int_{}^{}"),
             ("rm sin x", "\\mathrm{\\sin} x"),
             ("left ( {} right )", "\\left( {} \\right)"),
+            ("int x + iint", "\\int x+\\iint"),
         ] {
             assert_eq!(to_latex(script), expected, "{script}");
         }

@@ -9,7 +9,7 @@ let package = Package(
     name: "HwpStudio",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/mgriebling/SwiftMath.git", exact: "1.7.3"),
+        .package(url: "https://github.com/mgriebling/SwiftMath.git", revision: "1d2c90827e9c3908269d810d055fb03b7da5fd53"),
     ],
     targets: [
         .systemLibrary(name: "CHwpEngine", path: "Engine/include"),

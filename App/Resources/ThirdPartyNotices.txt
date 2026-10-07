@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-SwiftMath 1.7.3 — https://github.com/mgriebling/SwiftMath
+SwiftMath (1d2c908) — https://github.com/mgriebling/SwiftMath
 
 MIT License
 

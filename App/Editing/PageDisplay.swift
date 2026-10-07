@@ -326,42 +326,56 @@ final class PageDisplay: @unchecked Sendable {
 final class Formulas: @unchecked Sendable {
     static let shared = Formulas()
     private let lock = NSLock()
-    private var images: [String: (image: NSImage, ascent: Double)?] = [:]
+    private var images: [String: Formula?] = [:]
+
+    /// An equation set as an image with room around it: glyphs reach past the line's
+    /// ascent and descent (an integral's tails, italic overhangs), and an image clips.
+    private struct Formula {
+        let image: NSImage
+        /// The room on each side.
+        let pad: Double
+        /// The line's width, and its baseline's distance from the image top.
+        let width: Double
+        let ascent: Double
+    }
 
     /// Draws the equation in its rect, its baseline on the line's, shrunk if wider than the rect.
     func draw(_ equation: PageDisplay.Op.Equation, in context: CGContext) -> Bool {
         // ponytail: SwiftMath draws no glyph its math font lacks (한글 in \text), so those
         // equations keep the engine's drawing; set them here once SwiftMath falls back to other fonts.
-        guard equation.latex.allSatisfy(\.isASCII), let (image, ascent) = image(equation) else { return false }
-        let size = image.size
-        let scale = min(1, equation.rect.width / size.width)
-        let origin = CGPoint(x: equation.rect.midX - size.width * scale / 2, y: equation.baseline - ascent * scale)
+        guard equation.latex.allSatisfy(\.isASCII), let formula = formula(equation) else { return false }
+        let scale = min(1, equation.rect.width / formula.width)
+        let origin = CGPoint(x: equation.rect.midX - (formula.width / 2 + formula.pad) * scale,
+                             y: equation.baseline - formula.ascent * scale)
+        let size = formula.image.size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        image.draw(in: CGRect(origin: origin, size: CGSize(width: size.width * scale, height: size.height * scale)),
-                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        formula.image.draw(in: CGRect(origin: origin, size: CGSize(width: size.width * scale, height: size.height * scale)),
+                           from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         NSGraphicsContext.restoreGraphicsState()
         return true
     }
 
-    /// The set equation and its baseline's distance from the image top.
-    private func image(_ equation: PageDisplay.Op.Equation) -> (image: NSImage, ascent: Double)? {
+    private func formula(_ equation: PageDisplay.Op.Equation) -> Formula? {
         let key = "\(equation.size) \(equation.color.components ?? []) \(equation.latex)"
         lock.lock()
         defer { lock.unlock() }
         if let known = images[key] { return known }
+        let pad = equation.size / 2
         var math = MathImage(latex: equation.latex, fontSize: equation.size,
                              textColor: NSColor(cgColor: equation.color) ?? .black, labelMode: .display, textAlignment: .left)
         math.font = .xitsFont
+        math.contentInsets = MTEdgeInsets(top: pad, left: pad, bottom: pad, right: pad)
         let (error, image, info) = math.asImage()
-        var result: (image: NSImage, ascent: Double)?
-        if error == nil, let image, let info, image.size.width > 0 {
+        var result: Formula?
+        if error == nil, let image, let info, image.size.width > 2 * pad {
             // Vector each time it is drawn, so zoom and PDF stay sharp.
             image.cacheMode = .never
-            // MathImage centers the line vertically in its rounded-up height.
+            // MathImage centers the line vertically in its rounded-up height, inside the room.
             let height = max(info.ascent + info.descent, equation.size / 2)
-            let baselineFromBottom = (image.size.height - height) / 2 + info.descent
-            result = (image, image.size.height - baselineFromBottom)
+            let baselineFromBottom = (image.size.height - 2 * pad - height) / 2 + info.descent + pad
+            result = Formula(image: image, pad: pad, width: image.size.width - 2 * pad,
+                             ascent: image.size.height - baselineFromBottom)
         }
         images[key] = .some(result)
         return result
