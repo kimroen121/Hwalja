@@ -9,10 +9,9 @@ struct DocumentWindow: View {
     @State private var pageField = ""
 
     var body: some View {
-        if let message = document.creationError {
+        if document.creationFailed {
             VStack(spacing: 16) {
                 Image(systemName: "exclamationmark.triangle").font(.largeTitle)
-                Text(message).multilineTextAlignment(.center)
                 HStack {
                     Button("다시 시도") { NSDocumentController.shared.newDocument(nil) }
                     Button("다른 문서 열기…") { NSDocumentController.shared.openDocument(nil) }

@@ -103,8 +103,7 @@ struct MenuItems {
             Choice(title: "붙이기", symbol: Icon.paste, key: "v", enabled: context.hasSelection && !context.locked) { send(#selector(PageEditor.paste(_:))) },
         ]
         if selected {
-            items.append(Choice(title: context.object == nil ? "지우기" : "개체 삭제",
-                                symbol: Icon.delete, enabled: !context.locked) {
+            items.append(Choice(title: "지우기", symbol: Icon.delete, enabled: !context.locked) {
                 editor.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
             })
         }
@@ -177,9 +176,6 @@ struct MenuItems {
                     Choice(title: "줄 지우기") { viewer.editTable(.deleteRow) },
                     Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) },
                 ]),
-                Choice(title: "표 전체 삭제", symbol: Icon.delete, enabled: !context.locked) {
-                    viewer.deleteCurrentTable()
-                },
             ]
         }
         if context.canCaption {

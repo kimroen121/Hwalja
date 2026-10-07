@@ -5,7 +5,7 @@
 - **1차 목표: rhwp가 지원하는 기능을 모두 앱에서 쓸 수 있게 한다.** rhwp(`build/rhwp`, `Vendor/rhwp-*.tar.gz` + 패치)에 있는 편집·조회·저장 기능이 기준이다. rhwp에 없는 기능(하이퍼링크 넣기, 메모, 변경 내용 추적 등)은 1차에서 다루지 않는다.
 - 2차 목표: rhwp에 없는 웹 한글·로컬 한글 기능을 엔진에 더해 데스크톱 한글 수준으로 끌어올린다.
 - 화면 기준: 조판 결과는 로컬 「Hancom Office HWP Viewer」와 최대한 같게 한다. UI는 Apple HIG를 따르고, 앱 안에 설명 문구를 넣지 않는다.
-- 용어: 모든 메뉴·대화상자 이름은 웹 한글(저장해 둔 편집 화면 htm, main.js, 탭 스크린샷)에서 그대로 가져온다. 새 용어를 만들지 않는다. macOS 표준 명령 이름(프린트…, PDF로 내보내기… 등)은 쓴다. 웹 한글에서 이름을 찾지 못한 기능은 이름을 확인할 때까지 보류한다(아래 「이름 확인이 필요한 기능」).
+- 용어: 모든 메뉴·대화상자 이름은 웹 한글(저장해 둔 편집 화면 htm, main.js, 탭 스크린샷)에서 그대로 가져온다. 웹 한글에 없는 대화상자 안의 문구와 기능의 동작은 한컴 공식 도움말을 따른다(`docs/GUIDELINES.md`). 새 용어를 만들지 않는다. macOS 표준 명령 이름(프린트…, PDF로 내보내기… 등)은 쓴다. 웹 한글에서 이름을 찾지 못한 기능은 이름을 확인할 때까지 보류한다(아래 「이름 확인이 필요한 기능」).
 
 ## 지켜야 할 원칙
 
@@ -41,33 +41,36 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 ### 2. 웹 한글 메뉴의 남은 항목 중 rhwp가 지원하는 것
 
-이름은 웹 한글 메뉴에서 확인한 그대로다.
+메뉴 이름은 웹 한글 메뉴 그대로, 대화상자의 구성과 동작은 한컴 도움말(`help:` 뒤 경로, 기준 <https://help.hancom.com/hoffice/multi/ko_kr/hwp/>)을 따른다.
 
 - 파일
-  - [ ] 문서 정보…의 문서 요약·글꼴 정보·그림 정보 탭(일반·문서 통계는 됨): 요약은 HWP 요약 정보 쓰기가 rhwp에 없고, 글꼴 정보는 `get_document_info`.
-  - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`.
-- 편집
-- 보기
+  - [ ] 문서 정보…의 문서 요약·글꼴 정보·그림 정보·저작권 탭(일반·문서 통계는 됨, help: `file/document_properties/document_summary.htm` 등): 요약 정보 쓰기가 rhwp에 없고, 글꼴 정보는 `get_document_info`로 읽을 수 있다.
+  - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`. 이 환경의 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요).
 - 입력
-  - [ ] 필드 입력…, 누름틀 고치기·누름틀 지우기·필드 삭제: wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`.
-  - [ ] 차트 › 데이터 편집, 행/열 전환: `list_charts_native`, `get/set_chart_data_native`(구조 편집 포함). rhwp가 차트를 새로 만들지 못하고 로컬 문서에도 차트가 없어, 차트가 든 문서를 받으면 만든다.
-  - [ ] 문서 안 양식 개체(누름 단추·선택 상자 등) 값 바꾸기: `get_form_object_at_native`, `set_form_value_native`.
+  - [ ] 필드 입력…(help: `insert/madanginfo/madanginfo.htm`), 빠른 메뉴의 누름틀 고치기·누름틀 지우기·필드 삭제: wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.
+  - [ ] 차트 › 데이터 편집, 행/열 전환(help: `table/chart/chart(inputdata).htm`): `list_charts_native`, `get/set_chart_data_native`(구조 편집 포함). rhwp가 차트를 새로 만들지 못하고 로컬 문서에도 차트가 없어, 차트가 든 문서를 받으면 만든다.
+  - [ ] 문서 안 양식 개체(누름 단추·선택 상자 등) 값 바꾸기(help: `view/workwindow/workwindow(attribute).htm`): `get_form_object_at_native`, `set_form_value_native`.
 - 서식
+  - [ ] 스타일…(F6)(help: `format/style/style.htm`, `style(new).htm`, `style(edit).htm`, `style(erase).htm`): wasm `get_style_list`, `get_style_detail`, `update_style`, `update_style_shapes`, `create_style`, `delete_style`. 대화상자 구성은 도움말의 스타일 목록·추가하기·편집하기·지우기.
+  - [ ] 개체 속성 › 선 탭(웹 한글 스크린샷에 있음, help: `insert/objectattribute/objectattribute(line).htm`)과 도형의 채우기 탭(help: `objectattribute(face).htm`): `set_shape_properties_native`, `set_picture_properties_native`의 선·채우기 필드.
+  - [ ] 개체 속성 › 기본의 너비·높이 기준(고정값·종이·쪽·단·문단, 높이는 고정값·종이·쪽)과 본문 위치(help: `objectattribute(general).htm`): rhwp 속성 JSON이 `width_criterion`·`text_flow`를 받지 않으므로 rhwp 패치가 필요하다. 「개체와 조판 부호를 항상 같은 쪽에 놓기」도 같다.
   - [ ] 표 칸·주석 안 문단의 시작 번호 방식: `set_numbering_restart_native`는 본문 문단만 받는다.
-  - [ ] 스타일…(F6) 대화상자: wasm `get_style_list`, `get_style_detail`, `update_style`, `update_style_shapes`, `create_style`, `delete_style`.
-  - [ ] 개체 속성 › 선·테두리·배경 탭: `set_shape_properties_native`, `set_picture_properties_native`의 선·채우기 필드. 캡션의 「한 줄로 입력」은 rhwp에 없다.
-  - [ ] 개체 속성 › 고정값·본문 위치.
 - 쪽
-  - [ ] 단 › 왼쪽·오른쪽: 두 단의 너비 비율을 한글에서 확인해야 한다.
-  - [ ] 다단 설정 나누기: rhwp는 구역의 줄을 모두 첫 단 정의의 너비로 나누므로, 단 정의가 둘 이상인 구역의 조판부터 고쳐야 한다. 지금은 단 정의가 하나인 구역에서만 「단」을 바꾼다.
+  - [ ] 쪽 테두리/배경…(help: `format/pageborder/page_border.htm`, 테두리·배경 탭): `get/set_page_border_fill_native`.
+  - [ ] 구역 설정…(help: `format/section/section.htm`): `get/set_section_def_native`, `set_section_def_all_native`. 도움말의 「첫 쪽에만 감추기」·시작 쪽 번호가 여기 있다.
+  - [ ] 단 › 왼쪽·오른쪽: 두 단의 너비 비율이 도움말(`format/columns/columns.htm`)에도 없어 한글 화면으로 확인해야 한다.
+  - [ ] 다단 설정…(help: `format/columns/columns.htm`)과 다단 설정 나누기(help: `format/break/new_columns.htm`): rhwp는 구역의 줄을 모두 첫 단 정의의 너비로 나누므로, 단 정의가 둘 이상인 구역의 조판부터 고쳐야 한다. 지금은 단 정의가 하나인 구역에서만 「단」을 바꾼다.
+- 보기
+  - [ ] 문서 창 › 개요 보기(help: `view/workwindow/workwindow(outlinenumbering).htm`): `get_outline_navigation_native`로 제목 목록에서 문서 안 이동.
+  - [ ] 눈금자의 탭 표시와 탭 종류 변경 아이콘, 빠른 메뉴(help: `view/ruler/ruler(horizon).htm`): rhwp의 탭 설정 읽기·쓰기를 먼저 찾는다.
 - 표
-  - [ ] 셀 테두리/배경 › 각 셀마다 적용…, 하나의 셀처럼 적용…: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.
+  - [ ] 셀 테두리/배경 › 각 셀마다 적용…, 하나의 셀처럼 적용…: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`. 대화상자 문구를 도움말에서 찾지 못했다(웹 한글 스크린샷 필요).
   - [ ] 표 테두리 끌기의 나머지(바깥 왼쪽·위 테두리, 셀 안의 표): `resize_table_cells`, `move_table_offset`.
   - [ ] 블록 계산식 결과의 자동 다시 계산: 지금은 값으로 넣는다. 계산식 필드로 넣어야 한다.
 
 ### 3. 이름 확인이 필요한 기능
 
-rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자가 이름(로컬 한글 화면 등)을 확인해 주면 2단계와 같은 방식으로 넣는다.
+rhwp는 지원하지만 웹 한글 메뉴와 한컴 도움말 목차에서 이름을 찾지 못했다. 사용자가 이름(로컬 한글 화면 등)을 확인해 주면 2단계와 같은 방식으로 넣는다.
 
 | rhwp 함수 | 하는 일 |
 |---|---|
@@ -76,10 +79,7 @@ rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자�
 | `transpose_table_cells_in_place_native`, `copy/paste_table_cells_transposed_native` | 표의 줄과 칸 바꾸기 |
 | `fit_table_to_page_native` | 표 너비를 본문 폭에 맞추기 |
 | `assign_picture_image_native` | 그림 파일만 바꾸기(크기·위치 유지) |
-| `get/set_page_border_fill_native` | 쪽 테두리·배경 |
-| `get/set_section_def_native`, `set_section_def_all_native` | 구역 설정(쪽 번호 시작, 감추기 등) |
 | `get/apply_endnote_shape_native`, `get_footnote_info_native` | 각주·미주 번호 모양·구분선 |
-| `get_outline_navigation_native` | 개요(제목) 목록으로 문서 안 이동 |
 | `export_hml_native`, `extract_page_text/markdown_native` | 다른 형식으로 내보내기 |
 
 ### 4. 화면과 저장

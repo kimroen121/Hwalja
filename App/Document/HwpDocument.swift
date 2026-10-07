@@ -86,7 +86,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     private let sessionResult: Result<EditSession, Error>
     private nonisolated var session: EditSession { get throws { try sessionResult.get() } }
     private nonisolated let workBarrier = DocumentWorkBarrier()
-    let creationError: String?
+    /// A new document could not be made; the window offers to try again.
+    let creationFailed: Bool
     /// Rendered pages as shown, replaced only when a presentation is published.
     private(set) var pages: [RenderedPage]
     /// Each page's body area (쪽 윤곽 off shows only it).
@@ -142,7 +143,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         do {
             let (session, output) = try open(nil)
             sessionResult = .success(session)
-            creationError = nil
+            creationFailed = false
             pages = output.pages
             bodies = output.reply.bodies ?? []
             reply = output.reply
@@ -150,7 +151,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             context.pageCount = output.pages.count
         } catch {
             sessionResult = .failure(error)
-            creationError = "새 문서를 만들지 못했습니다. 다시 시도하거나 다른 문서를 열어 주세요."
+            creationFailed = true
             pages = []
             reply = EditReply(revision: 0, pageCount: 0, changedPages: [], canUndo: false, canRedo: false, dirty: false)
             // EditError contains only a category, never document text or bytes.
@@ -176,7 +177,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
         let (session, output) = opened!
         self.sessionResult = .success(session)
-        self.creationError = nil
+        self.creationFailed = false
         pages = output.pages
         bodies = output.reply.bodies ?? []
         reply = output.reply

@@ -43,54 +43,59 @@ struct EquationItem: Hashable {
 
 /// The palettes, in the order of 한글's 수식 편집 tool rows.
 enum EquationPalette {
-    /// The first row: templates, each with the sample its button shows. A palette of one
-    /// item is a plain button.
-    static let templates: [(face: String, items: [EquationItem])] = [
-        ("{x}^{2}", [
+    /// The first row: templates, each with its name and key in 한글's help (Ctrl there, ⌘
+    /// here) and the sample its button shows. A palette of one item is a plain button; the
+    /// key puts in a palette's first item.
+    static let templates: [(name: String, key: KeyEquivalent?, face: String, items: [EquationItem])] = [
+        ("위 첨자", nil, "{x}^{2}", [
             EquationItem(sample: "{x}^{2}", script: "{}^{}"),
             EquationItem(sample: "{x}_{1}", script: "{}_{}"),
             EquationItem(sample: "{x}_{1}^{2}", script: "{}_{}^{}"),
         ]),
-        ("bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
+        ("장식 기호", "d", "bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
             EquationItem(sample: "\($0) a", script: "\($0) {}")
         }),
-        ("{a} over {b}", [EquationItem(sample: "{a} over {b}", script: "{} over {}")]),
-        ("sqrt {x}", [EquationItem(sample: "sqrt {x}", script: "sqrt {}")]),
-        ("sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
+        ("분수", "o", "{a} over {b}", [EquationItem(sample: "{a} over {b}", script: "{} over {}")]),
+        ("근호", "r", "sqrt {x}", [EquationItem(sample: "sqrt {x}", script: "sqrt {}")]),
+        ("합 기호", "s", "sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
             EquationItem(sample: "\($0) from {i} to {n}", script: "\($0) from {} to {}")
         }),
-        ("int", [
+        ("적분", "i", "int", [
             EquationItem(sample: "int from {a} to {b}", script: "int from {} to {}"),
             EquationItem(sample: "iint", script: "iint "),
             EquationItem(sample: "iiint", script: "iiint "),
             EquationItem(sample: "oint", script: "oint "),
         ]),
-        ("lim", [
+        ("극한", "l", "lim", [
             EquationItem(sample: "lim from {x rarrow 0}", script: "lim from {}"),
             EquationItem(sample: "Lim from {n rarrow INF}", script: "Lim from {}"),
         ]),
-        ("left ( a right )", [("(", ")"), ("[", "]"), ("lbrace", "rbrace"), ("|", "|"), ("langle", "rangle"), ("lceil", "rceil"),
+        ("상호 관계", "e", "a REL rarrow {x} {y} b", ["rarrow", "larrow", "lrarrow", "RARROW", "LARROW", "LRARROW"].map {
+            EquationItem(sample: "REL \($0) {a} {b}", script: "REL \($0) {} {}")
+        } + [EquationItem(sample: "BUILDREL rarrow {a}", script: "BUILDREL rarrow {}")]),
+        ("괄호", "9", "left ( a right )", [("(", ")"), ("[", "]"), ("lbrace", "rbrace"), ("|", "|"), ("langle", "rangle"), ("lceil", "rceil"),
                  ("lfloor", "rfloor")].map {
             EquationItem(sample: "left \($0.0) a right \($0.1)", script: "left \($0.0) {} right \($0.1)")
         }),
-        ("cases{a # b}", [EquationItem(sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
-        ("pile{a # b}", [EquationItem(sample: "pile{a # bb}", script: "pile{ # }")]),
-        ("matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
+        ("경우", "0", "cases{a # b}", [EquationItem(sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
+        ("세로 쌓기", "p", "pile{a # b}", [EquationItem(sample: "pile{a # bb}", script: "pile{ # }")]),
+        ("행렬", "m", "matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
             EquationItem(sample: "\($0){a & b # c & d}", script: "\($0){ & # & }")
         }),
     ]
-    /// 칸 맞춤 and 줄 바꿈, after the templates: what each shows and puts.
-    static let marks: [(face: String, script: String)] = [("&", "&"), ("↵", "#")]
+    /// 줄 맞춤 and 줄 바꿈, after the templates: name, what each shows and puts.
+    static let marks: [(name: String, face: String, script: String)] = [("줄 맞춤", "&", "&"), ("줄 바꿈", "↵", "#")]
 
-    /// The second row: symbol groups, each with the glyph its button shows.
-    static let symbols: [(face: String, items: [EquationItem])] = [
-        ("Λ", group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω")),
-        ("λ", group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω")),
-        ("ℵ", group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω")),
-        ("≤", group("NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ VDASH ⊢ MODELS ⊨")),
-        ("±", group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ LNOT ¬ FORALL ∀ EXIST ∃")),
-        ("⇔", group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪")),
-        ("Δ", group("INF ∞ DEG ° prime ′ PARTIAL ∂ nabla ∇ THEREFORE ∴ BECAUSE ∵ EMPTYSET ∅ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇")),
+    /// The second row: symbol groups, each with its name in 한글's help and the glyph its
+    /// button shows.
+    static let symbols: [(name: String, face: String, items: [EquationItem])] = [
+        ("그리스 대문자", "Λ", group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω")),
+        ("그리스 소문자", "λ", group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω")),
+        ("그리스 기호", "ℵ", group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω")),
+        ("합, 집합 기호", "≤", group("NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ VDASH ⊢ MODELS ⊨")),
+        ("연산, 논리 기호", "±", group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ LNOT ¬ FORALL ∀ EXIST ∃")),
+        ("화살표", "⇔", group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪")),
+        ("기타 기호", "Δ", group("INF ∞ DEG ° prime ′ PARTIAL ∂ nabla ∇ THEREFORE ∴ BECAUSE ∵ EMPTYSET ∅ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇")),
     ]
 
     /// "keyword glyph keyword glyph …" as items that show the glyph and put the keyword.
@@ -216,6 +221,8 @@ private struct SymbolGlyph: View {
 /// A button of the tool rows: a palette's sample opening a grid of all of them, or, for a
 /// palette of one, putting that one in at once.
 private struct PaletteButton: View {
+    let name: String
+    var key: KeyEquivalent?
     /// The button's sample, rendered (templates) or as text (symbols).
     let face: String
     let items: [EquationItem]
@@ -239,7 +246,11 @@ private struct PaletteButton: View {
             .frame(height: 30)
         }
         .buttonStyle(ToolButtonStyle(on: open))
-        .help(items.count == 1 ? items[0].script : "")
+        .help(name)
+        .accessibilityLabel(name)
+        .background {
+            if let key { Button("") { pick(items[0]) }.keyboardShortcut(key, modifiers: .command).hidden() }
+        }
         .popover(isPresented: $open, arrowEdge: .bottom) {
             PaletteGrid(items: items, renderer: renderer, symbols: symbols) {
                 open = false
@@ -270,7 +281,7 @@ struct EquationEditor: View {
     }
 
     var body: some View {
-        DialogFrame("수식 편집", canConfirm: valid) {
+        DialogFrame("수식 편집", confirmTitle: "넣기", canConfirm: valid) {
             editor
         } confirm: {
             viewer.commit(edit)
@@ -287,7 +298,8 @@ struct EquationEditor: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 1) {
                 ForEach(EquationPalette.templates, id: \.face) { palette in
-                    PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: false) {
+                    PaletteButton(name: palette.name, key: palette.key, face: palette.face, items: palette.items,
+                                  renderer: renderer, symbols: false) {
                         script.insert($0.script)
                     }
                 }
@@ -297,12 +309,13 @@ struct EquationEditor: View {
                         Text(mark.face).font(.system(size: 16)).frame(minWidth: 26, minHeight: 30)
                     }
                     .buttonStyle(ToolButtonStyle())
-                    .help(mark.script)
+                    .help(mark.name)
+                    .accessibilityLabel(mark.name)
                 }
             }
             HStack(spacing: 1) {
                 ForEach(EquationPalette.symbols, id: \.face) { palette in
-                    PaletteButton(face: palette.face, items: palette.items, renderer: renderer, symbols: true) {
+                    PaletteButton(name: palette.name, face: palette.face, items: palette.items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
                     }
                 }

@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 struct DocumentTests {
     @Test func blankFailureIsRecoverableAndCannotSave() throws {
         let document = HwpDocument(blankUsing: { _ in throw EditError.renderFailed })
-        #expect(document.creationError != nil)
+        #expect(document.creationFailed)
         #expect(document.pages.isEmpty)
         #expect(!document.context.hasSelection)
         #expect(throws: EditError.self) { try document.snapshot(contentType: .hwpx) }
@@ -18,7 +18,7 @@ struct DocumentTests {
 
     @Test func blankEngineMismatchReportsCreationError() {
         let document = HwpDocument(blankUsing: { _ in throw EditError.incompatibleEngine })
-        #expect(document.creationError != nil)
+        #expect(document.creationFailed)
         #expect(document.pages.isEmpty)
     }
 
@@ -28,11 +28,11 @@ struct DocumentTests {
 
     @Test func newBlankDocumentRendersAndSaves() throws {
         let document = HwpDocument()
-        #expect(document.creationError == nil)
+        #expect(document.creationFailed == false)
         #expect(!document.pages.isEmpty)
         let saved = try document.snapshot(contentType: .hwpx)
         let reopened = try HwpDocument(data: saved)
-        #expect(reopened.creationError == nil)
+        #expect(reopened.creationFailed == false)
         #expect(!reopened.pages.isEmpty)
     }
 
@@ -109,7 +109,7 @@ struct DocumentTests {
         document.select { _ in throw EditError.unsupportedTarget }
         let saved = try await Task.detached { try document.snapshot(contentType: .hwpx) }.value
         #expect(!saved.isEmpty)
-        #expect(try HwpDocument(data: saved).creationError == nil)
+        #expect(try HwpDocument(data: saved).creationFailed == false)
     }
 
     @Test func mainThreadSnapshotRefusesPendingWorkWithoutDeadlock() async throws {
@@ -231,12 +231,9 @@ struct DocumentTests {
         #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
     }
 
-    @Test func quickMenuOffersExplicitDeletionForTablesAndObjects() {
-        let titles = { (context: EditingContext) in
-            MenuItems.quickMenu(Viewer(), context).compactMap { $0?.title }
-        }
-        #expect(titles(EditingContext(hasSelection: true, object: .shape)).contains("개체 삭제"))
-        #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표 전체 삭제"))
+    @Test func quickMenuOffersDeletionForObjects() {
+        let titles = MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true, object: .shape)).compactMap { $0?.title }
+        #expect(titles.contains("지우기"))
     }
 
     @Test func quickMenuKeepsCopyButDisablesMutationsInLockedDocuments() throws {
@@ -930,20 +927,6 @@ struct DocumentTests {
         viewer.headerFooter(footer: true, pageNumber: nil)
         await document.settle()
         #expect(document.reply.revision == revision + 2)
-    }
-
-    @Test func viewerDeletesTheTableContainingTheCaret() async throws {
-        let document = HwpDocument()
-        let viewer = Viewer()
-        viewer.canvas.bind(document)
-        document.selection = .caret(EditPosition(target: body, scalar: 0))
-        viewer.insertTable(rows: 2, columns: 2)
-        await document.settle()
-        #expect(document.context.inTable)
-        viewer.deleteCurrentTable()
-        await document.settle()
-        #expect(!document.context.inTable)
-        #expect(document.selection?.focus.target.cell == nil)
     }
 
     @Test func notesTakeTypedText() async throws {
