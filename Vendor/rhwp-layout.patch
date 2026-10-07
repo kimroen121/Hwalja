@@ -2098,3 +2098,30 @@ index 3989968..e268160 100644
  
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
+diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
+--- a/src/renderer/svg.rs
++++ b/src/renderer/svg.rs
+@@ -3584,7 +3584,11 @@
+ fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64) -> String {
++    let color_emoji = cluster_str
++        .chars()
++        .any(|ch| matches!(ch as u32, 0x1F000..=0x1FAFF));
+     if !cluster_str
+         .chars()
+         .any(|ch| ch.is_ascii_alphanumeric() || is_halfwidth_cjk_quote(ch))
++        && !color_emoji
+     {
+         return String::new();
+     }
+@@ -3596,7 +3600,10 @@
+     } else {
+         1.0
+     };
+-    let text_length = cluster_advance / scale_x;
++    let mut text_length = cluster_advance / scale_x;
++    if color_emoji {
++        text_length -= (text_length * 0.08).min(0.5);
++    }
+     format!(
+         " textLength=\"{:.4}\" lengthAdjust=\"spacingAndGlyphs\"",
+         text_length

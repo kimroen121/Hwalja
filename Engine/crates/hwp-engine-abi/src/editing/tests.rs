@@ -1838,6 +1838,24 @@ fn render_pages() {
     let mut s = s;
     std::fs::write(folder.join("pages.pdf"), s.export(SaveFormat::Pdf).unwrap()).unwrap();
 }
+
+#[test]
+fn color_emoji_svg_fits_each_glyph_to_its_layout_advance() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let end = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, end, "📣😄📖").unwrap();
+    let svg = s.core.render_page_svg_native(0).unwrap();
+    for glyph in ["📣", "😄", "📖"] {
+        let line = svg
+            .lines()
+            .find(|line| line.contains(&format!(">{glyph}</text>")))
+            .unwrap_or_else(|| panic!("missing {glyph} in page SVG"));
+        assert!(
+            line.contains("textLength=") && line.contains("lengthAdjust=\"spacingAndGlyphs\""),
+            "fallback color glyph must be fitted to its HWP layout slot: {line}"
+        );
+    }
+}
 /// `HWP_BENCH=<file> cargo test --release bench_typing -- --ignored --nocapture`
 #[test]
 #[ignore]

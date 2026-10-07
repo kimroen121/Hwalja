@@ -58,7 +58,6 @@
 
 | 순위 | 문제 | 메모 |
 |---|---|---|
-| P2 | 연속한 색 이모지가 서로 겹침 | 새 문서(함초롬바탕 10pt)에 `📣😄📖`를 이어 치고 390%로 보면 그림이 다음 이모지까지 넘치고 마지막 이모지에 커서가 붙음. Apple Color Emoji 대체 글꼴의 advance와 실제 그림 범위가 다른 것으로 의심. 표시 목록 run 위치·advance, Core Text bounds, SVG/PDF를 함께 비교 |
 | P1 | 가변 글꼴의 굵기/기울임 축 미지원 | 화면 표시 목록과 PDF 경로가 파일+face index만 전달하고 variation axis를 전달하지 않음. Pretendard Variable bold는 현재 다른 글꼴 fallback이라 줄 폭이 달라질 수 있음 |
 
 ### 편집

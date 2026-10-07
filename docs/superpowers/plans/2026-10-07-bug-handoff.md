@@ -41,12 +41,12 @@
 - Consumes: `PageDisplay.Op.Text`, `RenderedPage.draw(in:rect:)`.
 - Produces: text-run drawing whose logical advance and painted color-glyph bounds do not overlap.
 
-- [ ] Add a bitmap regression test rendering `📣😄📖` through the real document/display-list path and assert separated foreground components plus caret clearance.
-- [ ] Run the focused Swift test and verify the overlap assertion fails for the current renderer.
-- [ ] Record Core Text typographic advance and image bounds for each shaped run; prove whether global `textLength` scaling is the failing boundary.
-- [ ] Make the smallest display geometry change that preserves the SVG text chunk's final advance while preventing adjacent color-glyph overlap.
-- [ ] Run the focused test, `make test`, and an app snapshot at 390%.
-- [ ] Remove the resolved BUG_HANDOFF row and commit `fix: keep consecutive color emoji apart`.
+- [x] Add a bitmap regression test rendering `📣😄📖` through the real document/display-list path and assert separated foreground components plus caret clearance.
+- [x] Run the focused Swift test and verify the overlap assertion fails for the current renderer.
+- [x] Record Core Text typographic advance and image bounds for each shaped run; prove whether global `textLength` scaling is the failing boundary.
+- [x] Make the smallest display geometry change that preserves the SVG text chunk's final advance while preventing adjacent color-glyph overlap.
+- [x] Run the focused test, `make test`, and an app snapshot at 390%.
+- [x] Remove the resolved BUG_HANDOFF row and commit `fix: keep consecutive color emoji apart`.
 
 ### Task 2: Variable Font Axes
 

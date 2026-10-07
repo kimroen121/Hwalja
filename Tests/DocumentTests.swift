@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AppKit
+import CoreText
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -764,6 +765,9 @@ struct DocumentTests {
                                            focus: EditPosition(target: body, scalar: 3))
         document.formatText(CharStyle(size: 72), nil)
         await document.settle()
+        document.selection = .caret(EditPosition(target: body, scalar: 3))
+        document.move(.right, extend: false)
+        await document.settle()
         let rendered = document.pages.compactMap { page -> String? in
             guard case .display(let display) = page else { return nil }
             return display.ops.compactMap { op in
@@ -804,6 +808,46 @@ struct DocumentTests {
         for contentType in [UTType.hwpx, .hwp] {
             let reopened = try HwpDocument(data: document.snapshot(contentType: contentType))
             #expect(try await reopened.paragraph(body).text == "앞😀뒤")
+        }
+    }
+
+    @Test func consecutiveColorEmojiStayWithinTheirLayoutAdvances() async throws {
+        let document = HwpDocument()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type("📣😄📖", nil)
+        await document.settle()
+        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0),
+                                           focus: EditPosition(target: body, scalar: 3))
+        document.formatText(CharStyle(size: 72), nil)
+        await document.settle()
+
+        let page = try #require(document.pages.first)
+        guard case .display(let display) = page else {
+            Issue.record("emoji page must use the native display list")
+            return
+        }
+        let emoji = display.ops.compactMap { op -> PageDisplay.Op.Text? in
+            guard case .text(let text) = op,
+                  text.runs.map(\.text).joined().unicodeScalars.contains(where: { $0.properties.isEmojiPresentation })
+            else { return nil }
+            return text
+        }
+        #expect(emoji.count == 3)
+        let caret = try #require(document.presentation.caret)
+        for (index, text) in emoji.enumerated() {
+            let run = try #require(text.runs.first)
+            let descriptor = try #require(FontFiles.shared.descriptor(display.fonts[run.font]))
+            let font = FontFiles.shared.font(descriptor, size: text.size)
+            let line = CTLineCreateWithAttributedString(
+                NSAttributedString(string: run.text, attributes: [.font: font])
+            )
+            let advance = CTLineGetTypographicBounds(line, nil, nil, nil)
+            let target = text.length ?? advance
+            let ink = CTLineGetImageBounds(line, nil).applying(CGAffineTransform(scaleX: target / advance, y: 1))
+            let boundary = index + 1 < emoji.count ? emoji[index + 1].origin.x : caret.x
+            let paintedMaxX = text.origin.x + ink.maxX
+            #expect(paintedMaxX <= boundary - 0.5,
+                    "\(run.text) paints \(paintedMaxX - boundary) px into the next emoji/caret slot")
         }
     }
 
