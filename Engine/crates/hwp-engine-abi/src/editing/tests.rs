@@ -1318,6 +1318,35 @@ fn equation_shorthands_and_underover_draw_as_hancom_does() {
     assert!(y("1") > y("max"));
 }
 
+#[test]
+fn integral_path_is_tall_slender_and_light() {
+    let core = DocumentCore::new_empty();
+    let svg = core
+        .render_equation_preview_native("int from 0 to 1 x", 1_000, 0)
+        .unwrap();
+    let tag = svg
+        .split("<path")
+        .find(|part| part.contains("stroke-linecap=\"round\""))
+        .expect("integral stroke path");
+    let attr = |name: &str| {
+        let value = tag.split(&format!("{name}=\"" )).nth(1).unwrap();
+        value.split('"').next().unwrap()
+    };
+    let points: Vec<f64> = attr("d")
+        .split(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-')))
+        .filter(|part| !part.is_empty())
+        .map(|part| part.parse().unwrap())
+        .collect();
+    assert_eq!(points.len(), 8);
+    let xs = [points[0], points[2], points[4], points[6]];
+    let height = (points[1] - points[7]).abs();
+    let visual_width = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - xs.iter().copied().fold(f64::INFINITY, f64::min);
+    let stroke: f64 = attr("stroke-width").parse().unwrap();
+    assert!(visual_width / height < 0.20, "too wide: {visual_width}/{height}");
+    assert!(stroke / height < 0.022, "too heavy: {stroke}/{height}");
+}
+
 /// A file written without line records (by another program) is laid out on opening, its
 /// lines as tall as the equations in them.
 #[test]

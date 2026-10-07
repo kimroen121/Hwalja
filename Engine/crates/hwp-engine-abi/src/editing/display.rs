@@ -653,14 +653,30 @@ fn fallback(db: &fontdb::Database, c: char, used: &[fontdb::ID]) -> Option<fontd
     static FALLBACKS: Memo<(char, Vec<fontdb::ID>), Option<fontdb::ID>> = Mutex::new(None);
     memo(&FALLBACKS, (c, used.to_vec()), || {
         let base = db.face(used[0])?;
-        db.faces()
+        let candidates = || {
+            db.faces()
             .filter(|face| !used.contains(&face.id))
+            // LastResort deliberately claims every scalar with a missing-glyph symbol.
+            // Picking it before a real fallback turns emoji into `?` on macOS.
+            .filter(|face| !face.families.iter().any(|(name, _)| name == "LastResort"))
             .filter(|face| {
                 !(base.style != face.style
                     && base.weight != face.weight
                     && base.stretch != face.stretch)
             })
-            .find(|face| has_char(db, face.id, c))
+            .filter(|face| has_char(db, face.id, c))
+        };
+        let emoji = matches!(c as u32, 0x1F000..=0x1FAFF | 0x2600..=0x27BF);
+        emoji
+            .then(|| {
+                candidates().find(|face| {
+                    face.families
+                        .iter()
+                        .any(|(name, _)| name.to_ascii_lowercase().contains("emoji"))
+                })
+            })
+            .flatten()
+            .or_else(|| candidates().next())
             .map(|face| face.id)
     })
 }

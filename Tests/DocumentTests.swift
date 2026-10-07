@@ -231,6 +231,14 @@ struct DocumentTests {
         #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
     }
 
+    @Test func quickMenuOffersExplicitDeletionForTablesAndObjects() {
+        let titles = { (context: EditingContext) in
+            MenuItems.quickMenu(Viewer(), context).compactMap { $0?.title }
+        }
+        #expect(titles(EditingContext(hasSelection: true, object: .shape)).contains("개체 삭제"))
+        #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표 전체 삭제"))
+    }
+
     @Test func quickMenuKeepsCopyButDisablesMutationsInLockedDocuments() throws {
         // A 배포용 문서 has no body or table to edit, so its context has neither.
         let context = EditingContext(hasSelection: true, hasRange: true, locked: true)
@@ -749,6 +757,59 @@ struct DocumentTests {
         #expect("가👨‍👩‍👧‍👦e\u{301}".scalars(1..<8) == "👨‍👩‍👧‍👦")
     }
 
+    @Test func emojiSurvivesTypingRenderingAndBothSaveFormats() async throws {
+        let document = HwpDocument()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type("앞😀뒤", nil)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "앞😀뒤")
+        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0),
+                                           focus: EditPosition(target: body, scalar: 3))
+        document.formatText(CharStyle(size: 72), nil)
+        await document.settle()
+        let rendered = document.pages.compactMap { page -> String? in
+            guard case .display(let display) = page else { return nil }
+            return display.ops.compactMap { op in
+                guard case .text(let text) = op else { return nil }
+                return text.runs.map(\.text).joined()
+            }.joined()
+        }.joined()
+        #expect(rendered.contains("😀"))
+        let emojiFaces = document.pages.flatMap { page -> [String] in
+            guard case .display(let display) = page else { return [] }
+            return display.ops.flatMap { op -> [String] in
+                guard case .text(let text) = op else { return [] }
+                return text.runs.compactMap { run in
+                    run.text.contains("😀") ? display.fonts[run.font].path : nil
+                }
+            }
+        }
+        #expect(emojiFaces.contains { $0.localizedCaseInsensitiveContains("emoji") })
+        let hasColoredEmoji = document.pages.contains { page in
+            guard case .display = page,
+                  let context = colorBitmap(page.size),
+                  let bytes = context.data?.assumingMemoryBound(to: UInt8.self)
+            else { return false }
+            page.draw(in: context, rect: CGRect(origin: .zero, size: page.size))
+            var emojiColoredPixels = 0
+            for y in 0..<context.height {
+                for x in 0..<context.width {
+                    let pixel = bytes + y * context.bytesPerRow + x * 4
+                    if pixel[0] > 180, pixel[1] > 70, pixel[1] < 230, pixel[2] < 100 {
+                        emojiColoredPixels += 1
+                    }
+                }
+            }
+            return emojiColoredPixels > 300
+        }
+        #expect(hasColoredEmoji, "the page must draw the emoji glyph, not LastResort's question-mark box")
+
+        for contentType in [UTType.hwpx, .hwp] {
+            let reopened = try HwpDocument(data: document.snapshot(contentType: contentType))
+            #expect(try await reopened.paragraph(body).text == "앞😀뒤")
+        }
+    }
+
     /// Renders the canvas offscreen: the page is drawn and the caret sits on it.
     /// `HWP_SNAPSHOT=<png>` keeps the image for a look.
     @Test func canvasDrawsPagesAndCaret() async throws {
@@ -845,6 +906,20 @@ struct DocumentTests {
         viewer.headerFooter(footer: true, pageNumber: nil)
         await document.settle()
         #expect(document.reply.revision == revision + 2)
+    }
+
+    @Test func viewerDeletesTheTableContainingTheCaret() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        viewer.insertTable(rows: 2, columns: 2)
+        await document.settle()
+        #expect(document.context.inTable)
+        viewer.deleteCurrentTable()
+        await document.settle()
+        #expect(!document.context.inTable)
+        #expect(document.selection?.focus.target.cell == nil)
     }
 
     @Test func notesTakeTypedText() async throws {
@@ -1208,6 +1283,17 @@ private func bitmap(_ size: CGSize, scale: CGFloat) -> CGContext? {
     context?.fill(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
     context?.translateBy(x: 0, y: size.height * scale)
     context?.scaleBy(x: scale, y: -scale)
+    return context
+}
+
+private func colorBitmap(_ size: CGSize) -> CGContext? {
+    let context = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    context?.setFillColor(NSColor.white.cgColor)
+    context?.fill(CGRect(origin: .zero, size: size))
+    context?.translateBy(x: 0, y: size.height)
+    context?.scaleBy(x: 1, y: -1)
     return context
 }
 /// Gray pixels of a page drawn at 2× and blurred by downsampling to 1×, so sub-pixel

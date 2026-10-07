@@ -1971,3 +1971,59 @@ index 3989968..e268160 100644
  
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
+diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
+--- a/src/renderer/equation/layout.rs
++++ b/src/renderer/equation/layout.rs
+@@ -165,10 +165,10 @@ pub(crate) fn integral_geom(fs: f64) -> IntegralGeom {
+     let h = fs * INTEGRAL_SCALE;
+     IntegralGeom {
+-        width: fs * 0.52,
+-        stroke_w: fs * 0.06,
+-        top_y: h * 0.04,
+-        bottom_y: h * 0.96,
+-        top_hook_x: fs * 0.50,
+-        bottom_hook_x: fs * 0.04,
++        width: fs * 0.42,
++        stroke_w: fs * 0.045,
++        top_y: h * 0.03,
++        bottom_y: h * 0.97,
++        top_hook_x: fs * 0.40,
++        bottom_hook_x: fs * 0.02,
+     }
+ }
+@@ -820,7 +820,7 @@ impl EquationLayouter {
+         let op_h = fs * INTEGRAL_SCALE;
+         let geom = integral_geom(fs);
+         let op_w = integral_width(fs, symbol);
+-        let script_x = op_w + fs * 0.22;
++        let script_x = op_w + fs * 0.16;
+         let mut total_w = op_w;
+         let sup_laid = sup.as_ref().map(|s| {
+             let mut b = self.layout_node(s, fs * SCRIPT_SCALE);
+@@ -1334,7 +1334,7 @@ pub(crate) fn integral_strokes(symbol: &str) -> (usize, bool) {
+     }
+ }
+ /// HwpStudio: 겹친 줄기 사이 (글자 크기 배수).
+-pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.3;
++pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.22;
+ /// HwpStudio: 줄기 수만큼 넓힌 적분 기호의 폭.
+ pub(crate) fn integral_width(fs: f64, symbol: &str) -> f64 {
+     let (strokes, _) = integral_strokes(symbol);
+diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
+--- a/src/renderer/equation/svg_render.rs
++++ b/src/renderer/equation/svg_render.rs
+@@ -459,10 +459,10 @@ fn integral_stroke(x: f64, y: f64, fs: f64, color: &str) -> String {
+     let p0y = y + g.bottom_y;
+     let p3x = x + g.top_hook_x;
+     let p3y = y + g.top_y;
+-    let c1x = x + g.width * 1.02;
+-    let c1y = y + g.bottom_y - h * 0.30;
+-    let c2x = x - g.width * 0.10;
+-    let c2y = y + g.top_y + h * 0.30;
++    let c1x = x + g.width * 0.88;
++    let c1y = y + g.bottom_y - h * 0.22;
++    let c2x = x + g.width * 0.12;
++    let c2y = y + g.top_y + h * 0.22;
+     format!(
+         "<path d=\"M{:.2},{:.2} C{:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>\\n",
+         p0x, p0y, c1x, c1y, c2x, c2y, p3x, p3y, color, g.stroke_w,
