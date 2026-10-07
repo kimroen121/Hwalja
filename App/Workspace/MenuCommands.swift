@@ -255,6 +255,7 @@ struct MenuItems {
                     toggle(title, viewer.columns == count) { viewer.columns = count }
                 }
             } label: { Label("쪽 모양", systemImage: "rectangle.split.2x1") }
+            toggle("쪽 윤곽", viewer.showsOutline) { viewer.showsOutline.toggle() }
             Menu {
                 toggle("조판 부호", viewer.showsControlCodes) { viewer.showsControlCodes.toggle() }
                 toggle("문단 부호", viewer.showsParagraphMarks) { viewer.showsParagraphMarks.toggle() }

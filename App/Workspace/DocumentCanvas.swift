@@ -177,7 +177,7 @@ final class DocumentCanvas: NSScrollView {
     /// Zero-based page at the middle of the view.
     var currentPage: Int { editor.page(near: visibleCenter) }
     func go(to page: Int) {
-        guard let frame = editor.frame(ofPage: page) else { return }
+        guard let frame = editor.clip(ofPage: page) else { return }
         let origin = NSPoint(x: contentView.bounds.minX, y: frame.minY - PageEditor.gap)
         contentView.scroll(to: contentView.constrainBoundsRect(NSRect(origin: origin, size: contentView.bounds.size)).origin)
         reflectScrolledClipView(contentView)
@@ -231,10 +231,15 @@ private final class CenteringClipView: NSClipView {
 final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemValidation {
     static let margin: CGFloat = 24
     static let gap: CGFloat = 16
+    /// Between pages without 쪽 윤곽: white, a dashed line across.
+    static let draftGap: CGFloat = 8
 
     private(set) var model: HwpDocument?
     private var observer: AnyCancellable?
+    /// Each page's frame, its origin where the page's top-left corner is drawn.
     private var pageFrames: [NSRect] = []
+    /// The part of each page in view: the whole page, or its body without 쪽 윤곽.
+    private var pageClips: [NSRect] = []
     private var shown = Presentation()
     /// A thin bar, one screen point wide at any zoom.
     private let caret = NSView()
@@ -312,17 +317,25 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     var columns = 1 {
         didSet { layoutPages() }
     }
+    /// 쪽 윤곽: whole pages apart; off, only their bodies, one after another.
+    var showsOutline = true {
+        didSet { layoutPages(force: true) }
+    }
     /// Size of one row of pages, for fitting it to the window.
     var spread: NSSize? {
-        guard !pageFrames.isEmpty else { return nil }
-        let width = pageFrames.map(\.width).max()!, n = CGFloat(min(columns, pageFrames.count))
-        return NSSize(width: width * n + Self.gap * (n - 1), height: pageFrames.map(\.height).max()!)
+        guard !pageClips.isEmpty else { return nil }
+        let width = pageClips.map(\.width).max()!, n = CGFloat(min(columns, pageClips.count))
+        return NSSize(width: width * n + Self.gap * (n - 1), height: pageClips.map(\.height).max()!)
     }
     func frame(ofPage index: Int) -> NSRect? {
         pageFrames.indices.contains(index) ? pageFrames[index] : nil
     }
+    /// The part of the page in view.
+    func clip(ofPage index: Int) -> NSRect? {
+        pageClips.indices.contains(index) ? pageClips[index] : nil
+    }
     func page(near point: NSPoint) -> Int {
-        pageFrames.enumerated().min { distance($0.element, point) < distance($1.element, point) }?.offset ?? 0
+        pageClips.enumerated().min { distance($0.element, point) < distance($1.element, point) }?.offset ?? 0
     }
     private func distance(_ frame: NSRect, _ point: NSPoint) -> CGFloat {
         let dy = point.y < frame.minY ? frame.minY - point.y : max(0, point.y - frame.maxY)
@@ -334,24 +347,32 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// widest page. The clip view centers the whole stack, so the layout never depends on
     /// the viewport.
     func layoutPages(force: Bool = false) {
-        guard let pages = model?.pages else { return }
-        let sizes = pages.map(\.size)
-        let slot = sizes.map(\.width).max() ?? 0
-        let columns = max(1, min(columns, sizes.count))
-        let width = slot * CGFloat(columns) + Self.gap * CGFloat(columns - 1) + Self.margin * 2
-        var frames: [NSRect] = []
-        var y = Self.margin
-        for row in stride(from: 0, to: sizes.count, by: columns) {
-            let rowSizes = sizes[row..<min(row + columns, sizes.count)]
-            for (column, size) in rowSizes.enumerated() {
-                let x = Self.margin + CGFloat(column) * (slot + Self.gap) + (slot - size.width) / 2
-                frames.append(NSRect(x: x.rounded(), y: y, width: size.width, height: size.height))
-            }
-            y += rowSizes.map(\.height).max()! + Self.gap
+        guard let model else { return }
+        // The shown part of each page, in page points.
+        let parts = model.pages.indices.map { index in
+            let size = model.pages[index].size
+            guard !showsOutline, model.bodies.indices.contains(index) else { return NSRect(origin: .zero, size: size) }
+            return PageGeometry.viewRect(model.bodies[index], in: .zero)
         }
-        let size = NSSize(width: width, height: y - Self.gap + Self.margin)
-        guard force || frames != pageFrames || size != frame.size else { return }
-        pageFrames = frames
+        let slot = parts.map(\.width).max() ?? 0
+        let columns = max(1, min(columns, parts.count))
+        let rowGap = showsOutline ? Self.gap : Self.draftGap
+        let width = slot * CGFloat(columns) + Self.gap * CGFloat(columns - 1) + Self.margin * 2
+        var frames: [NSRect] = [], clips: [NSRect] = []
+        var y = Self.margin
+        for row in stride(from: 0, to: parts.count, by: columns) {
+            let rowParts = parts[row..<min(row + columns, parts.count)]
+            for (column, part) in rowParts.enumerated() {
+                let x = (Self.margin + CGFloat(column) * (slot + Self.gap) + (slot - part.width) / 2).rounded()
+                clips.append(NSRect(x: x, y: y, width: part.width, height: part.height))
+                let size = model.pages[row + column].size
+                frames.append(NSRect(x: x - part.minX, y: y - part.minY, width: size.width, height: size.height))
+            }
+            y += rowParts.map(\.height).max()! + rowGap
+        }
+        let size = NSSize(width: width, height: y - rowGap + Self.margin)
+        guard force || frames != pageFrames || clips != pageClips || size != frame.size else { return }
+        (pageFrames, pageClips) = (frames, clips)
         setFrameSize(size)
         placeCaret()
         needsDisplay = true
@@ -364,14 +385,30 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         shadow.shadowColor = .black.withAlphaComponent(0.25)
         shadow.shadowBlurRadius = 3
         shadow.shadowOffset = NSSize(width: 0, height: -1)
-        for (index, frame) in pageFrames.enumerated() where frame.insetBy(dx: -4, dy: -4).intersects(dirtyRect) {
+        for (index, clip) in pageClips.enumerated() where clip.insetBy(dx: -4, dy: -Self.draftGap).intersects(dirtyRect) {
             NSGraphicsContext.saveGraphicsState()
-            shadow.set()
+            if showsOutline { shadow.set() }
             NSColor.white.setFill()
-            frame.fill()
+            clip.fill()
             NSGraphicsContext.restoreGraphicsState()
-            if pages.indices.contains(index) { pages[index].draw(in: context, rect: frame) }
-            if showsGrid { drawGrid(in: frame, dirty: dirtyRect) }
+            if pages.indices.contains(index) {
+                context.saveGState()
+                context.clip(to: clip)
+                pages[index].draw(in: context, rect: pageFrames[index])
+                context.restoreGState()
+            }
+            if !showsOutline, index >= columns {
+                NSColor.white.setFill()
+                NSRect(x: clip.minX, y: clip.minY - Self.draftGap, width: clip.width, height: Self.draftGap).fill()
+                let line = NSBezierPath(), y = clip.minY - Self.draftGap / 2
+                line.move(to: NSPoint(x: clip.minX, y: y))
+                line.line(to: NSPoint(x: clip.maxX, y: y))
+                line.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
+                line.setLineDash([4 * line.lineWidth, 3 * line.lineWidth], count: 2, phase: 0)
+                NSColor.gray.setStroke()
+                line.stroke()
+            }
+            if showsGrid { drawGrid(in: clip, dirty: dirtyRect) }
         }
         let active = window?.isKeyWindow == true && window?.firstResponder === self
         (active ? NSColor.selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor).setFill()
@@ -475,7 +512,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         } else if let line = border(at: point) {
             cursor = Self.borderCursor(row: line.line.row)
         } else {
-            cursor = pageFrames.contains { $0.contains(point) } ? .iBeam : .arrow
+            cursor = pageClips.contains { $0.contains(point) } ? .iBeam : .arrow
         }
         cursor.set()
     }
@@ -520,7 +557,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if shown.reflowed {
             layoutPages(force: true)
         } else {
-            shown.changedPages.forEach { index in frame(ofPage: index).map { setNeedsDisplay($0) } }
+            // A changed page may have a new body.
+            if !showsOutline { layoutPages() }
+            shown.changedPages.forEach { index in clip(ofPage: index).map { setNeedsDisplay($0) } }
         }
         (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
         if shown.reflowed || !shown.changedPages.isEmpty {

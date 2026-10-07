@@ -466,6 +466,8 @@ pub struct EditReply {
     pub page_count: u32,
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     pub changed_pages: Vec<u32>,
+    /// Body area (inside the margins, 머리말 and 꼬리말) of each changed page, in order.
+    pub bodies: Vec<PageRect>,
     pub can_undo: bool,
     pub can_redo: bool,
     pub dirty: bool,

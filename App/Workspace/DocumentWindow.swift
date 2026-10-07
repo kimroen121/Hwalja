@@ -97,7 +97,7 @@ private struct ClearTitleBar: NSViewRepresentable {
 /// Page count, page in view and zoom.
 private struct StatusBar: View {
     @ObservedObject var document: HwpDocument
-    let viewer: Viewer
+    @ObservedObject var viewer: Viewer
     @ObservedObject var position: ViewPosition
 
     var body: some View {
@@ -105,6 +105,7 @@ private struct StatusBar: View {
             Text("\(position.page + 1) / \(document.context.pageCount)쪽")
                 .monospacedDigit()
             Spacer()
+            ToolIcon("쪽 윤곽", symbol: "doc", on: viewer.showsOutline) { viewer.showsOutline.toggle() }
             ToolIcon("축소", symbol: "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
             Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
                 .menuStyle(.borderlessButton)
@@ -171,6 +172,9 @@ final class Viewer: ObservableObject {
     }
     @Published var showsRuler = false {
         didSet { canvas.showsRuler = showsRuler }
+    }
+    @Published var showsOutline = true {
+        didSet { canvas.editor.showsOutline = showsOutline }
     }
     @Published var goingToPage = false
     @Published var insertingTable = false

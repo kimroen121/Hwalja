@@ -1077,6 +1077,25 @@ struct DocumentTests {
         #expect(canvas.editor.page(near: NSPoint(x: second.midX, y: second.midY)) == 1)
     }
 
+    @Test func withoutPageOutlineOnlyBodiesShowOneAfterAnother() async throws {
+        let document = HwpDocument()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(nil) { $0.map { .replace($0, text: String(repeating: "줄\n", count: 120)) } }
+        await document.settle()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        canvas.bind(document)
+        let page = try #require(canvas.editor.frame(ofPage: 0))
+        canvas.editor.showsOutline = false
+        let first = try #require(canvas.editor.clip(ofPage: 0)), second = try #require(canvas.editor.clip(ofPage: 1))
+        let moved = try #require(canvas.editor.frame(ofPage: 0))
+        #expect(first.width < page.width && first.height < page.height)
+        #expect(moved.size == page.size && moved.contains(first))
+        #expect(second.minY == first.maxY + PageEditor.draftGap)
+        #expect(canvas.editor.page(near: NSPoint(x: second.midX, y: second.minY + 2)) == 1)
+        canvas.editor.showsOutline = true
+        #expect(canvas.editor.clip(ofPage: 0) == page)
+    }
+
     @Test func zoomingAndReflowingSettle() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
@@ -1233,6 +1252,13 @@ struct DocumentTests {
                 let rep = try #require(editor.bitmapImageRepForCachingDisplay(in: page))
                 editor.cacheDisplay(in: page, to: rep)
                 try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "page-\(index + 1).png"))
+            }
+            viewer.showsOutline = false
+            if let first = editor.clip(ofPage: 0), let last = editor.clip(ofPage: min(1, other.pages.count - 1)) {
+                let area = first.union(last).insetBy(dx: -8, dy: -8)
+                let rep = try #require(editor.bitmapImageRepForCachingDisplay(in: area))
+                editor.cacheDisplay(in: area, to: rep)
+                try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "draft.png"))
             }
         }
     }

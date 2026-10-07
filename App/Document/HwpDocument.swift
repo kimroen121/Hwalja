@@ -89,6 +89,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     let creationError: String?
     /// Rendered pages as shown, replaced only when a presentation is published.
     private(set) var pages: [RenderedPage]
+    /// Each page's body area (쪽 윤곽 off shows only it).
+    private(set) var bodies: [PageRect] = []
     // Plain stored properties (not @Published) so the nonisolated file-reading init can set them.
     private(set) var reply: EditReply
     /// Marks this document's copies on the pasteboard, so a paste here takes them from the engine.
@@ -142,6 +144,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             sessionResult = .success(session)
             creationError = nil
             pages = output.pages
+            bodies = output.reply.bodies ?? []
             reply = output.reply
             thumbnails = output.pages
             context.pageCount = output.pages.count
@@ -163,6 +166,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         self.sessionResult = .success(session)
         self.creationError = nil
         pages = output.pages
+        bodies = output.reply.bodies ?? []
         reply = output.reply
         thumbnails = output.pages
         context.pageCount = output.pages.count
@@ -541,7 +545,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {
                 if index < pages.count { pages[index] = page } else { pages.append(page) }
             }
+            for (index, body) in zip(output.reply.changedPages.map(Int.init), output.reply.bodies ?? []) where index <= bodies.count {
+                if index < bodies.count { bodies[index] = body } else { bodies.append(body) }
+            }
             pages.removeLast(max(0, pages.count - Int(output.reply.pageCount)))
+            bodies.removeLast(max(0, bodies.count - Int(output.reply.pageCount)))
             next.changedPages.formUnion(IndexSet(output.reply.changedPages.map(Int.init)))
             next.reflowed = next.reflowed || pages.count != count
         }

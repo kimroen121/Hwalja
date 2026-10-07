@@ -152,10 +152,29 @@ impl EditSession {
                 .and_then(|s| self.caret(self.revision, &s.focus).ok()),
             page_count: self.core.page_count(),
             changed_pages: self.changed.clone(),
+            bodies: self.changed.iter().map(|&page| self.body(page)).collect(),
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
             dirty: self.state != 0,
             locked: self.locked,
+        }
+    }
+    /// 쪽 윤곽 off shows only this rectangle of the page.
+    fn body(&self, page: u32) -> PageRect {
+        let info: serde_json::Value = self
+            .core
+            .get_page_info_native(page)
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+        let f = |key: &str| info[key].as_f64().unwrap_or(0.0);
+        let top = f("marginTop") + f("marginHeader");
+        PageRect {
+            page,
+            x: f("bodyLeft"),
+            y: top,
+            width: f("bodyRight") - f("bodyLeft"),
+            height: f("height") - top - f("marginBottom") - f("marginFooter"),
         }
     }
     /// Renders pages from `from` on and keeps the PDF of those that changed. With an unchanged

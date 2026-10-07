@@ -51,7 +51,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 - 편집
   - [ ] 조판 부호 지우기: `delete_control_native`.
 - 보기
-  - [ ] 쪽 윤곽: 앱만으로 가능.
   - [ ] 문서 창 › 눈금자의 들여쓰기 표시와 여백·들여쓰기 끌기: 지금은 보이는 쪽을 0으로 하고 본문 여백만 표시한다.
 - 입력
   - [ ] 책갈피…(넣기·고치기·지우기, 책갈피로 가기): `add_bookmark_native`, `rename_bookmark_native`, `delete_bookmark_native`, `get_bookmarks_native`.

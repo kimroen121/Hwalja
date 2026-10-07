@@ -448,6 +448,8 @@ struct EditReply: Decodable, Sendable {
     var pageCount: UInt32
     /// Pages re-rendered by this revision; the accompanying PDF holds exactly these, in order.
     var changedPages: [UInt32]
+    /// Body area of each changed page, in order.
+    var bodies: [PageRect]?
     var canUndo: Bool
     var canRedo: Bool
     var dirty: Bool
