@@ -24,6 +24,7 @@
 - draws a treat-as-character equation of a paragraph split over pages only on the page holding its line (it was drawn again on the next).
 - reads 한글's `from` / `to` limits (`sum from {i=1} to {n}`; LaTeX's `\to` stays an arrow), keeps whole keywords such as `SIMEQ` together, draws check, acute, grave, dyad, arch and strike-through decorations as themselves, and draws ∬, ∭ and the contour integrals at the size their layout gives, with a slimmer integral sign and its limits closer;
 - adds `insert_new_number_of_native` for 새 번호로 시작 of every 번호 종류 (쪽·그림·표·수식·각주·미주), and makes 책갈피 넣기 shift the characters after it instead of adding a bogus character offset (the 책갈피 read back at the paragraph end).
+- draws equations in STIX Two Math (its math italic letters for variables) and takes the integral, radical, bracket, arrow and accent signs from that font, grown by its MATH table's size variants and part assemblies, the layout giving radicals, brackets and integrals the glyphs' widths; 상호 관계 arrows span what is written over and under them;
 - fits fallback color emoji glyphs to their HWP layout advances so consecutive emoji do not paint over one another or the caret.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.

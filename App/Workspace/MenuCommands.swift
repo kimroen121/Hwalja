@@ -18,7 +18,7 @@ struct MenuItems {
     private var context: EditingContext { document?.context ?? EditingContext() }
     private var editor: PageEditor? { viewer?.canvas.editor }
     private func toggle(_ title: String, _ on: Bool, _ action: @escaping () -> Void) -> some View {
-        Toggle(title, isOn: Binding(get: { on }, set: { _ in action() }))
+        Toggle(title, isOn: Binding(get: { on }, set: { _ in action() })).toggleStyle(.checkbox)
     }
     private func item(_ title: String, _ symbol: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) { Label(title, systemImage: symbol) }

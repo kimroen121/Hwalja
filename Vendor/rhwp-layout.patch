@@ -966,7 +966,7 @@ index 648ce9f..a5b0cbc 100644
          "END" => return EqCommandClass::EndEnv,
          "SQRT" | "ROOT" => return EqCommandClass::Sqrt,
 diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
-index d8ecae2..76a82e8 100644
+index d8ecae2..1662689 100644
 --- a/src/renderer/equation/layout.rs
 +++ b/src/renderer/equation/layout.rs
 @@ -165,12 +165,12 @@ pub(crate) struct IntegralGeom {
@@ -1076,7 +1076,17 @@ index d8ecae2..76a82e8 100644
                  height: op_fs,
                  baseline: op_fs * 0.7, // 적분 기호 baseline: 기호 높이의 70%
                  kind: LayoutKind::MathSymbol(text.to_string()),
-@@ -549,7 +594,8 @@ impl EqLayout {
+@@ -467,7 +512,8 @@ impl EqLayout {
+     fn layout_sqrt(&self, index: &Option<Box<EqNode>>, body: &EqNode, fs: f64) -> LayoutBox {
+         let b = self.layout_node(body, fs);
+         let pad = fs * SQRT_PAD;
+-        let sign_w = fs * 0.6; // √ 기호 폭
++        // √ 기호 폭 (HwpStudio: 글꼴의 근호를 그 높이로 늘린 폭)
++        let sign_w = stretched_width("√", b.height + pad * 2.0, fs).map_or(fs * 0.6, |w| w + fs * 0.05);
+         let body_w = b.width + pad;
+         let body_h = b.height + pad * 2.0;
+ 
+@@ -549,7 +595,8 @@ impl EqLayout {
          let b = self.layout_node(base, fs);
          let s = self.layout_node(sub, fs * SCRIPT_SCALE);
  
@@ -1086,7 +1096,7 @@ index d8ecae2..76a82e8 100644
          let total_h = (b.height).max(sub_shift + s.height);
  
          let mut base_box = b;
-@@ -597,7 +643,10 @@ impl EqLayout {
+@@ -597,7 +644,10 @@ impl EqLayout {
  
              let mut base_box = b;
              base_box.x = 0.0;
@@ -1098,7 +1108,22 @@ index d8ecae2..76a82e8 100644
  
              // 글리프 기준 첨자 세로 위치(박스 상단 원점) — 컴팩트(글리프 상·하단 근처).
              let sup_dy = geom.top_y - sp.height * 0.30; // 상한: 최상단 근처
-@@ -758,6 +807,9 @@ impl EqLayout {
+@@ -608,11 +658,12 @@ impl EqLayout {
+             base_box.y = head;
+ 
+             let mut sup_box = sp;
+-            sup_box.x = base_box.x + geom.top_hook_x + gap_x;
++            sup_box.x = base_box.x + base_box.width - geom.width + geom.top_hook_x + gap_x;
+             sup_box.y = base_box.y + sup_dy;
+ 
+             let mut sub_box = sb;
+-            sub_box.x = base_box.x + geom.bottom_hook_x + gap_x;
++            // HwpStudio: under the stem's right, clear of the bottom hook.
++            sub_box.x = base_box.x + base_box.width * 0.55 + fs * 0.05;
+             sub_box.y = base_box.y + sub_dy;
+ 
+             let right = (sup_box.x + sup_box.width)
+@@ -758,6 +809,9 @@ impl EqLayout {
      }
  
      /// 적분 기호 레이아웃: 큰 기호 + 오른쪽 위/아래 첨자 (nolimits 스타일)
@@ -1108,7 +1133,7 @@ index d8ecae2..76a82e8 100644
      fn layout_integral(
          &self,
          symbol: &str,
-@@ -765,48 +817,45 @@ impl EqLayout {
+@@ -765,48 +819,46 @@ impl EqLayout {
          sup: &Option<Box<EqNode>>,
          fs: f64,
      ) -> LayoutBox {
@@ -1151,6 +1176,7 @@ index d8ecae2..76a82e8 100644
 +            let mut b = self.layout_node(s, fs * SCRIPT_SCALE);
              b.x = script_x;
 -            b.y = sub_shift;
++            b.x = op_w * 0.55 + fs * 0.05;
 +            b.y = geom.bottom_y - b.height * 0.72;
              total_w = total_w.max(script_x + b.width);
 -            total_h = total_h.max(sub_shift + b.height);
@@ -1181,7 +1207,7 @@ index d8ecae2..76a82e8 100644
              kind: LayoutKind::BigOp {
                  symbol: symbol.to_string(),
                  sub: sub_laid.map(Box::new),
-@@ -815,6 +864,65 @@ impl EqLayout {
+@@ -815,6 +867,65 @@ impl EqLayout {
          }
      }
  
@@ -1247,7 +1273,83 @@ index d8ecae2..76a82e8 100644
      fn layout_limit(&self, is_upper: bool, sub: &Option<Box<EqNode>>, fs: f64) -> LayoutBox {
          let name = if is_upper { "Lim" } else { "lim" };
          let name_w = estimate_text_width(name, fs, false);
-@@ -1214,28 +1322,57 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
+@@ -994,30 +1105,35 @@ impl EqLayout {
+         // 아래 내용
+         let mut under_box = under.as_ref().map(|u| self.layout_node(u, small_fs));
+ 
+-        // 전체 폭: 가장 넓은 요소 기준
+-        let max_w = arrow_box
+-            .width
+-            .max(over_box.width)
+-            .max(under_box.as_ref().map(|u| u.width).unwrap_or(0.0));
++        // 전체 폭: 가장 넓은 요소 기준. HwpStudio: 화살표는 위아래 내용보다 조금 길게,
++        // 적어도 1.5em으로 그리고(svg_render가 선으로 늘림), 양옆은 관계 기호만큼 띄운다.
++        let pad = fs * RELATION_SPACE;
++        let max_w = (over_box.width)
++            .max(under_box.as_ref().map(|u| u.width).unwrap_or(0.0))
++            + fs * 0.4;
++        let max_w = max_w.max(fs * 1.5).max(arrow_box.width);
+ 
+         // 화살표 폭을 max_w로 확장 (시각적으로 늘림)
+         arrow_box.width = max_w;
+ 
+         // 세로 배치: over → arrow → under
+         let mut y = 0.0;
+-        over_box.x = (max_w - over_box.width) / 2.0;
++        over_box.x = pad + (max_w - over_box.width) / 2.0;
+         over_box.y = y;
+         y += over_box.height + gap;
+ 
+-        arrow_box.x = 0.0;
++        arrow_box.x = pad;
+         arrow_box.y = y;
+-        let arrow_center_y = y + arrow_box.height / 2.0;
++        // HwpStudio: the arrow's own baseline, so the letters beside it sit on the line
++        // and the arrow on the math axis (was its box's middle, the letters on the arrow).
++        let arrow_baseline = y + arrow_box.baseline;
+         y += arrow_box.height + gap;
+ 
+         if let Some(ref mut ub) = under_box {
+-            ub.x = (max_w - ub.width) / 2.0;
++            ub.x = pad + (max_w - ub.width) / 2.0;
+             ub.y = y;
+-            y += ub.height;
++            // HwpStudio: and room for its descenders (y, g), which go below its box.
++            y += ub.height + gap;
+         } else {
+             y -= gap; // under가 없으면 마지막 gap 제거
+         }
+@@ -1025,9 +1141,9 @@ impl EqLayout {
+         LayoutBox {
+             x: 0.0,
+             y: 0.0,
+-            width: max_w,
++            width: max_w + 2.0 * pad,
+             height: y,
+-            baseline: arrow_center_y,
++            baseline: arrow_baseline,
+             kind: LayoutKind::Rel {
+                 arrow: Box::new(arrow_box),
+                 over: Box::new(over_box),
+@@ -1124,8 +1240,15 @@ impl EqLayout {
+             fs * 0.333
+         };
+ 
+-        let left_w = if left.is_empty() { 0.0 } else { paren_w };
+-        let right_w = if right.is_empty() { 0.0 } else { paren_w };
++        // HwpStudio: as wide as the font's bracket drawn there.
++        let side = |d: &str| {
++            if d.is_empty() {
++                0.0
++            } else {
++                stretched_width(d, b.height, fs).unwrap_or(paren_w)
++            }
++        };
++        let (left_w, right_w) = (side(left), side(right));
+ 
+         let mut body_box = b;
+         body_box.x = left_w + pad;
+@@ -1214,28 +1337,87 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
      matches!(symbol, "∫" | "∬" | "∭" | "∮" | "∯" | "∰")
  }
  
@@ -1264,8 +1366,38 @@ index d8ecae2..76a82e8 100644
 +}
 +/// HwpStudio: 겹친 줄기 사이 (글자 크기 배수).
 +pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.22;
-+/// HwpStudio: 줄기 수만큼 넓힌 적분 기호의 폭.
++/// HwpStudio: the width of the font's `delimiter` grown to `height` (as the renderers draw
++/// it), `None` without the font or for a name rather than a character.
++pub(crate) fn stretched_width(delimiter: &str, height: f64, fs: f64) -> Option<f64> {
++    let mut chars = delimiter.chars();
++    let (Some(c), None) = (chars.next(), chars.next()) else {
++        return None;
++    };
++    let scale = fs / super::stix::units_per_em();
++    Some(super::stix::stretched(c, true, height / scale)?.width() * scale)
++}
++
++/// HwpStudio: STIX Two Math's upright display integral for `symbol`, drawn to the
++/// integral's box (`integral_geom`).
++pub(crate) fn integral_glyph(symbol: &str) -> Option<super::stix::Shape> {
++    let name = match symbol {
++        "∫" => "uni222B",
++        "∬" => "uni222C",
++        "∭" => "uni222D",
++        "∮" => "uni222E",
++        "∯" => "uni222F",
++        "∰" => "uni2230",
++        _ => return None,
++    };
++    super::stix::named(&format!("{name}.updsp"))
++}
++
++/// HwpStudio: 줄기 수만큼 넓힌 적분 기호의 폭 (글꼴이 있으면 그 글리프의 폭).
 +pub(crate) fn integral_width(fs: f64, symbol: &str) -> f64 {
++    if let Some(shape) = integral_glyph(symbol) {
++        let g = integral_geom(fs);
++        return shape.width() * (g.bottom_y - g.top_y) / shape.height();
++    }
 +    let (strokes, _) = integral_strokes(symbol);
 +    integral_geom(fs).width + (strokes - 1) as f64 * fs * INTEGRAL_STROKE_STEP
 +}
@@ -1320,6 +1452,18 @@ index d8ecae2..76a82e8 100644
      w
  }
  
+diff --git a/src/renderer/equation/mod.rs b/src/renderer/equation/mod.rs
+index f546561..546e967 100644
+--- a/src/renderer/equation/mod.rs
++++ b/src/renderer/equation/mod.rs
+@@ -13,6 +13,7 @@ pub mod canvas_render;
+ pub(crate) mod dispatch;
+ pub mod layout;
+ pub mod parser;
++pub(crate) mod stix;
+ pub mod svg_render;
+ pub mod symbols;
+ pub mod tokenizer;
 diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
 index 99c9ee9..767143f 100644
 --- a/src/renderer/equation/parser.rs
@@ -1419,22 +1563,252 @@ index 99c9ee9..767143f 100644
      /// 극한 파싱
      fn parse_limit(&mut self, is_upper: bool) -> EqNode {
          let mut sub = None;
+diff --git a/src/renderer/equation/stix.rs b/src/renderer/equation/stix.rs
+new file mode 100644
+index 0000000..ea53b7f
+--- /dev/null
++++ b/src/renderer/equation/stix.rs
+@@ -0,0 +1,210 @@
++//! HwpStudio: 수식 기호(적분·근호·괄호·화살표·장식)를 STIX Two Math 글리프로 그린다.
++//! 기호를 늘릴 때는 글꼴 MATH 표의 크기 변형 글리프를 고르고, 그보다 길면 표의 조각
++//! 이음(assembly)으로 잇는다. 글꼴이 없으면 모두 `None` 이고 호출부는 종전대로 그린다.
++
++use std::sync::OnceLock;
++use ttf_parser::{Face, GlyphId};
++
++/// The installed STIX Two Math.
++fn face() -> Option<&'static Face<'static>> {
++    static FACE: OnceLock<Option<Face<'static>>> = OnceLock::new();
++    FACE.get_or_init(|| {
++        #[cfg(not(target_arch = "wasm32"))]
++        {
++            let db = crate::renderer::pdf::default_fontdb();
++            let query = usvg::fontdb::Query {
++                families: &[usvg::fontdb::Family::Name("STIX Two Math")],
++                ..Default::default()
++            };
++            let id = db.query(&query)?;
++            let (data, index) = db.with_face_data(id, |data, index| (data.to_vec(), index))?;
++            Face::parse(Box::leak(data.into_boxed_slice()), index).ok()
++        }
++        #[cfg(target_arch = "wasm32")]
++        None
++    })
++    .as_ref()
++}
++
++/// Glyphs placed in font units (y up), and the ink box around them.
++pub(crate) struct Shape {
++    glyphs: Vec<(GlyphId, f64, f64)>,
++    pub x_min: f64,
++    pub x_max: f64,
++    pub y_min: f64,
++    pub y_max: f64,
++}
++
++impl Shape {
++    fn new() -> Self {
++        Shape {
++            glyphs: Vec::new(),
++            x_min: f64::INFINITY,
++            x_max: f64::NEG_INFINITY,
++            y_min: f64::INFINITY,
++            y_max: f64::NEG_INFINITY,
++        }
++    }
++    fn add(&mut self, face: &Face, glyph: GlyphId, dx: f64, dy: f64) {
++        if let Some(r) = face.glyph_bounding_box(glyph) {
++            self.x_min = self.x_min.min(dx + r.x_min as f64);
++            self.x_max = self.x_max.max(dx + r.x_max as f64);
++            self.y_min = self.y_min.min(dy + r.y_min as f64);
++            self.y_max = self.y_max.max(dy + r.y_max as f64);
++        }
++        self.glyphs.push((glyph, dx, dy));
++    }
++    pub fn width(&self) -> f64 {
++        self.x_max - self.x_min
++    }
++    pub fn height(&self) -> f64 {
++        self.y_max - self.y_min
++    }
++
++    /// A filled SVG path of the shape, its ink's top-left at (`left`, `top`), `scale` px a unit.
++    pub fn path(&self, left: f64, top: f64, scale: f64, color: &str) -> String {
++        struct Builder<'a> {
++            d: &'a mut String,
++            at: &'a dyn Fn(f32, f32) -> (f64, f64),
++        }
++        impl Builder<'_> {
++            fn point(&mut self, command: char, points: &[(f32, f32)]) {
++                self.d.push(command);
++                for &(x, y) in points {
++                    let (x, y) = (self.at)(x, y);
++                    self.d.push_str(&format!("{x:.2},{y:.2} "));
++                }
++            }
++        }
++        impl ttf_parser::OutlineBuilder for Builder<'_> {
++            fn move_to(&mut self, x: f32, y: f32) {
++                self.point('M', &[(x, y)]);
++            }
++            fn line_to(&mut self, x: f32, y: f32) {
++                self.point('L', &[(x, y)]);
++            }
++            fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
++                self.point('Q', &[(x1, y1), (x, y)]);
++            }
++            fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
++                self.point('C', &[(x1, y1), (x2, y2), (x, y)]);
++            }
++            fn close(&mut self) {
++                self.d.push('Z');
++            }
++        }
++        let Some(face) = face() else {
++            return String::new();
++        };
++        let mut d = String::new();
++        for &(glyph, dx, dy) in &self.glyphs {
++            let at = |x: f32, y: f32| {
++                (
++                    left + (dx + x as f64 - self.x_min) * scale,
++                    top + (self.y_max - dy - y as f64) * scale,
++                )
++            };
++            face.outline_glyph(glyph, &mut Builder { d: &mut d, at: &at });
++        }
++        format!("<path d=\"{}\" fill=\"{}\"/>\n", d.trim_end(), color)
++    }
++}
++
++/// Font units in an em.
++pub(crate) fn units_per_em() -> f64 {
++    face().map_or(1000.0, |f| f.units_per_em() as f64)
++}
++
++/// The thickness of the rule a radical draws over its body, in font units.
++pub(crate) fn radical_rule() -> Option<f64> {
++    let constants = face()?.tables().math?.constants?;
++    Some(constants.radical_rule_thickness().value as f64)
++}
++
++/// The glyph named `name` (a variant with no character of its own, such as `uni222B.updsp`).
++pub(crate) fn named(name: &str) -> Option<Shape> {
++    let face = face()?;
++    let mut shape = Shape::new();
++    shape.add(face, face.glyph_index_by_name(name)?, 0.0, 0.0);
++    Some(shape)
++}
++
++/// `c` grown along one axis to at least `length` font units: the first size variant that
++/// reaches it, or the glyph assembled from its parts, or failing both its largest variant.
++pub(crate) fn stretched(c: char, vertical: bool, length: f64) -> Option<Shape> {
++    let face = face()?;
++    let base = face.glyph_index(c)?;
++    let variants = face.tables().math.and_then(|m| m.variants);
++    let construction = variants.and_then(|v| {
++        if vertical {
++            v.vertical_constructions.get(base)
++        } else {
++            v.horizontal_constructions.get(base)
++        }
++    });
++    let mut chosen = base;
++    if let Some(construction) = construction {
++        for variant in construction.variants {
++            chosen = variant.variant_glyph;
++            if variant.advance_measurement as f64 >= length {
++                let mut shape = Shape::new();
++                shape.add(face, chosen, 0.0, 0.0);
++                return Some(shape);
++            }
++        }
++        if let (Some(assembly), Some(v)) = (construction.assembly, variants) {
++            return assembled(face, assembly, v.min_connector_overlap as f64, vertical, length);
++        }
++    }
++    let mut shape = Shape::new();
++    shape.add(face, chosen, 0.0, 0.0);
++    Some(shape)
++}
++
++/// The assembly's parts in order (bottom to top, or left to right), its extenders repeated
++/// until it spans `length`, the overlaps then widened (as far as the connectors allow) so
++/// it spans no more.
++fn assembled(
++    face: &Face,
++    assembly: ttf_parser::math::GlyphAssembly,
++    min_overlap: f64,
++    vertical: bool,
++    length: f64,
++) -> Option<Shape> {
++    let parts: Vec<_> = assembly.parts.into_iter().collect();
++    let span = |list: &[ttf_parser::math::GlyphPart]| {
++        list.iter().map(|p| p.full_advance as f64).sum::<f64>()
++            - min_overlap * list.len().saturating_sub(1) as f64
++    };
++    let mut list = Vec::new();
++    for repeat in 0..64 {
++        list = parts
++            .iter()
++            .flat_map(|p| std::iter::repeat_n(*p, if p.part_flags.extender() { repeat } else { 1 }))
++            .collect();
++        if span(&list) >= length || !parts.iter().any(|p| p.part_flags.extender()) {
++            break;
++        }
++    }
++    if list.is_empty() {
++        return None;
++    }
++    let joins = list.len().saturating_sub(1) as f64;
++    let max_overlap = list
++        .windows(2)
++        .map(|w| w[0].end_connector_length.min(w[1].start_connector_length) as f64)
++        .fold(f64::INFINITY, f64::min);
++    let overlap = if joins > 0.0 {
++        (min_overlap + (span(&list) - length).max(0.0) / joins).min(max_overlap.max(min_overlap))
++    } else {
++        0.0
++    };
++    let mut shape = Shape::new();
++    let mut at = 0.0;
++    for part in &list {
++        let (dx, dy) = if vertical { (0.0, at) } else { (at, 0.0) };
++        shape.add(face, part.glyph_id, dx, dy);
++        at += part.full_advance as f64 - overlap;
++    }
++    Some(shape)
++}
 diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
-index 7fc0b71..fafbfd3 100644
+index 7fc0b71..aa78593 100644
 --- a/src/renderer/equation/svg_render.rs
 +++ b/src/renderer/equation/svg_render.rs
-@@ -12,7 +12,9 @@ use super::symbols::{DecoKind, FontStyleKind};
+@@ -12,7 +12,8 @@ use super::symbols::{DecoKind, FontStyleKind};
  /// Cambria Math 는 Windows 에서 "볼드 인상" 을 유발해 제외. Pretendard 는 산세리프라 수식 부적합으로 제외. (Task #280)
  pub const DEFAULT_EQUATION_FONT_FAMILY_ATTR: &str =
      "font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
 -const EQ_FONT_FAMILY: &str = " font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
-+// HwpStudio: 한컴 수식 글꼴(HancomEQN)에 가까운 Times New Roman을 먼저, 그 글꼴에 없는
-+// 기호는 수학 글꼴로.
-+const EQ_FONT_FAMILY: &str = " font-family=\"'Times New Roman', 'Times', 'STIX Two Text', 'STIX Two Math', 'Latin Modern Math', serif\"";
++// HwpStudio: STIX Two Math를 먼저(기울인 글자는 그 수학 이탤릭 글자로), 없는 글자는 다른 글꼴로.
++const EQ_FONT_FAMILY: &str = " font-family=\"'STIX Two Math', 'STIX Two Text', 'Times New Roman', 'Times', serif\"";
  
  /// 수식을 SVG 조각 문자열로 렌더링
  ///
-@@ -101,14 +103,25 @@ fn render_box(
+@@ -64,7 +65,13 @@ fn render_box(
+                     '\u{3000}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{AC00}'..='\u{D7AF}'
+                 )
+             });
+-            let italic_attr = if !has_cjk && italic {
++            // HwpStudio: STIX Two Math has no italic face; its math italic letters are.
++            let esc = if !has_cjk && italic && !bold {
++                escape_xml(&math_italic(text))
++            } else {
++                esc
++            };
++            let italic_attr = if !has_cjk && italic && bold {
+                 " font-style=\"italic\""
+             } else {
+                 ""
+@@ -101,14 +108,25 @@ fn render_box(
              // 폰트 미임베딩 SVG 에서 뷰어 대체 폰트의 글리프 bbox 편차로 상·하한이
              // 어긋나던 문제를, 폰트 독립·결정적 path 로 해소한다(geom SSOT).
              if super::layout::is_integral_symbol(text) {
@@ -1464,7 +1838,35 @@ index 7fc0b71..fafbfd3 100644
                  ));
              }
          }
-@@ -245,7 +258,9 @@ fn render_box(
+@@ -146,6 +164,19 @@ fn render_box(
+             let sign_h = lb.height;
+             let body_left = x + body.x - fs * 0.1;
+             let sign_x = x;
++            // HwpStudio: the font's radical, its top on the rule over the body.
++            let scale = fs / super::stix::units_per_em();
++            let radical = super::stix::stretched('√', true, sign_h / scale);
++            if let (Some(shape), Some(rule)) = (radical, super::stix::radical_rule()) {
++                let right = body_left;
++                let left = right - shape.width() * scale;
++                svg.push_str(&shape.path(left, y, scale, color));
++                let t = rule * scale;
++                svg.push_str(&format!(
++                    "<path d=\"M{:.2},{:.2} H{:.2} V{:.2} H{:.2} Z\" fill=\"{}\"/>\n",
++                    right - t, y, x + lb.width, y + t, right - t, color,
++                ));
++            } else {
+             // V 모양 경로
+             let v_top = y;
+             let v_mid_x = body_left - fs * 0.15;
+@@ -164,6 +195,7 @@ fn render_box(
+                 x + lb.width, v_top,
+                 color, fs * 0.04,
+             ));
++            }
+ 
+             // 인덱스 (있으면)
+             if let Some(idx) = index {
+@@ -245,7 +277,9 @@ fn render_box(
              if is_integral {
                  // 적분: 기호는 왼쪽, 첨자는 오른쪽 위/아래 (nolimits).
                  // Task #1317: 폰트 `<text>` 대신 stroke path 로 렌더(geom SSOT).
@@ -1475,13 +1877,53 @@ index 7fc0b71..fafbfd3 100644
              } else {
                  // ∑, ∏ 등: 기호는 중앙, 첨자는 위/아래 (limits)
                  let sup_h = sup.as_ref().map(|b| b.height + fs * 0.05).unwrap_or(0.0);
-@@ -413,7 +428,30 @@ fn render_box(
+@@ -344,7 +378,13 @@ fn render_box(
+         }
+         LayoutKind::Rel { arrow, over, under } => {
+             render_box(svg, over, x, y, color, fs, italic, bold);
+-            render_box(svg, arrow, x, y, color, fs, italic, bold);
++            let drawn = match &arrow.kind {
++                LayoutKind::MathSymbol(t) => draw_rel_arrow(svg, t, x + arrow.x, y + arrow.y, arrow.width, arrow.height, color),
++                _ => false,
++            };
++            if !drawn {
++                render_box(svg, arrow, x, y, color, fs, italic, bold);
++            }
+             if let Some(u) = under {
+                 render_box(svg, u, x, y, color, fs, italic, bold);
+             }
+@@ -359,6 +399,18 @@ fn render_box(
+             // 텍스트 높이 파렌(`(`, `)`)은 폰트 글리프로 렌더, 그 외는 path. (Task #283)
+             let use_glyph = lb.height <= fs * 1.2;
+             let paren_w = if use_glyph { fs * 0.333 } else { fs * 0.27 };
++            // HwpStudio: with the font, each bracket fills the side the layout gave it.
++            if super::layout::stretched_width("(", lb.height, fs).is_some() {
++                let right_x = x + body.x + body.width;
++                if !left.is_empty() {
++                    draw_stretch_bracket(svg, left, x, y, body.x, lb.height, color, fs);
++                }
++                render_box(svg, body, x, y, color, fs, italic, bold);
++                if !right.is_empty() {
++                    draw_stretch_bracket(svg, right, right_x, y, x + lb.width - right_x, lb.height, color, fs);
++                }
++                return;
++            }
+             // 왼쪽 괄호
+             if !left.is_empty() {
+                 if use_glyph && (left == "(" || left == ")") {
+@@ -413,19 +465,47 @@ fn render_box(
  /// S-곡선(bottom-left → top-right, 양끝 갈고리)을 그린다. 폰트에 의존하지 않으므로
  /// SVG 뷰어/환경에 무관하게 동일한 visual bbox 를 보장하며, layout 의 상·하한
  /// attach point(동일 geom)와 정합한다.
 -fn integral_path(x: f64, y: f64, fs: f64, color: &str) -> String {
 +fn integral_path(x: f64, y: f64, fs: f64, color: &str, symbol: &str) -> String {
-+    // HwpStudio: ∬·∭ 은 줄기를 겹쳐 긋고, ∮ 계열은 가운데에 고리를 두른다.
++    // HwpStudio: STIX Two Math's own upright display integral, sized to the integral's box.
++    if let Some(shape) = super::layout::integral_glyph(symbol) {
++        let g = integral_geom(fs);
++        let scale = (g.bottom_y - g.top_y) / shape.height();
++        return shape.path(x, y + g.top_y, scale, color);
++    }
++    // ∬·∭ 은 줄기를 겹쳐 긋고, ∮ 계열은 가운데에 고리를 두른다.
 +    let (strokes, contour) = super::layout::integral_strokes(symbol);
 +    let step = fs * super::layout::INTEGRAL_STROKE_STEP;
 +    let mut out: String = (0..strokes)
@@ -1503,11 +1945,13 @@ index 7fc0b71..fafbfd3 100644
 +    out
 +}
 +
++/// 적분기호 한 줄기: 하단 갈고리 끝(좌하) → 상단 갈고리 끝(우상).
 +fn integral_stroke(x: f64, y: f64, fs: f64, color: &str) -> String {
      let g = integral_geom(fs);
      let h = g.bottom_y - g.top_y;
-     // 하단 갈고리 끝(좌하) → 상단 갈고리 끝(우상). 하부는 우측, 상부는 좌측으로
-@@ -422,10 +460,10 @@ fn integral_path(x: f64, y: f64, fs: f64, color: &str) -> String {
+-    // 하단 갈고리 끝(좌하) → 상단 갈고리 끝(우상). 하부는 우측, 상부는 좌측으로
+-    // 휘어 적분기호 특유의 기운 S 형태를 만든다(round cap 으로 갈고리 표현).
+     let p0x = x + g.bottom_hook_x;
      let p0y = y + g.bottom_y;
      let p3x = x + g.top_hook_x;
      let p3y = y + g.top_y;
@@ -1522,7 +1966,130 @@ index 7fc0b71..fafbfd3 100644
      format!(
          "<path d=\"M{:.2},{:.2} C{:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>\n",
          p0x, p0y, c1x, c1y, c2x, c2y, p3x, p3y, color, g.stroke_w,
-@@ -644,12 +682,55 @@ fn draw_decoration(
+@@ -441,6 +521,66 @@ fn font_size_from_box(lb: &LayoutBox, base_fs: f64) -> f64 {
+     }
+ }
+ 
++/// Latin letters as Unicode mathematical italic (h is the older ℎ).
++fn math_italic(text: &str) -> String {
++    text.chars()
++        .map(|c| match c {
++            'h' => 'ℎ',
++            'A'..='Z' => char::from_u32(0x1D434 + c as u32 - 'A' as u32).unwrap_or(c),
++            'a'..='z' => char::from_u32(0x1D44E + c as u32 - 'a' as u32).unwrap_or(c),
++            _ => c,
++        })
++        .collect()
++}
++
++/// HwpStudio: REL's arrow across its box, so it spans what is written over and under it:
++/// the font's, or lines without it. Returns false for other symbols.
++fn draw_rel_arrow(svg: &mut String, arrow: &str, x: f64, y: f64, w: f64, h: f64, color: &str) -> bool {
++    // The font's arrow, grown to the width, on the glyph's baseline (0.8 em down the box).
++    let scale = h / super::stix::units_per_em();
++    let mut chars = arrow.chars();
++    if let (Some(c), None) = (chars.next(), chars.next()) {
++        if let Some(shape) = super::stix::stretched(c, false, w / scale) {
++            svg.push_str(&shape.path(
++                x + (w - shape.width() * scale) / 2.0,
++                y + h * 0.8 - shape.y_max * scale,
++                scale,
++                color,
++            ));
++            return true;
++        }
++    }
++    let (left, right, double) = match arrow {
++        "→" => (false, true, false),
++        "←" => (true, false, false),
++        "↔" => (true, true, false),
++        "⇒" => (false, true, true),
++        "⇐" => (true, false, true),
++        "⇔" => (true, true, true),
++        _ => return false,
++    };
++    // The glyph's axis sits a quarter em above its baseline (0.8 em down the box).
++    let (mid, stroke, head) = (y + h * 0.55, h * 0.045, h * 0.22);
++    let gap = if double { h * 0.09 } else { 0.0 };
++    let mut d = String::new();
++    let inset = |end: bool| if end && double { head * 0.5 } else { 0.0 };
++    for dy in if double { vec![-gap, gap] } else { vec![0.0] } {
++        d.push_str(&format!("M{:.2},{:.2} H{:.2} ", x + inset(left), mid + dy, x + w - inset(right)));
++    }
++    if left {
++        d.push_str(&format!("M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2} ", x + head, mid - head * 0.8, x, mid, x + head, mid + head * 0.8));
++    }
++    if right {
++        let r = x + w;
++        d.push_str(&format!("M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2} ", r - head, mid - head * 0.8, r, mid, r - head, mid + head * 0.8));
++    }
++    svg.push_str(&format!(
++        "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>\n",
++        d.trim_end(), color, stroke,
++    ));
++    true
++}
++
+ /// 늘림 괄호 렌더링
+ fn draw_stretch_bracket(
+     svg: &mut String,
+@@ -452,6 +592,20 @@ fn draw_stretch_bracket(
+     color: &str,
+     fs: f64,
+ ) {
++    // HwpStudio: the font's own bracket, as tall as the box, centred in it.
++    let scale = fs / super::stix::units_per_em();
++    let mut chars = bracket.chars();
++    if let (Some(c), None) = (chars.next(), chars.next()) {
++        if let Some(shape) = super::stix::stretched(c, true, h / scale) {
++            svg.push_str(&shape.path(
++                x + (w - shape.width() * scale) / 2.0,
++                y + (h - shape.height() * scale) / 2.0,
++                scale,
++                color,
++            ));
++            return;
++        }
++    }
+     let mid_x = x + w / 2.0;
+     let stroke_w = if matches!(bracket, "(" | ")") {
+         (fs * 0.042).max(0.48)
+@@ -559,6 +713,34 @@ fn draw_decoration(
+     color: &str,
+     fs: f64,
+ ) {
++    // HwpStudio: the font's accent (the wide ones grown to the body), its foot just over the
++    // body; rules stay lines.
++    let accent = match kind {
++        DecoKind::Hat => Some(('\u{302}', true)),
++        DecoKind::Check => Some(('\u{30C}', true)),
++        DecoKind::Tilde => Some(('\u{303}', true)),
++        DecoKind::Acute => Some(('\u{301}', false)),
++        DecoKind::Grave => Some(('\u{300}', false)),
++        DecoKind::Dot => Some(('\u{307}', false)),
++        DecoKind::DDot => Some(('\u{308}', false)),
++        DecoKind::Vec => Some(('\u{20D7}', true)),
++        DecoKind::Dyad => Some(('\u{20E1}', true)),
++        DecoKind::Arch => Some(('\u{23DC}', true)),
++        _ => None,
++    };
++    let scale = fs / super::stix::units_per_em();
++    if let Some((c, wide)) = accent {
++        let length = if wide { width * 0.9 / scale } else { 0.0 };
++        if let Some(shape) = super::stix::stretched(c, false, length) {
++            svg.push_str(&shape.path(
++                mid_x - shape.width() * scale / 2.0,
++                y + fs * 0.2 - shape.height() * scale,
++                scale,
++                color,
++            ));
++            return;
++        }
++    }
+     let stroke_w = fs * 0.03;
+     let half_w = width / 2.0;
+ 
+@@ -644,12 +826,55 @@ fn draw_decoration(
                  mid_x - half_w, uy, mid_x + half_w, uy, color, stroke_w,
              ));
          }
@@ -1957,7 +2524,7 @@ index 7ae0e89..b809400 100644
          13 => NumFmt::HanjaNumber,  // 一, 二, 三
          _ => NumFmt::Digit,
 diff --git a/src/renderer/mod.rs b/src/renderer/mod.rs
-index 9d37742..4fcd199 100644
+index 9d37742..fdc5d6a 100644
 --- a/src/renderer/mod.rs
 +++ b/src/renderer/mod.rs
 @@ -1501,6 +1501,9 @@ pub fn base_family_without_weight_suffix(font_family: &str) -> Option<String> {
@@ -1970,7 +2537,7 @@ index 9d37742..4fcd199 100644
          // [#6171] 이름 셋 중 `HYGothic` 만 Windows 에서 해석된다. headless Chrome
          // 통제 실측(`'X',serif` 를 없는 글꼴 기준선과 픽셀 차분):
          // `HY중고딕` 0px · `HYGothic-Medium` 0px · **`HYGothic` 3,287px**.
-@@ -1944,6 +1953,8 @@ pub enum NumberFormat {
+@@ -1944,6 +1947,8 @@ pub enum NumberFormat {
      LatinLower,
      /// 한글 가나다: 가, 나, 다
      HangulGaNaDa,
@@ -1979,7 +2546,7 @@ index 9d37742..4fcd199 100644
      /// 한글 일이삼: 일, 이, 삼
      HangulNumber,
      /// 한자 一二三: 一, 二, 三
-@@ -1978,6 +1989,7 @@ pub fn format_number(number: u16, format: NumberFormat) -> String {
+@@ -1978,6 +1983,7 @@ pub fn format_number(number: u16, format: NumberFormat) -> String {
          NumberFormat::LatinUpper => format_latin(number, true),
          NumberFormat::LatinLower => format_latin(number, false),
          NumberFormat::HangulGaNaDa => format_hangul_ganada(number),
@@ -1987,7 +2554,7 @@ index 9d37742..4fcd199 100644
          NumberFormat::HangulNumber => format_hangul_number(number),
          NumberFormat::HanjaNumber => format_hanja_number(number),
      }
-@@ -2059,6 +2071,17 @@ fn format_hangul_ganada(n: u16) -> String {
+@@ -2059,6 +2065,17 @@ fn format_hangul_ganada(n: u16) -> String {
          .unwrap_or_else(|| n.to_string())
  }
  
@@ -2086,9 +2653,12 @@ index 3989968..e268160 100644
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
 diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
+index 3e52ea0..9863981 100644
 --- a/src/renderer/svg.rs
 +++ b/src/renderer/svg.rs
-@@ -3584,7 +3584,11 @@
+@@ -3582,9 +3582,13 @@ fn color_to_svg(color: u32) -> String {
+ }
+ 
  fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64) -> String {
 +    let color_emoji = cluster_str
 +        .chars()
@@ -2100,7 +2670,7 @@ diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
      {
          return String::new();
      }
-@@ -3596,7 +3600,10 @@
+@@ -3596,7 +3600,10 @@ fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64)
      } else {
          1.0
      };

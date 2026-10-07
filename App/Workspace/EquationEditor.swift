@@ -41,9 +41,10 @@ struct EquationItem: Hashable {
     let script: String
 }
 
-/// The palettes, in the order of 한글's 수식 편집 tool rows.
+/// The palettes, in the order of 한글's 수식 편집 tool rows, only the ones used most, so
+/// they fit in one row; the script takes the rest.
 enum EquationPalette {
-    /// The first row: templates, each with its name and key in 한글's help (Ctrl there, ⌘
+    /// Templates, each with its name and key in 한글's help (Ctrl there, ⌘
     /// here) and the sample its button shows. A palette of one item is a plain button; the
     /// key puts in a palette's first item.
     static let templates: [(name: String, key: KeyEquivalent?, face: String, items: [EquationItem])] = [
@@ -52,9 +53,6 @@ enum EquationPalette {
             EquationItem(sample: "{x}_{1}", script: "{}_{}"),
             EquationItem(sample: "{x}_{1}^{2}", script: "{}_{}^{}"),
         ]),
-        ("장식 기호", "d", "bar a", ["bar", "vec", "hat", "tilde", "dot", "ddot", "acute", "grave", "check", "arch", "dyad", "under"].map {
-            EquationItem(sample: "\($0) a", script: "\($0) {}")
-        }),
         ("분수", "o", "{a} over {b}", [EquationItem(sample: "{a} over {b}", script: "{} over {}")]),
         ("근호", "r", "sqrt {x}", [EquationItem(sample: "sqrt {x}", script: "sqrt {}")]),
         ("합 기호", "s", "sum", ["sum", "prod", "coprod", "bigcup", "bigcap"].map {
@@ -70,32 +68,20 @@ enum EquationPalette {
             EquationItem(sample: "lim from {x rarrow 0}", script: "lim from {}"),
             EquationItem(sample: "Lim from {n rarrow INF}", script: "Lim from {}"),
         ]),
-        ("상호 관계", "e", "a REL rarrow {x} {y} b", ["rarrow", "larrow", "lrarrow", "RARROW", "LARROW", "LRARROW"].map {
-            EquationItem(sample: "REL \($0) {a} {b}", script: "REL \($0) {} {}")
-        } + [EquationItem(sample: "BUILDREL rarrow {a}", script: "BUILDREL rarrow {}")]),
         ("괄호", "9", "left ( a right )", [("(", ")"), ("[", "]"), ("lbrace", "rbrace"), ("|", "|"), ("langle", "rangle"), ("lceil", "rceil"),
                  ("lfloor", "rfloor")].map {
             EquationItem(sample: "left \($0.0) a right \($0.1)", script: "left \($0.0) {} right \($0.1)")
         }),
-        ("경우", "0", "cases{a # b}", [EquationItem(sample: "cases{x & x>0 # -x & x<0}", script: "cases{ & # & }")]),
-        ("세로 쌓기", "p", "pile{a # b}", [EquationItem(sample: "pile{a # bb}", script: "pile{ # }")]),
         ("행렬", "m", "matrix{a & b # c & d}", ["matrix", "pmatrix", "bmatrix", "dmatrix"].map {
             EquationItem(sample: "\($0){a & b # c & d}", script: "\($0){ & # & }")
         }),
     ]
-    /// 줄 맞춤 and 줄 바꿈, after the templates: name, what each shows and puts.
-    static let marks: [(name: String, face: String, script: String)] = [("줄 맞춤", "&", "&"), ("줄 바꿈", "↵", "#")]
-
-    /// The second row: symbol groups, each with its name in 한글's help and the glyph its
-    /// button shows.
+    /// Then symbol groups, each with its name in 한글's help and the glyph its button shows.
     static let symbols: [(name: String, face: String, items: [EquationItem])] = [
-        ("그리스 대문자", "Λ", group("Alpha Α Beta Β Gamma Γ Delta Δ Epsilon Ε Zeta Ζ Eta Η Theta Θ Iota Ι Kappa Κ Lambda Λ Mu Μ Nu Ν Xi Ξ Omicron Ο Pi Π Rho Ρ Sigma Σ Tau Τ Upsilon Υ Phi Φ Chi Χ Psi Ψ Omega Ω")),
         ("그리스 소문자", "λ", group("alpha α beta β gamma γ delta δ epsilon ε zeta ζ eta η theta θ iota ι kappa κ lambda λ mu μ nu ν xi ξ omicron ο pi π rho ρ sigma σ tau τ upsilon υ phi φ chi χ psi ψ omega ω")),
-        ("그리스 기호", "ℵ", group("vartheta ϑ varpi ϖ varsigma ς varupsilon ϒ varphi φ varepsilon ε ALEPH ℵ HBAR ℏ IMATH ı JMATH ȷ ELL ℓ WP ℘ IMAG ℑ REIMAGE ℜ ANGSTROM Å OHM Ω")),
         ("합, 집합 기호", "≤", group("NEQ ≠ LEQ ≤ GEQ ≥ ll ≪ gg ≫ APPROX ≈ SIM ∼ SIMEQ ≃ CONG ≅ EQUIV ≡ PROPTO ∝ SUBSET ⊂ SUPERSET ⊃ SUBSETEQ ⊆ SUPSETEQ ⊇ IN ∈ NOTIN ∉ OWNS ∋ VDASH ⊢ MODELS ⊨")),
         ("연산, 논리 기호", "±", group("PLUSMINUS ± MINUSPLUS ∓ TIMES × DIV ÷ CDOT · CIRC ∘ BULLET • INTER ∩ UNION ∪ SQCAP ⊓ SQCUP ⊔ OPLUS ⊕ OMINUS ⊖ OTIMES ⊗ ODOT ⊙ UPLUS ⊎ WEDGE ∧ VEE ∨ LNOT ¬ FORALL ∀ EXIST ∃")),
         ("화살표", "⇔", group("larrow ← rarrow → uparrow ↑ downarrow ↓ lrarrow ↔ udarrow ↕ LARROW ⇐ RARROW ⇒ UPARROW ⇑ DOWNARROW ⇓ LRARROW ⇔ UDARROW ⇕ nwarrow ↖ nearrow ↗ swarrow ↙ searrow ↘ mapsto ↦ hookleft ↩ hookright ↪")),
-        ("기타 기호", "Δ", group("INF ∞ DEG ° prime ′ PARTIAL ∂ nabla ∇ THEREFORE ∴ BECAUSE ∵ EMPTYSET ∅ ANGLE ∠ TRIANGLE △ BOT ⊥ TOP ⊤ CDOTS ⋯ LDOTS … VDOTS ⋮ DDOTS ⋱ DAGGER † DDAGGER ‡ CENTIGRADE ℃ FAHRENHEIT ℉ HUND ‰ THOU ‱ LAPLACE ℒ STAR ★ BIGCIRC ○ DIAMOND ◇")),
     ]
 
     /// "keyword glyph keyword glyph …" as items that show the glyph and put the keyword.
@@ -304,27 +290,18 @@ struct EquationEditor: View {
                     }
                 }
                 RowDivider()
-                ForEach(EquationPalette.marks, id: \.script) { mark in
-                    Button { script.insert(mark.script) } label: {
-                        Text(mark.face).font(.system(size: 16)).frame(minWidth: 26, minHeight: 30)
-                    }
-                    .buttonStyle(ToolButtonStyle())
-                    .help(mark.name)
-                    .accessibilityLabel(mark.name)
-                }
-            }
-            HStack(spacing: 1) {
                 ForEach(EquationPalette.symbols, id: \.face) { palette in
                     PaletteButton(name: palette.name, face: palette.face, items: palette.items, renderer: renderer, symbols: true) {
                         script.insert(word: $0.script)
                     }
                 }
-                Spacer(minLength: 16)
+                RowDivider()
                 SpinField(value: $edit.fontSize, unit: "pt", range: 1...127)
                     .accessibilityLabel("글자 크기")
                 ColorWell(hex: Binding { Self.hex(edit.color) } set: { edit.color = Self.color($0) })
                     .accessibilityLabel("글자 색")
                     .padding(.leading, 8)
+                Spacer(minLength: 0)
             }
             .padding(.bottom, 8)
             VStack(spacing: 0) {

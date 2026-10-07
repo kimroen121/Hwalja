@@ -1326,30 +1326,22 @@ fn integral_path_is_tall_slender_and_light() {
     let svg = core
         .render_equation_preview_native("int from 0 to 1 x", 1_000, 0)
         .unwrap();
-    let tag = svg
-        .split("<path")
-        .find(|part| part.contains("stroke-linecap=\"round\""))
-        .expect("integral stroke path");
-    let attr = |name: &str| {
-        let value = tag.split(&format!("{name}=\"")).nth(1).unwrap();
-        value.split('"').next().unwrap()
-    };
-    let points: Vec<f64> = attr("d")
+    // The ∫ is one filled outline: STIX Two Math's upright display integral, or the stroke
+    // drawn without that font.
+    let tag = svg.split("<path").nth(1).expect("integral path");
+    let d = tag.split("d=\"").nth(1).unwrap().split('"').next().unwrap();
+    let points: Vec<f64> = d
         .split(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-')))
         .filter(|part| !part.is_empty())
         .map(|part| part.parse().unwrap())
         .collect();
-    assert_eq!(points.len(), 8);
-    let xs = [points[0], points[2], points[4], points[6]];
-    let height = (points[1] - points[7]).abs();
-    let visual_width = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)
-        - xs.iter().copied().fold(f64::INFINITY, f64::min);
-    let stroke: f64 = attr("stroke-width").parse().unwrap();
-    assert!(
-        visual_width / height < 0.20,
-        "too wide: {visual_width}/{height}"
-    );
-    assert!(stroke / height < 0.022, "too heavy: {stroke}/{height}");
+    let span = |k: usize| {
+        let v = points.iter().skip(k).step_by(2);
+        v.clone().copied().fold(f64::NEG_INFINITY, f64::max)
+            - v.copied().fold(f64::INFINITY, f64::min)
+    };
+    let (width, height) = (span(0), span(1));
+    assert!(width / height < 0.25, "too wide: {width}/{height}");
 }
 
 /// A file written without line records (by another program) is laid out on opening, its

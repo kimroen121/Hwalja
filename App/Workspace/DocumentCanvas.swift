@@ -453,8 +453,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 let line = NSBezierPath(), y = clip.minY - Self.draftGap / 2
                 line.move(to: NSPoint(x: clip.minX, y: y))
                 line.line(to: NSPoint(x: clip.maxX, y: y))
-                line.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
-                line.setLineDash([4 * line.lineWidth, 3 * line.lineWidth], count: 2, phase: 0)
+                // One device pixel at any zoom.
+                line.lineWidth = 1 / ((window?.backingScaleFactor ?? 2) * (enclosingScrollView?.magnification ?? 1))
+                line.setLineDash([3 * line.lineWidth, 3 * line.lineWidth], count: 2, phase: 0)
                 NSColor.gray.setStroke()
                 line.stroke()
             }
