@@ -110,7 +110,8 @@ final class EquationRenderer {
     }
 }
 
-/// A rendered equation at its size, scaled by `zoom`.
+/// A rendered equation at its size, scaled by `zoom`: SwiftMath's own size when it sets the
+/// equation, its room around it drawn but not laid out, so nothing is clipped.
 struct EquationGlyph: View {
     let display: PageDisplay?
     var zoom = 1.0
@@ -119,14 +120,24 @@ struct EquationGlyph: View {
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         let scale = PageGeometry.pointsPerPixel * zoom
+        if let display, let natural = Formulas.shared.natural(display) {
+            canvas(scale) { Formulas.shared.drawNatural(display, in: $0) }
+                .frame(width: natural.size.width * scale, height: natural.size.height * scale)
+                .padding(-natural.pad * scale)
+        } else {
+            canvas(scale) { display?.draw(in: $0) }
+                .frame(width: (display?.width ?? 0) * scale, height: (display?.height ?? 0) * scale)
+        }
+    }
+
+    private func canvas(_ scale: Double, draw: @escaping (CGContext) -> Void) -> some View {
         let tint = scheme == .dark ? CGColor.white : CGColor.black
-        Canvas { context, size in
-            guard let display else { return }
+        return Canvas { [tinted] context, size in
             context.withCGContext { cg in
                 if tinted { cg.beginTransparencyLayer(auxiliaryInfo: nil) }
                 cg.saveGState()
                 cg.scaleBy(x: scale, y: scale)
-                display.draw(in: cg)
+                draw(cg)
                 cg.restoreGState()
                 if tinted {
                     cg.setBlendMode(.sourceIn)
@@ -136,7 +147,6 @@ struct EquationGlyph: View {
                 }
             }
         }
-        .frame(width: (display?.width ?? 0) * scale, height: (display?.height ?? 0) * scale)
     }
 }
 
@@ -350,7 +360,7 @@ struct EquationEditor: View {
             .padding(.bottom, 8)
             VStack(spacing: 0) {
                 ScrollView([.horizontal, .vertical]) {
-                    EquationGlyph(display: preview, zoom: 1.5)
+                    EquationGlyph(display: preview, zoom: 3)
                         .padding(16)
                         .frame(minWidth: 860, minHeight: 230, alignment: .center)
                 }

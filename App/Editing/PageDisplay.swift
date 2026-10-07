@@ -356,6 +356,26 @@ final class Formulas: @unchecked Sendable {
         return true
     }
 
+    /// A preview's equation at its own size, not fitted to the engine's box: the size with
+    /// room around it, and the room on each side. `nil` when SwiftMath cannot set it.
+    func natural(_ display: PageDisplay) -> (size: CGSize, pad: Double)? {
+        guard let equation = Self.equation(display), equation.latex.allSatisfy(\.isASCII),
+              let formula = formula(equation) else { return nil }
+        return (formula.image.size, formula.pad)
+    }
+    /// Draws `natural`'s equation with its room's top-left at the origin.
+    func drawNatural(_ display: PageDisplay, in context: CGContext) {
+        guard let equation = Self.equation(display), let formula = formula(equation) else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        formula.image.draw(in: CGRect(origin: .zero, size: formula.image.size), from: .zero, operation: .sourceOver,
+                           fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    private static func equation(_ display: PageDisplay) -> PageDisplay.Op.Equation? {
+        display.ops.lazy.compactMap { if case let .equation(equation, _) = $0 { equation } else { nil } }.first
+    }
+
     private func formula(_ equation: PageDisplay.Op.Equation) -> Formula? {
         let key = "\(equation.size) \(equation.color.components ?? []) \(equation.latex)"
         lock.lock()
