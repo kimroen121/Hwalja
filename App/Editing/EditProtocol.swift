@@ -3,7 +3,7 @@ import Foundation
 // Mirrors Engine/crates/hwp-engine-abi/src/editing/protocol.rs.
 
 enum EditProtocolVersion {
-    static let current: UInt32 = 3
+    static let current: UInt32 = 4
 }
 // Offsets (`scalar`) count Unicode scalars, not UTF-16 units.
 

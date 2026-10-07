@@ -44,6 +44,33 @@ enum RenderedPage: @unchecked Sendable {
     }
 }
 
+/// Makes a PDF from the same page objects the canvas draws. This keeps Core Text variable
+/// font instances, synthetic traits, fallback glyphs and object placement identical on screen
+/// and in exported/printed output.
+func pdfData(drawing pages: [RenderedPage]) throws -> Data {
+    guard let first = pages.first else { throw EditError.renderFailed }
+    let data = NSMutableData()
+    guard let consumer = CGDataConsumer(data: data as CFMutableData) else { throw EditError.renderFailed }
+    var mediaBox = CGRect(origin: .zero, size: first.size)
+    guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+        throw EditError.renderFailed
+    }
+    for page in pages {
+        var pageBox = CGRect(origin: .zero, size: page.size)
+        let boxData = Data(bytes: &pageBox, count: MemoryLayout<CGRect>.size)
+        context.beginPDFPage([kCGPDFContextMediaBox as String: boxData] as CFDictionary)
+        context.saveGState()
+        context.translateBy(x: 0, y: pageBox.height)
+        context.scaleBy(x: 1, y: -1)
+        page.draw(in: context, rect: pageBox)
+        context.restoreGState()
+        context.endPDFPage()
+    }
+    context.closePDF()
+    guard data.length > 0 else { throw EditError.renderFailed }
+    return data as Data
+}
+
 /// How the engine draws one page, in its pixel space (96 dpi, y down). Text uses the exact
 /// font files the PDF would embed, so it looks the same.
 final class PageDisplay: @unchecked Sendable {
@@ -55,13 +82,18 @@ final class PageDisplay: @unchecked Sendable {
     struct Face: Hashable {
         let path: String
         let index: Int
+        let weight: UInt16
+        let italic: Bool
     }
 
     /// Reads the engine's encoding (`Display::encode`).
     init(_ reader: inout ByteReader) throws {
         width = Double(try reader.f32())
         height = Double(try reader.f32())
-        fonts = try (0..<reader.count()).map { _ in Face(path: try reader.string(), index: Int(try reader.u32())) }
+        fonts = try (0..<reader.count()).map { _ in
+            Face(path: try reader.string(), index: Int(try reader.u32()),
+                 weight: try reader.u16(), italic: try reader.u8() != 0)
+        }
         ops = try (0..<reader.count()).map { _ in try Op(&reader) }
     }
 
@@ -189,7 +221,7 @@ final class PageDisplay: @unchecked Sendable {
                 context.scaleBy(x: 1, y: -1)
                 context.draw(image, in: CGRect(origin: .zero, size: rect.size))
                 context.restoreGState()
-            case .text(let text): Self.draw(text, fonts: fonts, in: context)
+            case .text(let text): Self.draw(text, faces: self.fonts, fonts: fonts, in: context)
             }
         }
     }
@@ -208,13 +240,15 @@ final class PageDisplay: @unchecked Sendable {
 
     /// One SVG `<text>`: glyphs at their natural advances from the origin, stretched to
     /// `length` when given, the way usvg lays out a single text chunk.
-    private static func draw(_ text: Op.Text, fonts: [CTFontDescriptor?], in context: CGContext) {
-        var glyphs: [CGGlyph] = [], positions: [CGPoint] = [], runs: [(font: CTFont, range: Range<Int>)] = []
-        var lines: [(CTLine, x: CGFloat)] = []
+    private static func draw(_ text: Op.Text, faces: [Face], fonts: [CTFontDescriptor?], in context: CGContext) {
+        var glyphs: [CGGlyph] = [], positions: [CGPoint] = []
+        var runs: [(font: CTFont, range: Range<Int>, syntheticItalic: Bool)] = []
+        var lines: [(line: CTLine, x: CGFloat, syntheticItalic: Bool)] = []
         var x: CGFloat = 0
         for run in text.runs {
             guard let descriptor = fonts[run.font] else { continue }
             let font = FontFiles.shared.font(descriptor, size: text.size)
+            let syntheticItalic = FontFiles.shared.needsSyntheticItalic(faces[run.font], font: font)
             let units = Array(run.text.utf16)
             var found = [CGGlyph](repeating: 0, count: units.count)
             if run.text.unicodeScalars.count == units.count, !run.text.unicodeScalars.contains(where: Self.needsShaping),
@@ -227,11 +261,11 @@ final class PageDisplay: @unchecked Sendable {
                     positions.append(CGPoint(x: x, y: 0))
                     x += advance.width
                 }
-                runs.append((font, start..<glyphs.count))
+                runs.append((font, start..<glyphs.count, syntheticItalic))
             } else {
                 // Clusters that need shaping (old Hangul jamo, surrogate pairs) go through Core Text.
                 let line = CTLineCreateWithAttributedString(NSAttributedString(string: run.text, attributes: [.font: font]))
-                lines.append((line, x))
+                lines.append((line, x, syntheticItalic))
                 x += CTLineGetTypographicBounds(line, nil, nil, nil)
             }
         }
@@ -243,18 +277,28 @@ final class PageDisplay: @unchecked Sendable {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         context.setFillColor(text.color)
         for run in runs {
+            context.saveGState()
+            if run.syntheticItalic { context.concatenate(Self.syntheticItalicTransform) }
             glyphs[run.range].withUnsafeBufferPointer { g in
                 positions[run.range].withUnsafeBufferPointer { p in
                     CTFontDrawGlyphs(run.font, g.baseAddress!, p.baseAddress!, g.count, context)
                 }
             }
+            context.restoreGState()
         }
-        for (line, x) in lines {
-            context.textPosition = CGPoint(x: x, y: 0)
-            CTLineDraw(line, context)
+        for item in lines {
+            context.saveGState()
+            if item.syntheticItalic { context.concatenate(Self.syntheticItalicTransform) }
+            context.textPosition = CGPoint(x: item.x, y: 0)
+            CTLineDraw(item.line, context)
+            context.restoreGState()
         }
         context.restoreGState()
     }
+
+    private static let syntheticItalicTransform = CGAffineTransform(
+        a: 1, b: 0, c: -tan(12 * .pi / 180), d: 1, tx: 0, ty: 0
+    )
 }
 
 /// Font files the engine names, loaded once, and fonts by size.
@@ -273,7 +317,45 @@ final class FontFiles: @unchecked Sendable {
         defer { lock.unlock() }
         if let known = descriptors[face] { return known }
         let all = CTFontManagerCreateFontDescriptorsFromURL(URL(fileURLWithPath: face.path) as CFURL) as? [CTFontDescriptor]
-        let descriptor = all.flatMap { $0.indices.contains(face.index) ? $0[face.index] : nil }
+        let descriptor = all.flatMap { descriptors -> CTFontDescriptor? in
+            guard descriptors.indices.contains(face.index) else { return nil }
+            var descriptor = descriptors[face.index]
+            let probe = CTFontCreateWithFontDescriptor(descriptor, 12, nil)
+            let axes = CTFontCopyVariationAxes(probe) as? [[CFString: Any]] ?? []
+            var hasItalicAxis = false
+            for axis in axes {
+                guard let identifier = axis[kCTFontVariationAxisIdentifierKey] as? NSNumber,
+                      let minimum = axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber,
+                      let maximum = axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber
+                else { continue }
+                let value: Double?
+                switch identifier.uint32Value {
+                case 0x7767_6874: // `wght`
+                    value = min(max(Double(face.weight), minimum.doubleValue), maximum.doubleValue)
+                case 0x736C_6E74 where face.italic: // `slnt`
+                    hasItalicAxis = true
+                    value = minimum.doubleValue < 0
+                        ? max(minimum.doubleValue, -12)
+                        : min(maximum.doubleValue, 12)
+                case 0x6974_616C where face.italic: // `ital`
+                    hasItalicAxis = true
+                    value = maximum.doubleValue
+                default:
+                    value = nil
+                }
+                if let value {
+                    descriptor = CTFontDescriptorCreateCopyWithVariation(
+                        descriptor, identifier, CGFloat(value)
+                    )
+                }
+            }
+            if face.italic && !hasItalicAxis {
+                descriptor = CTFontDescriptorCreateCopyWithSymbolicTraits(
+                    descriptor, .traitItalic, .traitItalic
+                ) ?? descriptor
+            }
+            return descriptor
+        }
         descriptors[face] = descriptor
         return descriptor
     }
@@ -286,6 +368,14 @@ final class FontFiles: @unchecked Sendable {
         let font = CTFontCreateWithFontDescriptor(descriptor, size, nil)
         fonts[key] = font
         return font
+    }
+
+    func needsSyntheticItalic(_ face: PageDisplay.Face, font: CTFont) -> Bool {
+        guard face.italic, !CTFontGetSymbolicTraits(font).contains(.traitItalic) else { return false }
+        let variations = CTFontCopyVariation(font) as NSDictionary?
+        let slant = NSNumber(value: UInt32(0x736C_6E74)) // `slnt`
+        let italic = NSNumber(value: UInt32(0x6974_616C)) // `ital`
+        return variations?[slant] == nil && variations?[italic] == nil
     }
 }
 

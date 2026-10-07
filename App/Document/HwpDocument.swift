@@ -480,7 +480,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// The whole document as PDF, after queued edits.
     func pdf() async throws -> Data {
         await settle()
-        return try await session.pdf()
+        return try pdfData(drawing: pages)
     }
     /// Plain text of a selection within one container; paragraphs are joined with newlines.
     func text(of selection: EditSelection) async throws -> String {

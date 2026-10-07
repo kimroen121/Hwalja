@@ -19,6 +19,10 @@ pub struct Display {
 pub struct Face {
     pub path: String,
     pub index: u32,
+    /// CSS weight requested by the SVG run (100–900).
+    pub weight: u16,
+    /// Whether the SVG run requested italic or oblique text.
+    pub italic: bool,
 }
 
 /// Colors are `0xrrggbb`; a missing fill or stroke is not painted.
@@ -77,7 +81,8 @@ pub enum Op {
 }
 
 impl Display {
-    /// Little-endian binary: width, height (f32); fonts (u32 count; path, u32 index each);
+    /// Little-endian binary: width, height (f32); fonts (u32 count; path, u32 index,
+    /// u16 CSS weight and u8 italic flag each);
     /// ops (u32 count; a u8 tag and its fields each). Strings are a u32 byte length and
     /// UTF-8; an absent color is `u32::MAX`. The app's `PageDisplay` reads it.
     pub fn encode(&self, out: &mut Vec<u8>) {
@@ -94,6 +99,8 @@ impl Display {
         for face in &self.fonts {
             text(out, &face.path);
             u(out, face.index);
+            out.extend(face.weight.to_le_bytes());
+            out.push(face.italic as u8);
         }
         u(out, self.ops.len() as u32);
         for op in &self.ops {
@@ -225,7 +232,7 @@ struct Builder<'a> {
     db: Arc<fontdb::Database>,
     clips: HashMap<&'a str, Vec<[f64; 4]>>,
     fonts: Vec<Face>,
-    font_index: HashMap<fontdb::ID, u16>,
+    font_index: HashMap<(fontdb::ID, u16, bool), u16>,
     ops: Vec<Op>,
 }
 
@@ -526,7 +533,7 @@ impl<'a> Builder<'a> {
         let base = pick(&self.db, family, weight, style)?;
         let mut runs: Vec<(u16, String)> = Vec::new();
         for (id, c) in faces(&self.db, base, &text) {
-            let font = self.font(id)?;
+            let font = self.font(id, weight, style != fontdb::Style::Normal)?;
             match runs.last_mut() {
                 Some((f, s)) if *f == font => s.push(c),
                 _ => runs.push((font, c.to_string())),
@@ -556,8 +563,9 @@ impl<'a> Builder<'a> {
         Some(())
     }
 
-    fn font(&mut self, id: fontdb::ID) -> Option<u16> {
-        if let Some(&index) = self.font_index.get(&id) {
+    fn font(&mut self, id: fontdb::ID, weight: u16, italic: bool) -> Option<u16> {
+        let key = (id, weight, italic);
+        if let Some(&index) = self.font_index.get(&key) {
             return Some(index);
         }
         let (source, index) = self.db.face_source(id)?;
@@ -568,9 +576,11 @@ impl<'a> Builder<'a> {
         self.fonts.push(Face {
             path: path.to_str()?.to_string(),
             index,
+            weight,
+            italic,
         });
         let font = (self.fonts.len() - 1) as u16;
-        self.font_index.insert(id, font);
+        self.font_index.insert(key, font);
         Some(font)
     }
 }
@@ -742,6 +752,19 @@ fn transform(text: &str) -> Option<Op> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn variable_face_keeps_requested_weight_and_style() {
+        let svg = r#"<svg width="200" height="80"><text x="0" y="40" font-family="'Pretendard Variable', sans-serif" font-size="32" font-weight="700" font-style="italic">가변</text></svg>"#;
+        let display = build(svg).expect("supported text must produce a display list");
+        let face = display
+            .fonts
+            .iter()
+            .find(|face| face.path.contains("PretendardVariable"))
+            .expect("the installed Pretendard variable face must be selected");
+        assert_eq!(face.weight, 700);
+        assert!(face.italic);
+    }
 
     #[test]
     fn fallback_score_prefers_matching_style_then_nearest_weight() {

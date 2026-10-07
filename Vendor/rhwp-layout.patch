@@ -1970,19 +1970,6 @@ index 9d37742..4fcd199 100644
          // [#6171] 이름 셋 중 `HYGothic` 만 Windows 에서 해석된다. headless Chrome
          // 통제 실측(`'X',serif` 를 없는 글꼴 기준선과 픽셀 차분):
          // `HY중고딕` 0px · `HYGothic-Medium` 0px · **`HYGothic` 3,287px**.
-@@ -1657,6 +1660,12 @@ pub fn render_font_family_chain_for_weight(font_family: &str, bold: bool) -> Str
-     let mut family_names = Vec::new();
-     push_unique_family(&mut family_names, primary);
-     for alias in installed_render_font_aliases(primary) {
-+        // SVG-to-PDF resolves this variable face at its default regular
-+        // instance, even for bold runs. Keep the existing bold fallback until
-+        // weight-axis instantiation is supported by that output path.
-+        if bold && *alias == "Pretendard Variable" {
-+            continue;
-+        }
-         push_unique_family(&mut family_names, *alias);
-     }
-     if let Some(base) = base_family_without_weight_suffix(primary) {
 @@ -1944,6 +1953,8 @@ pub enum NumberFormat {
      LatinLower,
      /// 한글 가나다: 가, 나, 다

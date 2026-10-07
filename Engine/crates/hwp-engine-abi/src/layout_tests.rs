@@ -11,8 +11,8 @@ fn pretendard_variable_is_tried_before_unrelated_fallbacks() {
     assert!(variable < chain.find("'Apple SD Gothic Neo'").unwrap());
     let bold = rhwp::renderer::render_font_family_chain_for_weight("Pretendard", true);
     assert!(
-        !bold.contains("'Pretendard Variable'"),
-        "PDF backend cannot instantiate variable bold; preserve existing bold fallback"
+        bold.contains("'Pretendard Variable'"),
+        "bold text must retain the installed variable family instead of changing metrics"
     );
 }
 

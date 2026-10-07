@@ -851,6 +851,48 @@ struct DocumentTests {
         }
     }
 
+    @Test func variableFontKeepsWeightAndItalicRequest() async throws {
+        let document = HwpDocument()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.formatText(CharStyle(font: "Pretendard Variable", size: 32, bold: true, italic: true), nil)
+        document.type(String(repeating: "가변글꼴 굵기와 기울임 ", count: 18), nil)
+        await document.settle()
+
+        guard case .display(let display) = try #require(document.pages.first) else {
+            Issue.record("variable-font page must use the native display list")
+            return
+        }
+        let run = try #require(display.ops.compactMap { op -> PageDisplay.Op.Text? in
+            guard case .text(let text) = op,
+                  text.runs.map(\.text).joined().unicodeScalars.contains(where: { "가변".unicodeScalars.contains($0) })
+            else { return nil }
+            return text
+        }.first)
+        let face = display.fonts[try #require(run.runs.first).font]
+        #expect(face.path.contains("PretendardVariable"))
+        #expect(face.weight == 700)
+        #expect(face.italic)
+
+        let descriptor = try #require(FontFiles.shared.descriptor(face))
+        let font = FontFiles.shared.font(descriptor, size: run.size)
+        let variations = CTFontCopyVariation(font) as NSDictionary?
+        let weight = variations?[NSNumber(value: UInt32(0x7767_6874))] as? NSNumber // `wght`
+        #expect((weight?.doubleValue ?? 0) >= 650,
+                "Core Text must instantiate the variable face near the requested weight")
+        #expect(FontFiles.shared.needsSyntheticItalic(face, font: font),
+                "a variable face without an italic axis must synthesize the requested slant")
+
+        let pdf = try #require(PDFDocument(data: try await document.pdf()))
+        let exported = try #require(pdf.page(at: 0))
+        let screenPixels = try #require(raster(.display(display)))
+        let pdfPixels = try #require(raster(.pdf(exported)))
+        let differing = zip(screenPixels, pdfPixels).filter { abs(Int($0) - Int($1)) > 96 }.count
+        let painted = zip(screenPixels, pdfPixels).filter { min($0, $1) < 224 }.count
+        let ratio = Double(differing) / Double(max(1, painted))
+        #expect(ratio < 0.08,
+                "PDF export must use the same variable-font instance as the canvas")
+    }
+
     /// Renders the canvas offscreen: the page is drawn and the caret sits on it.
     /// `HWP_SNAPSHOT=<png>` keeps the image for a look.
     @Test func canvasDrawsPagesAndCaret() async throws {

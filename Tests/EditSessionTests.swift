@@ -48,7 +48,7 @@ struct EditSessionTests {
     }
 
     @Test func rejectsMalformedRenderingPayloads() {
-        let json = Data(#"{"version":3,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
+        let json = Data(#"{"version":4,"revision":0,"pageCount":1,"changedPages":[0],"canUndo":false,"canRedo":false,"dirty":false}"#.utf8)
         // Old raw PDF payload, unknown discriminator and a truncated display.
         for data in [Data("%PDF-1.7".utf8), Data([2]), Data([1])] {
             #expect(throws: EditError.renderFailed) { try EditSession.Output((json, data)) }

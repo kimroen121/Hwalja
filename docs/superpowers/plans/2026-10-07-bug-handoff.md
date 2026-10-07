@@ -62,12 +62,12 @@
 - Consumes: SVG `font-weight`/`font-style` and font file face index.
 - Produces: display-list face variation data and matching Core Text/PDF font instances.
 
-- [ ] Add Rust and Swift tests proving Pretendard Variable bold/italic retains its family and requested traits without changing the normal-face advance contract.
-- [ ] Run both focused tests and verify they fail for the missing-axis path.
-- [ ] Extend the display-list contract with only the required variation coordinates and instantiate the matching `CTFontDescriptor`.
-- [ ] Apply the same axis choice in rhwp PDF export if the pixel comparison shows a mismatch.
-- [ ] Run focused tests, `make test`, and screen/PDF pixel comparison.
-- [ ] Remove the resolved BUG_HANDOFF row and commit `fix: preserve variable font axes`.
+- [x] Add Rust and Swift tests proving Pretendard Variable bold/italic retains its family and requested traits without changing the normal-face advance contract.
+- [x] Run both focused tests and verify they fail for the missing-axis path.
+- [x] Extend the display-list contract with only the required variation coordinates and instantiate the matching `CTFontDescriptor`.
+- [x] Apply the same axis choice in PDF export after the pixel comparison showed a mismatch.
+- [x] Run focused tests, `make test`, and screen/PDF pixel comparison.
+- [x] Remove the resolved BUG_HANDOFF row and commit `fix: preserve variable font axes`.
 
 ### Task 3: rhwp Paragraph and Pagination Fidelity
 

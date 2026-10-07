@@ -532,7 +532,7 @@ fn protocol_version_accepts_current_and_rejects_previous() {
     };
     assert!(s
         .apply(EditRequest {
-            version: 3,
+            version: PROTOCOL_VERSION,
             revision: 0,
             command: command("새"),
             amend: false,
@@ -540,7 +540,7 @@ fn protocol_version_accepts_current_and_rejects_previous() {
         .is_ok());
     assert!(matches!(
         s.apply(EditRequest {
-            version: 2,
+            version: PROTOCOL_VERSION - 1,
             revision: 1,
             command: command("옛"),
             amend: false,
@@ -835,7 +835,9 @@ fn ffi_round_trip_owns_results() {
         assert_eq!(data[0], 1);
         assert!(!data.windows(5).any(|w| w == b"%PDF-"));
         hwp_edit_result_free(opened);
-        let request = br#"{"op":"apply","request":{"version":3,"revision":0,"command":{"kind":"replace","selection":{"anchor":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0},"focus":{"target":{"section":0,"paragraph":1,"cell":null},"scalar":0}},"text":"x"}}}"#;
+        let request = format!(
+            r#"{{"op":"apply","request":{{"version":{PROTOCOL_VERSION},"revision":0,"command":{{"kind":"replace","selection":{{"anchor":{{"target":{{"section":0,"paragraph":1,"cell":null}},"scalar":0}},"focus":{{"target":{{"section":0,"paragraph":1,"cell":null}},"scalar":0}}}},"text":"x"}}}}}}"#
+        );
         let applied = hwp_edit_request(session, request.as_ptr(), request.len());
         assert_eq!(hwp_edit_result_status(applied), 0, "{}", json(applied));
         assert!(json(applied).contains("\"revision\":1"));
