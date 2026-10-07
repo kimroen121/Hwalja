@@ -151,8 +151,12 @@ final class Viewer: ObservableObject {
     let canvas = DocumentCanvas(frame: .zero)
     let position = ViewPosition()
     /// Pages side by side.
+    /// Pages side by side; more than one turns 쪽 윤곽 on, as 한글's 여러 쪽 보기 does.
     @Published var columns = 1 {
-        didSet { canvas.columns = columns }
+        didSet {
+            canvas.columns = columns
+            if columns > 1 { showsOutline = true }
+        }
     }
     @Published var showsTools = true
     @Published var showsFormat = true
@@ -173,8 +177,13 @@ final class Viewer: ObservableObject {
     @Published var showsRuler = false {
         didSet { canvas.showsRuler = showsRuler }
     }
-    @Published var showsOutline = true {
-        didSet { canvas.editor.showsOutline = showsOutline }
+    /// 쪽 윤곽, remembered for new windows and the next launch as 한글 does.
+    @Published var showsOutline = UserDefaults.standard.object(forKey: "showsOutline") as? Bool ?? true {
+        didSet {
+            canvas.editor.showsOutline = showsOutline
+            canvas.showsMargins = showsOutline
+            UserDefaults.standard.set(showsOutline, forKey: "showsOutline")
+        }
     }
     @Published var goingToPage = false
     @Published var insertingTable = false
@@ -205,6 +214,8 @@ final class Viewer: ObservableObject {
     var undoManager: UndoManager? { canvas.editor.undoManager }
 
     init() {
+        canvas.editor.showsOutline = showsOutline
+        canvas.showsMargins = showsOutline
         canvas.onViewChange = { [weak self] in
             guard let self else { return }
             let zoom = Int((canvas.zoom * 100).rounded()), page = canvas.currentPage

@@ -59,6 +59,10 @@ final class DocumentCanvas: NSScrollView {
             needsRulers()
         }
     }
+    /// Without 쪽 윤곽 the rulers show the margins but cannot change them, as in 한글.
+    var showsMargins = true {
+        didSet { needsRulers() }
+    }
     private var rulersPending = false
     /// Places the rulers once, after the layout that asked: changing them lays the view out again.
     func needsRulers() {
@@ -103,7 +107,7 @@ final class DocumentCanvas: NSScrollView {
                 .withSymbolConfiguration(.init(pointSize: 8, weight: .regular)) else { return nil }
             let marker = NSRulerMarker(rulerView: ruler, markerLocation: at, image: image,
                                        imageOrigin: NSPoint(x: image.size.width / 2, y: 0))
-            marker.isMovable = !model.context.locked
+            marker.isMovable = !model.context.locked && (showsMargins || ![.left, .right, .top, .bottom].contains(mark))
             marker.representedObject = mark.rawValue as NSString
             return marker
         }

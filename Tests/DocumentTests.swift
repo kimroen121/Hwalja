@@ -1123,6 +1123,14 @@ struct DocumentTests {
         #expect(canvas.editor.clip(ofPage: 0) == page)
     }
 
+    @Test func pageOutlineTurnsOnForSeveralPagesAndIsRemembered() {
+        let viewer = Viewer()
+        viewer.showsOutline = false
+        #expect(Viewer().showsOutline == false && !viewer.canvas.editor.showsOutline)
+        viewer.columns = 2
+        #expect(viewer.showsOutline && viewer.canvas.editor.showsOutline && Viewer().showsOutline)
+    }
+
     @Test func zoomingAndReflowingSettle() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
         let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
@@ -1287,6 +1295,7 @@ struct DocumentTests {
                 editor.cacheDisplay(in: area, to: rep)
                 try rep.representation(using: .png, properties: [:])?.write(to: folder.appending(path: "draft.png"))
             }
+            viewer.showsOutline = true
         }
     }
 

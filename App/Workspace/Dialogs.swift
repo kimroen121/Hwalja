@@ -56,8 +56,9 @@ extension Viewer {
     func setPage(_ page: PageSetup, section: UInt32) {
         document?.edit(undoManager) { _ in .setPage(section: section, page) }
     }
-    /// Replaces the section's 머리말 (or 꼬리말) for every page.
+    /// Replaces the section's 머리말 (or 꼬리말) for every page, turning 쪽 윤곽 on to show it.
     func headerFooter(footer: Bool, pageNumber: Placement?) {
+        showsOutline = true
         document?.edit(undoManager) { selection in
             .headerFooter(section: selection?.focus.target.section ?? 0, footer: footer, pageNumber: pageNumber)
         }
