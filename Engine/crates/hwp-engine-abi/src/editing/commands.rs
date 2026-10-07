@@ -468,6 +468,51 @@ impl EditSession {
                 validate_page(page)
             }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
+            EditCommand::NewNumber { position, .. } => {
+                codes::body(&position.target)?;
+                self.validate_position(position)
+            }
+            EditCommand::SetPageHide { target, .. } => {
+                codes::body(target)?;
+                get(self.core.document(), target).map(|_| ())
+            }
+            EditCommand::AddBookmark { position, name } => {
+                codes::body(&position.target)?;
+                self.validate_position(position)?;
+                if name.trim().is_empty() || self.bookmarks().iter().any(|b| &b.name == name) {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
+            EditCommand::ChangeBookmark {
+                target,
+                control,
+                name,
+            } => {
+                codes::body(target)?;
+                if !matches!(
+                    get(self.core.document(), target)?
+                        .controls
+                        .get(*control as usize),
+                    Some(Control::Bookmark(_))
+                ) || name.as_ref().is_some_and(|n| n.trim().is_empty())
+                {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
+            EditCommand::EraseCodes { selection, kinds } => {
+                if kinds.is_empty() {
+                    return Err(EditError::InvalidInput);
+                }
+                if let Some(selection) = selection {
+                    codes::body(&selection.anchor.target)?;
+                    codes::body(&selection.focus.target)?;
+                    self.validate_position(&selection.anchor)?;
+                    self.validate_position(&selection.focus)?;
+                }
+                Ok(())
+            }
             EditCommand::DeleteHeaderFooter { target } => {
                 if target.header_footer.is_none() {
                     return Err(EditError::UnsupportedTarget);
@@ -1216,6 +1261,34 @@ impl EditSession {
                     records.remove(c);
                 }
                 Ok(self.kept(target.section))
+            }
+            EditCommand::NewNumber {
+                position,
+                numbering,
+                number,
+            } => {
+                self.new_number(position, *numbering, *number)?;
+                Ok(self.kept(position.target.section))
+            }
+            EditCommand::SetPageHide { target, hide } => {
+                self.set_page_hide(target, hide)?;
+                Ok(self.kept(target.section))
+            }
+            EditCommand::AddBookmark { position, name } => {
+                self.add_bookmark(position, name)?;
+                Ok(self.kept(position.target.section))
+            }
+            EditCommand::ChangeBookmark {
+                target,
+                control,
+                name,
+            } => {
+                self.change_bookmark(target, *control, name.as_deref())?;
+                Ok(self.kept(target.section))
+            }
+            EditCommand::EraseCodes { selection, kinds } => {
+                self.erase_codes(selection.as_ref(), kinds)?;
+                Ok(self.kept(0))
             }
             EditCommand::SetColumns { section, count } => {
                 let current = self.column_defs(*section)[0];

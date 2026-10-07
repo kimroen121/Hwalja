@@ -284,6 +284,7 @@ enum Icon {
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"
+    static let documentInfo = "info.circle", eraseCodes = "eraser", bookmark = "bookmark", newNumber = "number", pageHide = "eye.slash"
     static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"

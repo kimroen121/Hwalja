@@ -123,13 +123,23 @@ enum EditCommand: Encodable, Sendable {
     case deleteHeaderFooter(EditTarget)
     /// 단 하나, 둘 or 셋 for a section with one column definition.
     case setColumns(section: UInt32, count: UInt16)
+    /// 새 번호로 시작 at a body position; a paragraph that already starts the kind anew changes its number.
+    case newNumber(EditPosition, numbering: NumberKind, number: UInt16)
+    /// 현재 쪽만 감추기 for the body paragraph `target`; nothing hidden takes it out.
+    case setPageHide(EditTarget, PageHide)
+    case addBookmark(EditPosition, name: String)
+    /// 책갈피 이름 바꾸기, or without `name` 지우기.
+    case changeBookmark(EditTarget, control: UInt32, name: String?)
+    /// 조판 부호 지우기 in the body, or in `selection`.
+    case eraseCodes(EditSelection?, kinds: [CodeKind])
     case undo
     case redo
 
     private enum Key: String, CodingKey {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
-             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy
+             footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
+             numbering, number, hide, name, control, kinds
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -252,6 +262,28 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setColumns", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(count, forKey: .count)
+        case let .newNumber(position, numbering, number):
+            try c.encode("newNumber", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(numbering, forKey: .numbering)
+            try c.encode(number, forKey: .number)
+        case let .setPageHide(target, hide):
+            try c.encode("setPageHide", forKey: .kind)
+            try c.encode(target, forKey: .target)
+            try c.encode(hide, forKey: .hide)
+        case let .addBookmark(position, name):
+            try c.encode("addBookmark", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(name, forKey: .name)
+        case let .changeBookmark(target, control, name):
+            try c.encode("changeBookmark", forKey: .kind)
+            try c.encode(target, forKey: .target)
+            try c.encode(control, forKey: .control)
+            try c.encode(name, forKey: .name)
+        case let .eraseCodes(selection, kinds):
+            try c.encode("eraseCodes", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(kinds, forKey: .kinds)
         case let .calculateBlock(selection, function):
             try c.encode("calculateBlock", forKey: .kind)
             try c.encode(selection, forKey: .selection)
@@ -646,6 +678,84 @@ struct StyleInfo: Decodable, Hashable, Sendable {
     var name: String
 }
 
+/// 번호 종류 of 새 번호로 시작, in the dialog's order.
+enum NumberKind: String, Codable, CaseIterable, Sendable {
+    case page, picture, table, equation, footnote, endnote
+    var title: String {
+        switch self {
+        case .page: "쪽 번호"
+        case .picture: "그림 번호"
+        case .table: "표 번호"
+        case .equation: "수식 번호"
+        case .footnote: "각주 번호"
+        case .endnote: "미주 번호"
+        }
+    }
+}
+
+/// 감출 내용 of 현재 쪽만 감추기.
+struct PageHide: Codable, Hashable, Sendable {
+    var header = false
+    var footer = false
+    var pageNumber = false
+    /// 쪽 테두리/배경.
+    var borderFill = false
+    /// 바탕쪽.
+    var masterPage = false
+}
+
+/// A code 조판 부호 지우기 can take out.
+enum CodeKind: Encodable, Hashable, Sendable {
+    case footnote, endnote, pageHide, drawing, textBox, picture, table, equation, header, footer, pageNumberPosition
+    case newNumber(NumberKind)
+
+    /// 개체 선택, in the order 한글's help lists it.
+    static let all: [CodeKind] = [
+        .footnote, .pageHide, .drawing, .picture, .textBox, .footer, .header, .endnote,
+        .newNumber(.footnote), .newNumber(.picture), .newNumber(.endnote), .newNumber(.equation), .newNumber(.page), .newNumber(.table),
+        .equation, .pageNumberPosition, .table,
+    ]
+    var title: String {
+        switch self {
+        case .footnote: "각주"
+        case .endnote: "미주"
+        case .pageHide: "감추기"
+        case .drawing: "그리기"
+        case .textBox: "글상자"
+        case .picture: "그림"
+        case .table: "표"
+        case .equation: "수식"
+        case .header: "머리말"
+        case .footer: "꼬리말"
+        case .pageNumberPosition: "쪽 번호 위치"
+        case let .newNumber(kind): "새 " + kind.title
+        }
+    }
+    private enum Key: String, CodingKey { case newNumber }
+    func encode(to encoder: Encoder) throws {
+        if case let .newNumber(kind) = self {
+            var c = encoder.container(keyedBy: Key.self)
+            try c.encode(kind, forKey: .newNumber)
+        } else {
+            var c = encoder.singleValueContainer()
+            try c.encode(String(describing: self))
+        }
+    }
+}
+
+/// A 책갈피 of the body.
+struct Bookmark: Decodable, Hashable, Sendable {
+    var name: String
+    var position: EditPosition
+    var control: UInt32
+}
+
+/// 문서 정보 › 문서 통계.
+struct Statistics: Decodable, Hashable, Sendable {
+    var characters, charactersWithoutSpaces, hanja, words, lines, paragraphs, pages, manuscript: UInt32
+    var tables, pictures, textBoxes: UInt32
+}
+
 /// 96 dpi, top-left origin within `page`.
 struct PageRect: Decodable, Hashable, Sendable {
     var page: UInt32
@@ -688,6 +798,9 @@ enum EngineRequest: Encodable, Sendable {
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
+    case pageHide(EditTarget)
+    case bookmarks
+    case statistics
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
@@ -756,6 +869,13 @@ enum EngineRequest: Encodable, Sendable {
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
             try c.encode(section, forKey: .section)
+        case let .pageHide(target):
+            try c.encode("pageHide", forKey: .op)
+            try c.encode(target, forKey: .target)
+        case .bookmarks:
+            try c.encode("bookmarks", forKey: .op)
+        case .statistics:
+            try c.encode("statistics", forKey: .op)
         case let .objectAt(revision, page, x, y):
             try c.encode("objectAt", forKey: .op)
             try c.encode(revision, forKey: .revision)

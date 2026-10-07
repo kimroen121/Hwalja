@@ -353,12 +353,6 @@ struct ObjectSheet: View {
     }
 }
 
-private extension View {
-    func tab(_ title: String) -> some View {
-        frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text(title) }.tag(title)
-    }
-}
-
 /// Choices shown as pictures in a row, as the web dialogs show 본문과의 배치 and 쪽 경계에서.
 private struct IconTiles<Value: Hashable, Picture: View>: View {
     @Binding var selection: Value

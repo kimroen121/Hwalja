@@ -867,6 +867,30 @@ struct DocumentTests {
         #expect(try await document.find("사과").count == 3)
     }
 
+    @Test func pageCodesAndBookmarksRunFromTheViewer() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        document.type("책갈피 이름", nil)
+        await document.settle()
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        #expect(await viewer.wordAtCaret() == "책갈피")
+        viewer.addBookmark("처음")
+        viewer.newNumber(.page, from: 7)
+        viewer.setPageHide(PageHide(header: true, footer: true))
+        await document.settle()
+        let marks = try await document.bookmarks()
+        #expect(marks.map(\.name) == ["처음"])
+        #expect(try await document.pageHide(body) == PageHide(header: true, footer: true))
+        viewer.eraseCodes([.pageHide, .newNumber(.page)])
+        await document.settle()
+        #expect(try await document.pageHide(body) == PageHide())
+        let statistics = try await document.statistics()
+        #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
+    }
+
     @Test func structureCommandsRunFromTheViewer() async throws {
         let document = HwpDocument()
         let viewer = Viewer()
@@ -1246,6 +1270,11 @@ struct DocumentTests {
             ("margins", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                                                                     props: ObjectProps(caption: "Bottom")),
                                             viewer: viewer, tab: "여백/캡션"))),
+            ("newNumber", AnyView(NewNumberSheet(viewer: viewer))),
+            ("pageHide", AnyView(PageHideSheet(viewer: viewer, hide: PageHide(header: true)))),
+            ("bookmark", AnyView(BookmarkSheet(viewer: viewer))),
+            ("eraseCodes", AnyView(EraseCodesSheet(viewer: viewer))),
+            ("documentInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics())))),
             ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                                                                      props: ObjectProps(pageBreak: 2, repeatHeader: true)),
                                              viewer: viewer, tab: "표"))),

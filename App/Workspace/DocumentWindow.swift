@@ -55,6 +55,13 @@ struct DocumentWindow: View {
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.startingNumber) { NewNumberSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.bookmarking) { BookmarkSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.erasingCodes) { EraseCodesSheet(viewer: viewer) }
+        .sheet(isPresented: Binding(get: { viewer.pageHide != nil }, set: { if !$0 { viewer.pageHide = nil } })) {
+            if let hide = viewer.pageHide { PageHideSheet(viewer: viewer, hide: hide) }
+        }
+        .sheet(item: $viewer.documentInfo) { DocumentInfoSheet(info: $0) }
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
         .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingCharShape) {
@@ -186,6 +193,12 @@ final class Viewer: ObservableObject {
         }
     }
     @Published var goingToPage = false
+    /// 새 번호로 시작, 책갈피 and 조판 부호 지우기, while open; 현재 쪽만 감추기 and 문서 정보 with what they show.
+    @Published var startingNumber = false
+    @Published var bookmarking = false
+    @Published var erasingCodes = false
+    @Published var pageHide: PageHide?
+    @Published var documentInfo: DocumentInfo?
     @Published var insertingTable = false
     @Published var splittingCells = false
     /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.

@@ -101,6 +101,15 @@ final class EditSession: @unchecked Sendable {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await decode(send(.pageSetup(section: section)))
     }
+    func pageHide(_ target: EditTarget) async throws -> PageHide {
+        try await decode(send(.pageHide(target)))
+    }
+    func bookmarks() async throws -> [Bookmark] {
+        try await decode(send(.bookmarks))
+    }
+    func statistics() async throws -> Statistics {
+        try await decode(send(.statistics))
+    }
 
     func styles() async throws -> [StyleInfo] {
         try await decode(send(.styles))

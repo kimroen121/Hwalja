@@ -1329,7 +1329,7 @@ fn integral_path_is_tall_slender_and_light() {
         .find(|part| part.contains("stroke-linecap=\"round\""))
         .expect("integral stroke path");
     let attr = |name: &str| {
-        let value = tag.split(&format!("{name}=\"" )).nth(1).unwrap();
+        let value = tag.split(&format!("{name}=\"")).nth(1).unwrap();
         value.split('"').next().unwrap()
     };
     let points: Vec<f64> = attr("d")
@@ -1343,7 +1343,10 @@ fn integral_path_is_tall_slender_and_light() {
     let visual_width = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)
         - xs.iter().copied().fold(f64::INFINITY, f64::min);
     let stroke: f64 = attr("stroke-width").parse().unwrap();
-    assert!(visual_width / height < 0.20, "too wide: {visual_width}/{height}");
+    assert!(
+        visual_width / height < 0.20,
+        "too wide: {visual_width}/{height}"
+    );
     assert!(stroke / height < 0.022, "too heavy: {stroke}/{height}");
 }
 
@@ -1674,6 +1677,151 @@ fn an_empty_header_is_entered_anywhere_in_its_area() {
     s.core.create_header_footer_native(0, false, 0).unwrap();
     let hit = s.hit_test(s.revision, 0, 300.0, 120.0, true).unwrap();
     assert!(hit.target.header_footer.is_none());
+}
+/// 새 번호로 시작, 현재 쪽만 감추기, 책갈피 and 조판 부호 지우기 change only their codes, and
+/// stay through saving; 문서 통계 counts the text.
+#[test]
+fn page_codes_bookmarks_and_erasing_survive_saving() {
+    for format in ["hwp", "hwpx"] {
+        let save = if format == "hwp" {
+            SaveFormat::Hwp
+        } else {
+            SaveFormat::Hwpx
+        };
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let at = |paragraph, scalar| {
+            point(
+                EditTarget {
+                    paragraph,
+                    ..body()
+                },
+                scalar,
+            )
+        };
+        for number in [3, 5] {
+            run(
+                &mut s,
+                EditCommand::NewNumber {
+                    position: at(1, 1),
+                    numbering: NumberKind::Picture,
+                    number,
+                },
+            )
+            .unwrap();
+        }
+        let hide = PageHide {
+            header: true,
+            page_number: true,
+            ..Default::default()
+        };
+        run(
+            &mut s,
+            EditCommand::SetPageHide {
+                target: at(1, 0).target,
+                hide,
+            },
+        )
+        .unwrap();
+        run(
+            &mut s,
+            EditCommand::AddBookmark {
+                position: at(1, 1),
+                name: "가".into(),
+            },
+        )
+        .unwrap();
+        assert!(run(
+            &mut s,
+            EditCommand::AddBookmark {
+                position: at(1, 0),
+                name: "가".into()
+            }
+        )
+        .is_err());
+        let mark = s.bookmarks().remove(0);
+        assert_eq!((mark.name.as_str(), mark.position.scalar), ("가", 1));
+        run(
+            &mut s,
+            EditCommand::ChangeBookmark {
+                target: mark.position.target.clone(),
+                control: mark.control,
+                name: Some("나".into()),
+            },
+        )
+        .unwrap();
+        let stats = s.statistics();
+        assert_eq!(
+            (stats.tables, stats.paragraphs > 3, stats.characters > 10),
+            (1, true, true),
+            "{format}"
+        );
+
+        let mut s = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let numbers: Vec<_> = s.core.document().sections[0].paragraphs[1]
+            .controls
+            .iter()
+            .filter_map(|c| match c {
+                Control::NewNumber(n) => Some((n.number_type, n.number)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            numbers,
+            [(rhwp::model::control::AutoNumberType::Picture, 5)],
+            "{format}"
+        );
+        assert_eq!(s.page_hide(&at(1, 0).target).unwrap(), hide, "{format}");
+        assert_eq!(
+            s.bookmarks()
+                .iter()
+                .map(|b| b.name.as_str())
+                .collect::<Vec<_>>(),
+            ["나"],
+            "{format}"
+        );
+
+        let kinds = vec![
+            CodeKind::Table,
+            CodeKind::PageHide,
+            CodeKind::NewNumber(NumberKind::Picture),
+        ];
+        run(
+            &mut s,
+            EditCommand::EraseCodes {
+                selection: None,
+                kinds: kinds.clone(),
+            },
+        )
+        .unwrap();
+        assert!(
+            codes::codes(s.core.document(), None, &kinds).is_empty(),
+            "{format}"
+        );
+        assert_eq!(s.bookmarks().len(), 1, "{format}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(
+            codes::codes(s.core.document(), None, &kinds).len(),
+            3,
+            "{format}"
+        );
+        let mark = s.bookmarks().remove(0);
+        let text = s.paragraph(&mark.position.target).unwrap().text;
+        run(
+            &mut s,
+            EditCommand::ChangeBookmark {
+                target: mark.position.target.clone(),
+                control: mark.control,
+                name: None,
+            },
+        )
+        .unwrap();
+        assert!(s.bookmarks().is_empty(), "{format}");
+        assert_eq!(
+            s.paragraph(&mark.position.target).unwrap().text,
+            text,
+            "{format}"
+        );
+    }
 }
 /// `HWP_RENDER=<file> HWP_RENDER_DIR=<folder> cargo test render_pages -- --ignored`: each
 /// page as rhwp draws it, and the PDF, for a look.

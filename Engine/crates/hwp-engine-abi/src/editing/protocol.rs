@@ -260,8 +260,117 @@ pub enum EditCommand {
         #[serde(rename = "pageNumber")]
         page_number: Option<Placement>,
     },
+    /// 새 번호로 시작: numbers of `numbering` from `number` on, from `position` (a body
+    /// paragraph). Where the paragraph already starts that kind anew, its number changes.
+    NewNumber {
+        position: EditPosition,
+        numbering: NumberKind,
+        number: u16,
+    },
+    /// 현재 쪽만 감추기, set at the start of the body paragraph `target`; nothing hidden
+    /// takes it out.
+    SetPageHide {
+        target: EditTarget,
+        hide: PageHide,
+    },
+    /// 책갈피 넣기 at `position` in the body.
+    AddBookmark {
+        position: EditPosition,
+        name: String,
+    },
+    /// 책갈피 이름 바꾸기 (or, without `name`, 지우기) for control `control` of the body
+    /// paragraph `target`.
+    ChangeBookmark {
+        target: EditTarget,
+        control: u32,
+        name: Option<String>,
+    },
+    /// 조판 부호 지우기: every code of `kinds` in the body, or in `selection`.
+    EraseCodes {
+        selection: Option<EditSelection>,
+        kinds: Vec<CodeKind>,
+    },
     Undo,
     Redo,
+}
+/// 번호 종류 of 새 번호로 시작.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NumberKind {
+    Page,
+    Picture,
+    Table,
+    Equation,
+    Footnote,
+    Endnote,
+}
+/// 감출 내용 of 현재 쪽만 감추기.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PageHide {
+    pub header: bool,
+    pub footer: bool,
+    pub page_number: bool,
+    /// 쪽 테두리/배경.
+    pub border_fill: bool,
+    /// 바탕쪽.
+    pub master_page: bool,
+}
+/// The codes 조판 부호 지우기 can take out, as its 개체 선택 names them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CodeKind {
+    /// 각주.
+    Footnote,
+    /// 미주.
+    Endnote,
+    /// 감추기.
+    PageHide,
+    /// 그리기: a drawing object without text.
+    Drawing,
+    /// 글상자: a drawing object with text.
+    TextBox,
+    /// 그림.
+    Picture,
+    /// 표.
+    Table,
+    /// 수식.
+    Equation,
+    /// 머리말.
+    Header,
+    /// 꼬리말.
+    Footer,
+    /// 쪽 번호 위치.
+    PageNumberPosition,
+    /// 새 쪽 번호, 새 그림 번호, 새 표 번호, 새 수식 번호, 새 각주 번호, 새 미주 번호.
+    NewNumber(NumberKind),
+}
+/// A 책갈피 of the body.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Bookmark {
+    pub name: String,
+    pub position: EditPosition,
+    pub control: u32,
+}
+/// 문서 정보 › 문서 통계: the document's 분량, table cells counted as paragraphs.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Statistics {
+    /// 글자(공백 포함), 글자(공백 제외), 글자에 포함된 한자 수.
+    pub characters: u32,
+    pub characters_without_spaces: u32,
+    pub hanja: u32,
+    /// 낱말, 줄, 문단, 쪽.
+    pub words: u32,
+    pub lines: u32,
+    pub paragraphs: u32,
+    pub pages: u32,
+    /// 원고지(200자 기준).
+    pub manuscript: u32,
+    /// 표, 그림, 글상자.
+    pub tables: u32,
+    pub pictures: u32,
+    pub text_boxes: u32,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

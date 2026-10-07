@@ -1,5 +1,6 @@
 mod cells;
 mod clipboard;
+mod codes;
 mod commands;
 mod display;
 pub mod ffi;
@@ -317,7 +318,17 @@ impl EditSession {
                 scalar: 0,
                 upstream: false,
             }),
+            EditCommand::NewNumber { position, .. } | EditCommand::AddBookmark { position, .. } => {
+                Some(position.clone())
+            }
+            EditCommand::SetPageHide { target, .. }
+            | EditCommand::ChangeBookmark { target, .. } => Some(EditPosition {
+                target: target.clone(),
+                scalar: 0,
+                upstream: false,
+            }),
             EditCommand::SetPage { .. }
+            | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }
             | EditCommand::HeaderFooter { .. }

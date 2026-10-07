@@ -214,6 +214,8 @@ struct MenuItems {
             .disabled(viewer == nil || context.locked)
         item("프린트…", Icon.print) { send(#selector(DocumentCanvas.printDocument(_:))) }
             .keyboardShortcut("p")
+        item("문서 정보…", Icon.documentInfo) { viewer?.showDocumentInfo() }
+            .disabled(viewer == nil)
     }
 
     /// 편집 items after the system's clipboard commands.
@@ -221,6 +223,8 @@ struct MenuItems {
         item("모양 복사", Icon.styleCopy) { viewer?.paintFormat() }
             .keyboardShortcut("c", modifiers: [.command, .option])
             .disabled(!context.canFormat)
+        item("조판 부호 지우기…", Icon.eraseCodes) { viewer?.erasingCodes = true }
+            .disabled(viewer == nil || context.locked)
     }
     @ViewBuilder var find: some View {
         Group {
@@ -231,12 +235,16 @@ struct MenuItems {
             item("찾아가기…", Icon.goTo) { viewer?.goingToPage = true }
                 .keyboardShortcut("g", modifiers: [.command, .option])
             Divider()
-            Button("다음 찾기") { viewer?.findNext() }
-                .keyboardShortcut("g")
-            Button("이전 찾기") { viewer?.findNext(backward: true) }
-                .keyboardShortcut("g", modifiers: [.command, .shift])
+            Group {
+                Button("다음 찾기") { viewer?.findNext() }
+                    .keyboardShortcut("g")
+                Button("이전 찾기") { viewer?.findNext(backward: true) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+            }
+            .disabled(viewer?.matches.isEmpty ?? true)
             Button("선택 부분으로 찾기") { viewer?.findSelection() }
                 .keyboardShortcut("e")
+                .disabled(!context.hasRange)
         }
         .disabled(viewer == nil)
     }
@@ -308,6 +316,8 @@ struct MenuItems {
                 }
             } label: { Label("캡션 넣기", systemImage: Icon.caption) }
                 .disabled(!context.canCaption)
+            item("책갈피…", Icon.bookmark) { viewer?.bookmarking = true }
+                .disabled(!context.inBody)
         }
     }
 
@@ -376,6 +386,11 @@ struct MenuItems {
             Menu { headerItems(footer: true) } label: { Label("꼬리말", systemImage: Icon.footer) }
         }
         .disabled(viewer == nil || context.locked)
+        Group {
+            item("새 번호로 시작…", Icon.newNumber) { viewer?.startingNumber = true }
+            item("현재 쪽만 감추기…", Icon.pageHide) { viewer?.showPageHide() }
+        }
+        .disabled(!context.inBody)
         Divider()
         Group {
             item("쪽 나누기", Icon.pageBreak) { viewer?.insertBreak(column: false) }

@@ -95,6 +95,14 @@ enum Request {
     PageSetup {
         section: u32,
     },
+    /// 현재 쪽만 감추기 of a body paragraph.
+    PageHide {
+        target: EditTarget,
+    },
+    /// The 책갈피 of the body.
+    Bookmarks,
+    /// 문서 정보's 문서 통계.
+    Statistics,
     /// Every match of `query`, as selections in document order.
     #[serde(rename_all = "camelCase")]
     Find {
@@ -234,6 +242,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::PageSetup { section } => {
             HwpEditResult::ok(session.page_setup(section)?, Vec::new())
         }
+        Request::PageHide { target } => HwpEditResult::ok(session.page_hide(&target)?, Vec::new()),
+        Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),
+        Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
         Request::Find {
             query,
             case_sensitive,

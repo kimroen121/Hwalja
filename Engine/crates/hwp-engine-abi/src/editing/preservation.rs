@@ -207,6 +207,21 @@ pub(super) fn check(
         }
         EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
+        EditCommand::NewNumber {
+            position: EditPosition { target, .. },
+            ..
+        }
+        | EditCommand::AddBookmark {
+            position: EditPosition { target, .. },
+            ..
+        }
+        | EditCommand::SetPageHide { target, .. }
+        | EditCommand::ChangeBookmark { target, .. } => {
+            return check_host(before, after, target.section, target.paragraph)
+        }
+        EditCommand::EraseCodes { selection, kinds } => {
+            return check_erased(before, after, selection.as_ref(), kinds)
+        }
         EditCommand::DeleteHeaderFooter { target } => {
             return check_deleted_header_footer(before, after, target)
         }
@@ -699,6 +714,41 @@ fn check_columns(before: &Document, after: &Document, section: u32) -> Result<()
         }
     }
     same_rest(&mut a, &mut b, section)
+}
+/// Every paragraph keeps its text, and its controls but the codes erased.
+fn check_erased(
+    before: &Document,
+    after: &Document,
+    selection: Option<&EditSelection>,
+    kinds: &[CodeKind],
+) -> Result<(), EditError> {
+    let erased = super::codes::codes(before, selection, kinds);
+    if super::codes::codes(after, selection, kinds).len() == erased.len() && !erased.is_empty() {
+        return Err(EditError::PreservationFailed);
+    }
+    for (s, (x, y)) in before.sections.iter().zip(&after.sections).enumerate() {
+        if x.paragraphs.len() != y.paragraphs.len() {
+            return Err(EditError::PreservationFailed);
+        }
+        for (p, (a, b)) in x.paragraphs.iter().zip(&y.paragraphs).enumerate() {
+            let kept: Vec<String> = a
+                .controls
+                .iter()
+                .enumerate()
+                .filter(|(c, _)| !erased.contains(&(s, p, *c)))
+                .map(|(_, c)| format!("{:?}", std::mem::discriminant(c)))
+                .collect();
+            let now: Vec<String> = b
+                .controls
+                .iter()
+                .map(|c| format!("{:?}", std::mem::discriminant(c)))
+                .collect();
+            if a.text != b.text || kept != now {
+                return Err(EditError::PreservationFailed);
+            }
+        }
+    }
+    Ok(())
 }
 /// Only the definition `target` is in is gone, with its data record.
 fn check_deleted_header_footer(

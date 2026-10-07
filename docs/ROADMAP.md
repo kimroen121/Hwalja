@@ -44,13 +44,11 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 이름은 웹 한글 메뉴에서 확인한 그대로다.
 
 - 파일
-  - [ ] 문서 정보…: `get_document_info`(읽기).
+  - [ ] 문서 정보…의 문서 요약·글꼴 정보·그림 정보 탭(일반·문서 통계는 됨): 요약은 HWP 요약 정보 쓰기가 rhwp에 없고, 글꼴 정보는 `get_document_info`.
   - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`.
 - 편집
-  - [ ] 조판 부호 지우기: `delete_control_native`.
 - 보기
 - 입력
-  - [ ] 책갈피…(넣기·고치기·지우기, 책갈피로 가기): `add_bookmark_native`, `rename_bookmark_native`, `delete_bookmark_native`, `get_bookmarks_native`.
   - [ ] 필드 입력…, 누름틀 고치기·누름틀 지우기·필드 삭제: wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`.
   - [ ] 차트 › 데이터 편집, 행/열 전환: `list_charts_native`, `get/set_chart_data_native`(구조 편집 포함). rhwp가 차트를 새로 만들지 못하고 로컬 문서에도 차트가 없어, 차트가 든 문서를 받으면 만든다.
   - [ ] 문서 안 양식 개체(누름 단추·선택 상자 등) 값 바꾸기: `get_form_object_at_native`, `set_form_value_native`.
@@ -60,8 +58,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
   - [ ] 개체 속성 › 선·테두리·배경 탭: `set_shape_properties_native`, `set_picture_properties_native`의 선·채우기 필드. 캡션의 「한 줄로 입력」은 rhwp에 없다.
   - [ ] 개체 속성 › 고정값·본문 위치.
 - 쪽
-  - [ ] 새 번호로 시작…: `insert_new_number_native`.
-  - [ ] 현재 쪽만 감추기…(머리말·꼬리말 등): `get/set_page_hide_native`, `toggle_hide_header_footer_native`.
   - [ ] 단 › 왼쪽·오른쪽: 두 단의 너비 비율을 한글에서 확인해야 한다.
   - [ ] 다단 설정 나누기: rhwp는 구역의 줄을 모두 첫 단 정의의 너비로 나누므로, 단 정의가 둘 이상인 구역의 조판부터 고쳐야 한다. 지금은 단 정의가 하나인 구역에서만 「단」을 바꾼다.
 - 표

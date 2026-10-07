@@ -16,6 +16,13 @@ fn offsets(p: &Paragraph) -> Vec<usize> {
         p.control_text_positions()
     }
 }
+/// The character offset control `control` stands at.
+pub(super) fn control_offset(p: &Paragraph, control: usize) -> usize {
+    offsets(p)
+        .get(control)
+        .copied()
+        .unwrap_or(p.text.chars().count())
+}
 /// Each control in the line with its character offset, in control order.
 fn in_line(p: &Paragraph) -> impl Iterator<Item = (usize, usize)> + '_ {
     let at = offsets(p);

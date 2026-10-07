@@ -448,6 +448,15 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func session(formatAt position: EditPosition) async throws -> Format {
         try await session.format(revision: revision, at: position)
     }
+    func pageHide(_ target: EditTarget) async throws -> PageHide {
+        try await session.pageHide(target)
+    }
+    func bookmarks() async throws -> [Bookmark] {
+        try await session.bookmarks()
+    }
+    func statistics() async throws -> Statistics {
+        try await session.statistics()
+    }
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }

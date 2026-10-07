@@ -38,6 +38,10 @@ struct DialogFrame<Content: View>: View {
 extension View {
     /// The width every tabbed dialog shares.
     func dialogTabs() -> some View { frame(width: 460, alignment: .topLeading) }
+    /// A tab of a dialog, named and tagged `title`.
+    func tab(_ title: String) -> some View {
+        frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text(title) }.tag(title)
+    }
 }
 
 /// A group's name, in the web dialogs' blue and the weight of the fields under it.
