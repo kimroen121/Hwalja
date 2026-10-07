@@ -360,7 +360,7 @@ struct EquationEditor: View {
             .padding(.bottom, 8)
             VStack(spacing: 0) {
                 ScrollView([.horizontal, .vertical]) {
-                    EquationGlyph(display: preview, zoom: 3)
+                    EquationGlyph(display: preview, zoom: 1.5)
                         .padding(16)
                         .frame(minWidth: 860, minHeight: 230, alignment: .center)
                 }

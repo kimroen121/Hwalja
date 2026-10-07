@@ -228,9 +228,8 @@ struct DocumentInfoSheet: View {
 
     var body: some View {
         DialogFrame("문서 정보") {
-            TabView(selection: $tab) {
-                general.tab("일반")
-                statistics.tab("문서 통계")
+            DialogTabs(selection: $tab, titles: ["일반", "문서 통계"]) { tab in
+                if tab == "일반" { general } else { statistics }
             }
             .dialogTabs()
             .frame(height: 300)

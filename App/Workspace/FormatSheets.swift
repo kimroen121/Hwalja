@@ -176,9 +176,8 @@ struct CharShapeSheet: View {
 
     var body: some View {
         DialogFrame("글자 모양") {
-            TabView(selection: $tab) {
-                basic.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("기본") }.tag("기본")
-                extended.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("확장") }.tag("확장")
+            DialogTabs(selection: $tab, titles: ["기본", "확장"]) { tab in
+                Group { if tab == "확장" { extended } else { basic } }.padding(16)
             }
             .frame(width: 520, height: 330)
         } confirm: {
@@ -365,14 +364,17 @@ struct ParaShapeSheet: View {
 
     var body: some View {
         DialogFrame("문단 모양") {
-            TabView(selection: $tab) {
-                basic.padding(16).frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text("기본") }.tag("기본")
-                BorderFillGroups(style: $style) {
-                    Toggle("문단 테두리 연결", isOn: Binding { style.borderConnect ?? false } set: { style.borderConnect = $0 })
+            DialogTabs(selection: $tab, titles: ["기본", "테두리/배경"]) { tab in
+                Group {
+                    if tab == "기본" {
+                        basic
+                    } else {
+                        BorderFillGroups(style: $style) {
+                            Toggle("문단 테두리 연결", isOn: Binding { style.borderConnect ?? false } set: { style.borderConnect = $0 })
+                        }
+                    }
                 }
                 .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .tabItem { Text("테두리/배경") }.tag("테두리/배경")
             }
             .frame(width: 520, height: 400)
         } confirm: {
@@ -509,38 +511,39 @@ struct ListSheet: View {
 
     var body: some View {
         DialogFrame("글머리표 및 문단 번호") {
-            TabView(selection: $tab) {
-                VStack(alignment: .leading, spacing: 8) {
-                    GroupTitle("글머리표 모양")
-                    Samples(count: FormatChoices.bullets.count, selected: FormatChoices.bullets.firstIndex { $0 == bullet }) {
-                        bullet = $0.map { FormatChoices.bullets[$0] }
-                    } sample: { BulletSample(bullet: FormatChoices.bullets[$0]) }
-                }
-                .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .tabItem { Text("글머리표") }.tag("글머리표")
-                VStack(alignment: .leading, spacing: 8) {
-                    GroupTitle("문단 번호 모양")
-                    Samples(count: FormatChoices.numberings.count, selected: numbering) { numbering = $0 } sample: {
-                        NumberingSample(levels: FormatChoices.numberings[$0])
+            DialogTabs(selection: $tab, titles: ["글머리표", "문단 번호"]) { tab in
+                if tab == "글머리표" {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("글머리표 모양")
+                        Samples(count: FormatChoices.bullets.count, selected: FormatChoices.bullets.firstIndex { $0 == bullet }) {
+                            bullet = $0.map { FormatChoices.bullets[$0] }
+                        } sample: { BulletSample(bullet: FormatChoices.bullets[$0]) }
                     }
-                    GroupTitle("시작 번호 방식").padding(.top, 8)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Picker("", selection: $restart) {
-                            Text("앞 번호 목록에 이어").tag(0)
-                            Text("이전 번호 목록에 이어").tag(1)
-                            Text("새 번호 목록 시작").tag(2)
+                    .padding(16)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("문단 번호 모양")
+                        Samples(count: FormatChoices.numberings.count, selected: numbering) { numbering = $0 } sample: {
+                            NumberingSample(levels: FormatChoices.numberings[$0])
                         }
-                        .pickerStyle(.radioGroup)
-                        .labelsHidden()
-                        LabeledField("1수준 시작 번호") { SpinField(value: $start, unit: "", range: 1...65535) }
-                            .padding(.leading, 20)
-                            .disabled(restart != 2)
+                        GroupTitle("시작 번호 방식").padding(.top, 8)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Picker("", selection: $restart) {
+                                Text("앞 번호 목록에 이어").tag(0)
+                                Text("이전 번호 목록에 이어").tag(1)
+                                Text("새 번호 목록 시작").tag(2)
+                            }
+                            .pickerStyle(.radioGroup)
+                            .labelsHidden()
+                            LabeledField("1수준 시작 번호") { SpinField(value: $start, unit: "", range: 1...65535) }
+                                .padding(.leading, 20)
+                                .disabled(restart != 2)
+                        }
+                        .padding(.leading, 12)
+                        .disabled(!inBody || numbering == nil)
                     }
-                    .padding(.leading, 12)
-                    .disabled(!inBody || numbering == nil)
+                    .padding(16)
                 }
-                .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .tabItem { Text("문단 번호") }.tag("문단 번호")
             }
             .frame(width: 420, height: 470)
         } confirm: {

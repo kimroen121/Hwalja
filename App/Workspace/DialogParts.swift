@@ -35,13 +35,35 @@ struct DialogFrame<Content: View>: View {
     }
 }
 
+/// A dialog's tabs: a segmented control on the top edge of a box holding the chosen tab.
+/// (TabView's own tab bar draws its names over one another in a fitted sheet.)
+struct DialogTabs<Content: View>: View {
+    @Binding var selection: String
+    let titles: [String]
+    @ViewBuilder let content: (String) -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $selection) {
+                ForEach(titles, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .zIndex(1)
+            content(selection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 12)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .quaternarySystemFill)))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
+                .padding(.top, -11)
+        }
+    }
+}
+
 extension View {
     /// The width every tabbed dialog shares.
     func dialogTabs() -> some View { frame(width: 460, alignment: .topLeading) }
-    /// A tab of a dialog, named and tagged `title`.
-    func tab(_ title: String) -> some View {
-        frame(maxWidth: .infinity, alignment: .topLeading).tabItem { Text(title) }.tag(title)
-    }
 }
 
 /// A group's name, in the web dialogs' blue and the weight of the fields under it.

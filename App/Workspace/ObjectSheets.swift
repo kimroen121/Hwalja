@@ -124,13 +124,14 @@ struct ObjectSheet: View {
 
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성") {
-            TabView(selection: $tab) {
-                basic.tab("기본")
-                margins.tab("여백/캡션")
-                if kind == .picture { picture.tab("그림") }
-                if kind == .table {
-                    table.tab("표")
-                    cellTab.tab("셀")
+            DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
+                       + (kind == .table ? ["표", "셀"] : [])) { tab in
+                switch tab {
+                case "여백/캡션": margins
+                case "그림": picture
+                case "표": table
+                case "셀": cellTab
+                default: basic
                 }
             }
             .dialogTabs()
