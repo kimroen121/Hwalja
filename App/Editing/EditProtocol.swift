@@ -782,8 +782,6 @@ enum EditError: String, Error, Decodable, Sendable {
 
 enum SaveFormat: String, Encodable, Sendable {
     case hwp, hwpx
-    /// The whole document as rendered.
-    case pdf
 }
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.

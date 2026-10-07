@@ -23,7 +23,7 @@
 - 앱(`App/`): SwiftUI `DocumentGroup` 문서 앱. `HwpDocument`가 편집·이동을 제출 순서대로 하나씩 처리하고, 끝날 때마다 `Presentation`(바뀐 쪽, 커서, 선택 영역, 선택 개체)을 한 번에 내보낸다. SwiftUI는 키 입력마다 바뀌지 않는 `EditingContext`·`format`만 관찰한다.
 - 캔버스(`DocumentCanvas.swift`): 쪽을 동기적으로 그리는 자체 뷰(`NSTextInputClient`). 클릭·끌기·키 입력·한글 조합, 개체 선택·크기 조절·옮기기, 표 테두리 끌기, 빠른 메뉴.
 - 엔진(`Engine/`): `hwp_edit_*` C ABI 하나. 요청·응답은 JSON(`editing/protocol.rs` ↔ `App/Editing/EditProtocol.swift`), 쪽은 이진 표시 목록(`display.rs` ↔ `PageDisplay.swift`). 문서 열기도 편집 세션으로 한다.
-- 렌더링: 편집마다 바뀐 쪽만 SVG로 그려 해시로 비교하고, 바뀐 쪽은 표시 목록으로 만들어 Core Graphics/Core Text로 바로 그린다. 표시 목록이 다루지 못하는 쪽(화살표 marker 등)만 PDF로 받는다. 4쪽 보고서에서 키 입력 한 번이 앱 왕복 24ms, 새 쪽 그리기 3ms다. 프린트·PDF 내보내기는 엔진이 전체 PDF를 새로 만든다.
+- 렌더링: 편집마다 바뀐 쪽만 SVG로 그려 해시로 비교하고, 바뀐 쪽은 표시 목록으로 만들어 Core Graphics/Core Text로 바로 그린다. 표시 목록이 다루지 못하는 쪽(화살표 marker 등)만 PDF로 받는다. 4쪽 보고서에서 키 입력 한 번이 앱 왕복 24ms, 새 쪽 그리기 3ms다. 프린트·PDF 내보내기는 화면에 그린 쪽을 그대로 PDF로 그린다.
 - 창 구성은 웹 한글과 같은 순서다: macOS 메뉴 막대(파일·편집·보기·입력·서식·쪽·표), 도구 상자(작은 탭 기본·편집·보기·입력·서식·쪽·표가 큰 아이콘 줄을 바꾼다), 서식 도구 상자, 사이드바(쪽 미리 보기) + 쪽, 상태 표시줄(쪽, 확대/축소).
 - 안전장치: 문자소 경계 검증, 실패 시 롤백, 저장 전 재파싱 검증. 명령마다 바뀌어야 할 곳만 바뀌는지 보는 보존 검사(`preservation.rs`)는 테스트 빌드에서만 돈다. 로컬 문서 47개에서 구조 명령 156회 거부 0(`structure_edits_on_corpus`, opt-in).
 

@@ -44,9 +44,7 @@ enum RenderedPage: @unchecked Sendable {
     }
 }
 
-/// Makes a PDF from the same page objects the canvas draws. This keeps Core Text variable
-/// font instances, synthetic traits, fallback glyphs and object placement identical on screen
-/// and in exported/printed output.
+/// A PDF drawn from the pages the canvas draws, so printing and export look as the screen does.
 func pdfData(drawing pages: [RenderedPage]) throws -> Data {
     guard let first = pages.first else { throw EditError.renderFailed }
     let data = NSMutableData()

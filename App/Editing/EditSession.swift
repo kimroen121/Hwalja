@@ -56,10 +56,6 @@ final class EditSession: @unchecked Sendable {
     func export(_ format: SaveFormat) throws -> Data {
         try queue.sync { try request(.export(format)).data }
     }
-    /// The whole document as PDF.
-    func pdf() async throws -> Data {
-        try await send(.export(.pdf)).data
-    }
 
     /// `amend` folds the edit into the latest undo step (IME composition).
     func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false) async throws -> Output {

@@ -755,6 +755,12 @@ mod tests {
 
     #[test]
     fn variable_face_keeps_requested_weight_and_style() {
+        if !default_fontdb()
+            .faces()
+            .any(|f| f.families.iter().any(|(n, _)| n == "Pretendard Variable"))
+        {
+            return; // The font is not installed here.
+        }
         let svg = r#"<svg width="200" height="80"><text x="0" y="40" font-family="'Pretendard Variable', sans-serif" font-size="32" font-weight="700" font-style="italic">가변</text></svg>"#;
         let display = build(svg).expect("supported text must produce a display list");
         let face = display

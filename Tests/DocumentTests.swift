@@ -851,7 +851,8 @@ struct DocumentTests {
         }
     }
 
-    @Test func variableFontKeepsWeightAndItalicRequest() async throws {
+    @Test(.enabled(if: NSFontManager.shared.availableFontFamilies.contains("Pretendard Variable")))
+    func variableFontKeepsWeightAndItalicRequest() async throws {
         let document = HwpDocument()
         document.selection = .caret(EditPosition(target: body, scalar: 0))
         document.formatText(CharStyle(font: "Pretendard Variable", size: 32, bold: true, italic: true), nil)
