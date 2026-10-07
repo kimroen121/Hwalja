@@ -182,10 +182,32 @@ index e386e2a..2197b58 100644
          };
  
 diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_core/commands/object_ops/equation.rs
-index a52e940..51de19e 100644
+index a52e940..789974c 100644
 --- a/src/document_core/commands/object_ops/equation.rs
 +++ b/src/document_core/commands/object_ops/equation.rs
-@@ -355,6 +355,12 @@ impl DocumentCore {
+@@ -259,7 +259,9 @@ impl DocumentCore {
+     ) -> Result<String, HwpError> {
+         use crate::renderer::equation::layout::EqLayout;
+         use crate::renderer::equation::parser::EqParser;
+-        use crate::renderer::equation::svg_render::{eq_color_to_svg, render_equation_svg};
++        use crate::renderer::equation::svg_render::{
++            eq_color_to_svg, equation_group_attrs, render_equation_svg,
++        };
+         use crate::renderer::equation::tokenizer::tokenize;
+ 
+         let font_size_px = crate::renderer::hwpunit_to_px(font_size_hwpunit as i32, self.dpi);
+@@ -272,8 +274,8 @@ impl DocumentCore {
+         let w = layout_box.width;
+         let h = layout_box.height;
+         let svg = format!(
+-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.2} {:.2}\" width=\"{:.2}\" height=\"{:.2}\">{}</svg>",
+-            w, h, w, h, svg_fragment,
++            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.2} {:.2}\" width=\"{:.2}\" height=\"{:.2}\"><g{}>{}</g></svg>",
++            w, h, w, h, equation_group_attrs(script, &layout_box, font_size_px, &color_str), svg_fragment,
+         );
+         Ok(svg)
+     }
+@@ -355,6 +357,12 @@ impl DocumentCore {
                      *offset -= 8;
                  }
              }
@@ -1780,7 +1802,7 @@ index 0000000..ea53b7f
 +    Some(shape)
 +}
 diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
-index 7fc0b71..aa78593 100644
+index 7fc0b71..dd55e77 100644
 --- a/src/renderer/equation/svg_render.rs
 +++ b/src/renderer/equation/svg_render.rs
 @@ -12,7 +12,8 @@ use super::symbols::{DecoKind, FontStyleKind};
@@ -2107,8 +2129,10 @@ index 7fc0b71..aa78593 100644
 +        }
 +        DecoKind::Acute | DecoKind::Grave => {
 +            let lean = if kind == DecoKind::Acute { 1.0 } else { -1.0 };
-+            svg.push_str(&format!(
-+                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
+             svg.push_str(&format!(
+                 "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
+-                mid_x - half_w * 0.5, y + fs * 0.1,
+-                mid_x + half_w * 0.5, y + fs * 0.1,
 +                mid_x - lean * fs * 0.08, y + fs * 0.16,
 +                mid_x + lean * fs * 0.08, y,
 +                color, stroke_w,
@@ -2140,15 +2164,34 @@ index 7fc0b71..aa78593 100644
 +            ));
 +        }
 +        DecoKind::StrikeThrough => {
-             svg.push_str(&format!(
-                 "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
--                mid_x - half_w * 0.5, y + fs * 0.1,
--                mid_x + half_w * 0.5, y + fs * 0.1,
++            svg.push_str(&format!(
++                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
 +                mid_x - half_w * 0.7, y + fs * 1.05,
 +                mid_x + half_w * 0.7, y + fs * 0.2,
                  color, stroke_w,
              ));
          }
+@@ -678,6 +903,20 @@ fn escape_xml(text: &str) -> String {
+     result
+ }
+ 
++/// HwpStudio: 수식 그룹에 붙여 앱이 수식을 직접 조판할 수 있게 하는 속성: 스크립트,
++/// 레이아웃 상자(폭 높이 기준선)와 글자 크기, 색.
++pub fn equation_group_attrs(script: &str, layout: &LayoutBox, font_size: f64, color: &str) -> String {
++    format!(
++        " data-script=\"{}\" data-box=\"{:.2} {:.2} {:.2} {:.2}\" data-color=\"{}\"",
++        escape_xml(script),
++        layout.width,
++        layout.height,
++        layout.baseline,
++        font_size,
++        color
++    )
++}
++
+ /// 수식 color(0x00BBGGRR)를 SVG 색상 문자열(#rrggbb)로 변환
+ pub fn eq_color_to_svg(color: u32) -> String {
+     let r = color & 0xFF;
 diff --git a/src/renderer/equation/symbols.rs b/src/renderer/equation/symbols.rs
 index 595ea2a..485611e 100644
 --- a/src/renderer/equation/symbols.rs
@@ -2653,10 +2696,33 @@ index 3989968..e268160 100644
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
 diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
-index 3e52ea0..9863981 100644
+index 3e52ea0..5738bec 100644
 --- a/src/renderer/svg.rs
 +++ b/src/renderer/svg.rs
-@@ -3582,9 +3582,13 @@ fn color_to_svg(color: u32) -> String {
+@@ -583,14 +583,20 @@ impl SvgRenderer {
+                 };
+                 let scale_y = 1.0_f64;
+                 let needs_scale = (scale_x - 1.0).abs() > 0.01 || (scale_y - 1.0).abs() > 0.01;
++                let attrs = crate::renderer::equation::svg_render::equation_group_attrs(
++                    &eq.script,
++                    &eq.layout_box,
++                    eq.font_size,
++                    &eq.color_str,
++                );
+                 if needs_scale {
+                     self.output.push_str(&format!(
+-                        "<g transform=\"translate({},{}) scale({:.4},{:.4})\">\n",
++                        "<g transform=\"translate({},{}) scale({:.4},{:.4})\"{attrs}>\n",
+                         node.bbox.x, node.bbox.y, scale_x, scale_y,
+                     ));
+                 } else {
+                     self.output.push_str(&format!(
+-                        "<g transform=\"translate({},{})\">\n",
++                        "<g transform=\"translate({},{})\"{attrs}>\n",
+                         node.bbox.x, node.bbox.y,
+                     ));
+                 }
+@@ -3582,9 +3588,13 @@ fn color_to_svg(color: u32) -> String {
  }
  
  fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64) -> String {
@@ -2670,7 +2736,7 @@ index 3e52ea0..9863981 100644
      {
          return String::new();
      }
-@@ -3596,7 +3600,10 @@ fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64)
+@@ -3596,7 +3606,10 @@ fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64)
      } else {
          1.0
      };

@@ -138,6 +138,12 @@ final class EditSession: @unchecked Sendable {
             return try PageDisplay(&reader)
         }
     }
+    /// An equation script as LaTeX, or with `fromLatex`, LaTeX as a script.
+    func convertEquation(_ text: String, fromLatex: Bool) async throws -> String {
+        struct Converted: Decodable { var text: String }
+        let converted: Converted = try await decode(send(.convertEquation(text, fromLatex: fromLatex)))
+        return converted.text
+    }
 
     private func send(_ request: EngineRequest) async throws -> Payload {
         try await send(request) { $0 }

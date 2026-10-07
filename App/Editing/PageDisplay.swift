@@ -1,7 +1,9 @@
+import AppKit
 import CoreText
 import Foundation
 import ImageIO
 import PDFKit
+import SwiftMath
 
 /// One page as drawn: the engine's display list, or a PDF page for the rare page it cannot
 /// express. Sizes are in points; drawing maps the page onto any rect.
@@ -105,6 +107,16 @@ final class PageDisplay: @unchecked Sendable {
         case path(CGPath, fill: CGColor?, stroke: CGColor?, width: Double, round: Bool)
         case image(CGRect, CGImage?)
         case text(Text)
+        /// Set by SwiftMath when it can; otherwise the `fallback` ops after it draw it.
+        case equation(Equation, fallback: Int)
+
+        struct Equation {
+            let rect: CGRect
+            let baseline: Double
+            let size: Double
+            let color: CGColor
+            let latex: String
+        }
 
         struct Text {
             let origin: CGPoint
@@ -153,6 +165,10 @@ final class PageDisplay: @unchecked Sendable {
                 let runs = try (0..<r.count()).map { _ in (font: Int(try r.u16()), text: try r.string()) }
                 self = .text(Text(origin: CGPoint(x: v[0], y: v[1]), size: v[2], color: color, runs: runs,
                                   length: v[3] < 0 ? nil : v[3], center: center))
+            case 10:
+                let rect = try rect(), v = try numbers(2), color = Self.color(try r.u32())
+                self = .equation(Equation(rect: rect, baseline: v[0], size: v[1], color: color, latex: try r.string()),
+                                 fallback: Int(try r.u32()))
             default: throw EditError.renderFailed
             }
         }
@@ -182,7 +198,12 @@ final class PageDisplay: @unchecked Sendable {
 
     func draw(in context: CGContext) {
         let fonts = fonts.map(FontFiles.shared.descriptor)
+        var skip = 0
         for op in ops {
+            if skip > 0 {
+                skip -= 1
+                continue
+            }
             switch op {
             case .save: context.saveGState()
             case .restore: context.restoreGState()
@@ -220,6 +241,8 @@ final class PageDisplay: @unchecked Sendable {
                 context.draw(image, in: CGRect(origin: .zero, size: rect.size))
                 context.restoreGState()
             case .text(let text): Self.draw(text, faces: self.fonts, fonts: fonts, in: context)
+            case let .equation(equation, fallback):
+                if Formulas.shared.draw(equation, in: context) { skip = fallback }
             }
         }
     }
@@ -297,6 +320,52 @@ final class PageDisplay: @unchecked Sendable {
     private static let syntheticItalicTransform = CGAffineTransform(
         a: 1, b: 0, c: -tan(12 * .pi / 180), d: 1, tx: 0, ty: 0
     )
+}
+
+/// Equations set by SwiftMath, kept by LaTeX, size and color; `nil` for LaTeX it cannot set.
+final class Formulas: @unchecked Sendable {
+    static let shared = Formulas()
+    private let lock = NSLock()
+    private var images: [String: (image: NSImage, ascent: Double)?] = [:]
+
+    /// Draws the equation in its rect, its baseline on the line's, shrunk if wider than the rect.
+    func draw(_ equation: PageDisplay.Op.Equation, in context: CGContext) -> Bool {
+        // ponytail: SwiftMath draws no glyph its math font lacks (한글 in \text), so those
+        // equations keep the engine's drawing; set them here once SwiftMath falls back to other fonts.
+        guard equation.latex.allSatisfy(\.isASCII), let (image, ascent) = image(equation) else { return false }
+        let size = image.size
+        let scale = min(1, equation.rect.width / size.width)
+        let origin = CGPoint(x: equation.rect.midX - size.width * scale / 2, y: equation.baseline - ascent * scale)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        image.draw(in: CGRect(origin: origin, size: CGSize(width: size.width * scale, height: size.height * scale)),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+        return true
+    }
+
+    /// The set equation and its baseline's distance from the image top.
+    private func image(_ equation: PageDisplay.Op.Equation) -> (image: NSImage, ascent: Double)? {
+        let key = "\(equation.size) \(equation.color.components ?? []) \(equation.latex)"
+        lock.lock()
+        defer { lock.unlock() }
+        if let known = images[key] { return known }
+        var math = MathImage(latex: equation.latex, fontSize: equation.size,
+                             textColor: NSColor(cgColor: equation.color) ?? .black, labelMode: .display, textAlignment: .left)
+        math.font = .xitsFont
+        let (error, image, info) = math.asImage()
+        var result: (image: NSImage, ascent: Double)?
+        if error == nil, let image, let info, image.size.width > 0 {
+            // Vector each time it is drawn, so zoom and PDF stay sharp.
+            image.cacheMode = .never
+            // MathImage centers the line vertically in its rounded-up height.
+            let height = max(info.ascent + info.descent, equation.size / 2)
+            let baselineFromBottom = (image.size.height - height) / 2 + info.descent
+            result = (image, image.size.height - baselineFromBottom)
+        }
+        images[key] = .some(result)
+        return result
+    }
 }
 
 /// Font files the engine names, loaded once, and fonts by size.

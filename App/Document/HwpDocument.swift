@@ -477,6 +477,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func equationPreview(_ script: String, fontSize: UInt32, color: UInt32) async throws -> PageDisplay {
         try await session.equationPreview(script, fontSize: fontSize, color: color)
     }
+    func convertEquation(_ text: String, fromLatex: Bool) async throws -> String {
+        try await session.convertEquation(text, fromLatex: fromLatex)
+    }
     /// The whole document as PDF, after queued edits.
     func pdf() async throws -> Data {
         await settle()

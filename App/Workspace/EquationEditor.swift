@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-// 수식: Hancom's equation script with its template and symbol palettes, and a
-// preview drawn by the same renderer as the page.
+// 수식: Hancom's equation script, or LaTeX converted to it, with its template and symbol
+// palettes, and a preview drawn by the same renderer as the page.
 
 /// The equation 수식 is showing: a new one, or `object` being changed.
 struct EquationEdit: Identifiable {
@@ -246,20 +246,27 @@ private struct PaletteButton: View {
     }
 }
 
-/// 수식 편집, laid out as 한글's: two tool rows, the preview, and the script under it. The
-/// preview follows every keystroke.
+/// 수식 편집, laid out as 한글's: the tool row, the preview, and the script under it. The
+/// script is written in 한글's syntax or in LaTeX; the document keeps 한글's. The preview
+/// follows every keystroke.
 struct EquationEditor: View {
     let viewer: Viewer
+    let document: HwpDocument
     let renderer: EquationRenderer
     @Environment(\.dismiss) private var dismiss
     @State private var edit: EquationEdit
+    /// What the script view shows: `edit.script`, or it as LaTeX.
+    @State private var text: String
+    @AppStorage("equationLatex") private var latex = false
     @State private var preview: PageDisplay?
     @State private var script = ScriptView.Proxy()
 
     init(edit: EquationEdit, viewer: Viewer, document: HwpDocument) {
         self.viewer = viewer
+        self.document = document
         renderer = EquationRenderer(document: document)
         _edit = State(initialValue: edit)
+        _text = State(initialValue: edit.script)
     }
 
     private var valid: Bool {
@@ -270,13 +277,42 @@ struct EquationEditor: View {
         DialogFrame("수식 편집", confirmTitle: "넣기", canConfirm: valid) {
             editor
         } confirm: {
-            viewer.commit(edit)
-            dismiss()
+            Task {
+                await syncScript()
+                viewer.commit(edit)
+                dismiss()
+            }
         }
+        .task {
+            if latex { await switchSyntax(toLatex: true) }
+        }
+        .task(id: text) { await syncScript() }
+        .onChange(of: latex) { _, latex in Task { await switchSyntax(toLatex: latex) } }
         .task(id: "\(edit.fontSize) \(edit.color) \(edit.script)") {
             let size = UInt32((min(max(edit.fontSize, 1), 127) * 100).rounded())
             // The previous preview stays until the new one is ready, so typing never blinks.
             if let display = await renderer.display(edit.script, size: size, color: edit.color) { preview = display }
+        }
+    }
+
+    /// `edit.script` from what the script view shows.
+    private func syncScript() async {
+        guard latex else { return edit.script = text }
+        if let converted = try? await document.convertEquation(text, fromLatex: true) { edit.script = converted }
+    }
+    /// The script view in the other syntax.
+    private func switchSyntax(toLatex: Bool) async {
+        if !toLatex { return text = edit.script }
+        if let converted = try? await document.convertEquation(edit.script, fromLatex: false) { text = converted }
+    }
+    /// A palette's script at the caret, in the syntax shown.
+    private func insert(_ item: EquationItem, word: Bool) {
+        Task {
+            var inserted = item.script
+            if latex, let converted = try? await document.convertEquation(item.script, fromLatex: false) {
+                inserted = converted
+            }
+            word ? script.insert(word: inserted) : script.insert(inserted)
         }
     }
 
@@ -286,13 +322,13 @@ struct EquationEditor: View {
                 ForEach(EquationPalette.templates, id: \.face) { palette in
                     PaletteButton(name: palette.name, key: palette.key, face: palette.face, items: palette.items,
                                   renderer: renderer, symbols: false) {
-                        script.insert($0.script)
+                        insert($0, word: false)
                     }
                 }
                 RowDivider()
                 ForEach(EquationPalette.symbols, id: \.face) { palette in
                     PaletteButton(name: palette.name, face: palette.face, items: palette.items, renderer: renderer, symbols: true) {
-                        script.insert(word: $0.script)
+                        insert($0, word: true)
                     }
                 }
                 RowDivider()
@@ -300,27 +336,35 @@ struct EquationEditor: View {
                     .accessibilityLabel("글자 크기")
                 ColorWell(hex: Binding { Self.hex(edit.color) } set: { edit.color = Self.color($0) })
                     .accessibilityLabel("글자 색")
+                    .fixedSize()
                     .padding(.leading, 8)
                 Spacer(minLength: 0)
+                Picker("", selection: $latex) {
+                    Text("한글").tag(false)
+                    Text("LaTeX").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
             .padding(.bottom, 8)
             VStack(spacing: 0) {
                 ScrollView([.horizontal, .vertical]) {
                     EquationGlyph(display: preview, zoom: 1.5)
                         .padding(16)
-                        .frame(minWidth: 820, minHeight: 230, alignment: .center)
+                        .frame(minWidth: 860, minHeight: 230, alignment: .center)
                 }
                 .frame(height: 230)
                 .background(Color(nsColor: .underPageBackgroundColor))
                 .environment(\.colorScheme, .light)
                 Divider()
-                ScriptView(text: $edit.script, proxy: script)
+                ScriptView(text: $text, proxy: script)
                     .frame(height: 170)
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
         }
-        .frame(width: 820)
+        .frame(width: 860)
     }
 
     /// 0x00bbggrr and `#rrggbb`.

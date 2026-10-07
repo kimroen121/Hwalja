@@ -78,6 +78,17 @@ pub enum Op {
         length: Option<f64>,
         center: bool,
     },
+    /// An equation as LaTeX, for the app to set at `size` in `rect` with its baseline at
+    /// `baseline`. The `fallback` ops after it draw the engine's own layout; the app skips
+    /// them when it sets the equation itself.
+    Equation {
+        rect: [f64; 4],
+        baseline: f64,
+        size: f64,
+        color: u32,
+        latex: String,
+        fallback: u32,
+    },
 }
 
 impl Display {
@@ -188,6 +199,22 @@ impl Display {
                         text(out, s);
                     }
                 }
+                Op::Equation {
+                    rect,
+                    baseline,
+                    size,
+                    color: c,
+                    latex,
+                    fallback,
+                } => {
+                    out.push(10);
+                    rect.iter().for_each(|&v| f(out, v));
+                    f(out, *baseline);
+                    f(out, *size);
+                    u(out, *c);
+                    text(out, latex);
+                    u(out, *fallback);
+                }
             }
         }
     }
@@ -268,6 +295,30 @@ impl<'a> Builder<'a> {
         Some(())
     }
 
+    /// An equation group's script as LaTeX, placed by the group's transform.
+    fn equation(&self, n: roxmltree::Node, script: &str) -> Option<Op> {
+        let b: Vec<f64> = n
+            .attribute("data-box")?
+            .split(' ')
+            .map(|v| v.parse().ok())
+            .collect::<Option<_>>()?;
+        let [w, h, baseline, size] = <[f64; 4]>::try_from(b).ok()?;
+        let m = match n.attribute("transform").map(transform) {
+            Some(Some(Op::Transform { m })) => m,
+            Some(_) => return None,
+            None => [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        };
+        let color = n.attribute("data-color")?.strip_prefix('#')?;
+        Some(Op::Equation {
+            rect: [m[4], m[5], w * m[0], h * m[3]],
+            baseline: m[5] + baseline * m[3],
+            size: size * m[3],
+            color: u32::from_str_radix(color, 16).ok()?,
+            latex: super::latex::to_latex(script),
+            fallback: 0,
+        })
+    }
+
     fn children(&mut self, node: roxmltree::Node<'a, '_>) -> Option<()> {
         for child in node.children() {
             if child.is_element() {
@@ -312,8 +363,24 @@ impl<'a> Builder<'a> {
                 self.viewport(n, viewport)
             }
             "g" => {
-                if !allowed(n, &["transform", "clip-path"]) {
+                if !allowed(
+                    n,
+                    &[
+                        "transform",
+                        "clip-path",
+                        "data-script",
+                        "data-box",
+                        "data-color",
+                    ],
+                ) {
                     return None;
+                }
+                let equation = n
+                    .attribute("data-script")
+                    .and_then(|script| self.equation(n, script));
+                let start = self.ops.len();
+                if let Some(op) = equation {
+                    self.ops.push(op);
                 }
                 self.ops.push(Op::Save);
                 if let Some(t) = n.attribute("transform") {
@@ -327,6 +394,10 @@ impl<'a> Builder<'a> {
                 }
                 self.children(n)?;
                 self.ops.push(Op::Restore);
+                let count = (self.ops.len() - start - 1) as u32;
+                if let Some(Op::Equation { fallback, .. }) = self.ops.get_mut(start) {
+                    *fallback = count;
+                }
                 Some(())
             }
             "rect" => {

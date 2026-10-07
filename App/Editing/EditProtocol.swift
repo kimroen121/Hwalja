@@ -805,6 +805,8 @@ enum EngineRequest: Encodable, Sendable {
     case objectProps(ObjectRef)
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
+    /// An equation script as LaTeX, or with `fromLatex`, LaTeX as a script.
+    case convertEquation(String, fromLatex: Bool)
     /// 문단 부호, 조판 부호 and 투명 선.
     case showMarks(paragraph: Bool, control: Bool, borders: Bool)
     case styles
@@ -817,7 +819,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -900,6 +902,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(script, forKey: .script)
             try c.encode(fontSize, forKey: .fontSize)
             try c.encode(color, forKey: .color)
+        case let .convertEquation(text, fromLatex):
+            try c.encode("convertEquation", forKey: .op)
+            try c.encode(text, forKey: .text)
+            try c.encode(fromLatex, forKey: .fromLatex)
         case .styles:
             try c.encode("styles", forKey: .op)
         case let .copyObject(object):

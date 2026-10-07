@@ -8,11 +8,14 @@ let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let package = Package(
     name: "HwpStudio",
     platforms: [.macOS(.v14)],
+    dependencies: [
+        .package(url: "https://github.com/mgriebling/SwiftMath.git", exact: "1.7.3"),
+    ],
     targets: [
         .systemLibrary(name: "CHwpEngine", path: "Engine/include"),
         .executableTarget(
             name: "HwpStudio",
-            dependencies: ["CHwpEngine"],
+            dependencies: ["CHwpEngine", "SwiftMath"],
             path: "App",
             exclude: ["Resources"],
             linkerSettings: [.unsafeFlags(["-L\(root)/build"])]

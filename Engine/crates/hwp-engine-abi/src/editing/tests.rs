@@ -1310,7 +1310,7 @@ fn equation_shorthands_and_underover_draw_as_hancom_does() {
     assert!(svg("x \\to y").contains("→"));
     // The limits go under and over the base, not after it as text.
     let under = svg("UNDEROVER {max}_{[-1,1]}^{} q");
-    assert!(!under.contains("UNDEROVER"));
+    assert!(!under.contains(">UNDEROVER<"));
     let y = |text: &str| {
         let at = under.find(&format!(">{text}<")).unwrap();
         let tag = &under[under[..at].rfind("<text").unwrap()..at];

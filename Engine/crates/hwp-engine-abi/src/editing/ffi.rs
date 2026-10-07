@@ -81,6 +81,12 @@ enum Request {
         font_size: u32,
         color: u32,
     },
+    /// An equation script as LaTeX, or with `fromLatex`, LaTeX as a script.
+    #[serde(rename_all = "camelCase")]
+    ConvertEquation {
+        text: String,
+        from_latex: bool,
+    },
     /// The document's styles, in order.
     Styles,
     /// Shows or hides 문단 부호 and 조판 부호.
@@ -217,6 +223,17 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             HwpEditResult::ok(session.object_props(&object)?, Vec::new())
         }
         Request::CellProps { cell } => HwpEditResult::ok(session.cell_props(&cell)?, Vec::new()),
+        Request::ConvertEquation { text, from_latex } => {
+            if text.chars().count() > objects::SCRIPT_LIMIT * 4 {
+                return Err(EditError::InvalidInput);
+            }
+            let text = if from_latex {
+                latex::from_latex(&text)
+            } else {
+                latex::to_latex(&text)
+            };
+            HwpEditResult::ok(serde_json::json!({ "text": text }), Vec::new())
+        }
         Request::EquationPreview {
             script,
             font_size,

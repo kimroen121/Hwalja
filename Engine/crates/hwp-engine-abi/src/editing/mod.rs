@@ -7,6 +7,7 @@ pub mod ffi;
 mod format;
 mod geometry;
 mod header_footer;
+mod latex;
 mod logical;
 mod navigation;
 mod objects;

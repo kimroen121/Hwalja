@@ -14,6 +14,8 @@ xcrun vtool -set-build-version macos "$minimum" "$(xcrun --show-sdk-version)" -r
   -output "$app/Contents/MacOS/HwpStudio" "$binary"
 cp "$repo_root/Config/Info.plist" "$app/Contents/Info.plist"
 cp "$repo_root/App/Resources/ThirdPartyNotices.txt" "$app/Contents/Resources/"
+# SwiftMath's fonts, where its resource lookup finds them.
+cp -R "$(dirname "$binary")/SwiftMath_SwiftMath.bundle" "$app/Contents/Resources/"
 codesign --force --options runtime \
   --entitlements "$repo_root/Config/HwpStudio.entitlements" \
   --sign "${SIGN_IDENTITY:--}" "$app"

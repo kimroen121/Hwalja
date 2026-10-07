@@ -31,7 +31,7 @@ pub(super) const CAPTIONS: [&str; 9] = [
 /// 그리기 개체 rhwp can draw: 가로 글상자, 직사각형, 타원, 직선, 호.
 const SHAPES: [&str; 5] = ["textbox", "rectangle", "ellipse", "line", "arc"];
 /// Longest equation script accepted, in characters.
-const SCRIPT_LIMIT: usize = 4096;
+pub(super) const SCRIPT_LIMIT: usize = 4096;
 
 fn number(json: &Value, key: &str) -> Option<f64> {
     json.get(key).and_then(Value::as_f64)
