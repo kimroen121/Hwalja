@@ -1077,6 +1077,33 @@ struct DocumentTests {
         #expect(canvas.editor.page(near: NSPoint(x: second.midX, y: second.midY)) == 1)
     }
 
+    @Test func rulerMarksTheBodyAndIndentsAndDraggingThemChangesThem() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        canvas.tile()
+        await document.settle()
+        canvas.showsRuler = true
+        var marks: [NSRulerMarker] = []
+        for _ in 0..<50 where marks.count < 5 {
+            try await Task.sleep(for: .milliseconds(20))
+            marks = canvas.horizontalRulerView?.markers ?? []
+        }
+        let page = try #require(canvas.editor.frame(ofPage: 0))
+        let left = try #require(marks.first { $0.representedObject as? String == "indentLeft" })
+        #expect(marks.count == 5 && marks.allSatisfy { page.minX < $0.markerLocation && $0.markerLocation < page.maxX })
+        let before = document.pages[0].id
+        // The first line stays where it was.
+        left.markerLocation += 20
+        canvas.editor.rulerView(canvas.horizontalRulerView!, didMove: left)
+        await document.settle()
+        #expect(document.format?.paragraph.marginLeft == 20 && document.format?.paragraph.indent == -20)
+        #expect(document.pages[0].id != before)
+    }
+
     @Test func withoutPageOutlineOnlyBodiesShowOneAfterAnother() async throws {
         let document = HwpDocument()
         document.selection = .caret(EditPosition(target: body, scalar: 0))

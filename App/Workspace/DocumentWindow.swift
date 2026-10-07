@@ -232,6 +232,7 @@ final class Viewer: ObservableObject {
 
     /// Keeps the find bar's matches and count current as the document changes.
     private func documentPresented() {
+        if showsRuler { canvas.needsRulers() }
         guard finding, let document else { return }
         if document.revision != searchedRevision {
             Task { await search() }

@@ -49,7 +49,8 @@ final class DocumentCanvas: NSScrollView {
         onViewChange?()
     }
 
-    /// 눈금자: rulers counting from the page in view, its body's edges marked.
+    /// 눈금자: rulers counting from the page in view, its body's edges and the caret
+    /// paragraph's 들여쓰기 marked; dragging a mark changes them.
     var showsRuler = false {
         didSet {
             hasHorizontalRuler = showsRuler
@@ -60,7 +61,7 @@ final class DocumentCanvas: NSScrollView {
     }
     private var rulersPending = false
     /// Places the rulers once, after the layout that asked: changing them lays the view out again.
-    private func needsRulers() {
+    func needsRulers() {
         guard !rulersPending else { return }
         rulersPending = true
         DispatchQueue.main.async { [weak self] in
@@ -92,21 +93,63 @@ final class DocumentCanvas: NSScrollView {
             }
             return
         }
-        // HWPUNIT to points; the body starts below the 머리말 and ends above the 꼬리말.
+        // Markers sit in the editor's coordinates; HWPUNIT to points. The body starts below
+        // the 머리말 and ends above the 꼬리말.
         let points = { (units: UInt32) in CGFloat(units) / 100 }
         let p = setup.page
-        func marker(_ ruler: NSRulerView, _ at: CGFloat, _ symbol: String) -> NSRulerMarker? {
+        let left = page.minX + points(p.marginLeft + p.marginGutter), right = page.maxX - points(p.marginRight)
+        func marker(_ ruler: NSRulerView, _ at: CGFloat, _ symbol: String, _ mark: RulerMark) -> NSRulerMarker? {
             guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 8, weight: .regular)) else { return nil }
             let marker = NSRulerMarker(rulerView: ruler, markerLocation: at, image: image,
                                        imageOrigin: NSPoint(x: image.size.width / 2, y: 0))
-            marker.isMovable = false
+            marker.isMovable = !model.context.locked
+            marker.representedObject = mark.rawValue as NSString
             return marker
         }
-        across.markers = [marker(across, points(p.marginLeft + p.marginGutter), "arrowtriangle.down.fill"),
-                          marker(across, page.width - points(p.marginRight), "arrowtriangle.down.fill")].compactMap { $0 }
-        down.markers = [marker(down, points(p.marginTop + p.marginHeader), "arrowtriangle.right.fill"),
-                        marker(down, page.height - points(p.marginBottom + p.marginFooter), "arrowtriangle.right.fill")].compactMap { $0 }
+        var marks = [marker(across, left, "arrowtriangle.down.fill", .left),
+                     marker(across, right, "arrowtriangle.down.fill", .right)]
+        // The caret paragraph's 왼쪽·오른쪽 여백 and 첫 줄 들여쓰기 (내어쓰기 when negative).
+        if let para = model.format?.paragraph, let start = para.marginLeft, let end = para.marginRight, let first = para.indent {
+            marks += [marker(across, left + start + first, "arrowtriangle.down", .firstLine),
+                      marker(across, left + start, "arrowtriangle.up", .indentLeft),
+                      marker(across, right - end, "arrowtriangle.up", .indentRight)]
+        }
+        across.markers = marks.compactMap { $0 }
+        down.markers = [marker(down, page.minY + points(p.marginTop + p.marginHeader), "arrowtriangle.right.fill", .top),
+                        marker(down, page.maxY - points(p.marginBottom + p.marginFooter), "arrowtriangle.right.fill", .bottom)]
+            .compactMap { $0 }
+    }
+    enum RulerMark: String { case left, right, top, bottom, firstLine, indentLeft, indentRight }
+
+    /// A dragged mark changes the page's 여백 or the paragraphs' 들여쓰기.
+    fileprivate func moved(_ marker: NSRulerMarker) {
+        guard let raw = marker.representedObject as? String, let mark = RulerMark(rawValue: raw), let model = editor.model,
+              let setup = rulerPage, let page = editor.frame(ofPage: editor.page(near: NSPoint(x: documentVisibleRect.midX, y: documentVisibleRect.midY)))
+        else { return }
+        let at = marker.markerLocation
+        let units = { (points: CGFloat) in UInt32(max(0, (points * 100).rounded())) }
+        var p = setup.page
+        let left = page.minX + CGFloat(p.marginLeft + p.marginGutter) / 100, right = page.maxX - CGFloat(p.marginRight) / 100
+        // Half a point, as 한글's 문단 모양 shows them.
+        let half = { (points: CGFloat) in Double((points * 2).rounded() / 2) }
+        switch mark {
+        case .left: p.marginLeft = units(at - page.minX) - min(p.marginGutter, units(at - page.minX))
+        case .right: p.marginRight = units(page.maxX - at)
+        case .top: p.marginTop = units(at - page.minY) - min(p.marginHeader, units(at - page.minY))
+        case .bottom: p.marginBottom = units(page.maxY - at) - min(p.marginFooter, units(page.maxY - at))
+        case .firstLine, .indentLeft, .indentRight:
+            guard let para = model.format?.paragraph, let start = para.marginLeft, let first = para.indent else { return }
+            switch mark {
+            case .firstLine: editor.format(ParaStyle(indent: half(at - left - start)))
+            // The first line stays where it was.
+            case .indentLeft: editor.format(ParaStyle(marginLeft: half(at - left), indent: half(left + start + first - at)))
+            default: editor.format(ParaStyle(marginRight: half(right - at)))
+            }
+            return
+        }
+        guard p != setup.page else { return }
+        model.edit(editor.undoManager) { _ in .setPage(section: setup.section, p) }
     }
     @objc private func userMagnified() { fit = nil }
 
@@ -266,6 +309,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    override func rulerView(_ ruler: NSRulerView, didMove marker: NSRulerMarker) {
+        (enclosingScrollView as? DocumentCanvas)?.moved(marker)
+    }
 
     init() {
         super.init(frame: .zero)

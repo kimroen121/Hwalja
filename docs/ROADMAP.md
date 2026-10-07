@@ -50,11 +50,10 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 - 편집
   - [ ] 조판 부호 지우기: `delete_control_native`.
 - 보기
-  - [ ] 문서 창 › 눈금자의 들여쓰기 표시와 여백·들여쓰기 끌기: 지금은 보이는 쪽을 0으로 하고 본문 여백만 표시한다.
 - 입력
   - [ ] 책갈피…(넣기·고치기·지우기, 책갈피로 가기): `add_bookmark_native`, `rename_bookmark_native`, `delete_bookmark_native`, `get_bookmarks_native`.
   - [ ] 필드 입력…, 누름틀 고치기·누름틀 지우기·필드 삭제: wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`.
-  - [ ] 차트 데이터 고치기: `list_charts_native`, `get/set_chart_data_native`.
+  - [ ] 차트 › 데이터 편집, 행/열 전환: `list_charts_native`, `get/set_chart_data_native`(구조 편집 포함). rhwp가 차트를 새로 만들지 못하고 로컬 문서에도 차트가 없어, 차트가 든 문서를 받으면 만든다.
   - [ ] 문서 안 양식 개체(누름 단추·선택 상자 등) 값 바꾸기: `get_form_object_at_native`, `set_form_value_native`.
 - 서식
   - [ ] 표 칸·주석 안 문단의 시작 번호 방식: `set_numbering_restart_native`는 본문 문단만 받는다.
@@ -88,21 +87,14 @@ rhwp는 지원하지만 웹 한글에서 이름을 찾지 못했다. 사용자�
 | `get_outline_navigation_native` | 개요(제목) 목록으로 문서 안 이동 |
 | `export_hml_native`, `extract_page_text/markdown_native` | 다른 형식으로 내보내기 |
 
-### 4. 화면 성능
+### 4. 화면과 저장
 
-- [ ] 남은 엔진 시간(약 20ms): 편집 쪽과 다음 쪽의 SVG(레이아웃 포함), 표시 목록의 XML 파싱. 다음 후보는 rhwp 렌더 트리(`get_page_layer_tree_native`)에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략).
-- 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchHostedTyping`, 화면 확인 `HWP_SNAPSHOT_DIR=<폴더> swift test --filter snapshots`.
+내부 작업(성능 측정·개선, 비교 도구, 조판 차이 조사)과 수동 점검은 `docs/BUG_HANDOFF.md`.
 
-### 5. 검증과 조판 동등성
-
-수동 점검과 남은 문제는 `docs/BUG_HANDOFF.md`.
-
-- [ ] 글자·문단 테두리와 배경이 쪽에 그려지는 모양을 한컴 뷰어와 비교한다(저장·다시 읽기는 테스트함).
-- [ ] 비교 도구: 한컴 뷰어에서 PDF로 인쇄한 결과와 쪽마다 픽셀 비교한다.
 - [ ] 글꼴 대응: 함초롬·HY 계열을 설치된 글꼴로 대응시킨다. 한컴 글꼴이 시스템에 있으면 그 글꼴을 쓴다(번들·재배포는 하지 않음).
 - [ ] 자동 저장 정책: 저장 검증이 충분해질 때까지는 macOS 버전으로 이전 판을 보존한다.
 
-### 6. 2차: rhwp에 없는 기능
+### 5. 2차: rhwp에 없는 기능
 
 엔진에 새로 만들어야 한다: 하이퍼링크…(넣기·고치기·지우기·열기), 메모, 문단 띠, 웹 동영상, 검토 › 변경 내용 추적, 1,000 단위 구분 쉼표(자릿점 넣기·빼기), 격자 설정, 편집 용지의 줄 격자, 문단 모양의 최소 공백, 빠른 교정·맞춤법(macOS 텍스트 서비스로).
 
