@@ -266,10 +266,13 @@ struct MenuItems {
                 toggle("서식", viewer.showsFormat) { viewer.showsFormat.toggle() }
             } label: { Label("도구 상자", systemImage: "menubar.rectangle") }
             Menu {
+                ForEach(TaskPane.allCases, id: \.self) { pane in
+                    toggle(pane.rawValue, viewer.taskPane == pane) { viewer.taskPane = viewer.taskPane == pane ? nil : pane }
+                }
+            } label: { Label("작업 창", systemImage: "sidebar.right") }
+            Menu {
                 toggle("눈금자", viewer.showsRuler) { viewer.showsRuler.toggle() }
             } label: { Label("문서 창", systemImage: "ruler") }
-            Button(viewer.showsThumbnails ? "사이드바 가리기" : "사이드바 보기") { viewer.showsThumbnails.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
         }
     }
 

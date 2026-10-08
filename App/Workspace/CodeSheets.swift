@@ -105,68 +105,112 @@ struct PageHideSheet: View {
 }
 
 /// 책갈피: 책갈피 이름, 책갈피 목록 (이름 or 위치 order), 넣기 and 이동, 이름 바꾸기 and 삭제.
+/// 책갈피, as a dialog: 책갈피 이름, 책갈피 목록 and its order, 넣기 and 이동.
 struct BookmarkSheet: View {
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    var body: some View {
+        DialogFrame("책갈피", confirmTitle: "넣기", canConfirm: BookmarkForm.addable(name)) {
+            BookmarkForm(viewer: viewer, name: $name, listWidth: 300) { dismiss() }
+        } confirm: {
+            viewer.addBookmark(name)
+            dismiss()
+        }
+        .task { name = await viewer.wordAtCaret() }
+    }
+}
+
+/// [책갈피] 작업 창: the dialog's items, with 넣기 under the name.
+struct BookmarkPane: View {
+    let viewer: Viewer
+    @State private var name = ""
+    @State private var added = 0
+    var body: some View {
+        BookmarkForm(viewer: viewer, name: $name, reload: added) {}
+            .padding([.horizontal, .bottom], 12)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .safeAreaInset(edge: .bottom) {
+                Button("넣기") {
+                    viewer.addBookmark(name)
+                    name = ""
+                    added += 1
+                }
+                .disabled(!BookmarkForm.addable(name) || viewer.document?.context.inBody != true)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding([.horizontal, .bottom], 12)
+            }
+    }
+}
+
+/// 책갈피 이름, 책갈피 목록 with 편집 and 지우기, 책갈피 정렬 기준 and 이동.
+struct BookmarkForm: View {
+    let viewer: Viewer
+    @Binding var name: String
+    var listWidth: CGFloat?
+    /// Changes when the list is to be read again.
+    var reload = 0
+    let moved: () -> Void
     @State private var marks: [Bookmark] = []
     @State private var chosen: String?
     @State private var byName = false
 
+    static func addable(_ name: String) -> Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
     private var shown: [Bookmark] { byName ? marks.sorted { $0.name < $1.name } : marks }
     private var mark: Bookmark? { marks.first { $0.name == chosen } }
     private var taken: Bool { marks.contains { $0.name == name } }
 
     var body: some View {
-        DialogFrame("책갈피", confirmTitle: "넣기", canConfirm: !name.trimmingCharacters(in: .whitespaces).isEmpty && !taken) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            if listWidth == nil {
+                GroupTitle("책갈피 이름")
+                TextField("", text: $name)
+            } else {
                 LabeledField("책갈피 이름") { TextField("", text: $name).frame(width: 220) }
-                HStack {
-                    GroupTitle("책갈피 목록")
-                    Spacer()
-                    ToolIcon("책갈피 이름 바꾸기", symbol: "pencil") {
-                        guard let mark else { return }
-                        viewer.changeBookmark(mark, name: name)
-                        reload()
-                    }
-                    .disabled(mark == nil || name.isEmpty || taken)
-                    ToolIcon("삭제", symbol: "trash") {
-                        guard let mark else { return }
-                        viewer.changeBookmark(mark, name: nil)
-                        reload()
-                    }
-                    .disabled(mark == nil)
-                }
-                List(shown, id: \.name, selection: $chosen) { Text($0.name) }
-                    .frame(width: 300, height: 160)
-                HStack {
-                    Text("책갈피 정렬 기준")
-                    Picker("", selection: $byName) {
-                        Text("이름").tag(true)
-                        Text("위치").tag(false)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .horizontalRadioGroupLayout()
-                    .labelsHidden()
-                    Spacer()
-                    Button("이동") {
-                        guard let mark else { return }
-                        viewer.go(to: mark)
-                        dismiss()
-                    }
-                    .disabled(mark == nil)
-                }
             }
-        } confirm: {
-            viewer.addBookmark(name)
-            dismiss()
+            HStack {
+                GroupTitle("책갈피 목록")
+                Spacer()
+                ToolIcon("편집", symbol: "pencil") {
+                    guard let mark else { return }
+                    viewer.changeBookmark(mark, name: name)
+                    load()
+                }
+                .disabled(mark == nil || name.isEmpty || taken)
+                ToolIcon("지우기", symbol: "trash") {
+                    guard let mark else { return }
+                    viewer.changeBookmark(mark, name: nil)
+                    load()
+                }
+                .disabled(mark == nil)
+            }
+            List(shown, id: \.name, selection: $chosen) { Text($0.name) }
+                .frame(width: listWidth, height: listWidth == nil ? nil : 160)
+                .frame(maxHeight: listWidth == nil ? .infinity : nil)
+            // A narrow 작업 창 puts the order and 이동 on lines of their own.
+            let layout = listWidth == nil ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
+            layout {
+                Text("책갈피 정렬 기준")
+                Picker("", selection: $byName) {
+                    Text("이름").tag(true)
+                    Text("위치").tag(false)
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                .fixedSize()
+                if listWidth != nil { Spacer() }
+                Button("이동") {
+                    guard let mark else { return }
+                    viewer.go(to: mark)
+                    moved()
+                }
+                .disabled(mark == nil)
+            }
         }
-        .task {
-            reload()
-            name = await viewer.wordAtCaret()
-        }
+        .task(id: reload) { load() }
     }
-    private func reload() {
+    private func load() {
         guard let document = viewer.document else { return }
         Task {
             await document.settle()

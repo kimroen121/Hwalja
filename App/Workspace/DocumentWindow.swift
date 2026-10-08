@@ -36,13 +36,12 @@ struct DocumentWindow: View {
             }
             if viewer.finding { FindBar(viewer: viewer) }
             HStack(spacing: 0) {
-                if viewer.showsThumbnails {
-                    PageThumbnails(document: document, viewer: viewer, position: viewer.position)
-                        .frame(width: 150)
-                    Divider()
-                }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minWidth: 480, minHeight: 400)
+                if let pane = viewer.taskPane {
+                    Divider()
+                    TaskPaneView(pane: pane, document: document, viewer: viewer)
+                }
             }
             Divider()
             StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
@@ -199,7 +198,10 @@ final class Viewer: ObservableObject {
     }
     @Published var showsTools = true
     @Published var showsFormat = true
-    @Published var showsThumbnails = true
+    /// The 작업 창 shown at the right, if any; it stays as it was left.
+    @Published var taskPane: TaskPane? = UserDefaults.standard.string(forKey: "taskPane").map { TaskPane(rawValue: $0) } ?? .pages {
+        didSet { UserDefaults.standard.set(taskPane?.rawValue ?? "", forKey: "taskPane") }
+    }
     /// 표시/숨기기.
     @Published var showsControlCodes = false {
         didSet { showMarks() }
@@ -473,6 +475,74 @@ private struct Canvas: NSViewRepresentable {
 }
 
 /// Page thumbnails; a page's image is redrawn only when the engine replaced that page.
+/// 작업 창 that work: 쪽 모양 보기, 스타일 and 책갈피.
+enum TaskPane: String, CaseIterable {
+    case pages = "쪽 모양 보기", styles = "스타일", bookmarks = "책갈피"
+    var symbol: String {
+        switch self {
+        case .pages: "doc.on.doc"
+        case .styles: "textformat"
+        case .bookmarks: "bookmark"
+        }
+    }
+}
+
+/// 작업 창, as in 한/글 2024: its name and close button over it, and the 작업 창 tabs as a
+/// column of icons at the window's edge.
+private struct TaskPaneView: View {
+    let pane: TaskPane
+    @ObservedObject var document: HwpDocument
+    @ObservedObject var viewer: Viewer
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(pane.rawValue).font(.headline)
+                    Spacer()
+                    ToolIcon("닫기", symbol: "xmark") { viewer.taskPane = nil }
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 6)
+                .frame(height: 34)
+                switch pane {
+                case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
+                case .styles: StylePane(document: document, editor: viewer.canvas.editor)
+                case .bookmarks: BookmarkPane(viewer: viewer)
+                }
+            }
+            .frame(width: 200)
+            Divider()
+            VStack(spacing: 4) {
+                ForEach(TaskPane.allCases, id: \.self) { item in
+                    ToolIcon(item.rawValue, symbol: item.symbol, on: item == pane) { viewer.taskPane = item }
+                }
+                Spacer()
+            }
+            .padding(.vertical, 6)
+            .frame(width: 36)
+        }
+    }
+}
+
+/// [스타일] 작업 창: the styles, the caret's marked; a click applies one.
+private struct StylePane: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var body: some View {
+        List(document.styles, id: \.id) { style in
+            Button { document.applyStyle(style.id, editor.undoManager) } label: {
+                Label(style.name, systemImage: style.id == document.format?.style ? "checkmark" : "paragraphsign")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!document.context.canApplyStyle)
+        }
+        .listStyle(.plain)
+        .task { await document.loadStyles() }
+    }
+}
+
 private struct PageThumbnails: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer

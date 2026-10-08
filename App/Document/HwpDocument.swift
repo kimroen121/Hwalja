@@ -114,7 +114,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Format at the caret (or at the end of the selection), with any pending style.
     private(set) var format: Format? { willSet { objectWillChange.send() } }
     /// The document's styles, read once.
-    private(set) var styles: [StyleInfo] = []
+    private(set) var styles: [StyleInfo] = [] {
+        didSet { objectWillChange.send() }
+    }
     /// A character format chosen at a caret, for the next text typed there.
     private var pendingStyle: (at: EditPosition, style: CharStyle)?
     private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
@@ -458,6 +460,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func statistics() async throws -> Statistics {
         try await session.statistics()
     }
+    /// Reads the document's styles the first time they are wanted.
+    func loadStyles() async {
+        if styles.isEmpty, let list = try? await session.styles() { styles = list }
+    }
     /// 상황 선 for `position` in the current revision.
     func status(at position: EditPosition) async throws -> CaretStatus {
         try await session.status(revision: revision, at: position)
@@ -569,7 +575,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             format = try? await session.format(revision: revision, at: selection.ordered.end,
                                                from: selection.anchor == selection.focus ? nil : selection.ordered.start)
         }
-        if styles.isEmpty, let list = try? await session.styles() { styles = list }
+        await loadStyles()
         // A pending style lasts while the caret stays put or composition continues there.
         if let pending = pendingStyle {
             if marked == nil && selection != .caret(pending.at) {

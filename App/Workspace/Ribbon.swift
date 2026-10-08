@@ -422,6 +422,12 @@ private struct ViewTiles: View {
         .padding(.top, 3)
         ToolTile("격자", Icon.grid, on: viewer.showsGrid) { viewer.showsGrid.toggle() }
         RowDivider()
+        ToolTile("작업 창", Icon.taskPane, choices: {
+            TaskPane.allCases.map { pane in
+                Choice(title: pane.rawValue, on: viewer.taskPane == pane) { viewer.taskPane = viewer.taskPane == pane ? nil : pane }
+            }
+        })
+        RowDivider()
         ToolTile("축소", Icon.zoomOut) { viewer.canvas.zoomOut(nil) }
         ToolTile("확대", Icon.zoomIn) { viewer.canvas.zoomIn(nil) }
         ToolTile("100%", Icon.actualSize) { viewer.canvas.setZoom(1) }
@@ -550,7 +556,7 @@ enum Icon {
         static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
-    static let newDocument = "doc.badge.plus", open = "folder"
+    static let newDocument = "doc.badge.plus", open = "folder", taskPane = "sidebar.right"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"
     static let zoomIn = "plus.magnifyingglass", zoomOut = "minus.magnifyingglass", actualSize = "1.magnifyingglass"
