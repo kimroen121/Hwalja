@@ -43,8 +43,10 @@ struct DocumentWindow: View {
                     TaskPaneView(pane: pane, document: document, viewer: viewer)
                 }
             }
-            Divider()
-            StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
+            if viewer.showsStatusBar {
+                Divider()
+                StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
+            }
         }
         .alert("찾아가기", isPresented: $viewer.goingToPage) {
             TextField("쪽", text: $pageField)
@@ -215,8 +217,18 @@ final class Viewer: ObservableObject {
     @Published var showsGrid = false {
         didSet { canvas.editor.showsGrid = showsGrid }
     }
-    @Published var showsRuler = false {
-        didSet { canvas.showsRuler = showsRuler }
+    /// 보기 › 문서 창: 상황 선, 가로 눈금자 and 세로 눈금자.
+    @Published var showsStatusBar = true
+    @Published var showsHorizontalRuler = false {
+        didSet { canvas.showsHorizontalRuler = showsHorizontalRuler }
+    }
+    @Published var showsVerticalRuler = false {
+        didSet { canvas.showsVerticalRuler = showsVerticalRuler }
+    }
+    /// 보기 탭's 눈금자: both rulers.
+    var showsRuler: Bool {
+        get { showsHorizontalRuler || showsVerticalRuler }
+        set { (showsHorizontalRuler, showsVerticalRuler) = (newValue, newValue) }
     }
     /// 쪽 윤곽, remembered for new windows and the next launch as 한글 does.
     @Published var showsOutline = UserDefaults.standard.object(forKey: "showsOutline") as? Bool ?? true {

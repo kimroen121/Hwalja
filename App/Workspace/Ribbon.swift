@@ -414,6 +414,7 @@ private struct ViewTiles: View {
         .padding(.horizontal, 5)
         .padding(.top, 3)
         VStack(alignment: .leading, spacing: 3) {
+            Toggle("상황 선", isOn: $viewer.showsStatusBar)
             Toggle("눈금자", isOn: $viewer.showsRuler)
         }
         .toggleStyle(.checkbox)

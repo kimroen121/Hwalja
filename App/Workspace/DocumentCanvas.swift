@@ -51,13 +51,22 @@ final class DocumentCanvas: NSScrollView {
 
     /// 눈금자: rulers counting from the page in view, its body's edges and the caret
     /// paragraph's 들여쓰기 marked; dragging a mark changes them.
-    var showsRuler = false {
-        didSet {
-            hasHorizontalRuler = showsRuler
-            hasVerticalRuler = showsRuler
-            rulersVisible = showsRuler
-            needsRulers()
-        }
+    var showsRuler: Bool {
+        get { showsHorizontalRuler || showsVerticalRuler }
+        set { (showsHorizontalRuler, showsVerticalRuler) = (newValue, newValue) }
+    }
+    /// 가로 눈금자 and 세로 눈금자, shown apart as 보기 › 문서 창 does.
+    var showsHorizontalRuler = false {
+        didSet { rulersChanged() }
+    }
+    var showsVerticalRuler = false {
+        didSet { rulersChanged() }
+    }
+    private func rulersChanged() {
+        hasHorizontalRuler = showsHorizontalRuler
+        hasVerticalRuler = showsVerticalRuler
+        rulersVisible = showsRuler
+        needsRulers()
     }
     /// Without 쪽 윤곽 the rulers show the margins but cannot change them, as in 한글.
     var showsMargins = true {
@@ -77,18 +86,19 @@ final class DocumentCanvas: NSScrollView {
     private var rulerPage: (section: UInt32, revision: UInt64, page: PageSetup)?
 
     private func placeRulers() {
-        guard showsRuler, let across = horizontalRulerView, let down = verticalRulerView, let model = editor.model else { return }
+        guard showsRuler, let model = editor.model else { return }
+        let across = showsHorizontalRuler ? horizontalRulerView : nil, down = showsVerticalRuler ? verticalRulerView : nil
         let visible = documentVisibleRect
         guard let page = editor.frame(ofPage: editor.page(near: NSPoint(x: visible.midX, y: visible.midY))) else { return }
         // Markers need the view they measure.
-        if across.clientView !== editor { across.clientView = editor }
-        if down.clientView !== editor { down.clientView = editor }
-        across.originOffset = page.minX
-        down.originOffset = page.minY
+        if let across, across.clientView !== editor { across.clientView = editor }
+        if let down, down.clientView !== editor { down.clientView = editor }
+        across?.originOffset = page.minX
+        down?.originOffset = page.minY
         let section = model.selection?.focus.target.section ?? 0
         guard let setup = rulerPage, setup.section == section, setup.revision == model.revision else {
-            across.markers = nil
-            down.markers = nil
+            across?.markers = nil
+            down?.markers = nil
             let revision = model.revision
             Task { [weak self] in
                 guard let setup = try? await model.pageSetup(section: section) else { return }
@@ -111,18 +121,22 @@ final class DocumentCanvas: NSScrollView {
             marker.representedObject = mark.rawValue as NSString
             return marker
         }
-        var marks = [marker(across, left, "arrowtriangle.down.fill", .left),
-                     marker(across, right, "arrowtriangle.down.fill", .right)]
-        // The caret paragraph's 왼쪽·오른쪽 여백 and 첫 줄 들여쓰기 (내어쓰기 when negative).
-        if let para = model.format?.paragraph, let start = para.marginLeft, let end = para.marginRight, let first = para.indent {
-            marks += [marker(across, left + start + first, "arrowtriangle.down", .firstLine),
-                      marker(across, left + start, "arrowtriangle.up", .indentLeft),
-                      marker(across, right - end, "arrowtriangle.up", .indentRight)]
+        if let across {
+            var marks = [marker(across, left, "arrowtriangle.down.fill", .left),
+                         marker(across, right, "arrowtriangle.down.fill", .right)]
+            // The caret paragraph's 왼쪽·오른쪽 여백 and 첫 줄 들여쓰기 (내어쓰기 when negative).
+            if let para = model.format?.paragraph, let start = para.marginLeft, let end = para.marginRight, let first = para.indent {
+                marks += [marker(across, left + start + first, "arrowtriangle.down", .firstLine),
+                          marker(across, left + start, "arrowtriangle.up", .indentLeft),
+                          marker(across, right - end, "arrowtriangle.up", .indentRight)]
+            }
+            across.markers = marks.compactMap { $0 }
         }
-        across.markers = marks.compactMap { $0 }
-        down.markers = [marker(down, page.minY + points(p.marginTop + p.marginHeader), "arrowtriangle.right.fill", .top),
-                        marker(down, page.maxY - points(p.marginBottom + p.marginFooter), "arrowtriangle.right.fill", .bottom)]
-            .compactMap { $0 }
+        if let down {
+            down.markers = [marker(down, page.minY + points(p.marginTop + p.marginHeader), "arrowtriangle.right.fill", .top),
+                            marker(down, page.maxY - points(p.marginBottom + p.marginFooter), "arrowtriangle.right.fill", .bottom)]
+                .compactMap { $0 }
+        }
     }
     enum RulerMark: String { case left, right, top, bottom, firstLine, indentLeft, indentRight }
 

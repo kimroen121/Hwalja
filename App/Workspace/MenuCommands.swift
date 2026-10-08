@@ -271,7 +271,9 @@ struct MenuItems {
                 }
             } label: { Label("작업 창", systemImage: "sidebar.right") }
             Menu {
-                toggle("눈금자", viewer.showsRuler) { viewer.showsRuler.toggle() }
+                toggle("상황 선", viewer.showsStatusBar) { viewer.showsStatusBar.toggle() }
+                toggle("가로 눈금자", viewer.showsHorizontalRuler) { viewer.showsHorizontalRuler.toggle() }
+                toggle("세로 눈금자", viewer.showsVerticalRuler) { viewer.showsVerticalRuler.toggle() }
             } label: { Label("문서 창", systemImage: "ruler") }
         }
     }
