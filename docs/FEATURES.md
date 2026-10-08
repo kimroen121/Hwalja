@@ -1,0 +1,321 @@
+# 기능 목록
+
+한컴오피스 2022 한/글 도움말(<https://help.hancom.com/hoffice120/ko-KR/Hwp/>) 목차의 기능을 빠짐없이 옮긴 표다. 순서와 이름은 도움말 목차 그대로다. 계획은 `ROADMAP.md`, 일하는 방식은 `GUIDELINES.md`.
+
+- 도움말 경로는 위 주소 뒤에 붙는다. `scripts/hancom-help.py`를 돌리면 `build/hancom-help/`에 목차(`toc.md`), 쪽마다 글(`pages/`), 그림(`img/`)이 생긴다. 아래 표에는 목차의 두 단계까지만 적었다. 그 아래 단계(대화 상자의 탭, 세부 기능)는 그 기능을 만들 때 도움말에서 하나씩 확인한다.
+- 상태
+  - ● 됨: 도움말 동작대로 쓸 수 있다.
+  - ◐ 일부: 메모에 된 것과 안 된 것을 적었다.
+  - ○ rhwp에 있음: 엔진(rhwp)에 함수가 있어 앱에 연결하면 된다.
+  - △ 엔진 작업: rhwp에 없거나 고쳐야 한다. 앱만으로 되는 일이면 메모에 적었다.
+  - — 범위 밖: Windows 전용, 한컴 서비스, macOS 기능으로 대신하는 것. 메모에 이유를 적었다.
+- 상태는 2026-10-08에 코드와 지난 점검 기록으로 매긴 것이다. 1단계에서 앱을 직접 써 보며 다시 확인한다.
+- 기능을 끝내면 상태를 바꾸고, 메모에서 끝난 내용을 지운다.
+
+## 한컴오피스 2022 한/글 소개
+
+도움말: `hwp/hwp(intro).htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 새로운 기능 | — | `hwp/new_features.htm` | 소개 문서 |
+| 사용 안내 | ◐ | `hwpbase/action(hwp).htm` | 화면 구성·메뉴·도구 상자·빠른 메뉴는 2단계 |
+
+## 파일
+
+도움말: `menu/file.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 새 문서 | ◐ | `file/new/new.htm` | 새 문서 ●. 새 탭은 macOS 창 탭. 한/워드·한/셀·한/쇼 문서는 범위 밖 |
+| 문서마당 | △ | `file/madang/madang(madang).htm` | 서식 파일 묶음이 필요. 앱 번들 서식은 사용권 확인 후 |
+| 문서 시작 도우미 | — | `file/start_screen.htm` | macOS 열기 패널과 최근 사용 항목으로 대신 |
+| 불러오기 | ◐ | `file/open/open.htm` | HWP·HWPX ●, 암호 문서 ●. 텍스트·DBF 불러오기 △ |
+| PDF를 오피스 문서로 변환하기 | — | `file/open/open(pdf).htm` | 한컴 변환 서비스 |
+| 그림을 오피스 문서로 변환하기 | — | `file/open/open(picture)_ocr.htm` | 한컴 OCR |
+| XML 문서 | — | `file/xml_document.htm` |  |
+| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기 △ |
+| 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 저장 설정 △, 인터넷 문서·텍스트 파일·한/글 97·XML △, 블록 저장하기 △ |
+| PDF로 저장하기 | ● | `file/to_pdf.htm` | 지금 이름은 「PDF로 내보내기…」. 1단계에서 이름 바꿈 |
+| 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
+| 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●. 문서 요약 △(rhwp에 요약 쓰기 없음), 글꼴 정보 ○ `get_document_info`, 그림 정보 ○, 저작권 △ |
+| DAISY 문서 | — | `file/daisy_document.htm` |  |
+| CCL 넣기 | △ | `file/ccl.htm` | CCL 마크 그림 자료가 필요 |
+| 공공누리 넣기 | △ | `file/kogl.htm` | 공공누리 마크 그림 자료가 필요 |
+| 점자로 바꾸기 | — | `file/conversion_to_braille.htm` |  |
+| 보내기 | △ | `file/send_to_mail/send_to_mail.htm` | macOS 공유 메뉴로 대신. 웹 서버로 올리기는 범위 밖 |
+| 편집 용지 | ◐ | `format/setting_paper/setting_paper.htm` | 기본(용지 종류·방향·여백·제본) ●. 줄 격자·글자 격자 △ |
+| 미리 보기 | △ | `file/preview/preview.htm` | 미리 보기 탭(상황 탭). 조판은 같은 표시 목록을 씀 |
+| 인쇄 | ◐ | `file/print/print.htm` | macOS 프린트(⌘P) ●. 인쇄: 확장(인쇄용 머리말/꼬리말)·워터마크 △ |
+| 최근 작업 문서 | ● | `file/recently_used_documents.htm` | macOS 최근 사용 항목 |
+| 문서 닫기 | ● | `file/close.htm` |  |
+| 끝 | ● | `file/exit.htm` | macOS 종료 |
+
+## 편집
+
+도움말: `menu/edit.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 되돌리기 | ● | `edit/undo.htm` |  |
+| 다시 실행 | ● | `edit/redo.htm` |  |
+| 오려 두기 | ● | `edit/cut.htm` |  |
+| 복사하기 | ● | `edit/copy.htm` |  |
+| 붙이기 | ◐ | `edit/paste.htm` | 같은 문서·다른 앱의 HTML·RTF ●. 셀 붙이기 ◐(표 → 표) |
+| 골라 붙이기 | △ | `edit/paste(select).htm` | 붙일 형식 고르기. 클립보드 형식(HWP 내부, HTML, RTF, 텍스트)으로 만들 수 있음 |
+| 모양 복사 | ◐ | `format/quick_format/quick_format.htm` | 글자·문단 모양 ●. 스타일 복사·셀 모양 복사·개체 모양 복사 △ |
+| 지우기 | ● | `edit/erase.htm` |  |
+| 조판 부호 지우기 | ● | `edit/erase_code.htm` |  |
+| 모두 선택 | ● | `edit/select_all.htm` |  |
+| 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기·찾아가기(쪽) ●. 찾기 선택 사항(대소문자, 온전한 낱말 등)·찾아가기의 줄·구역·책갈피·개체 △ |
+| 글자 바꾸기 | △ | `edit/change_characters/change_characters.htm` | 대문자/소문자·전각/반각·일어·간체/번체는 앱에서 바꿔 넣으면 됨. 한자로 바꾸기는 macOS 입력기 |
+| 정렬 | △ | `tools/sort/sort.htm` | 문단 정렬. 엔진에 문단 순서 바꾸기 명령 필요 |
+| 고치기 | ◐ | `edit/modification.htm` | 선택한 개체의 속성 열기 ● |
+| OLE 연결 | — | `edit/objectlink.htm` | Windows OLE |
+| OLE 개체 속성 | — | `edit/objecedit.htm` | Windows OLE |
+| 블록 | ● | `edit/block.htm` | F3 블록은 macOS 관례로 Shift 선택 |
+| 칸 단위 블록 | △ | `edit/column_block.htm` |  |
+| 삽입/수정 | △ | `edit/insert.htm` | 수정(덮어쓰기) 상태 |
+
+## 보기
+
+도움말: `menu/view.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 확대/축소 | ◐ | `view/zooming/zoom.htm` | 배율·쪽 맞춤·폭 맞춤·여러 쪽 ●. 화면 확대 대화 상자 △ |
+| 쪽 윤곽 | ● | `view/page_outline.htm` |  |
+| 표시/숨기기 | ◐ | `view/showandhide.htm` | 조판 부호·문단 부호·투명 선 ●. 교정 부호 △, 그림 숨기기 △ |
+| 메모 | △ | `view/memo.htm` | rhwp에 메모 없음 |
+| 한자 발음 | △ | `view/chinese_pronounce.htm` |  |
+| 격자 | ◐ | `view/grid/grid.htm` | 격자 보기 ●. 격자 설정 △ |
+| 개체 이동 안내선 | △ | `view/object_move_guideline/guideline(objectmoveguideline).htm` | 앱 쪽 작업 |
+| 컬러/회색조 | △ | `view/grayscale.htm` | 앱 쪽 작업(표시만 바꿈). 사용자 색 △ |
+| 도구 상자 | ◐ | `view/toolbar/toolbar.htm#bc-1` | 2단계에서 2022 구성으로 바꿈. 사용자 설정은 범위 밖 |
+| 작업 창 | ◐ | `view/workwindow/workwindow.htm` | 쪽 모양 보기(지금 왼쪽 사이드바) ●. 스타일·책갈피·개요 보기 ○, 클립보드 △, 나머지 범위 밖 |
+| 문서 창 | ◐ | `view/document_window.htm` | 가로 눈금자 ● (탭 표시 △), 상황 선 ◐, 세로 눈금자 △, 문서 탭은 macOS 창 탭 |
+| 편집 화면 나누기 | △ | `window/division/division.htm` | 앱 쪽 작업 |
+| 창 배열 | — | `window/arrange/arrange_windows.htm` | macOS 윈도우 메뉴 |
+| 창 목록 | — | `window/windows_list.htm` | macOS 윈도우 메뉴 |
+| 열린 창 목록 | — | `window/open_list.htm` | macOS 윈도우 메뉴 |
+
+## 입력
+
+도움말: `menu/insert.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 도형 | ◐ | `draw/drawing(polygon).htm` | 직선·직사각형·타원·호·글상자 ●. 다각형·곡선·자유선·개체 연결선 △. 새 그리기 속성 △ |
+| 그림 | ◐ | `insert/figure/figure(figure).htm` | 그림 넣기 ●. 그리기마당 △(자료 필요), 스크린 샷 △, 연결 그림 새로 고침 △, 그림에서 글자 가져오기 — |
+| 표 | ◐ | `table/table(table).htm` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
+| 차트 | △ | `table/chart/chart(createchart).htm` | rhwp가 차트를 새로 만들지 못함. 데이터 편집은 ○ `get/set_chart_data_native` |
+| 글상자 | ◐ | `insert/textbox/textbox.htm#bc-1` | 넣기 ●. 글상자 연결·세로쓰기 △ |
+| 멀티미디어 | △ | `insert/multimedia.htm` | 동영상·소리 개체 |
+| 수식 | ● | `insert/equation/equation.htm` | 수식 편집기. 각주 안 수식은 속성만(rhwp 쪽 배치 한계) |
+| 개체 | ◐ | `insert/object.htm` | 필드 입력(누름틀) ○ `insert_click_here_field_at`, 양식 개체 값 ○ `set_form_value_native`, 글맵시 △, OLE 개체 —, 그리기 개체 △ |
+| 캡션 넣기 | ● | `insert/caption.htm` |  |
+| 문단 띠 | △ | `insert/line.htm` |  |
+| 입력 도우미 | △ | `tools/insert_doumi.htm` | 상용구·글자 겹치기·외래어 표기·로마자 |
+| 채우기 | △ | `table/autofill/table(autofill)_main.htm` | 표 자동 채우기 |
+| 주석 | ◐ | `insert/annotations/annotations.htm` | 각주·미주 넣기 ●. 각주/미주 모양 ○ `get/apply_endnote_shape_native`, 각주↔미주 △, 주석 저장하기 △, 숨은 설명 △ |
+| 날짜/시간/파일 이름 | △ | `insert/date/date.htm` | 문자열 넣기는 앱 쪽 작업, 코드는 필드 필요 |
+| 덧말 넣기 | △ | `insert/addsummary.htm` |  |
+| 문서 끼워 넣기 | △ | `insert/insert_file.htm` | 다른 문서의 본문을 커서 위치에. 붙이기 경로로 만들 수 있음 |
+| 문자표 | ◐ | `insert/character_set.htm` | 문자표 ●(유니코드). 사용자 문자표·한/글 문자표·완성형 문자표 △ |
+| 한자 입력 | — | `insert/chinese_input.htm` | macOS 입력기 |
+| 메모 | △ | `insert/memo/memo.htm` | rhwp에 메모 없음 |
+| 상호 참조 | △ | `insert/cross_reference/cross_reference.htm` |  |
+| 책갈피 | ● | `insert/bookmark/bookmark.htm` | 넣기·이동·이름 바꾸기·지우기 |
+| 하이퍼링크 | △ | `insert/hyperlink/hyperlink.htm` | rhwp에 넣기 없음 |
+
+## 서식
+
+도움말: `menu/format.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 글자 모양 | ◐ | `format/font/fonts.htm` | 기본·확장·테두리/배경 탭 ●. 2022 대화 상자와 항목 대조 필요 |
+| 문단 모양 | ◐ | `format/paragraph/paragraph.htm` | 기본·확장·테두리/배경 ●. 탭 설정 탭 △, 최소 공백 △ |
+| 문단 첫 글자 장식 | △ | `format/drop_cap/drop_cap.htm` |  |
+| 문단 번호 모양 | ◐ | `format/numberbullet/numberbullet(main).htm` | 문단 번호·글머리표 ●, 새 번호 목록 시작은 저장 안 됨(BUG_HANDOFF P1). 그림 글머리표 △. 표 칸·주석 안 시작 번호 방식 ○ 확장 필요 |
+| 문단 번호 적용/해제 | ● | `format/numberbullet/number(attributes_cancel).htm` |  |
+| 글머리표 적용/해제 | ● | `format/numberbullet/bullet(attributes_cancel).htm` |  |
+| 개요 번호 모양 | △ | `format/outline/outline_numbering(paragraph_number).htm` |  |
+| 개요 적용/해제 | △ | `format/outline/outline_numbering(attributes_cancel).htm` |  |
+| 한 수준 증가/감소 | ● | `format/outline/outline_numbering(depth).htm` |  |
+| 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(추가·편집·지우기) ○ wasm `get_style_list`·`update_style`·`create_style`·`delete_style` |
+| 스타일마당 | △ | `format/style_templates/style_templates.htm` | 서식 파일 자료 필요 |
+| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 기본·여백/캡션·그림·채우기 일부 ●. 선 탭 ○, 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
+
+## 쪽
+
+도움말: `menu/Page.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 편집 용지 | ◐ | `format/setting_paper/setting_paper.htm#bc-1` | 기본(용지 종류·방향·여백·제본) ●. 줄 격자·글자 격자 △ |
+| 글자 방향 | △ | `format/vertical.htm` | 세로쓰기 |
+| 쪽 테두리/배경 | ○ | `format/pageborder/page_border.htm` | `get/set_page_border_fill_native` |
+| 바탕쪽 | △ | `format/masterpages/master_pages.htm` | rhwp에 바탕쪽 편집 없음(그리기는 됨) |
+| 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
+| 쪽 번호 매기기 | ◐ | `format/pagenumber.htm` | 머리말·꼬리말의 쪽 번호 ●. 쪽 번호 매기기 대화 상자(번호 위치·모양) △ 확인 필요 |
+| 새 번호로 시작 | ● | `format/new_number.htm` |  |
+| 감추기 | ● | `format/hide.htm` | 지금 이름은 「현재 쪽만 감추기…」. 메뉴 이름은 「감추기」 |
+| 줄 번호 | △ | `view/line_number.htm` |  |
+| 쪽 나누기 | ● | `format/break/page_break.htm` |  |
+| 단 나누기 | ● | `format/break/column_break.htm` |  |
+| 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 왼쪽·오른쪽 △, 다단 설정 대화 상자 △(rhwp가 구역의 줄을 첫 단 정의 너비로 나눔) |
+| 다단 설정 나누기 | △ | `format/break/new_columns.htm` | 단 정의가 둘 이상인 구역의 조판부터 |
+| 구역 설정 | ○ | `format/section/section.htm` | `get/set_section_def_native`, `set_section_def_all_native` |
+| 구역 나누기 | △ | `format/break/section_break.htm` |  |
+| 쪽 복사하기 | △ | `format/copy_page.htm` |  |
+| 쪽 지우기 | △ | `format/remove_page_current.htm` |  |
+| 원고지 | △ | `tools/wongogi/wongogi.htm` |  |
+| 라벨 | △ | `tools/label/label.htm` | 라벨 서식 자료 필요 |
+
+## 보안
+
+도움말: `menu/security.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 문서 암호 설정 | ○ | `file/password/password.htm` | 여는 암호 ●. 저장할 때 암호 거는 대화 상자 ○ `export_hwp_with_adapter_with_password` |
+| 문서 암호 변경/해제 | ○ | `file/password/password(change).htm` | 같은 저장 경로 |
+| 배포용 문서로 저장 | △ | `file/send_to_mail/publish(save).htm` |  |
+| 배포용 문서 편집 | — | `file/send_to_mail/publish(edit).htm` | 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요) |
+| 배포용 문서 암호 변경/해제 | △ | `file/send_to_mail/publish(cancel).htm` |  |
+| 개인 정보 보호 | △ | `security/user_info_security/user_info_security.htm` | rhwp `scan_pii`로 찾기는 됨, 보호(암호화) 저장 △ |
+| 문서 보안 설정 | △ | `security/document_security.htm` |  |
+
+## 검토
+
+도움말: `menu/review.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 교정 부호 | △ | `insert/proofreadmark/proofreadmark.htm` |  |
+| 변경 내용 추적 | △ | `review/track_changes/track_changes.htm` |  |
+| 변경 내용 표시 설정 | △ | `review/track_changes/track_changes(options).htm` |  |
+| 문서 이력 관리 | △ | `file/version_information/version_information.htm` |  |
+| 문서 비교 | △ | `review/compare_document/compare_document.htm` |  |
+| 새 메모 | △ | `insert/memo/memo(insert).htm#bc-1` | 메모와 같음 |
+| 메모 모양 | △ | `insert/memo/memo(format).htm#bc-1` |  |
+| 모든 메모 표시 | △ | `view/memo/memo(expression).htm#bc-1` |  |
+
+## 도구
+
+도움말: `menu/tools.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 맞춤법 | △ | `tools/speller/spelling.htm` | macOS 맞춤법 검사(NSSpellChecker)로 |
+| 한컴 사전 | — | `tools/dictionary/dictionary(haandictionary).htm` | macOS 사전 찾아보기로 대신 |
+| 한자 사전 | — | `tools/chinese_dictionary.htm` |  |
+| 유의어/반의어 사전 | — | `tools/thesaurus/thesaurus.htm` |  |
+| 번역 | — | `view/workwindow/workwindow(translation).htm#bc-1` | macOS 번역 서비스 |
+| 빠른 교정 | △ | `tools/qcorrect/qcorrect.htm` | macOS 텍스트 대치로 |
+| 한컴 애셋 | — | `tools/asset.htm` |  |
+| 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` |  |
+| 스크립트 매크로 | — | `tools/macro/macro.htm` |  |
+| 차례/색인 | △ | `tools/index/index.htm` | 개요 탐색 ○ `get_outline_navigation_native`가 시작점 |
+| 참고 문헌 | △ | `tools/bibliography/bibliography.htm` |  |
+| 블록 계산 | △ | `tools/blocksum/blocksum.htm` | 본문 블록의 합계·평균. 표 블록 계산식은 됨 |
+| 문서 찾기 | — | `file/finding_files/finding_files.htm` | Spotlight |
+| 개인 정보 바꾸기 | △ | `security/user_info_protection/user_info_protection.htm` |  |
+| 프레젠테이션 | — | `tools/presention/presentation.htm` |  |
+| 글자판 | — | `insert/keyboard/keyboard.htm` | macOS 입력기 |
+| 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |
+| 사용자 설정 | — | `view/toolbar/toolbar(edit).htm#bc-1` | 도구 상자 사용자 설정 |
+| 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 필요한 항목만 |
+| 스킨 설정 | — | `tools/skin.htm` | macOS 다크 모드 |
+
+## 표
+
+도움말: `menu/table.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 표 | ◐ | `table/table(table).htm#bc-1` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
+| 차트 만들기 | △ | `table/chart/chart(createchart).htm#bc-1` | 차트와 같음 |
+| 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 표·셀 탭 ●. 2022 대화 상자와 항목 대조 필요 |
+| 셀 테두리/배경 | ◐ | `table/cellborder/cellborder.htm` | 셀 테두리/배경 ●. 각 셀마다 적용·하나의 셀처럼 적용 ○ `apply_cell_border_fill_ids_native` |
+| 표 나누기 | ○ | `table/table(dividing).htm` | `split_table_native` |
+| 표 붙이기 | ○ | `table/table(attach).htm` | `merge_table_with_next_native` |
+| 줄/칸 추가하기 | ◐ | `table/table(ins).htm` | 위쪽·아래쪽·왼쪽·오른쪽 ●. 대화 상자(줄/칸 수) △ |
+| 줄/칸 지우기 | ● | `table/table(del).htm` |  |
+| 셀 나누기 | ● | `table/table(divide).htm` |  |
+| 셀 합치기 | ● | `table/table(merge).htm` |  |
+| 셀 높이를 같게 | ● | `table/table(eqheight).htm` |  |
+| 셀 너비를 같게 | ● | `table/table(eqwidth).htm` |  |
+| 표 테두리/배경 | ◐ | `table/tableborder/tableborder.htm` | 표/셀 속성의 테두리 ●. 2022 대화 상자 대조 필요 |
+| 표마당 | △ | `table/tablemadang/tablemadang.htm` | 표 스타일 자료 필요 |
+| 표 뒤집기 | ○ | `table/table(transform).htm` | `transpose_table_cells_in_place_native` |
+| 블록 계산식 | ◐ | `table/blockcal/blockcal.htm` | 값으로 넣음. 계산식 필드로 넣어 자동 다시 계산 △ |
+| 쉬운 계산식 | △ | `table/easycal/easycal.htm` |  |
+| 계산식 | ○ | `table/calculation/calculation.htm` | `evaluate_table_formula`. 계산식 필드 넣기 △ |
+| 1,000 단위 구분 쉼표 | △ | `table/table(threedigits).htm` | 자릿점 넣기·빼기 |
+| 셀 블록 | ● | `table/table(cell).htm` |  |
+| 표 크기 조절 | ◐ | `table/table(size).htm` | 테두리 끌기 ●. 바깥 왼쪽·위 테두리, 셀 안의 표 △(`resize_table_cells`, `move_table_offset`) |
+| 표의 편집 | ◐ | `table/table(edit).htm` | 중첩 표 셀 편집 △(읽기 전용) |
+| 표에서 세로쓰기 | △ | `table/table(write_vertically).htm` | 세로쓰기 셀은 읽기 전용 |
+| 셀 붙이기 | ◐ | `table/table(paste).htm#bc-1` |  |
+
+## 그림 그리기
+
+도움말: `draw/drawing.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 도형 탭 | ◐ | `toolbox/object_shapeobject.htm` | 개체 탭으로 2단계. 개체 묶기 ○ `group_shapes_native`, 풀기 ●, 순서 ●, 회전·뒤집기 ○ `set_control_flip_at` |
+| 개체 이동하기 | ● | `draw/move/drawing(move).htm` |  |
+| 개체 크기 조절 | ● | `draw/drawing(size).htm` |  |
+| 개체 기울이기 | △ | `draw/drawing(incline).htm` |  |
+| 개체 복사하기/붙이기 | ● | `draw/drawing(copy).htm` |  |
+| 개체를 그림 파일로 저장하기 | △ | `draw/drawing(save).htm` | 표시 목록을 그림으로 그리면 됨 |
+
+## 추가 기능
+
+도움말: `view/toolbox/menu_add-in.htm` · 범위 밖
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 옛한글 코드 변환기 | — | `hwpbase/hncpuaconverter_addin.htm` |  |
+| 단축키 도우미 | — | `tools/external_add-in/shortcut_key_assistant.htm` |  |
+
+## 한컴독스
+
+도움말: `cloud/thinkfree_drive.htm` · 범위 밖(한컴 서비스)
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 한컴독스에 자동 저장 | — | `cloud/auto_save(cloud).htm` | 한컴 서비스 |
+| 한컴독스에 저장하기 | — | `cloud/save(thinkfree).htm` |  |
+| 한컴독스에서 불러오기 | — | `cloud/open(thinkfree).htm` |  |
+| 문서 공유하기 | — | `cloud/share_file.htm` | macOS 공유 |
+| 환경 설정 내보내기/가져오기 | — | `cloud/options.htm` |  |
+
+## 단축키
+
+도움말: `view/toolbar/shortcut.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | macOS 대응표(아래 규칙)로 맞춤 |
+
+## 사용권
+
+도움말: `rights/rights.htm`
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 한/글 정보 | ● | `rights/rights(info).htm` | macOS 「HwpStudio에 관하여」 |
+
+## 고객 지원 안내
+
+도움말: `support/support(guide).htm` · 범위 밖
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
+| 제품 등록 방법 | — | `support/support(method).htm` |  |
+| 고객 지원 서비스 | — | `support/support(service).htm` |  |
+| 사용성 데이터 수집 및 처리 방침 | — | `support/support(data_collection).htm` |  |

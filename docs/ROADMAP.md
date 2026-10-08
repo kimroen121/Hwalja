@@ -1,11 +1,56 @@
 # HwpStudio 로드맵
 
-목표: HWP/HWPX 문서를 원본 훼손 없이 편집하는 macOS 네이티브 편집기.
+목표: HWP/HWPX 문서를 원본 훼손 없이 편집하는 macOS 네이티브 편집기. **한컴오피스 2022 한/글 도움말에 적힌 기능을 그 도움말대로, 최대한 정확하게 지원한다.**
 
-- **1차 목표: rhwp가 지원하는 기능을 모두 앱에서 쓸 수 있게 한다.** rhwp(`build/rhwp`, `Vendor/rhwp-*.tar.gz` + 패치)에 있는 편집·조회·저장 기능이 기준이다. rhwp에 없는 기능(하이퍼링크 넣기, 메모, 변경 내용 추적 등)은 1차에서 다루지 않는다.
-- 2차 목표: rhwp에 없는 웹 한글·로컬 한글 기능을 엔진에 더해 데스크톱 한글 수준으로 끌어올린다.
-- 화면 기준: 조판 결과는 로컬 「Hancom Office HWP Viewer」와 최대한 같게 한다. UI는 Apple HIG를 따르고, 앱 안에 설명 문구를 넣지 않는다.
-- 용어: 모든 메뉴·대화상자 이름은 웹 한글(저장해 둔 편집 화면 htm, main.js, 탭 스크린샷)에서 그대로 가져온다. 웹 한글에 없는 대화상자 안의 문구와 기능의 동작은 한컴 공식 도움말을 따른다(`docs/GUIDELINES.md`). 새 용어를 만들지 않는다. macOS 표준 명령 이름(프린트…, PDF로 내보내기… 등)은 쓴다. 웹 한글에서 이름을 찾지 못한 기능은 이름을 확인할 때까지 보류한다(아래 「이름 확인이 필요한 기능」).
+- **기준 문서: 한컴오피스 2022 한/글 도움말** <https://help.hancom.com/hoffice120/ko-KR/Hwp/index.htm>. 메뉴·도구 상자·대화 상자의 이름, 구성, 순서, 동작은 이 도움말의 글과 그림을 따른다. 전체 기능과 현재 상태는 `docs/FEATURES.md`.
+- **화면 배치는 한/글 2022와 같게, 모양과 조작은 macOS답게.** 무엇을 어디에 두는지는 한/글을 따르고, 그것을 어떻게 그리고 다루는지는 Apple HIG를 따른다(아래 「창 구성」).
+- 조판 결과는 로컬 「Hancom Office HWP Viewer」와 최대한 같게 한다.
+- 범위 밖: Windows 전용 기능(OLE, 창 배열, 입력기·글자판), 한컴 서비스(한컴독스, 한컴 애셋, 한컴 사전, 자동 업데이트), macOS가 이미 하는 일(창 목록, 문서 찾기, 스킨). 목록과 이유는 `FEATURES.md`의 「—」.
+- 엔진: rhwp(`build/rhwp`, `Vendor/rhwp-*.tar.gz` + 패치)에 있는 기능을 먼저 연결하고, 없는 기능은 엔진에 더한다. 예전의 「1차: rhwp 기능 / 2차: rhwp에 없는 기능」 구분은 없앤다. 순서는 아래 단계가 정한다.
+
+## 도움말을 읽는 법
+
+- `scripts/hancom-help.py`를 돌리면 `build/hancom-help/`에 목차·쪽 글·그림이 생긴다(커밋하지 않는다). 쪽 글의 `[img 경로]`가 `img/` 아래 그림이다.
+- 기능 하나를 만들 때 읽는 것
+  - 그 기능의 쪽(따라 하기, 자세한 정보, 참고)
+  - 대화 상자 그림: 탭, 항목, 순서, 단추를 이 그림에서 가져온다.
+  - 그 기능이 들어 있는 메뉴 쪽(`menu/*.htm`)과 도구 상자 탭 쪽(`view/toolbar/menu_*.htm`, `toolbox/*.htm`)과 그 그림
+- 도움말끼리 이름이 다를 때는 기능 자신의 쪽(제목, 대화 상자) > 메뉴 쪽 > 도구 상자 탭 쪽 순으로 따른다. 예: 표 레이아웃 탭 쪽은 「위에 줄 추가하기」, 줄/칸 추가하기 쪽은 「위쪽에 줄 추가하기」 → 「위쪽에 줄 추가하기」.
+- 도움말에 없는 것(대화 상자 안의 숨은 동작, 기본값)은 로컬 한컴 뷰어와 한컴에서 만든 문서로 확인한다. 확인할 수 없으면 추측해서 만들지 않고 BUG_HANDOFF에 적는다.
+- 한컴의 아이콘 그림은 가져다 쓰지 않는다. 같은 뜻의 SF Symbol을 쓴다.
+
+## 창 구성 (한/글 2022 → macOS)
+
+도움말 `hwpbase/screen.htm`(그림 `intro_screen.png`), `view/toolbar/menu.htm`, `view/toolbar/toolbar.htm`, `view/toolbar/toolbar(base).htm`, `view/toolbar_formatting.htm`, `view/status_bar.htm`, `view/view_selection_icon.htm`, `view/workwindow/workwindow.htm`.
+
+| 한/글 2022 | HwpStudio |
+|---|---|
+| 제목 | macOS 창 제목 막대(문서 이름, 편집됨 표시). 한/글의 빨강·파랑 파일 이름 색은 쓰지 않는다. |
+| 메뉴(파일·편집·보기·입력·서식·쪽·보안·검토·도구, 표 안에서는 표) | macOS 메뉴 막대에 같은 순서로 둔다. 각 메뉴의 항목과 순서는 `menu/*.htm`을 따르고, 아직 동작하지 않는 항목은 넣지 않는다. 앞에는 앱 메뉴, 뒤에는 macOS 윈도우·도움말 메뉴가 붙는다. |
+| 기본 도구 상자의 메뉴 탭(편집·보기·입력·서식·쪽·보안·검토·도구) | 창 위쪽의 탭 줄. 탭 이름을 누르면 그 탭의 큰 아이콘 줄로 바뀐다. 「파일」은 탭이 없다. 지금의 「기본」 탭은 없앤다. |
+| 메뉴 이름 옆 펼침 단추 | 탭 이름 옆 작은 chevron. 누르면 macOS 메뉴 막대의 같은 메뉴를 팝업 메뉴로 연다. |
+| 개체 탭(표 디자인·표 레이아웃·도형·그림·글맵시·차트·메모·양식 개체) | 개체를 넣거나 고르면 메뉴 탭 오른쪽에 나타나고 그 탭으로 바뀐다. 개체를 놓으면 사라지고 앞 탭으로 돌아간다. 강조색으로 메뉴 탭과 구별한다. |
+| 상황 탭(머리말/꼬리말·주석·바탕쪽·미리 보기 등) | 개체 탭과 같은 방식. 그 상태에 들어가면 나타나고, 탭의 「닫기」로 나온다. |
+| 큰 아이콘 + 이름, 그룹 사이 구분선 | 각 탭 쪽의 그림에 있는 아이콘 순서와 그룹을 그대로 둔다. 그룹 이름은 그림에 없으므로 쓰지 않는다. 좁은 창에서는 「옆으로 이동」 대신 가로 스크롤을 쓴다. |
+| 기본 도구 상자 접기/펴기 | 보기 › 도구 상자 › 기본과 탭 이름 두 번 누르기. 오른쪽 위 단추는 macOS 도구 막대 관례에 맞춰 둔다. |
+| 서식 도구 상자 | 탭과 상관없이 늘 같은 한 줄. 항목과 순서는 `view/toolbar_formatting.htm`(새 문서·불러오기·저장하기 │ 인쇄·미리 보기 │ 되돌리기·다시 실행 │ 스타일·언어·글꼴·글자 크기 │ 진하게·기울임·밑줄·취소선·글자 색 │ 양쪽·왼쪽·가운데·오른쪽·배분·나눔 정렬 │ 줄 간격). 글꼴·크기는 macOS 콤보 상자, 정렬은 세그먼트로 둔다. |
+| 작업 창 | 창 오른쪽의 macOS 인스펙터(사이드바). 작업 창 탭(쪽 모양 보기·스타일·책갈피·개요 보기·클립보드)을 위쪽 세그먼트로 바꾼다. 지금 왼쪽에 있는 쪽 미리 보기는 「쪽 모양 보기」 작업 창으로 옮긴다. 분리해서 띄우기는 하지 않는다. |
+| 문서 탭, 탭 이동 아이콘, 새 탭 | macOS 창 탭(윈도우 › 탭 막대 보기). |
+| 가로·세로 눈금자 | 편집 창 위·왼쪽. 세로 눈금자를 새로 만든다. |
+| 가로·세로 이동 막대 | macOS 스크롤 막대(겹쳐 그리기). |
+| 보기 선택 아이콘, 쪽 이동 아이콘 | 세로 이동 막대 아래 대신 상황 선 오른쪽 끝에 둔다. 항목은 `view/view_selection_icon.htm` 순서. |
+| 상황 선 | 창 아래 막대. 왼쪽부터 쪽(현재/전체), 단, 줄/칸, 구역, 현재 편집 상태(문단 나눔·셀 주소·개체 종류), 삽입/수정. 그 오른쪽에 확대 비율. 쪽·줄·구역을 누르면 찾아가기가 열린다. 입력 타수와 상황 선 도움말 영역은 넣지 않는다. |
+| 전체 화면, 크게 보기 | macOS 전체 화면(⌃⌘F). 크게 보기는 범위 밖. |
+| 빠른 메뉴 | 오른쪽 클릭 메뉴. 상태마다 항목을 도움말의 빠른 메뉴 그림과 맞춘다. |
+| 풍선 도움말 | macOS 도움말 태그(툴팁)에 이름과 단축키만 쓴다. 설명 문구는 넣지 않는다. |
+| 대화 상자 | 문서 창에 붙는 시트. 탭은 위쪽 탭 보기로, 항목과 순서는 도움말 그림 그대로 둔다. 한/글의 오른쪽 세로 단추 열은 macOS처럼 오른쪽 아래 가로 단추 줄로 옮긴다. 기본 단추 이름은 한/글의 동사(설정·넣기·만들기·나누기 등)를 그대로 쓰고, 취소는 「취소」. 대화 상자 이름은 도움말의 [대화 상자 이름]. |
+| 단축키 | 도움말 단축키를 macOS로 옮긴다: Ctrl → ⌘, Alt → ⌥(글자 입력과 겹치면 ⌥⌘). 연속 단축키(Ctrl+N,T 같은 것)는 쓰지 않는다. macOS 표준 단축키(⌘S, ⌘P, ⌘F, ⌘Z, ⇧⌘Z 등)가 있는 명령은 그것을 쓴다. |
+
+Apple 디자인 원칙(HIG)에서 지키는 것:
+- 시스템 컨트롤, SF Symbols, 시스템 글꼴, 시스템 강조색을 쓴다. 다크 모드와 손쉬운 사용 설정(대비 높이기, 동작 줄이기)에서도 맞게 보인다.
+- 앱 안에 설명 문구를 넣지 않는다. VoiceOver 이름은 한/글 이름을 그대로 쓴다.
+- 지금 쓸 수 없는 명령은 흐리게(비활성) 하고, 아직 만들지 않은 명령은 넣지 않는다.
+- 지연과 깜빡임은 버그다. 탭 전환·개체 탭 등장은 짧은 애니메이션 하나로 끝낸다.
 
 ## 지켜야 할 원칙
 
@@ -16,7 +61,6 @@
 - 빨라야 한다. 키 입력 한 번에 바뀐 쪽만 다시 그린다. 지연과 깜빡임은 버그로 다룬다.
 - 실패한 명령은 롤백한다. 롤백마저 실패하면 세션을 잠그고 마지막 정상 결과를 유지한다.
 - 개인 문서는 opt-in 로컬 검사에서만 쓴다. 본문을 로그나 저장소에 남기지 않는다.
-- 단축키는 macOS 관례에 맞추고(Ctrl → ⌘, 글자 입력과 겹치는 ⌥ 단독 → ⌥⌘), 한글 고유의 연속 단축키(Ctrl+N+T 같은 것)는 쓰지 않는다.
 
 ## 구조
 
@@ -24,74 +68,114 @@
 - 캔버스(`DocumentCanvas.swift`): 쪽을 동기적으로 그리는 자체 뷰(`NSTextInputClient`). 클릭·끌기·키 입력·한글 조합, 개체 선택·크기 조절·옮기기, 표 테두리 끌기, 빠른 메뉴.
 - 엔진(`Engine/`): `hwp_edit_*` C ABI 하나. 요청·응답은 JSON(`editing/protocol.rs` ↔ `App/Editing/EditProtocol.swift`), 쪽은 이진 표시 목록(`display.rs` ↔ `PageDisplay.swift`). 문서 열기도 편집 세션으로 한다.
 - 렌더링: 편집마다 바뀐 쪽만 SVG로 그려 해시로 비교하고, 바뀐 쪽은 표시 목록으로 만들어 Core Graphics/Core Text로 바로 그린다. 표시 목록이 다루지 못하는 쪽(화살표 marker 등)만 PDF로 받는다. 4쪽 보고서에서 키 입력 한 번이 앱 왕복 24ms, 새 쪽 그리기 3ms다. 프린트·PDF 내보내기는 화면에 그린 쪽을 그대로 PDF로 그린다.
-- 창 구성은 웹 한글과 같은 순서다: macOS 메뉴 막대(파일·편집·보기·입력·서식·쪽·표), 도구 상자(작은 탭 기본·편집·보기·입력·서식·쪽·표가 큰 아이콘 줄을 바꾼다), 서식 도구 상자, 사이드바(쪽 미리 보기) + 쪽, 상태 표시줄(쪽, 확대/축소).
+- 창 구성: macOS 메뉴 막대(파일·편집·보기·입력·서식·쪽·표), 도구 상자(작은 탭 기본·편집·보기·입력·서식·쪽·표가 큰 아이콘 줄을 바꾼다), 서식 도구 상자, 사이드바(쪽 미리 보기) + 쪽, 상태 표시줄(쪽, 확대/축소). 2단계에서 한/글 2022 구성으로 바꾼다.
 - 안전장치: 문자소 경계 검증, 실패 시 롤백, 저장 전 재파싱 검증. 명령마다 바뀌어야 할 곳만 바뀌는지 보는 보존 검사(`preservation.rs`)는 테스트 빌드에서만 돈다. 로컬 문서 47개에서 구조 명령 156회 거부 0(`structure_edits_on_corpus`, opt-in).
+
 
 ## 단계
 
+단계는 순서대로 하고, 각 줄(체크 상자)이 커밋 하나 크기다. 줄마다 도움말을 읽고 → 만들고 → 엔진·앱 테스트를 남기고 → 화면에서 확인하고 → `FEATURES.md` 상태를 고친 뒤 커밋한다. 화면에서 확인하지 못한 것은 BUG_HANDOFF의 수동 점검에 적는다.
+
 rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm」은 `wasm_api.rs`의 `HwpDocument`에만 있는 기능으로, `JsValue`를 돌려주는 경로는 네이티브에서 쓸 수 없으므로 내부 함수를 쓰거나 패치로 `DocumentCore`에 옮긴다.
 
-### 1. 편집 범위 넓히기 (읽기 전용 줄이기)
+### 1. 이름과 현재 상태 맞추기
+
+화면 구성을 바꾸기 전에, 지금 있는 것부터 2022 이름과 동작에 맞춘다.
+
+- [ ] 앱에 보이는 모든 이름(메뉴, 도구 상자, 대화 상자 제목·탭·항목·단추, 빠른 메뉴, 접근성 이름)을 2022 도움말과 대조한 표를 만들고 바꾼다. 이미 알고 있는 것:
+  - 「PDF로 내보내기…」 → 「PDF로 저장하기…」
+  - 「현재 쪽만 감추기…」 메뉴 → 「감추기…」(도구 상자 탭은 「현재 쪽만 감추기」)
+  - 「글머리표 모양…」과 「문단 번호 모양…」 → 2022의 [문단 번호/글머리표] 대화 상자 구성 확인(`format/numberbullet/numberbullet(main).htm`)
+  - 대화 상자 단추 「확인」 → 각 대화 상자의 2022 단추 이름
+- [ ] `FEATURES.md`의 ●·◐를 앱에서 하나씩 써 보며 다시 매긴다. 도움말과 동작이 다른 것은 ◐로 내리고 메모에 적는다.
+- [ ] 단축키를 2022 단축키 일람(`view/toolbar/shortcut(table).htm`)과 대조해 위 규칙으로 맞춘다.
+
+### 2. 창 구성
+
+위 「창 구성」 표대로 바꾼다. 각 줄에서 도움말 그림과 앱 스냅샷(`HWP_SNAPSHOT_DIR`)을 나란히 놓고 확인한다.
+
+- [ ] 메뉴 탭: 「기본」을 없애고 편집·보기·입력·서식·쪽·보안·검토·도구 탭으로 바꾼다. 각 탭의 아이콘 순서와 그룹은 `view/toolbar/menu_*.htm` 그림을 따르되, 아직 동작하지 않는 아이콘은 넣지 않는다. 처음 탭은 「편집」.
+- [ ] 탭 이름 옆 펼침 단추로 같은 메뉴를 팝업으로 연다.
+- [ ] 개체 탭: 표 디자인·표 레이아웃(`toolbox/object_table*.htm`), 도형(`toolbox/object_shapeobject.htm`), 그림(`toolbox/object_picture.htm`). 지금 「표」 탭과 그림 선택 시 덧붙는 아이콘을 여기로 옮긴다. 개체를 고르면 나타나고 그 탭으로 바뀐다.
+- [ ] 상황 탭: 머리말/꼬리말(`toolbox/state_header.htm`), 주석(`toolbox/state_annotations.htm`). 지금의 머리말 빠른 메뉴 명령을 이 탭에도 둔다.
+- [ ] 서식 도구 상자를 2022 항목과 순서로 맞춘다.
+- [ ] 상황 선: 쪽·단·줄/칸·구역·현재 편집 상태·삽입/수정과 확대 비율, 오른쪽 끝에 보기 선택 아이콘과 쪽 이동 아이콘. 누르면 찾아가기.
+- [ ] 작업 창: 오른쪽 인스펙터로 만들고 쪽 미리 보기를 「쪽 모양 보기」로 옮긴다. 보기 › 작업 창 메뉴.
+- [ ] 세로 눈금자. 보기 › 문서 창의 가로/세로 눈금자·상황 선 켜고 끄기.
+- [ ] 문서 탭: macOS 창 탭이 문서마다 잘 묶이는지 확인한다(DocumentGroup).
+- [ ] 기본 도구 상자 접기/펴기.
+
+### 3. 메뉴 막대와 빠른 메뉴
+
+- [ ] macOS 메뉴 막대를 파일·편집·보기·입력·서식·쪽·보안·검토·도구·표 순서와 `menu/*.htm` 항목 순서로 다시 짠다. 딸린 메뉴(예: 편집 › 찾기 › 찾기·찾아 바꾸기·다시 찾기·찾아가기)도 도움말대로. 「표」 메뉴는 늘 두고 표 밖에서는 항목을 흐리게 한다.
+- [ ] 빠른 메뉴: 본문, 블록, 표 셀, 개체(그림·도형·글상자·수식), 머리말/꼬리말, 각주 상태마다 도움말의 빠른 메뉴 항목에 맞춘다.
+
+### 4. rhwp에 있는 기능 연결 (FEATURES의 ○)
+
+엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
+
+- [ ] 표 나누기·표 붙이기(`table/table(dividing).htm`, `table(attach).htm`): `split_table_native`, `merge_table_with_next_native`.
+- [ ] 개체 묶기(`draw/drawing(group).htm`): `group_shapes_native`. 개체 풀기는 됨.
+- [ ] 표 뒤집기(`table/table(transform).htm`): `transpose_table_cells_in_place_native`. 도움말의 뒤집기 방식(줄·칸·줄/칸 기준, 90도 회전) 중 rhwp가 하는 것만 넣고 나머지는 △로 남긴다.
+- [ ] 그림 탭의 바꾸기/저장(`toolbox/object_picture.htm`): `assign_picture_image_native`(크기·위치 유지).
+- [ ] 쪽 테두리/배경…(`format/pageborder/page_border.htm`): `get/set_page_border_fill_native`.
+- [ ] 구역 설정…(`format/section/section.htm`): `get/set_section_def_native`, `set_section_def_all_native`.
+- [ ] 각주/미주 모양…(`insert/annotations/annotations(format).htm`): `get/apply_endnote_shape_native`, `get_footnote_info_native`.
+- [ ] 스타일…(F6)과 스타일 작업 창(`format/style/style.htm`, `view/workwindow/workwindow(style).htm`): wasm `get_style_list`, `get_style_detail`, `update_style`, `update_style_shapes`, `create_style`, `delete_style`.
+- [ ] 개요 보기 작업 창(`view/workwindow/workwindow(outlinenumbering).htm`): `get_outline_navigation_native`.
+- [ ] 책갈피 작업 창(`view/workwindow/bookmark/bookmark.htm`): 책갈피 명령은 이미 있음.
+- [ ] 문서 정보의 글꼴 정보·그림 정보 탭: `get_document_info`, 그림 목록.
+- [ ] 문서 암호 설정·변경/해제(`file/password/password.htm`): `export_hwp_with_adapter_with_password`, `export_hwpx_native_with_password`.
+- [ ] 셀 테두리/배경 › 각 셀마다 적용·하나의 셀처럼 적용(`table/cellborder/cellborder.htm`): `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.
+- [ ] 개체 속성 › 선 탭과 도형 채우기(`insert/objectattribute/*`): `set_shape_properties_native`, `set_picture_properties_native`.
+- [ ] 필드 입력…·누름틀(`insert/madanginfo/madanginfo.htm`): wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.
+- [ ] 양식 개체 값 바꾸기(`view/toolbar/toolbar(form_object).htm`): `get_form_object_at_native`, `set_form_value_native`.
+- [ ] 차트 데이터 편집(`table/chart/*`): `list_charts_native`, `get/set_chart_data_native`. 차트가 든 한컴 문서(`~/Downloads/차트.hwpx`)로 확인한다.
+
+### 5. 지금 있는 대화 상자를 2022와 맞추기
+
+대화 상자마다 도움말의 그림과 항목 설명을 놓고 탭·항목·순서·기본값·단추를 맞춘다. 없는 항목은 엔진이 되면 넣고, 안 되면 FEATURES 메모에 적는다.
+
+- [ ] 글자 모양(`format/font/*`): 기본·확장·테두리/배경 탭.
+- [ ] 문단 모양(`format/paragraph/*`): 기본·확장·탭 설정·테두리/배경 탭.
+- [ ] 문단 번호/글머리표(`format/numberbullet/*`). 「새 번호 목록 시작」이 저장되지 않는 문제(BUG_HANDOFF P1)를 같이 고친다.
+- [ ] 편집 용지(`format/setting_paper/*`): 기본 탭. 줄 격자 탭은 △.
+- [ ] 표 만들기·표/셀 속성·셀 나누기·줄/칸 추가하기(줄/칸 수가 있는 대화 상자)(`table/*`).
+- [ ] 개체 속성(`insert/objectattribute/*`): 기본·여백/캡션·선·채우기·그림 탭. 너비·높이 기준과 본문 위치는 rhwp 속성 JSON이 받지 않으므로 패치가 필요하다. 「개체와 조판 부호를 항상 같은 쪽에 놓기」도 같다.
+- [ ] 찾기·찾아 바꾸기·찾아가기(`edit/find/*`, `edit/go_to/go_to.htm`): 찾기 선택 사항, 찾아가기의 쪽·줄·구역·책갈피·개체.
+- [ ] 문자표(`insert/character_set*`): 유니코드 문자표 구성, 최근 사용한 문자.
+- [ ] 머리말/꼬리말(`format/header/*`), 새 번호로 시작, 감추기, 조판 부호 지우기, 문서 정보.
+
+### 6. 편집 범위 넓히기 (읽기 전용 줄이기)
 
 키 입력이 닿는 곳을 늘린다. 각각 보존 검사를 먼저 만든다.
 
 - [ ] 머리말·꼬리말 안 쪽 번호 넣기, 그림 속성: `insert_field_in_hf`, `get/set_header_footer_picture_properties`.
 - [ ] 각주·머리말 안 개체, 셀 안 도형, 중첩 표 셀 안 개체 선택, 중첩 표 셀 편집, 그리기 개체 캡션 글자: `get/set_cell_shape_properties_by_path`, `copy_selection_in_cell_by_path`. 칸 문단에 수식이 둘 이상이면 rhwp의 칸 수식 함수가 첫 수식만 찾는다. 도형의 칸 0은 글상자라 캡션을 가리킬 경로가 없다.
 - [ ] 각주 안 수식 고치기: rhwp 쪽 배치가 미주 수식에만 위치(`noteRef`)를 준다. 주석 안 수식은 속성만 바꾸고 옮기기·지우기·복사는 아직 안 된다.
+- [ ] 표 칸·주석 안 문단의 시작 번호 방식: `set_numbering_restart_native`는 본문 문단만 받는다.
+- [ ] 표 테두리 끌기의 나머지(바깥 왼쪽·위 테두리, 셀 안의 표): `resize_table_cells`, `move_table_offset`.
 
-### 2. 웹 한글 메뉴의 남은 항목 중 rhwp가 지원하는 것
+### 7. 엔진에 더할 기능 (FEATURES의 △)
 
-메뉴 이름은 웹 한글 메뉴 그대로, 대화상자의 구성과 동작은 한컴 도움말(`help:` 뒤 경로, 기준 <https://help.hancom.com/hoffice/multi/ko_kr/hwp/>)을 따른다.
+자주 쓰는 순서로 묶었다. 묶음마다 rhwp 구조(HWP 레코드, HWPX 요소)를 먼저 조사하고, 한컴에서 만든 견본 문서로 저장 형식을 확인한 뒤 만든다. 견본이 없으면 사용자에게 요청한다.
 
-- 파일
-  - [ ] 문서 정보…의 문서 요약·글꼴 정보·그림 정보·저작권 탭(일반·문서 통계는 됨, help: `file/document_properties/document_summary.htm` 등): 요약 정보 쓰기가 rhwp에 없고, 글꼴 정보는 `get_document_info`로 읽을 수 있다.
-  - [ ] 배포용 문서 열기 후 편집: `convert_to_editable`. 이 환경의 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요).
-- 입력
-  - [ ] 필드 입력…(help: `insert/madanginfo/madanginfo.htm`), 빠른 메뉴의 누름틀 고치기·누름틀 지우기·필드 삭제: wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.
-  - [ ] 차트 › 데이터 편집, 행/열 전환(help: `table/chart/chart(inputdata).htm`): `list_charts_native`, `get/set_chart_data_native`(구조 편집 포함). rhwp가 차트를 새로 만들지 못하고 로컬 문서에도 차트가 없어, 차트가 든 문서를 받으면 만든다.
-  - [ ] 문서 안 양식 개체(누름 단추·선택 상자 등) 값 바꾸기(help: `view/workwindow/workwindow(attribute).htm`): `get_form_object_at_native`, `set_form_value_native`.
-- 서식
-  - [ ] 스타일…(F6)(help: `format/style/style.htm`, `style(new).htm`, `style(edit).htm`, `style(erase).htm`): wasm `get_style_list`, `get_style_detail`, `update_style`, `update_style_shapes`, `create_style`, `delete_style`. 대화상자 구성은 도움말의 스타일 목록·추가하기·편집하기·지우기.
-  - [ ] 개체 속성 › 선 탭(웹 한글 스크린샷에 있음, help: `insert/objectattribute/objectattribute(line).htm`)과 도형의 채우기 탭(help: `objectattribute(face).htm`): `set_shape_properties_native`, `set_picture_properties_native`의 선·채우기 필드.
-  - [ ] 개체 속성 › 기본의 너비·높이 기준(고정값·종이·쪽·단·문단, 높이는 고정값·종이·쪽)과 본문 위치(help: `objectattribute(general).htm`): rhwp 속성 JSON이 `width_criterion`·`text_flow`를 받지 않으므로 rhwp 패치가 필요하다. 「개체와 조판 부호를 항상 같은 쪽에 놓기」도 같다.
-  - [ ] 표 칸·주석 안 문단의 시작 번호 방식: `set_numbering_restart_native`는 본문 문단만 받는다.
-- 쪽
-  - [ ] 쪽 테두리/배경…(help: `format/pageborder/page_border.htm`, 테두리·배경 탭): `get/set_page_border_fill_native`.
-  - [ ] 구역 설정…(help: `format/section/section.htm`): `get/set_section_def_native`, `set_section_def_all_native`. 도움말의 「첫 쪽에만 감추기」·시작 쪽 번호가 여기 있다.
-  - [ ] 단 › 왼쪽·오른쪽: 두 단의 너비 비율이 도움말(`format/columns/columns.htm`)에도 없어 한글 화면으로 확인해야 한다.
-  - [ ] 다단 설정…(help: `format/columns/columns.htm`)과 다단 설정 나누기(help: `format/break/new_columns.htm`): rhwp는 구역의 줄을 모두 첫 단 정의의 너비로 나누므로, 단 정의가 둘 이상인 구역의 조판부터 고쳐야 한다. 지금은 단 정의가 하나인 구역에서만 「단」을 바꾼다.
-- 보기
-  - [ ] 문서 창 › 개요 보기(help: `view/workwindow/workwindow(outlinenumbering).htm`): `get_outline_navigation_native`로 제목 목록에서 문서 안 이동.
-  - [ ] 눈금자의 탭 표시와 탭 종류 변경 아이콘, 빠른 메뉴(help: `view/ruler/ruler(horizon).htm`): rhwp의 탭 설정 읽기·쓰기를 먼저 찾는다.
-- 표
-  - [ ] 셀 테두리/배경 › 각 셀마다 적용…, 하나의 셀처럼 적용…: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`. 대화상자 문구를 도움말에서 찾지 못했다(웹 한글 스크린샷 필요).
-  - [ ] 표 테두리 끌기의 나머지(바깥 왼쪽·위 테두리, 셀 안의 표): `resize_table_cells`, `move_table_offset`.
-  - [ ] 블록 계산식 결과의 자동 다시 계산: 지금은 값으로 넣는다. 계산식 필드로 넣어야 한다.
+1. 앱만으로 되는 것: 컬러/회색조, 편집 화면 나누기, 개체 이동 안내선, 대문자/소문자·전각/반각 바꾸기, 날짜/시간 문자열, 문서 끼워 넣기, 골라 붙이기, 삽입/수정(수정 상태), 개체를 그림 파일로 저장하기, 맞춤법(macOS), 미리 보기 탭.
+2. 글자·문단: 하이퍼링크, 문단 첫 글자 장식, 개요 번호 모양·개요 적용/해제, 덧말, 글자 겹치기, 문단 띠, 1,000 단위 구분 쉼표, 문단 모양의 탭 설정·최소 공백.
+3. 쪽: 쪽 번호 매기기 대화 상자, 단(왼쪽·오른쪽)과 다단 설정·다단 설정 나누기(rhwp가 구역의 줄을 첫 단 정의 너비로 나누는 것부터), 구역 나누기, 줄 번호, 바탕쪽, 글자 방향, 쪽 복사하기·쪽 지우기, 편집 용지의 줄 격자.
+4. 표: 계산식 필드(블록 계산식 결과의 자동 다시 계산 포함), 쉬운 계산식, 표 자동 채우기, 문자열을 표로·표를 문자열로, 표 그리기·표 지우개, 표에서 세로쓰기, 차트 만들기.
+5. 개체: 다각형·곡선·자유선·개체 연결선, 글맵시, 글상자 연결, 개체 기울이기, 그림 자르기 확인, 멀티미디어.
+6. 참조: 상호 참조, 각주↔미주, 숨은 설명, 차례/색인, 참고 문헌.
+7. 검토·보안: 메모, 교정 부호, 변경 내용 추적, 문서 비교, 문서 이력 관리, 배포용 문서로 저장, 개인 정보 보호, 문서 요약 쓰기.
+8. 파일: 다른 형식으로 저장하기(텍스트 파일, 인터넷 문서), 텍스트 파일 불러오기, 인쇄의 확장·워터마크.
 
-### 3. 이름 확인이 필요한 기능
-
-rhwp는 지원하지만 웹 한글 메뉴와 한컴 도움말 목차에서 이름을 찾지 못했다. 사용자가 이름(로컬 한글 화면 등)을 확인해 주면 2단계와 같은 방식으로 넣는다.
-
-| rhwp 함수 | 하는 일 |
-|---|---|
-| `group_shapes_native` | 여러 개체를 하나로 묶기(「개체 풀기」의 반대) |
-| `split_table_native`, `merge_table_with_next_native` | 표를 두 개로 나누기, 다음 표와 붙이기 |
-| `transpose_table_cells_in_place_native`, `copy/paste_table_cells_transposed_native` | 표의 줄과 칸 바꾸기 |
-| `fit_table_to_page_native` | 표 너비를 본문 폭에 맞추기 |
-| `assign_picture_image_native` | 그림 파일만 바꾸기(크기·위치 유지) |
-| `get/apply_endnote_shape_native`, `get_footnote_info_native` | 각주·미주 번호 모양·구분선 |
-| `export_hml_native`, `extract_page_text/markdown_native` | 다른 형식으로 내보내기 |
-
-### 4. 화면과 저장
+### 8. 화면과 저장
 
 내부 작업(성능 측정·개선, 비교 도구, 조판 차이 조사)과 수동 점검은 `docs/BUG_HANDOFF.md`.
 
 - [ ] 글꼴 대응: 함초롬·HY 계열을 설치된 글꼴로 대응시킨다. 한컴 글꼴이 시스템에 있으면 그 글꼴을 쓴다(번들·재배포는 하지 않음).
 - [ ] 자동 저장 정책: 저장 검증이 충분해질 때까지는 macOS 버전으로 이전 판을 보존한다.
-
-### 5. 2차: rhwp에 없는 기능
-
-엔진에 새로 만들어야 한다: 하이퍼링크…(넣기·고치기·지우기·열기), 메모, 문단 띠, 웹 동영상, 검토 › 변경 내용 추적, 1,000 단위 구분 쉼표(자릿점 넣기·빼기), 격자 설정, 편집 용지의 줄 격자, 문단 모양의 최소 공백, 빠른 교정·맞춤법(macOS 텍스트 서비스로).
+- [ ] 배포용 문서 편집(`convert_to_editable`): 이 환경의 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요).
 
 ## 완료를 판단하는 검사
 
@@ -101,4 +185,4 @@ rhwp는 지원하지만 웹 한글 메뉴와 한컴 도움말 목차에서 이�
 4. 렌더 실패를 주입하면 revision과 문서가 이전 상태 그대로다.
 5. 확대율 50/100/200%와 쪽 경계에서 클릭한 위치와 커서가 맞는다.
 6. 실제 macOS 한글 입력기로 조합→확정→Undo를 수동 확인한다. 확인하지 않았으면 지원 완료로 보고하지 않는다.
-7. 새 기능마다: 엔진 테스트(명령·저장·다시 열기), 앱 테스트(메뉴·도구 상자에서 실행), 웹 한글 용어 대조.
+7. 새 기능마다: 엔진 테스트(명령·저장·다시 열기), 앱 테스트(메뉴·도구 상자에서 실행), 2022 도움말과 이름·동작 대조.
