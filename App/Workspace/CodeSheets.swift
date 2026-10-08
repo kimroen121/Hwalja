@@ -85,7 +85,7 @@ struct PageHideSheet: View {
     @State var hide: PageHide
 
     var body: some View {
-        DialogFrame("감추기", confirmTitle: "설정") {
+        DialogFrame("현재 쪽만 감추기", confirmTitle: "설정") {
             VStack(alignment: .leading, spacing: 8) {
                 GroupTitle("감출 내용")
                 VStack(alignment: .leading, spacing: 6) {

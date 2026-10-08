@@ -1,6 +1,6 @@
 # 기능 목록
 
-한컴오피스 2022 한/글 도움말(<https://help.hancom.com/hoffice120/ko-KR/Hwp/>) 목차의 기능을 빠짐없이 옮긴 표다. 순서와 이름은 도움말 목차 그대로다. 계획은 `ROADMAP.md`, 일하는 방식은 `GUIDELINES.md`.
+한컴오피스 2024 한/글 도움말(<https://help.hancom.com/hoffice130/ko-KR/Hwp/>) 목차의 기능을 빠짐없이 옮긴 표다. 순서와 이름은 도움말 목차 그대로다. 계획은 `ROADMAP.md`, 일하는 방식은 `GUIDELINES.md`.
 
 - 도움말 경로는 위 주소 뒤에 붙는다. `scripts/hancom-help.py`를 돌리면 `build/hancom-help/`에 목차(`toc.md`), 쪽마다 글(`pages/`), 그림(`img/`)이 생긴다. 아래 표에는 목차의 두 단계까지만 적었다. 그 아래 단계(대화 상자의 탭, 세부 기능)는 그 기능을 만들 때 도움말에서 하나씩 확인한다.
 - 상태
@@ -9,10 +9,11 @@
   - ○ rhwp에 있음: 엔진(rhwp)에 함수가 있어 앱에 연결하면 된다.
   - △ 엔진 작업: rhwp에 없거나 고쳐야 한다. 앱만으로 되는 일이면 메모에 적었다.
   - — 범위 밖: Windows 전용, 한컴 서비스, macOS 기능으로 대신하는 것. 메모에 이유를 적었다.
-- 상태는 2026-10-08에 코드, 지난 화면 점검 기록, 2022 대화 상자 탭 구성과 대조해 매겼다.
+- 상태는 2026-10-08에 코드, 지난 화면 점검 기록, 2024 대화 상자 탭 구성과 대조해 매겼다.
 - 기능을 끝내면 상태를 바꾸고, 메모에서 끝난 내용을 지운다.
 
-## 한컴오피스 2022 한/글 소개
+
+## 한컴오피스 2024 한/글 소개
 
 도움말: `hwp/hwp(intro).htm`
 
@@ -89,9 +90,9 @@
 | 메모 | △ | `view/memo.htm` | rhwp에 메모 없음 |
 | 한자 발음 | △ | `view/chinese_pronounce.htm` |  |
 | 격자 | ◐ | `view/grid/grid.htm` | 격자 보기 ●. 격자 설정 △ |
-| 개체 이동 안내선 | △ | `view/object_move_guideline/guideline(objectmoveguideline).htm` | 앱 쪽 작업 |
-| 컬러/회색조 | △ | `view/grayscale.htm` | 앱 쪽 작업(표시만 바꿈). 사용자 색 △ |
-| 도구 상자 | ◐ | `view/toolbar/toolbar.htm#bc-1` | 2단계에서 2022 구성으로 바꿈. 사용자 설정은 범위 밖 |
+| 안내선 | △ | `view/object_move_guideline/guideline(objectmoveguideline).htm` | 앱 쪽 작업 |
+| 문서 보기 색 | △ | `view/document_view_color.htm` | 앱 쪽 작업(표시만 바꿈). 사용자 색 △ |
+| 도구 상자 | ◐ | `view/toolbar/toolbar.htm#bc-1` | 2단계에서 2024 구성으로 바꿈. 사용자 설정은 범위 밖 |
 | 작업 창 | ◐ | `view/workwindow/workwindow.htm` | 쪽 모양 보기(지금 왼쪽 사이드바) ●. 스타일·책갈피·개요 보기 ○, 클립보드 △, 나머지 범위 밖 |
 | 문서 창 | ◐ | `view/document_window.htm` | 가로 눈금자 ● (탭 표시 △), 상황 선 ◐, 세로 눈금자 △, 문서 탭은 macOS 창 탭 |
 | 편집 화면 나누기 | △ | `window/division/division.htm` | 앱 쪽 작업 |
@@ -134,8 +135,8 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 글자 모양 | ◐ | `format/font/fonts.htm` | 2022 탭은 기본·확장·테두리/배경. 앱은 기본·확장이고 테두리/배경을 확장 안에 둔다. 5단계에서 탭을 나누고 항목(강조점 등)을 대조 |
-| 문단 모양 | ◐ | `format/paragraph/paragraph.htm` | 2022 탭은 기본·확장·탭 설정·테두리/배경. 앱은 기본·테두리/배경. 확장(문단 보호·외톨이줄 보호·다음 문단과 함께 등)과 탭 설정이 없다. 최소 공백 △ |
+| 글자 모양 | ◐ | `format/font/fonts.htm` | 2024 탭은 기본·확장·테두리/배경. 앱은 기본·확장이고 테두리/배경을 확장 안에 둔다. 5단계에서 탭을 나누고 항목(강조점 등)을 대조 |
+| 문단 모양 | ◐ | `format/paragraph/paragraph.htm` | 2024 탭은 기본·확장·탭 설정·테두리/배경. 앱은 기본·테두리/배경. 확장(문단 보호·외톨이줄 보호·다음 문단과 함께 등)과 탭 설정이 없다. 최소 공백 △ |
 | 문단 첫 글자 장식 | △ | `format/drop_cap/drop_cap.htm` |  |
 | 문단 번호 모양 | ◐ | `format/numberbullet/numberbullet(main).htm` | 문단 번호·글머리표 ●, 새 번호 목록 시작은 저장 안 됨(BUG_HANDOFF P1). 그림 글머리표 △. 표 칸·주석 안 시작 번호 방식 ○ 확장 필요 |
 | 문단 번호 적용/해제 | ● | `format/numberbullet/number(attributes_cancel).htm` |  |
@@ -145,7 +146,7 @@
 | 한 수준 증가/감소 | ● | `format/outline/outline_numbering(depth).htm` |  |
 | 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(추가·편집·지우기) ○ wasm `get_style_list`·`update_style`·`create_style`·`delete_style` |
 | 스타일마당 | △ | `format/style_templates/style_templates.htm` | 서식 파일 자료 필요 |
-| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 2022 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 그림 탭, 도형의 선·채우기 탭. 글상자·그림자 탭과 그림의 선 탭 없음. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
+| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 2024 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 그림 탭, 도형의 선·채우기 탭. 글상자·그림자 탭과 그림의 선 탭 없음. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
 
 ## 쪽
 
@@ -160,12 +161,12 @@
 | 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
 | 쪽 번호 매기기 | △ | `format/pagenumber.htm` | 앱에는 머리말·꼬리말 모양 목록의 쪽 번호만 있다. [쪽 번호 매기기] 대화 상자(번호 위치 10가지·번호 모양)는 없음. rhwp에 쪽 번호 위치(`PageNumberPos`) 모델과 그리기는 있고 넣기 명령이 없다(새 번호로 시작처럼 패치) |
 | 새 번호로 시작 | ● | `format/new_number.htm` |  |
-| 감추기 | ● | `format/hide.htm` |  |
+| 현재 쪽만 감추기 | ● | `format/hide.htm` |  |
 | 줄 번호 | △ | `view/line_number.htm` |  |
 | 쪽 나누기 | ● | `format/break/page_break.htm` |  |
 | 단 나누기 | ● | `format/break/column_break.htm` |  |
 | 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 왼쪽·오른쪽 △, 다단 설정 대화 상자 △(rhwp가 구역의 줄을 첫 단 정의 너비로 나눔) |
-| 다단 설정 나누기 | △ | `format/break/new_columns.htm` | 단 정의가 둘 이상인 구역의 조판부터 |
+| 단 설정 나누기 | △ | `format/break/new_columns.htm` | 단 정의가 둘 이상인 구역의 조판부터 |
 | 구역 설정 | ○ | `format/section/section.htm` | `get/set_section_def_native`, `set_section_def_all_native` |
 | 구역 나누기 | △ | `format/break/section_break.htm` |  |
 | 쪽 복사하기 | △ | `format/copy_page.htm` |  |
@@ -224,7 +225,7 @@
 | 개인 정보 바꾸기 | △ | `security/user_info_protection/user_info_protection.htm` |  |
 | 프레젠테이션 | — | `tools/presention/presentation.htm` |  |
 | 글자판 | — | `insert/keyboard/keyboard.htm` | macOS 입력기 |
-| 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |
+| COM 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |
 | 사용자 설정 | — | `view/toolbar/toolbar(edit).htm#bc-1` | 도구 상자 사용자 설정 |
 | 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 필요한 항목만 |
 | 스킨 설정 | — | `tools/skin.htm` | macOS 다크 모드 |
@@ -237,7 +238,7 @@
 |---|---|---|---|
 | 표 | ◐ | `table/table(table).htm#bc-1` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
 | 차트 만들기 | △ | `table/chart/chart(createchart).htm#bc-1` | 차트와 같음 |
-| 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 2022 탭은 기본·여백/캡션·테두리·배경·표·셀. 앱은 기본·여백/캡션·표·셀. 테두리·배경 탭 ○ |
+| 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 2024 탭은 기본·여백/캡션·테두리·배경·표·셀. 앱은 기본·여백/캡션·표·셀. 테두리·배경 탭 ○ |
 | 셀 테두리/배경 | ○ | `table/cellborder/cellborder.htm` | 앱에 없음. 각 셀마다 적용(테두리·배경·대각선)·하나의 셀처럼 적용: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties` |
 | 표 나누기 | ○ | `table/table(dividing).htm` | `split_table_native` |
 | 표 붙이기 | ○ | `table/table(attach).htm` | `merge_table_with_next_native` |
@@ -279,8 +280,10 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 옛한글 코드 변환기 | — | `hwpbase/hncpuaconverter_addin.htm` |  |
+| 한애드온즈 | — | `tools/external_add-in/addons.htm` | 한컴 서비스 |
+| 옛한글 코드 변환기(COM 추가 기능) | — | `hwpbase/hncpuaconverter_addin.htm` |  |
 | 단축키 도우미 | — | `tools/external_add-in/shortcut_key_assistant.htm` |  |
+| 애셋 스튜디오(Beta) | — | `tools/external_add-in/asset_studio.htm` | 한컴 서비스 |
 
 ## 한컴독스
 
@@ -309,6 +312,13 @@
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
 | 한/글 정보 | ● | `rights/rights(info).htm` | macOS 「HwpStudio에 관하여」 |
+
+## 오픈 소스 라이선스
+
+도움말: `oss/oss_notice.htm` · 범위 밖
+
+| 기능 | 상태 | 도움말 | 메모 |
+|---|---|---|---|
 
 ## 고객 지원 안내
 

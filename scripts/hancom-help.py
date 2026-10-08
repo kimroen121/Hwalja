@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Fetches the 한컴오피스 2022 한/글 도움말 into build/hancom-help (not committed):
+"""Fetches the 한컴오피스 2024 한/글 도움말 into build/hancom-help (not committed):
 toc.md (the whole table of contents with each page's path), pages/*.txt (each page
 as text, pictures as [img path]) and img/ (the pictures at those paths)."""
 import concurrent.futures as cf, html, json, os, re, urllib.parse, urllib.request
 
-BASE = "https://help.hancom.com/hoffice120/ko-KR/Hwp/"
+BASE = "https://help.hancom.com/hoffice130/ko-KR/Hwp/"
 OUT = os.path.join(os.path.dirname(__file__), "..", "build", "hancom-help")
 
 
