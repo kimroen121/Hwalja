@@ -50,7 +50,7 @@ struct ToolRow: View {
             .coordinateSpace(.named("tabs"))
             .overlay(alignment: .topLeading) {
                 // As in Word: one line under the selected tab, moved from tab to tab, a little longer under the pointer.
-                if let span = spans[tab] {
+                if expanded, let span = spans[tab] {
                     let grow: CGFloat = hovered == tab ? 4 : 0
                     Capsule()
                         .frame(width: span.width + grow * 2, height: 3)

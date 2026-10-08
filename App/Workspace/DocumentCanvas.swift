@@ -66,6 +66,9 @@ final class DocumentCanvas: NSScrollView {
         hasHorizontalRuler = showsHorizontalRuler
         hasVerticalRuler = showsVerticalRuler
         rulersVisible = showsRuler
+        // Since macOS 14 views draw past their bounds; the ruler's edge line would run up over the tools.
+        horizontalRulerView?.clipsToBounds = true
+        verticalRulerView?.clipsToBounds = true
         needsRulers()
     }
     /// Without 쪽 윤곽 the rulers show the margins but cannot change them, as in 한글.
