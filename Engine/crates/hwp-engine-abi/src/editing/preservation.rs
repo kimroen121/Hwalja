@@ -248,6 +248,14 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
+        EditCommand::InsertClickHere { position, .. } => {
+            return check_host(
+                before,
+                after,
+                position.target.section,
+                position.target.paragraph,
+            )
+        }
         EditCommand::SetPage { section, whole, .. } => {
             return check_page(before, after, *section, *whole)
         }

@@ -99,6 +99,8 @@ enum EditCommand: Encodable, Sendable {
     case insertEquation(EditPosition, script: String, fontSize: UInt32, color: UInt32)
     /// A 각주 (or 미주) at `position`; the caret moves into it.
     case insertNote(EditPosition, endnote: Bool)
+    /// 필드 입력 › 누름틀: 안내문, 메모 내용, 필드 이름 and 양식 모드에서 편집 가능.
+    case insertClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
     /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
     /// from the paper's corner in HWPUNIT. A line runs corner to corner, `flip` turning it.
     case insertShape(EditPosition, shape: String, x: Int32, y: Int32, width: UInt32, height: UInt32, flip: Bool)
@@ -169,7 +171,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -252,6 +254,13 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .insertClickHere(position, guide, memo, name, formEditable):
+            try c.encode("insertClickHere", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(guide, forKey: .guide)
+            try c.encode(memo, forKey: .memo)
+            try c.encode(name, forKey: .name)
+            try c.encode(formEditable, forKey: .formEditable)
         case let .setPictureLink(object, path):
             try c.encode("setPictureLink", forKey: .kind)
             try c.encode(object, forKey: .object)

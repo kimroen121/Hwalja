@@ -47,6 +47,11 @@ extension Viewer {
             return .eraseCodes(range, kinds: kinds)
         }
     }
+    func insertClickHere(guide: String, memo: String, name: String, formEditable: Bool) {
+        document?.edit(undoManager) { selection in
+            selection.map { .insertClickHere($0.ordered.start, guide: guide, memo: memo, name: name, formEditable: formEditable) }
+        }
+    }
     func replaceFont(language: UInt8?, from: String, to: String) {
         document?.edit(undoManager) { _ in .replaceFont(language: language, from: from, to: to) }
     }
@@ -286,6 +291,41 @@ struct PageHideSheet: View {
             }
         } confirm: {
             viewer.setPageHide(hide)
+            dismiss()
+        }
+    }
+}
+
+/// [필드 입력] › 누름틀: 입력할 내용의 안내문, 메모 내용, 필드 이름, 양식 모드에서 편집 가능.
+struct FieldSheet: View {
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var guide = "이곳을 마우스로 누르고 내용을 입력하세요."
+    @State private var memo = ""
+    @State private var name = ""
+    @State private var formEditable = false
+    var body: some View {
+        DialogFrame("필드 입력", confirmTitle: "넣기", canConfirm: !guide.trimmingCharacters(in: .whitespaces).isEmpty) {
+            VStack(alignment: .leading, spacing: 10) {
+                GroupTitle("누름틀")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("입력할 내용의 안내문")
+                        TextField("", text: $guide).frame(width: 280)
+                    }
+                    GridRow {
+                        FieldLabel("메모 내용")
+                        TextField("", text: $memo).frame(width: 280)
+                    }
+                    GridRow {
+                        FieldLabel("필드 이름")
+                        TextField("", text: $name).frame(width: 280)
+                    }
+                }
+                Toggle("양식 모드에서 편집 가능", isOn: $formEditable)
+            }
+        } confirm: {
+            viewer.insertClickHere(guide: guide, memo: memo, name: name, formEditable: formEditable)
             dismiss()
         }
     }

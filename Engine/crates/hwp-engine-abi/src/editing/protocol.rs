@@ -278,6 +278,17 @@ pub enum EditCommand {
         position: EditPosition,
         endnote: bool,
     },
+    /// 필드 입력 › 누름틀: an empty field at `position` showing `guide` (입력할 내용의
+    /// 안내문), with its 메모 내용 and 필드 이름; what is typed there goes in it.
+    InsertClickHere {
+        position: EditPosition,
+        guide: String,
+        memo: String,
+        name: String,
+        /// 양식 모드에서 편집 가능.
+        #[serde(default, rename = "formEditable")]
+        form_editable: bool,
+    },
     /// Adds or removes a row or column of the table holding `cell`.
     EditTable {
         cell: EditTarget,

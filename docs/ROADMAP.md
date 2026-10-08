@@ -57,7 +57,7 @@ Apple 디자인 원칙(HIG)에서 지키는 것:
 
 - 원본 파일에는 명시적인 「저장」 전까지 쓰지 않는다. 저장은 원자적으로 하고, 저장 전에 재파싱으로 검증한다.
 - 화면과 내보내기는 같은 조판 결과를 쓴다.
-- 안전성을 확인할 수 없는 대상(필드·제목 표시가 있는 문단, 세로쓰기 셀, 중첩 표·표 안 글상자, 줄 안 개체가 있는 머리말·꼬리말 문단)은 읽기 전용으로 둔다. 숨은 컨트롤을 평문으로 바꾸지 않는다. 읽기 전용을 풀 때는 그 대상의 보존 검사를 먼저 만든다.
+- 안전성을 확인할 수 없는 대상(제목 표시가 있는 문단, 여러 문단에 걸친 필드, 세로쓰기 셀, 중첩 표·표 안 글상자, 줄 안 개체가 있는 머리말·꼬리말 문단)은 읽기 전용으로 둔다. 숨은 컨트롤을 평문으로 바꾸지 않는다. 읽기 전용을 풀 때는 그 대상의 보존 검사를 먼저 만든다.
 - 조합 중인 글자는 문서에 바로 넣어 문서 글꼴로 보인다. 조합 하나, 붙이기, Enter 각각이 실행 취소 1단위다. 엔진이 앞 편집을 처리하는 동안 이어 친 글자는 한 편집(1단위)으로 묶인다. Undo/Redo는 내용·커서·조판을 함께 되돌린다.
 - 빨라야 한다. 키 입력 한 번에 바뀐 쪽만 다시 그린다. 지연과 깜빡임은 버그로 다룬다.
 - 실패한 명령은 롤백한다. 롤백마저 실패하면 세션을 잠그고 마지막 정상 결과를 유지한다.
@@ -107,7 +107,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
-- [ ] 필드 입력…·누름틀(`insert/madanginfo/madanginfo.htm`): wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.
+- [ ] 필드 입력의 나머지(`insert/madanginfo/*`): 누름틀 고치기(wasm `update_click_here_props`를 `DocumentCore`로)·지우기(`remove_field_at`), 사용자 정보·작성한 날짜·문서 요약·파일 이름/경로 탭.
 - [ ] 양식 개체 값 바꾸기(`view/toolbar/toolbar(form_object).htm`): `get_form_object_at_native`, `set_form_value_native`.
 - [ ] 차트 데이터 편집(`table/chart/*`): `list_charts_native`, `get/set_chart_data_native`. 차트가 든 한컴 문서(`~/Downloads/차트.hwpx`)로 확인한다.
 

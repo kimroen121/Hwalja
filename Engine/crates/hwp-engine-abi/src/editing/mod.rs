@@ -295,7 +295,8 @@ impl EditSession {
             | EditCommand::InsertPicture { position, .. }
             | EditCommand::InsertEquation { position, .. }
             | EditCommand::InsertShape { position, .. }
-            | EditCommand::InsertNote { position, .. } => Some(position.clone()),
+            | EditCommand::InsertNote { position, .. }
+            | EditCommand::InsertClickHere { position, .. } => Some(position.clone()),
             EditCommand::EditTable { cell, .. }
             | EditCommand::FlipTable { cell, .. }
             | EditCommand::SetCellBorder {

@@ -93,6 +93,7 @@ struct DocumentWindow: View {
             if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
         }
         .sheet(item: $viewer.cellBorder) { CellBorderSheet(editing: $0, viewer: viewer) }
+        .sheet(isPresented: $viewer.insertingField) { FieldSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
         .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
         .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
@@ -287,6 +288,7 @@ final class Viewer: ObservableObject {
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
     @Published var pageBorder: (section: UInt32, border: PageBorder)?
     @Published var cellBorder: CellBorderEditing?
+    @Published var insertingField = false
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
     @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
     /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.

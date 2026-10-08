@@ -5829,3 +5829,51 @@ fn cell_and_table_backgrounds_take_gradients_and_pictures() {
         check(&EditSession::open(&s.export(save).unwrap()).unwrap());
     }
 }
+#[test]
+fn click_here_fields_show_their_guide_and_take_typing() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let at = point(body(), 1);
+        // As the app sends it.
+        let insert: EditCommand = serde_json::from_value(serde_json::json!({
+            "kind": "insertClickHere", "position": at, "guide": "이름을 넣으세요",
+            "memo": "메모", "name": "이름", "formEditable": false,
+        }))
+        .unwrap();
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        assert_eq!(
+            s.core.document().sections[0].paragraphs[1]
+                .field_ranges
+                .len(),
+            1
+        );
+        // The empty field shows its guide.
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        let text: String = svg
+            .split("</text>")
+            .filter_map(|t| t.rsplit('>').next())
+            .collect();
+        assert!(
+            text.contains("이름을넣으세요") || text.contains("이름을 넣으세요"),
+            "{text}"
+        );
+        // What is typed at the caret goes in the field.
+        replace(
+            &mut s,
+            caret.target.clone(),
+            caret.scalar,
+            caret.scalar,
+            "홍길동",
+        )
+        .unwrap();
+        let value = |s: &EditSession| s.core.get_field_value_by_name("이름").unwrap();
+        assert!(value(&s).contains("홍길동"), "{}", value(&s));
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert!(value(&reopened).contains("홍길동"), "{format}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert!(s.core.document().sections[0].paragraphs[1]
+            .field_ranges
+            .is_empty());
+    }
+}

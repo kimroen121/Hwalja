@@ -155,14 +155,15 @@ pub(super) fn get<'a>(doc: &'a Document, t: &EditTarget) -> Result<&'a Paragraph
         .ok_or(EditError::InvalidInput)
 }
 /// Paragraphs whose text can change around their controls (tables, pictures, notes…),
-/// which stay in place. Fields and title marks index the text and stay read-only.
+/// which stay in place, and inside or around their fields (rhwp moves a field's range
+/// with the text). Title marks, range tags and fields across paragraphs index the text
+/// and stay read-only.
 pub(super) fn editable(p: &Paragraph) -> bool {
     editable_with(p, &[])
 }
 /// Like `editable`, letting the control characters in `allowed` stand in the text.
 pub(super) fn editable_with(p: &Paragraph, allowed: &[char]) -> bool {
     p.title_marks.is_empty()
-        && p.field_ranges.is_empty()
         && p.range_tags.is_empty()
         && p.orphan_field_ends.is_empty()
         && p.ctrl_data_records.len() <= p.controls.len()
@@ -419,6 +420,30 @@ impl EditSession {
             EditCommand::InsertNote { position, .. } => {
                 body_only(&position.target)?;
                 self.validate_position(position)
+            }
+            EditCommand::InsertClickHere {
+                position,
+                guide,
+                memo,
+                name,
+                ..
+            } => {
+                let t = &position.target;
+                if t.note.is_some() || t.header_footer.is_some() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                self.validate_position(position)?;
+                let fits = |s: &String, n: usize| {
+                    s.chars().count() <= n && !s.chars().any(char::is_control)
+                };
+                if guide.trim().is_empty()
+                    || !fits(guide, 1_000)
+                    || !fits(memo, 1_000)
+                    || !fits(name, 255)
+                {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
             }
             EditCommand::Break { position, .. } => {
                 body_only(&position.target)?;
@@ -1412,6 +1437,42 @@ impl EditSession {
                     )
                 })?;
                 Ok(EditSelection::caret(after))
+            }
+            EditCommand::InsertClickHere {
+                position,
+                guide,
+                memo,
+                name,
+                form_editable,
+            } => {
+                let t = &position.target;
+                let at = self.spot(position)?.text;
+                let (s, p) = (t.section as usize, t.paragraph as usize);
+                match &t.cell {
+                    Some(c) => self.core.insert_click_here_field_at_in_cell(
+                        s,
+                        p,
+                        c.control as usize,
+                        c.cell as usize,
+                        c.paragraph as usize,
+                        at,
+                        false,
+                        guide,
+                        memo,
+                        name,
+                        *form_editable,
+                    )?,
+                    None => self.core.insert_click_here_field_at(
+                        s,
+                        p,
+                        at,
+                        guide,
+                        memo,
+                        name,
+                        *form_editable,
+                    )?,
+                };
+                Ok(EditSelection::caret(position.clone()))
             }
             EditCommand::InsertNote { position, endnote } => {
                 let t = &position.target;

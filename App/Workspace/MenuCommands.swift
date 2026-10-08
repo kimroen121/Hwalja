@@ -325,6 +325,10 @@ struct MenuItems {
         .disabled(!context.inBody)
         item("수식…", Icon.equation) { viewer?.newEquation() }
             .disabled(!context.canPicture)
+        Menu {
+            item("필드 입력…", Icon.field) { viewer?.insertingField = true }
+        } label: { Label("개체", systemImage: Icon.field) }
+            .disabled(!context.hasSelection || context.locked || context.inNote || context.inHeaderFooter)
         Group {
             Menu {
                 ForEach(Captions.all, id: \.value) { caption in

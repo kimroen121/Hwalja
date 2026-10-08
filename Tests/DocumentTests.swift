@@ -1088,6 +1088,10 @@ struct DocumentTests {
         let statistics = try await document.statistics()
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
         #expect(try await document.outline().isEmpty)
+        let edits = document.reply.revision
+        viewer.insertClickHere(guide: "이곳을 마우스로 누르고 내용을 입력하세요.", memo: "", name: "이름", formEditable: true)
+        await document.settle()
+        #expect(document.reply.revision > edits)
         #expect(await viewer.setPassword(current: nil, new: "12345") && document.hasPassword)
         #expect(await !viewer.setPassword(current: "틀림", new: nil) && document.hasPassword)
         #expect(await viewer.setPassword(current: "12345", new: nil) && !document.hasPassword)
