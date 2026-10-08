@@ -351,6 +351,12 @@ struct DocumentTests {
         #expect(document.object == first && document.others == [second])
         document.choose(second)
         #expect(document.object == first && document.others.isEmpty)
+        // 개체 선택: every object on the page at once, the last as the 기준 개체.
+        let all = try await document.objects(page: 0)
+        #expect(all.map(\.object).contains(first.object) && all.map(\.object).contains(second.object))
+        document.choose(all: all)
+        #expect(document.object == all.last && document.others.count == all.count - 1)
+        document.object = first
         // As a <Shift> click does: chosen in the queue, so the bars follow.
         document.select { $0.choose(second); return nil }
         await document.settle()
@@ -402,6 +408,11 @@ struct DocumentTests {
         let moved = PageGeometry.viewRect(try #require(document.object).rect, in: page)
         #expect(abs(moved.minX - (rect.minX + 40)) < 2 && abs(moved.minY - (rect.minY + 20)) < 2)
         #expect(abs(moved.width - rect.width) < 2)
+        // A click on it, once let go, chooses it again.
+        document.deselectObject()
+        await document.settle()
+        await drag(NSPoint(x: moved.midX, y: moved.midY), NSPoint(x: moved.midX, y: moved.midY))
+        #expect(document.object != nil)
 
         document.deselectObject()
         document.selection = .caret(EditPosition(target: body, scalar: 0))

@@ -107,7 +107,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
-- [ ] 개체 선택 아이콘(`draw/drawing(select).htm`): 끌어서 여러 개체 고르기, Alt+클릭으로 겹친 개체 돌아가며 고르기, Tab으로 쪽의 개체 차례로 고르기. Shift+클릭과 개체 묶기는 됨.
 - [ ] 문서 정보 › 그림 정보의 연결 그림 단추(그림 삽입·모두 삽입·경로 바꾸기·확장자 바꾸기·그림 경로 복사): 연결 그림을 읽어 오는 길이 먼저 필요하다.
 - [ ] 셀·표 테두리/배경의 배경 그러데이션·그림.
 - [ ] 필드 입력…·누름틀(`insert/madanginfo/madanginfo.htm`): wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.

@@ -1099,6 +1099,7 @@ enum EngineRequest: Encodable, Sendable {
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
+    case objects(revision: UInt64, page: UInt32)
     case objectProps(ObjectRef)
     /// 삽입 그림 저장하기: the picture's image file.
     case pictureFile(ObjectRef)
@@ -1214,6 +1215,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(y, forKey: .y)
         case let .tableLines(revision, page):
             try c.encode("tableLines", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(page, forKey: .page)
+        case let .objects(revision, page):
+            try c.encode("objects", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(page, forKey: .page)
         case let .place(revision, object, page):

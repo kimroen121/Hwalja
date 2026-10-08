@@ -347,6 +347,14 @@ impl EditSession {
             })
             .collect())
     }
+    /// Every object on `page`, bottom first: 개체 선택's drag, <Alt> and <Tab>.
+    pub fn objects(&self, revision: u64, page: u32) -> Result<Vec<PlacedObject>, EditError> {
+        self.check_revision(revision)?;
+        if page >= self.core.page_count() {
+            return Err(EditError::InvalidInput);
+        }
+        self.placed(page)
+    }
     /// The topmost picture or equation under a page point (96 dpi, top-left origin).
     pub fn object_at(
         &self,

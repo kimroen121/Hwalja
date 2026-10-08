@@ -294,6 +294,7 @@ struct ToolRow: View {
             if let textBox = placed?.textBox {
                 ToolTile("글자 넣기", Icon.textIn, on: textBox) { viewer.change { .setTextBox($0, attach: !textBox) } }
             }
+            ToolTile("개체 선택", Icon.selectObjects) { viewer.draw("select") }
             RowDivider()
             ToolTile("도형 속성", Icon.objectProps) { viewer.showObjectProperties() }
             RowDivider()
@@ -322,6 +323,7 @@ struct ToolRow: View {
                  Choice(title: "삽입 그림 저장하기…") { viewer.savePicture() }]
             })
             ToolTile("원본 그림으로", Icon.originalPicture) { MenuItems.restorePicture(viewer) }
+            ToolTile("개체 선택", Icon.selectObjects) { viewer.draw("select") }
             RowDivider()
             ToolTile("그림 속성", Icon.objectProps) { viewer.showObjectProperties() }
             RowDivider()
@@ -588,7 +590,8 @@ enum Icon {
     static let header = "rectangle.topthird.inset.filled", footer = "rectangle.bottomthird.inset.filled"
     static let footnote = "note.text", endnote = "doc.plaintext"
     static let objectProps = "slider.horizontal.3", pictureEffect = "camera.filters"
-    static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward"
+    static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward",
+                      selectObjects = "cursorarrow.and.square.on.square.dashed"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBorder = "square.dashed.inset.filled", section = "rectangle.split.1x2", noteShape = "text.append", styles = "textformat.alt"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"

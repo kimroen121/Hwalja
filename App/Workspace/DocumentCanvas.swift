@@ -361,7 +361,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     // MARK: Pages
 
     /// The 그리기 개체 being drawn (`textbox`, `rectangle`, `ellipse`, `line`, `arc`): the
-    /// next drag on a page draws it. Esc stops.
+    /// next drag on a page draws it; with `select` (개체 선택) it chooses the objects inside
+    /// it instead. Esc stops.
     var drawingShape: String? {
         didSet {
             if drawingShape == nil { setRubber(nil) }
@@ -712,6 +713,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         window?.makeFirstResponder(self)
         commitComposition()
         let clicks = event.clickCount, extend = event.modifierFlags.contains(.shift)
+        if clicks == 1, event.modifierFlags.contains(.option) { return cycleObjects(model, hit) }
         if clicks == 1, !extend {
             if let end = lineEnd(at: point), let ends = lineEnds {
                 let (from, other) = end ? (ends.end, ends.start) : (ends.start, ends.end)
@@ -1008,6 +1010,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         guard let shape = drawingShape, let band = rubber, let model, !pageFrames.isEmpty else { return }
         drawingShape = nil
+        if shape == "select" { return chooseObjects(in: band) }
         let index = page(near: band.start)
         let frame = pageFrames[index]
         let start = PageGeometry.enginePoint(band.start, in: frame)
@@ -1017,6 +1020,50 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             end = CGPoint(x: start.x + 113, y: start.y + (shape == "line" ? 0 : 76))
         }
         model.insertShape(shape, page: index, from: start, to: end, undoManager)
+    }
+
+    /// 개체 선택: the objects wholly inside the drag on the page where it ended, but tables
+    /// and equations; a drag that does not move chooses what is under it.
+    private func chooseObjects(in band: (start: NSPoint, end: NSPoint)) {
+        guard let model, let hit = enginePoint(band.end) else { return }
+        let frame = pageFrames[hit.page]
+        let (a, b) = (PageGeometry.enginePoint(band.start, in: frame), PageGeometry.enginePoint(band.end, in: frame))
+        let area = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
+        // In the selection queue, as a click, so the bars and frames follow.
+        model.select { model in
+            let all = try await model.objects(page: hit.page)
+            if area.width < 2 && area.height < 2 {
+                model.object = all.last { CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height).contains(b) }
+                return nil
+            }
+            let chosen = all.filter {
+                ![.table, .equation].contains($0.object.kind)
+                    && area.contains(CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height))
+            }
+            if chosen.isEmpty { NSSound.beep() } else { model.choose(all: chosen) }
+            return nil
+        }
+    }
+    /// <Alt> and a click: the objects under the point in turn, from the top down.
+    private func cycleObjects(_ model: HwpDocument, _ hit: (page: Int, point: CGPoint)) {
+        model.select { model in
+            let under = try await model.objects(page: hit.page).reversed().filter {
+                CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height).contains(hit.point)
+            }
+            guard !under.isEmpty else { return nil }
+            let now = under.firstIndex { $0.object == model.object?.object }
+            model.object = under[now.map { ($0 + 1) % under.count } ?? 0]
+            return nil
+        }
+    }
+    /// <Tab>: the next (or with <Shift>, previous) object on the selected one's page.
+    private func nextObject(_ model: HwpDocument, _ current: PlacedObject, backward: Bool) {
+        model.select { model in
+            let all = try await model.objects(page: Int(current.rect.page))
+            guard let at = all.firstIndex(where: { $0.object == current.object }), all.count > 1 else { return nil }
+            model.object = all[(at + (backward ? all.count - 1 : 1)) % all.count]
+            return nil
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1158,6 +1205,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             case #selector(deleteBackward(_:)), #selector(deleteForward(_:)):
                 return model?.edit(undoManager) { _ in .deleteObject(object.object) } ?? ()
             case #selector(insertNewline(_:)): return onOpenObject?(object) ?? ()
+            case #selector(insertTab(_:)), #selector(insertBacktab(_:)):
+                guard let model else { return }
+                return nextObject(model, object, backward: selector == #selector(insertBacktab(_:)))
             case #selector(cancelOperation(_:)): return model?.deselectObject() ?? ()
             default: break
             }

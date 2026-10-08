@@ -267,7 +267,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 도형 탭 | ◐ | `toolbox/object_shapeobject.htm` | 개체 탭으로 2단계. 개체 묶기 ●(Shift+클릭으로 고름, G; 끌어서 고르는 개체 선택 아이콘은 ○), 풀기 ●(U), 순서 ●, 회전·뒤집기 ○ `set_control_flip_at` |
+| 도형 탭 | ◐ | `toolbox/object_shapeobject.htm` | 개체 탭으로 2단계. 개체 묶기 ●(Shift+클릭으로 고름, G), 개체 선택 ●(도형·그림 탭의 아이콘으로 끌어 고르기, Alt+클릭으로 겹친 개체 돌아가며, Tab·Shift+Tab으로 쪽의 개체 차례로; F11·일부분 선택 설정 ○), 풀기 ●(U), 순서 ●, 회전·뒤집기 ○ `set_control_flip_at` |
 | 개체 이동하기 | ● | `draw/move/drawing(move).htm` |  |
 | 개체 크기 조절 | ● | `draw/drawing(size).htm` |  |
 | 개체 기울이기 | △ | `draw/drawing(incline).htm` |  |

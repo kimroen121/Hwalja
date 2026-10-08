@@ -121,6 +121,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         object = had ? kept.popLast() : placed
         others = kept
     }
+    /// Chooses `objects`, the last as the 기준 개체.
+    func choose(all objects: [PlacedObject]) {
+        object = objects.last
+        others = objects.dropLast()
+    }
     /// Text the input method is still composing; it is already in the document.
     private(set) var marked: EditSelection?
     private(set) var presentation = Presentation()
@@ -533,6 +538,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
     }
     /// The table borders on a page that can be dragged.
+    /// Every object on `page`, bottom first.
+    func objects(page: Int) async throws -> [PlacedObject] {
+        try await session.objects(revision: revision, page: UInt32(page))
+    }
     func tableLines(page: Int) async throws -> [TableLine] {
         try await session.tableLines(revision: revision, page: UInt32(page))
     }
