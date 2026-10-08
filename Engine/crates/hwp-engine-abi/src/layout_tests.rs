@@ -109,3 +109,46 @@ fn synthetic_picture_line_keeps_existing_layout_owner() {
         "the NO_LS fix must not replace synthetic source lines"
     );
 }
+
+#[test]
+fn missing_lineseg_page_fragment_reserves_layout_safety_once() {
+    use rhwp::model::control::Control;
+    use rhwp::model::image::Picture;
+    use rhwp::model::shape::{CommonObjAttr, TextWrap, VertRelTo};
+
+    let mut core = DocumentCore::new_empty();
+    core.create_blank_document_native().unwrap();
+    core.insert_text_native(0, 0, 0, "앞").unwrap();
+    core.split_paragraph_native(0, 0, 1, None).unwrap();
+    core.insert_text_native(0, 1, 0, &"가 ".repeat(400)).unwrap();
+
+    let mut document = core.document().clone();
+    document.sections[0].paragraphs[0].line_segs.clear();
+    document.sections[0].paragraphs[0].controls = vec![Control::Picture(Box::new(Picture {
+        common: CommonObjAttr {
+            width: 10_000,
+            height: 50_000,
+            flow_with_text: true,
+            text_wrap: TextWrap::TopAndBottom,
+            vert_rel_to: VertRelTo::Para,
+            ..Default::default()
+        },
+        ..Default::default()
+    }))];
+    document.sections[0].paragraphs[1].line_segs.clear();
+    core.set_document(document);
+
+    let layout: serde_json::Value =
+        serde_json::from_str(&core.get_page_text_layout_native(0).unwrap()).unwrap();
+    let mut rows = std::collections::BTreeSet::new();
+    for run in layout["runs"].as_array().unwrap() {
+        if run["paraIdx"] == 1 {
+            rows.insert((run["y"].as_f64().unwrap() * 100.0).round() as i64);
+        }
+    }
+    assert_eq!(
+        rows.len(),
+        9,
+        "a near-bottom synthetic paragraph must not pay the 4px drift margin twice",
+    );
+}

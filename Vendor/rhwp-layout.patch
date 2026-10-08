@@ -3158,3 +3158,23 @@ diff --git a/src/serializer/doc_info.rs b/src/serializer/doc_info.rs
              }
              // 추가 채우기 속성: size(u32) = 0, 이어서 미확인 바이트로 alpha(u8).
              // hwplib 및 parse_fill(additional_size 만큼 skip 후 종류별 1바이트를
+diff --git a/src/renderer/typeset.rs b/src/renderer/typeset.rs
+index 8f42c61..d2be5d3 100644
+--- a/src/renderer/typeset.rs
++++ b/src/renderer/typeset.rs
+@@ -17630 +17630 @@ impl TypesetEngine {
+-        let base_available = (st.base_available_height() - layout_drift_safety_px).max(0.0);
++        let base_available = st.base_available_height().max(0.0);
+@@ -17757,2 +17757,10 @@ impl TypesetEngine {
+-            // Task #332 Stage 4b: partial split 의 줄 단위 fit 검사에도 layout drift 마진 적용
+-            let avail_for_lines = (page_avail - sp_b - layout_drift_safety_px).max(0.0);
++            // Task #332 Stage 4b: partial split 의 줄 단위 fit 검사에도 layout drift 마진 적용.
++            // `base_available` 에서 미리 빼고 여기서 다시 빼면 첫 fragment가 같은 4px
++            // 마진을 두 번 지불한다. 첫 fragment는 위에서 계산한 실제 `safety`(저장
++            // anchor·PartialTable 면제 포함)를 한 번만, continuation은 기본 마진을 한 번만 쓴다.
++            let fragment_safety = if cursor_line == 0 {
++                safety
++            } else {
++                layout_drift_safety_px
++            };
++            let avail_for_lines = (page_avail - sp_b - fragment_safety).max(0.0);
