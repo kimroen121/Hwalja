@@ -643,6 +643,8 @@ pub struct ObjectProps {
     pub page_break: Option<u8>,
     pub repeat_header: Option<bool>,
     pub cell_spacing: Option<i32>,
+    /// Tables: 표 테두리/배경, its four sides and 배경.
+    pub table_border: Option<CellBorder>,
     pub script: Option<String>,
     /// HWPUNIT (100 per point).
     pub font_size: Option<u32>,

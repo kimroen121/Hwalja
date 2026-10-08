@@ -559,10 +559,12 @@ diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
-@@ -1025,6 +1025,59 @@
+@@ -1023,6 +1023,59 @@
+             "\"sourceRows\":{},\"sourceCols\":{},\"targetRows\":{},\"targetCols\":{}",
+             source_rows, source_cols, source_cols, source_rows
          )))
-     }
- 
++    }
++
 +    /// HwpStudio: 표 뒤집기 (table(transform).htm); `turn` and `margins` as `Table::flip`
 +    /// takes them. A line moving to another side takes a border fill with it there.
 +    pub fn flip_table_native(
@@ -614,11 +616,9 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
 +            ctrl: control_idx,
 +        });
 +        Ok(super::super::helpers::json_ok())
-+    }
-+
+     }
+ 
      /// 행/열 바꿈 복사 버퍼를 커서 위치에 새 표로 생성해 붙여넣는다.
-     pub fn paste_table_cells_transposed_as_new_table_native(
-         &mut self,
 @@ -1259,7 +1312,7 @@
          Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
      }
@@ -702,7 +702,37 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          };
          let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
          let allow_overlap = (table.attr >> 14) & 0x01 != 0;
-@@ -3155,6 +3208,16 @@
+@@ -2968,8 +3021,29 @@
+             .map(|(idx, s)| (idx as u8, s.para_shape_id, s.char_shape_id as u32))
+             .unwrap_or((0, 0, 0));
+ 
++        // 표 테두리/배경: the table's own border fill, laid over the one it has.
++        let table_border_fill = if json.contains("\"borderLeft\"")
++            || json.contains("\"borderTop\"")
++            || json.contains("\"fillType\"")
++        {
++            let current = self
++                .get_table_mut(section_idx, parent_para_idx, control_idx)?
++                .border_fill_id;
++            let mut value: serde_json::Value =
++                serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
++            if let Some(map) = value.as_object_mut() {
++                map.insert("borderFillId".into(), current.into());
++            }
++            Some(self.create_border_fill_from_json(&value.to_string()))
++        } else {
++            None
++        };
++
+         let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+ 
++        if let Some(id) = table_border_fill {
++            table.border_fill_id = id;
++        }
+         if let Some(v) = json_i16(json, "cellSpacing") {
+             table.cell_spacing = v;
+         }
+@@ -3155,6 +3229,16 @@
          }
  
          // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
@@ -719,19 +749,19 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
              if let Some(v) = json_i16(json, "outerLeft") {
                  table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
-@@ -3664,6 +3727,12 @@
-                 for offset in para.char_offsets.iter_mut() {
-                     if *offset >= threshold {
+@@ -3666,6 +3750,12 @@
                          *offset -= 8;
-+                    }
-+                }
+                     }
+                 }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
-                     }
-                 }
++                    }
++                }
              }
+ 
+             // 컨트롤 및 대응하는 ctrl_data_record 제거
 diff --git a/src/document_core/commands/text_editing.rs b/src/document_core/commands/text_editing.rs
 --- a/src/document_core/commands/text_editing.rs
 +++ b/src/document_core/commands/text_editing.rs

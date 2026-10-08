@@ -546,23 +546,7 @@ struct PageBorderSheet: View {
                 }
             }
         } label: {
-            Canvas { context, size in
-                let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
-                context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                let path = Path { path in
-                    for side in sides {
-                        switch side {
-                        case 0: path.move(to: CGPoint(x: box.minX, y: box.minY)); path.addLine(to: CGPoint(x: box.minX, y: box.maxY))
-                        case 1: path.move(to: CGPoint(x: box.maxX, y: box.minY)); path.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
-                        case 2: path.move(to: CGPoint(x: box.minX, y: box.minY)); path.addLine(to: CGPoint(x: box.maxX, y: box.minY))
-                        default: path.move(to: CGPoint(x: box.minX, y: box.maxY)); path.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
-                        }
-                    }
-                }
-                context.stroke(path, with: .color(.primary), lineWidth: 2)
-            }
-            .frame(width: 22, height: 22)
-            .padding(3)
+            SideIcon(sides: sides)
         }
         .buttonStyle(ToolButtonStyle(on: down))
         .help(title)
@@ -585,6 +569,34 @@ struct PageBorderSheet: View {
                 }
             }
         }
+    }
+}
+
+/// A side button's picture: its sides (왼쪽, 오른쪽, 위쪽, 아래쪽, 가로, 세로) over a dashed box.
+struct SideIcon: View {
+    let sides: [Int]
+    var body: some View {
+        Canvas { context, size in
+            let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+            context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            let path = Path { path in
+                for side in sides {
+                    let (from, to): (CGPoint, CGPoint) = switch side {
+                    case 0: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY))
+                    case 1: (CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY))
+                    case 2: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY))
+                    case 3: (CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))
+                    case 4: (CGPoint(x: box.minX, y: box.midY), CGPoint(x: box.maxX, y: box.midY))
+                    default: (CGPoint(x: box.midX, y: box.minY), CGPoint(x: box.midX, y: box.maxY))
+                    }
+                    path.move(to: from)
+                    path.addLine(to: to)
+                }
+            }
+            context.stroke(path, with: .color(.primary), lineWidth: 2)
+        }
+        .frame(width: 22, height: 22)
+        .padding(3)
     }
 }
 
@@ -1118,6 +1130,8 @@ struct CellBorderSheet: View {
     @State private var pressed: Set<Int> = []
     /// Each side's line before its button last put one on.
     @State private var previous: [BorderSide]
+    /// 표 테두리/배경, opened over this dialog.
+    @State private var table: ObjectSheetState?
 
     private static let none = BorderSide(line: 0, width: 0, color: "#000000")
 
@@ -1152,12 +1166,14 @@ struct CellBorderSheet: View {
                 .padding(.vertical, 22)
             }
             .frame(width: 520, height: 330)
-            if !editing.one {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                if !editing.one {
                     Text("적용 범위")
                     ChoiceField($all, editing.block ? [(true, "모든 셀"), (false, "선택된 셀")] : [(true, "모든 셀")], minWidth: 100)
                         .fixedSize()
                 }
+                Spacer()
+                Button("표 테두리/배경…") { Task { table = await viewer.tableSheet() } }
             }
         } confirm: {
             var border = CellBorder()
@@ -1174,6 +1190,7 @@ struct CellBorderSheet: View {
                 touched.insert(side)
             }
         }
+        .sheet(item: $table) { TableBorderSheet(state: $0, viewer: viewer) }
     }
 
     /// The sides a block shows: its outside, and inside it for 각 셀마다 적용.
@@ -1269,27 +1286,7 @@ struct CellBorderSheet: View {
                 touched.insert(side)
             }
         } label: {
-            Canvas { context, size in
-                let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
-                context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                let path = Path { path in
-                    for side in which {
-                        let (from, to): (CGPoint, CGPoint) = switch side {
-                        case 0: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY))
-                        case 1: (CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY))
-                        case 2: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY))
-                        case 3: (CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))
-                        case 4: (CGPoint(x: box.minX, y: box.midY), CGPoint(x: box.maxX, y: box.midY))
-                        default: (CGPoint(x: box.midX, y: box.minY), CGPoint(x: box.midX, y: box.maxY))
-                        }
-                        path.move(to: from)
-                        path.addLine(to: to)
-                    }
-                }
-                context.stroke(path, with: .color(.primary), lineWidth: 2)
-            }
-            .frame(width: 22, height: 22)
-            .padding(3)
+            SideIcon(sides: which)
         }
         .buttonStyle(ToolButtonStyle(on: down))
         .help(title)

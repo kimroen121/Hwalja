@@ -1195,6 +1195,12 @@ struct DocumentTests {
         await document.settle()
         let drawn = try await document.cellBorder(corner.target)
         #expect(drawn.sides[0] == red && drawn.fill == cellBorder.fill && document.context.cellBlock)
+        let sheet = try #require(await viewer.tableSheet())
+        var tableProps = sheet.props
+        tableProps.tableBorder?.fill = PageFill(color: "#eeeeee", patternColor: "#000000", pattern: 0)
+        viewer.setObject(sheet.object, tableProps.changes(from: sheet.props))
+        await document.settle()
+        #expect(try await document.objectProps(sheet.object).tableBorder?.fill == tableProps.tableBorder?.fill)
         viewer.editCells { .mergeCells($0) }
         await document.settle()
         #expect(document.context.inTable && !document.context.cellBlock)
@@ -1608,6 +1614,11 @@ struct DocumentTests {
             ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                                                                      props: ObjectProps(pageBreak: 2, repeatHeader: true)),
                                              viewer: viewer, tab: "표"))),
+            ("tableBorder", AnyView(TableBorderSheet(state: ObjectSheetState(
+                object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
+                props: ObjectProps(cellSpacing: 283, tableBorder: CellBorder(
+                    sides: Array(repeating: BorderSide(line: 1, width: 3, color: "#336699"), count: 4) + [nil, nil],
+                    fill: PageFill(color: "#ffeecc", patternColor: "#000000", pattern: 0)))), viewer: viewer))),
         ]
         for (name, view) in views {
             let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))

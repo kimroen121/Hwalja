@@ -443,8 +443,15 @@ impl EditSession {
         if o.kind != ObjectKind::Equation {
             read_caption(&mut map);
         }
-        serde_json::from_value(Value::Object(rename(map, false)))
-            .map_err(|_| EditError::RenderFailed)
+        let border = (o.kind == ObjectKind::Table).then(|| {
+            let mut b = self.border_of(&Value::Object(map.clone()));
+            (b.sides[4], b.sides[5], b.diagonal) = (None, None, None);
+            b
+        });
+        let mut props: ObjectProps = serde_json::from_value(Value::Object(rename(map, false)))
+            .map_err(|_| EditError::RenderFailed)?;
+        props.table_border = border;
+        Ok(props)
     }
     pub fn cell_props(&self, t: &EditTarget) -> Result<CellProps, EditError> {
         commands::get(self.core.document(), t)?;
@@ -477,6 +484,13 @@ impl EditSession {
         let percent = |v: Option<i32>| v.is_none_or(|v| (-100..=100).contains(&v));
         let one_of =
             |v: &Option<String>, names: &[&str]| v.as_deref().is_none_or(|v| names.contains(&v));
+        if props
+            .table_border
+            .as_ref()
+            .is_some_and(|b| o.kind != ObjectKind::Table || !super::borders::valid_border(b))
+        {
+            return Err(EditError::InvalidInput);
+        }
         let valid = props.width.is_none_or(|v| (1..=1_000_000).contains(&v))
             && props.height.is_none_or(|v| (1..=1_000_000).contains(&v))
             && [
@@ -599,6 +613,17 @@ impl EditSession {
     ) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         let mut json = object_json(props);
+        json.remove("tableBorder");
+        if let Some(b) = &props.table_border {
+            let s = &b.sides;
+            json.extend(super::borders::border_json(
+                [s[0].as_ref(), s[1].as_ref(), s[2].as_ref(), s[3].as_ref()],
+                &CellBorder {
+                    diagonal: None,
+                    ..b.clone()
+                },
+            ));
+        }
         write_caption(&mut json, o.kind == ObjectKind::Table);
         if o.note.is_some() {
             let (kind, n) = self.note_of(o)?;

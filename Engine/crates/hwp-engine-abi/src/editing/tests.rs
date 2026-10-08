@@ -5510,3 +5510,50 @@ fn cell_borders_backgrounds_and_diagonals() {
         assert_eq!(s.cell_border(&at(&s, 0, 0)).unwrap(), before, "{format}");
     }
 }
+#[test]
+fn table_borders_and_backgrounds_are_set() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let table = ObjectRef {
+            kind: ObjectKind::Table,
+            section: 0,
+            paragraph: 2,
+            control: 0,
+            cell: None,
+            note: None,
+        };
+        let before = s.object_props(&table).unwrap();
+        let mut border = before.table_border.clone().unwrap();
+        let thick = BorderSide {
+            line: 1,
+            width: 9,
+            color: "#008000".into(),
+        };
+        border.sides[..4].fill(Some(thick.clone()));
+        border.fill = Some(PageFill {
+            color: "#ffeecc".into(),
+            pattern_color: "#000000".into(),
+            pattern: 0,
+        });
+        let set = EditCommand::SetObject {
+            object: table.clone(),
+            props: ObjectProps {
+                table_border: Some(border.clone()),
+                cell_spacing: Some(283),
+                ..Default::default()
+            },
+        };
+        run(&mut s, set).unwrap();
+        let now = s.object_props(&table).unwrap();
+        assert_eq!(now.table_border.as_ref(), Some(&border), "{format}");
+        assert_eq!(now.cell_spacing, Some(283), "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(
+            reopened.object_props(&table).unwrap().table_border,
+            Some(border),
+            "{format}"
+        );
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(s.object_props(&table).unwrap(), before, "{format}");
+    }
+}

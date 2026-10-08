@@ -25,18 +25,23 @@ struct ObjectSheetState: Identifiable {
 extension Viewer {
 
     /// 개체 속성 of the selected object, or 표/셀 속성 of the table holding the caret.
+    /// The table holding the caret, with its properties and the caret cell's.
+    func tableSheet() async -> ObjectSheetState? {
+        guard let document, let target = document.selection?.focus.target, let cell = target.cell else { return nil }
+        let table = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
+        guard let props = try? await document.objectProps(table), let cellProps = try? await document.cellProps(target)
+        else { return nil }
+        return ObjectSheetState(object: table, props: props, cell: (target, cellProps))
+    }
     func showObjectProperties() {
         guard let document else { return }
         Task {
             if let placed = document.object {
                 guard let props = try? await document.objectProps(placed.object) else { return NSSound.beep() }
                 objectSheet = ObjectSheetState(object: placed.object, props: props, line: placed.ends != nil)
-            } else if let target = document.selection?.focus.target, let cell = target.cell {
-                let table = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
-                guard let props = try? await document.objectProps(table),
-                      let cellProps = try? await document.cellProps(target)
-                else { return NSSound.beep() }
-                objectSheet = ObjectSheetState(object: table, props: props, cell: (target, cellProps))
+            } else if document.selection?.focus.target.cell != nil {
+                guard let sheet = await tableSheet() else { return NSSound.beep() }
+                objectSheet = sheet
             }
         }
     }
@@ -145,8 +150,11 @@ struct ObjectSheet: View {
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성", confirmTitle: "설정") {
             DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
+                       + (kind == .table ? ["테두리", "배경"] : [])
                        + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])) { tab in
                 switch tab {
+                case "테두리": tableBorder
+                case "배경": tableBackground
                 case "선": line
                 case "채우기": fill
                 case "여백/캡션": margins
@@ -288,6 +296,9 @@ struct ObjectSheet: View {
         }
         .padding(16)
     }
+
+    private var tableBorder: some View { TableBorderTab(props: $props) }
+    private var tableBackground: some View { TableBackgroundTab(props: $props) }
 
     private var line: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -560,5 +571,135 @@ private enum Pictogram {
             c.stroke(Path(box), with: .color(ink), lineWidth: 1)
             c.draw(Text("#1").font(.system(size: 8)).foregroundStyle(ink), at: label)
         }
+    }
+}
+
+/// [표 테두리/배경], from 셀 테두리/배경: the table's 테두리 and 배경 tabs alone.
+struct TableBorderSheet: View {
+    let state: ObjectSheetState
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var props: ObjectProps
+    @State private var tab = "테두리"
+
+    init(state: ObjectSheetState, viewer: Viewer) {
+        (self.state, self.viewer) = (state, viewer)
+        _props = State(initialValue: state.props)
+    }
+    var body: some View {
+        DialogFrame("표 테두리/배경", confirmTitle: "설정") {
+            DialogTabs(selection: $tab, titles: ["테두리", "배경"]) { tab in
+                if tab == "배경" { TableBackgroundTab(props: $props) } else { TableBorderTab(props: $props) }
+            }
+            .dialogTabs()
+            .frame(width: 520, height: 330)
+        } confirm: {
+            viewer.setObject(state.object, props.changes(from: state.props))
+            dismiss()
+        }
+    }
+}
+
+/// 표 테두리: 셀 간격 (without which the table's own sides do not show), and the sides.
+struct TableBorderTab: View {
+    @Binding var props: ObjectProps
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            LabeledField("셀 간격") {
+                SpinField(value: Binding { Units.millimeters(props.cellSpacing ?? 0) } set: { props.cellSpacing = Units.units($0) },
+                          unit: "mm", range: 0...100)
+            }
+            TableSides(border: Binding { props.tableBorder ?? CellBorder() } set: { props.tableBorder = $0 })
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
+
+/// 표 배경: one fill over the whole table.
+struct TableBackgroundTab: View {
+    @Binding var props: ObjectProps
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("채우기")
+            FillFields(fill: Binding { props.tableBorder?.fill } set: { props.tableBorder?.fill = $0 })
+                .padding(.leading, 12)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+}
+
+/// A table's 테두리: 종류, 굵기 and 색, 선 종류 바로 적용, and the side buttons around a
+/// 미리 보기 (왼쪽, 오른쪽, 위, 아래 and 모두).
+private struct TableSides: View {
+    @Binding var border: CellBorder
+    @State private var line = BorderSide(line: 1, width: 1, color: "#000000")
+    @State private var instant = true
+    @State private var pressed: Set<Int> = []
+    @State private var previous = Array(repeating: BorderSide(line: 0, width: 0, color: "#000000"), count: 4)
+
+    private func side(_ i: Int) -> BorderSide { border.sides[i] ?? BorderSide(line: 0, width: 0, color: "#000000") }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("테두리")
+                LineFields(line: $line).padding(.leading, 12)
+                Toggle("선 종류 바로 적용", isOn: $instant).padding(.leading, 12)
+            }
+            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow {
+                    Color.clear.frame(width: 1, height: 1)
+                    HStack(spacing: 4) { button("위", [2]); button("아래", [3]) }
+                }
+                GridRow {
+                    VStack(spacing: 4) { button("왼쪽", [0]); button("오른쪽", [1]) }
+                    Canvas { context, size in
+                        let box = CGRect(origin: .zero, size: size).insetBy(dx: 8, dy: 8)
+                        context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
+                        if let fill = border.fill, fill.color != "none" {
+                            context.fill(Path(box), with: .color(HexColor.color(fill.color)))
+                        }
+                        for x in [box.minX + box.width / 3, box.minX + box.width * 2 / 3] {
+                            context.stroke(Path { $0.move(to: CGPoint(x: x, y: box.minY)); $0.addLine(to: CGPoint(x: x, y: box.maxY)) },
+                                           with: .color(.gray.opacity(0.5)), lineWidth: 0.5)
+                        }
+                        LineFields.stroke(context, side(0), CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY))
+                        LineFields.stroke(context, side(1), CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY))
+                        LineFields.stroke(context, side(2), CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY))
+                        LineFields.stroke(context, side(3), CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))
+                    }
+                    .frame(width: 140, height: 110)
+                }
+                GridRow {
+                    Color.clear.frame(width: 1, height: 1)
+                    button("모두", [0, 1, 2, 3])
+                }
+            }
+        }
+        .onChange(of: line) { _, line in
+            guard instant else { return }
+            for i in pressed { border.sides[i] = line }
+        }
+    }
+    /// Puts the line on `which`, or takes it back off.
+    private func button(_ title: String, _ which: [Int]) -> some View {
+        let down = which.allSatisfy(pressed.contains)
+        return Button {
+            for i in which {
+                if down {
+                    border.sides[i] = previous[i]
+                    pressed.remove(i)
+                } else if !pressed.contains(i) {
+                    previous[i] = side(i)
+                    border.sides[i] = line
+                    pressed.insert(i)
+                }
+            }
+        } label: { SideIcon(sides: which) }
+            .buttonStyle(ToolButtonStyle(on: down))
+            .help(title)
+            .accessibilityLabel(title)
     }
 }

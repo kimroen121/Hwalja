@@ -524,6 +524,8 @@ struct ObjectProps: PartialFormat {
     var pageBreak: UInt8?
     var repeatHeader: Bool?
     var cellSpacing: Int32?
+    /// Tables: 표 테두리/배경, its four sides and 배경.
+    var tableBorder: CellBorder?
     var script: String?
     /// HWPUNIT, 100 per point.
     var fontSize: UInt32?

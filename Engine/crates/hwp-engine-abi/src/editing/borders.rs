@@ -18,11 +18,12 @@ fn valid_side(s: &BorderSide) -> bool {
     s.line <= 16 && s.width <= 15 && s.color.starts_with('#') && s.color.len() == 7
 }
 
-/// rhwp's property JSON for `border` over the border fill `base`, with `sides` for the
-/// cell's left, right, top and bottom.
-fn props(base: u16, sides: [Option<&BorderSide>; 4], border: &CellBorder) -> String {
+/// rhwp's property JSON for `border`, with `sides` for the left, right, top and bottom.
+pub(super) fn border_json(
+    sides: [Option<&BorderSide>; 4],
+    border: &CellBorder,
+) -> Map<String, Value> {
     let mut j = Map::new();
-    j.insert("borderFillId".into(), json!(base));
     for (key, s) in SIDES.iter().zip(sides) {
         if let Some(s) = s {
             j.insert(
@@ -52,7 +53,24 @@ fn props(base: u16, sides: [Option<&BorderSide>; 4], border: &CellBorder) -> Str
         );
         j.insert("centerLine".into(), json!(CENTERS[d.center as usize]));
     }
+    j
+}
+/// `border_json` over the border fill `base`.
+fn props(base: u16, sides: [Option<&BorderSide>; 4], border: &CellBorder) -> String {
+    let mut j = border_json(sides, border);
+    j.insert("borderFillId".into(), json!(base));
     Value::Object(j).to_string()
+}
+/// Whether `border`'s lines, colors and shapes are ones rhwp takes.
+pub(super) fn valid_border(border: &CellBorder) -> bool {
+    let fill_ok = border.fill.as_ref().is_none_or(|f| {
+        f.pattern <= 6 && (f.color == "none" || f.color.len() == 7) && f.pattern_color.len() == 7
+    });
+    let diagonal_ok = border
+        .diagonal
+        .as_ref()
+        .is_none_or(|d| valid_side(&d.line) && d.center <= 3);
+    border.sides.iter().flatten().all(valid_side) && fill_ok && diagonal_ok
 }
 
 impl EditSession {
@@ -67,6 +85,10 @@ impl EditSession {
             c.cell as usize,
         )?)
         .map_err(|_| EditError::RenderFailed)?;
+        Ok(self.border_of(&v))
+    }
+    /// The 테두리/배경 rhwp's property JSON `v` describes.
+    pub(super) fn border_of(&self, v: &Value) -> CellBorder {
         let fill = self
             .core
             .document()
@@ -75,7 +97,7 @@ impl EditSession {
             .get((v["borderFillId"].as_u64().unwrap_or(0) as usize).wrapping_sub(1))
             .map(|bf| &bf.fill);
         let text = |v: &Value| v.as_str().unwrap_or("#000000").to_string();
-        Ok(CellBorder {
+        CellBorder {
             sides: [
                 Some(side(&v["borderLeft"])),
                 Some(side(&v["borderRight"])),
@@ -109,7 +131,7 @@ impl EditSession {
                     .position(|c| v["centerLine"] == *c)
                     .unwrap_or(0) as u8,
             }),
-        })
+        }
     }
     pub(super) fn validate_cell_border(
         &self,
@@ -117,16 +139,7 @@ impl EditSession {
         border: &CellBorder,
     ) -> Result<(), EditError> {
         self.block(selection)?;
-        let fill_ok = border.fill.as_ref().is_none_or(|f| {
-            f.pattern <= 6
-                && (f.color == "none" || f.color.len() == 7)
-                && f.pattern_color.len() == 7
-        });
-        let diagonal_ok = border
-            .diagonal
-            .as_ref()
-            .is_none_or(|d| valid_side(&d.line) && d.center <= 3);
-        if border.sides.iter().flatten().all(valid_side) && fill_ok && diagonal_ok {
+        if valid_border(border) {
             Ok(())
         } else {
             Err(EditError::InvalidInput)
