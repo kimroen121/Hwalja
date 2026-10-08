@@ -61,7 +61,8 @@ impl EditSession {
             }
         };
         Ok(Copied {
-            html,
+            // Other apps read HTML without a charset as Latin-1.
+            html: format!("<meta charset=\"utf-8\">{html}"),
             ..self.copied()
         })
     }

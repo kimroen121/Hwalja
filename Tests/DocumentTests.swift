@@ -599,11 +599,37 @@ struct DocumentTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(pasteboard.string(forType: .html)?.contains("굵은") == true)
+        // Other apps read it as UTF-8.
+        let data = try #require(pasteboard.data(forType: .html))
+        #expect(NSAttributedString(html: data, documentAttributes: nil)?.string.hasPrefix("굵은") == true)
         document.selection = .caret(EditPosition(target: body, scalar: 4))
         editor.paste(nil)
         await document.settle()
         #expect(try await document.paragraph(body).text == "굵은 글굵은")
         #expect(try await document.session(formatAt: EditPosition(target: body, scalar: 6)).text.bold == true)
+    }
+
+    /// Rich text from Pages or TextEdit (RTF, no HTML) keeps its bold and italic.
+    @Test func pastesRichTextFromOtherApps() async throws {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        canvas.bind(document)
+        let pasteboard = NSPasteboard.withUniqueName()
+        canvas.editor.pasteboard = pasteboard
+        let font = NSFont.systemFont(ofSize: 12)
+        let rich = NSMutableAttributedString(string: "굵게", attributes: [.font: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)])
+        rich.append(NSAttributedString(string: " <기울>", attributes: [.font: NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)]))
+        pasteboard.clearContents()
+        pasteboard.writeObjects([rich])
+        #expect(pasteboard.string(forType: .html) == nil)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        canvas.editor.paste(nil)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "굵게 <기울>")
+        let bold = try await document.session(formatAt: EditPosition(target: body, scalar: 1)).text
+        let italic = try await document.session(formatAt: EditPosition(target: body, scalar: 5)).text
+        #expect(bold.bold == true && bold.italic != true)
+        #expect(italic.italic == true && italic.bold != true)
     }
 
     @Test func compositionThenNewlineSplitsAfterCommittedText() async throws {
