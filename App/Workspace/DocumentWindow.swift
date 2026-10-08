@@ -301,7 +301,9 @@ final class Viewer: ObservableObject {
                 editTable(.insertRowBelow)
                 return true
             }
-            guard modifiers.isEmpty, let key = event.charactersIgnoringModifiers?.lowercased().first else { return false }
+            // By the key's place, so they work while typing 한글 as well.
+            let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g"]
+            guard modifiers.isEmpty, let key = letters[event.keyCode] else { return false }
             if context.cellBlock {
                 switch key {
                 case "m": editCells { .mergeCells($0) }
@@ -315,6 +317,7 @@ final class Viewer: ObservableObject {
                 switch key {
                 case "p": showObjectProperties()
                 case "u" where document?.object?.group == true: change { .ungroup($0) }
+                case "g" where context.objects > 1: groupObjects()
                 default: return false
                 }
             } else {

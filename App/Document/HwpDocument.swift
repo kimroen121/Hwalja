@@ -27,6 +27,8 @@ struct Presentation: Equatable {
     var highlight: [PageRect] = []
     /// The selected object's frame; the caret hides while an object is selected.
     var object: PageRect?
+    /// The frames of the other objects chosen with it.
+    var others: [PageRect] = []
     /// The selected object's size is protected (크기 고정).
     var objectLocked = false
     /// The selected object sits in the line (글자처럼 취급): dragging it moves it in the text.
@@ -58,6 +60,8 @@ struct EditingContext: Equatable {
     var cellBlock = false
     /// The kind of the selected object.
     var object: ObjectKind?
+    /// How many objects are chosen; more than one for 개체 묶기.
+    var objects = 0
     /// Formats can be read and changed here.
     var canFormat: Bool { hasSelection && !locked }
     /// 스타일 apply in the body and in cells, not in notes, 머리말 or 꼬리말.
@@ -103,8 +107,20 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     /// The selection before the caret went into a 머리말 or 꼬리말, where 닫기 returns.
     private var bodySelection: EditSelection?
-    /// The picture or equation selected as an object.
-    var object: PlacedObject?
+    /// The picture or equation selected as an object; with others, the last one chosen (기준 개체).
+    var object: PlacedObject? {
+        didSet { if oldValue?.object != object?.object { others = [] } }
+    }
+    /// Objects chosen with <Shift> before `object`, for 개체 묶기.
+    private(set) var others: [PlacedObject] = []
+    /// <Shift> and a click: `placed` joins the chosen objects as the 기준 개체; chosen again, it leaves.
+    func choose(_ placed: PlacedObject) {
+        var kept = others + [object].compactMap { $0 }
+        let had = kept.contains { $0.object == placed.object }
+        kept.removeAll { $0.object == placed.object }
+        object = had ? kept.popLast() : placed
+        others = kept
+    }
     /// Text the input method is still composing; it is already in the document.
     private(set) var marked: EditSelection?
     private(set) var presentation = Presentation()
@@ -520,6 +536,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             try await document.run(command)
             if case .deleteObject = command { document.object = nil }
             if case .moveObject = command { document.object = nil }
+            if case .group = command { document.object = nil }
             document.registerHistory(.undo, undoManager)
         }
     }
@@ -591,7 +608,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             (locked, inLine) = (props?.sizeProtect == true, props?.treatAsChar == true)
         }
         var next = Presentation(serial: presentation.serial + 1, caret: caret, highlight: highlight, object: object?.rect,
-                                objectLocked: locked, objectInLine: inLine, lineEnds: object?.ends)
+                                others: others.map(\.rect), objectLocked: locked, objectInLine: inLine, lineEnds: object?.ends)
         for output in staged {
             let count = pages.count
             for (index, page) in zip(output.reply.changedPages.map(Int.init), output.pages) where index <= pages.count {
@@ -623,6 +640,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                               inList: ["Number", "Bullet", "Outline"].contains(format?.paragraph.head ?? ""),
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: editable && block, object: object?.object.kind,
+                              objects: others.count + (object == nil ? 0 : 1),
                               locked: reply.locked == true)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }

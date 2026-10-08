@@ -286,9 +286,7 @@ struct ToolRow: View {
                 [Choice(title: "맨 뒤로") { viewer.change { .order($0, .back) } },
                  Choice(title: "뒤로") { viewer.change { .order($0, .backward) } }]
             })
-            if placed?.group == true {
-                ToolTile("그룹", Icon.group, choices: { [Choice(title: "개체 풀기") { viewer.change { .ungroup($0) } }] })
-            }
+            ToolTile("그룹", Icon.group, choices: { viewer.groupChoices })
         }
         .disabled(context.locked)
         RowDivider()
@@ -309,6 +307,7 @@ struct ToolRow: View {
         .disabled(context.locked)
         RowDivider()
         arrangement(context)
+        ToolTile("그룹", Icon.group, choices: { viewer.groupChoices })
     }
     @ViewBuilder private func headerFooter(_ context: EditingContext) -> some View {
         headers(context)

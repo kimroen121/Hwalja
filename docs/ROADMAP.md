@@ -107,7 +107,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
-- [ ] 개체 묶기(`draw/drawing(group).htm`): `group_shapes_native`. 개체 풀기는 됨.
+- [ ] 개체 선택 아이콘(`draw/drawing(select).htm`): 끌어서 여러 개체 고르기, Alt+클릭으로 겹친 개체 돌아가며 고르기, Tab으로 쪽의 개체 차례로 고르기. Shift+클릭과 개체 묶기는 됨.
 - [ ] 표 뒤집기(`table/table(transform).htm`): `transpose_table_cells_in_place_native`. 도움말의 뒤집기 방식(줄·칸·줄/칸 기준, 90도 회전) 중 rhwp가 하는 것만 넣고 나머지는 △로 남긴다.
 - [ ] 그림 탭의 바꾸기/저장(`toolbox/object_picture.htm`): `assign_picture_image_native`(크기·위치 유지).
 - [ ] 쪽 테두리/배경…(`format/pageborder/page_border.htm`): `get/set_page_border_fill_native`.

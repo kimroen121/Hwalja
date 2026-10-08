@@ -106,6 +106,20 @@ extension Viewer {
         guard let object = document?.object?.object else { return }
         document?.edit(undoManager) { _ in command(object) }
     }
+    /// 개체 묶기: the chosen objects into one.
+    func groupObjects() {
+        guard let document, let object = document.object, !document.others.isEmpty else { return }
+        let objects = document.others.map(\.object) + [object.object]
+        document.edit(undoManager) { _ in .group(objects) }
+    }
+    /// 그룹: 개체 묶기 and 개체 풀기, as on the 도형 and 그림 탭.
+    var groupChoices: [Choice?] {
+        let context = document?.context ?? EditingContext()
+        return [Choice(title: "개체 묶기", key: "g", modifiers: [], enabled: context.objects > 1 && !context.locked) { self.groupObjects() },
+                Choice(title: "개체 풀기", key: "u", modifiers: [], enabled: document?.object?.group == true && !context.locked) {
+                    self.change { .ungroup($0) }
+                }]
+    }
 }
 
 /// 개체 속성 (or 표/셀 속성), laid out like Hancom's: 기본 (size, position), 여백/캡션,

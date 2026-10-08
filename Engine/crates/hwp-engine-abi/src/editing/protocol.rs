@@ -204,6 +204,10 @@ pub enum EditCommand {
     Ungroup {
         object: ObjectRef,
     },
+    /// 개체 묶기: drawing objects and pictures of the body into one group.
+    Group {
+        objects: Vec<ObjectRef>,
+    },
     /// 도형 안에 글자 넣기 (or, without `attach`, 글상자 속성 없애기) for a drawing object of
     /// the body. Put in, the caret moves into the new text.
     SetTextBox {

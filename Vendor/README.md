@@ -31,6 +31,7 @@
 - adds `line_place_native`: the page, column and line in that column showing a line of a body paragraph, for the 상황 선.
 - pastes inline HTML with no block (part of a paragraph, as browsers copy it) as one paragraph with its formats, and reads `<b>`, `<i>` and `<u>` with attributes (`<b style=…>`, as Safari copies).
 - puts a click in a 머리말 or 꼬리말 at the nearest character boundary (it landed one character to the right).
+- keeps the line of a white box with a thin black line inside a group (the default 직사각형, drawn by 한글); only a text-only box's line is still dropped.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

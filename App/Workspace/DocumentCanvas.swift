@@ -486,6 +486,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if let rect = objectRect, rect.insetBy(dx: -8, dy: -8).intersects(dirtyRect) {
             drawHandles(around: rect)
         }
+        // The other chosen objects: their frames, the handles being the 기준 개체's.
+        for rect in otherRects where rect.insetBy(dx: -2, dy: -2).intersects(dirtyRect) {
+            let frame = NSBezierPath(rect: rect)
+            frame.lineWidth = 1 / (enclosingScrollView?.magnification ?? 1)
+            NSColor.controlAccentColor.setStroke()
+            frame.stroke()
+        }
         if let rubber {
             let band = NSBezierPath()
             if drawingShape == "line" || {
@@ -594,6 +601,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var highlightRects: [NSRect] { shown.highlight.compactMap(viewRect) }
     private var caretRect: NSRect? { shown.caret.flatMap(viewRect) }
     private var objectRect: NSRect? { shown.object.flatMap(viewRect) }
+    private var otherRects: [NSRect] { shown.others.compactMap(viewRect) }
     /// The selected 직선's start and end in view points.
     private var lineEnds: (start: NSPoint, end: NSPoint)? {
         guard let ends = shown.lineEnds, ends.count == 4, let page = shown.object?.page,
@@ -620,7 +628,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private func sync() {
         guard let model, model.presentation.serial != shown.serial else { return }
         let oldObject = objectRect
-        let old = highlightRects + [oldObject].compactMap { $0 }
+        let old = highlightRects + otherRects + [oldObject].compactMap { $0 }
         shown = model.presentation
         if shown.reflowed {
             layoutPages(force: true)
@@ -629,7 +637,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             if !showsOutline { layoutPages() }
             shown.changedPages.forEach { index in clip(ofPage: index).map { setNeedsDisplay($0) } }
         }
-        (old + highlightRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
+        (old + highlightRects + otherRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
         if shown.reflowed || !shown.changedPages.isEmpty {
             (tableLines, loadingLines) = ([:], [])
             linesGeneration += 1
@@ -734,7 +742,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         guard drawingShape == nil, let model, let hit = enginePoint(point) else { return }
         window?.makeFirstResponder(self)
         commitComposition()
-        if !(highlightRects + [objectRect].compactMap { $0 }).contains(where: { $0.contains(point) }) {
+        if !(highlightRects + otherRects + [objectRect].compactMap { $0 }).contains(where: { $0.contains(point) }) {
             click(model, hit, clicks: 1, extend: false)
         }
         Task { [weak self] in
@@ -754,9 +762,14 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             )
             // A click on an object selects it, except inside a 글상자, away from its edge,
             // where it places the caret in the box's text.
-            if position?.target.isHeaderFooter != true, !extend,
+            // With <Shift>, a click on another object chooses it too.
+            if position?.target.isHeaderFooter != true, !extend || model.object != nil,
                let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y),
                !(Self.inside(object.rect, hit.point) && position.map { Self.holds(object.object, $0) } == true) {
+                if extend {
+                    model.choose(object)
+                    return nil
+                }
                 model.object = object
                 if clicks == 2 { self?.onOpenObject?(object) }
                 // Still pressed: the drag that follows moves it.

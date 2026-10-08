@@ -319,6 +319,17 @@ impl EditSession {
                 scalar: 0,
                 upstream: false,
             }),
+            EditCommand::Group { objects } => objects.first().map(|object| EditPosition {
+                target: EditTarget {
+                    section: object.section,
+                    paragraph: object.paragraph,
+                    cell: None,
+                    note: None,
+                    header_footer: None,
+                },
+                scalar: 0,
+                upstream: false,
+            }),
             EditCommand::NewNumber { position, .. } | EditCommand::AddBookmark { position, .. } => {
                 Some(position.clone())
             }

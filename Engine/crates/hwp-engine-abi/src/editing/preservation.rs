@@ -242,8 +242,20 @@ pub(super) fn check(
                 before,
                 after,
                 object.section,
-                [object.paragraph, to.target.paragraph],
+                vec![object.paragraph, to.target.paragraph],
             )
+        }
+        EditCommand::Group { objects } => {
+            let section = objects
+                .first()
+                .ok_or(EditError::PreservationFailed)?
+                .section;
+            return check_hosts(
+                before,
+                after,
+                section,
+                objects.iter().map(|o| o.paragraph).collect(),
+            );
         }
         EditCommand::SetObject { object, .. }
         | EditCommand::DeleteObject { object }
@@ -683,17 +695,15 @@ fn check_hosts(
     before: &Document,
     after: &Document,
     section: u32,
-    mut paragraphs: [u32; 2],
+    mut paragraphs: Vec<u32>,
 ) -> Result<(), EditError> {
     paragraphs.sort_unstable_by(|a, b| b.cmp(a));
+    paragraphs.dedup();
     let mut a = before.clone();
     let mut b = after.clone();
     for doc in [&mut a, &mut b] {
         let list = &mut doc.sections[section as usize].paragraphs;
-        for (i, &p) in paragraphs.iter().enumerate() {
-            if i > 0 && p == paragraphs[i - 1] {
-                continue;
-            }
+        for &p in &paragraphs {
             if p as usize >= list.len() {
                 return Err(EditError::PreservationFailed);
             }

@@ -104,6 +104,8 @@ enum EditCommand: Encodable, Sendable {
     case moveLineEnd(ObjectRef, end: Bool, dx: Int32, dy: Int32)
     /// 개체 풀기.
     case ungroup(ObjectRef)
+    /// 개체 묶기.
+    case group([ObjectRef])
     /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
     case setTextBox(ObjectRef, attach: Bool)
     /// Moves an equation to another place in the text.
@@ -141,7 +143,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -303,6 +305,9 @@ enum EditCommand: Encodable, Sendable {
         case let .ungroup(object):
             try c.encode("ungroup", forKey: .kind)
             try c.encode(object, forKey: .object)
+        case let .group(objects):
+            try c.encode("group", forKey: .kind)
+            try c.encode(objects, forKey: .objects)
         case let .setTextBox(object, attach):
             try c.encode("setTextBox", forKey: .kind)
             try c.encode(object, forKey: .object)

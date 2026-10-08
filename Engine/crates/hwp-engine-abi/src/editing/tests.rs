@@ -3252,6 +3252,48 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
     assert_eq!(run(&mut s, bad).unwrap_err(), EditError::InvalidInput);
 }
 #[test]
+fn drawn_shapes_group() {
+    for (format, save) in [("hwpx", SaveFormat::Hwpx), ("hwp", SaveFormat::Hwp)] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        for x in [10_000, 30_000] {
+            let insert = EditCommand::InsertShape {
+                position: point(body(), 0),
+                shape: "rectangle".into(),
+                x,
+                y: 20_000,
+                width: 8_000,
+                height: 6_000,
+                flip: false,
+            };
+            run(&mut s, insert).unwrap();
+        }
+        let placed = |s: &EditSession| -> Vec<ObjectRef> {
+            (0..s.core.page_count())
+                .flat_map(|page| s.placed(page).unwrap())
+                .map(|o| o.object)
+                .collect()
+        };
+        let objects = placed(&s);
+        let page = (0..s.core.page_count())
+            .find(|&p| !s.placed(p).unwrap().is_empty())
+            .unwrap();
+        let lines = |s: &EditSession| {
+            s.core
+                .render_page_svg_native(page)
+                .unwrap()
+                .matches("stroke=\"#000000\"")
+                .count()
+        };
+        let drawn = lines(&s);
+        run(&mut s, EditCommand::Group { objects }).unwrap_or_else(|e| panic!("{format}: {e:?}"));
+        assert_eq!(placed(&s).len(), 1);
+        // Their lines stay, as 한글 draws them.
+        assert_eq!(lines(&s), drawn, "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(placed(&reopened).len(), 1, "{format}");
+    }
+}
+#[test]
 fn text_boxes_take_text() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let insert = EditCommand::InsertShape {
@@ -4058,8 +4100,16 @@ fn text_goes_into_drawing_objects_and_groups_come_apart() {
             object: object.clone(),
         };
         assert!(s.validate_command(&ungroup(&rectangle)).is_err());
-        let p = body().paragraph as usize;
-        s.core.group_shapes_native(0, &[(p, 0), (p, 1)]).unwrap();
+        // 개체 묶기 takes two or more, each once.
+        let members: Vec<ObjectRef> = s.placed(0).unwrap().into_iter().map(|o| o.object).collect();
+        let group_of = |objects: &[ObjectRef]| EditCommand::Group {
+            objects: objects.to_vec(),
+        };
+        assert!(s.validate_command(&group_of(&members[..1])).is_err());
+        assert!(s
+            .validate_command(&group_of(&[members[0].clone(), members[0].clone()]))
+            .is_err());
+        run(&mut s, group_of(&members)).unwrap();
         let group = s.placed(0).unwrap()[0].object.clone();
         assert_eq!(s.placed(0).unwrap().len(), 1);
         assert!(s.object_props(&group).unwrap().width.is_some());

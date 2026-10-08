@@ -335,6 +335,34 @@ struct DocumentTests {
         #expect(abs(moved[3] - ends[3] - 40) < 2)
     }
 
+    /// <Shift> and a click choose more objects; 개체 묶기 makes them one.
+    @Test func chosenObjectsAreGrouped() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.insertShape("rectangle", page: 0, from: CGPoint(x: 100, y: 300), to: CGPoint(x: 200, y: 380), nil)
+        await document.settle()
+        let first = try #require(document.object)
+        document.insertShape("ellipse", page: 0, from: CGPoint(x: 260, y: 300), to: CGPoint(x: 360, y: 380), nil)
+        await document.settle()
+        let second = try #require(document.object)
+        document.choose(first)
+        #expect(document.object == first && document.others == [second])
+        document.choose(second)
+        #expect(document.object == first && document.others.isEmpty)
+        // As a <Shift> click does: chosen in the queue, so the bars follow.
+        document.select { $0.choose(second); return nil }
+        await document.settle()
+        #expect(document.context.objects == 2)
+        #expect(MenuItems.quickMenu(viewer, document.context).contains { $0?.title == "개체 묶기" })
+        viewer.groupObjects()
+        await document.settle()
+        let group = try #require(try await document.objectAt(page: 0, x: 150, y: 340))
+        let other = try await document.objectAt(page: 0, x: 310, y: 340)
+        #expect(group.group && group == other)
+    }
+
     /// Dragging with the mouse sizes and moves the selected shape, and moves a table border.
     @Test func objectsAndTableBordersAreDragged() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))
@@ -1080,7 +1108,8 @@ struct DocumentTests {
         document.select { _ in EditSelection(anchor: cell, focus: far) }
         await document.settle()
         #expect(document.context.cellBlock && document.presentation.highlight.count == 6)
-        await key("p")
+        // P while typing 한글.
+        await key("ㅔ", code: 35)
         for _ in 0..<100 where viewer.objectSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
         #expect(viewer.objectSheet?.cell != nil)
     }

@@ -565,6 +565,7 @@ impl EditSession {
             EditCommand::Ungroup { object } => {
                 self.validate_drawing(object, |s| matches!(s, ShapeObject::Group(_)))
             }
+            EditCommand::Group { objects } => self.validate_group(objects),
             EditCommand::SetTextBox { object, attach } => self.validate_drawing(object, |s| {
                 s.drawing().is_some_and(|d| d.text_box.is_some() != *attach)
             }),
@@ -1441,6 +1442,15 @@ impl EditSession {
                     object.control as usize,
                 )?;
                 Ok(self.kept(object.section))
+            }
+            EditCommand::Group { objects } => {
+                let section = objects[0].section;
+                let targets: Vec<(usize, usize)> = objects
+                    .iter()
+                    .map(|o| (o.paragraph as usize, o.control as usize))
+                    .collect();
+                self.core.group_shapes_native(section as usize, &targets)?;
+                Ok(self.kept(section))
             }
             EditCommand::SetTextBox { object, attach } => {
                 let doc = self.core.document();

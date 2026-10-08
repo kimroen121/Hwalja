@@ -267,7 +267,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 도형 탭 | ◐ | `toolbox/object_shapeobject.htm` | 개체 탭으로 2단계. 개체 묶기 ○ `group_shapes_native`, 풀기 ●, 순서 ●, 회전·뒤집기 ○ `set_control_flip_at` |
+| 도형 탭 | ◐ | `toolbox/object_shapeobject.htm` | 개체 탭으로 2단계. 개체 묶기 ●(Shift+클릭으로 고름, G; 끌어서 고르는 개체 선택 아이콘은 ○), 풀기 ●(U), 순서 ●, 회전·뒤집기 ○ `set_control_flip_at` |
 | 개체 이동하기 | ● | `draw/move/drawing(move).htm` |  |
 | 개체 크기 조절 | ● | `draw/drawing(size).htm` |  |
 | 개체 기울이기 | △ | `draw/drawing(incline).htm` |  |
@@ -303,7 +303,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | ROADMAP 「창 구성」의 규칙으로 옮겼다. macOS 표준과 겹치는 것(정렬, 지우기 Ctrl+E, 줄 지우기 Ctrl+BackSpace, 다른 이름으로 저장하기)은 macOS 단축키를 쓴다. 연속 단축키와 Insert 키 단축키는 없다. 남은 것은 그 기능을 만들 때 넣는다(스타일 F6, 개체 묶기 G, 맨 앞으로 Shift+Page Up 등). |
+| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | ROADMAP 「창 구성」의 규칙으로 옮겼다. macOS 표준과 겹치는 것(정렬, 지우기 Ctrl+E, 줄 지우기 Ctrl+BackSpace, 다른 이름으로 저장하기)은 macOS 단축키를 쓴다. 연속 단축키와 Insert 키 단축키는 없다. 남은 것은 그 기능을 만들 때 넣는다(스타일 F6, 맨 앞으로 Shift+Page Up 등). |
 
 ## 사용권
 

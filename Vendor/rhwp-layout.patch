@@ -2530,7 +2530,28 @@ diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/parag
 diff --git a/src/renderer/layout/shape_layout.rs b/src/renderer/layout/shape_layout.rs
 --- a/src/renderer/layout/shape_layout.rs
 +++ b/src/renderer/layout/shape_layout.rs
-@@ -672,6 +672,19 @@
+@@ -108,17 +108,9 @@
+         && drawing.fill.fill_type == FillType::None
+         && drawing.fill.gradient.is_none()
+         && drawing.fill.image.is_none();
+-    if text_only_box {
+-        return true;
+-    }
+-    drawing.text_box.is_none()
+-        && drawing.fill.fill_type == FillType::Solid
+-        && drawing.fill.gradient.is_none()
+-        && drawing.fill.image.is_none()
+-        && drawing
+-            .fill
+-            .solid
+-            .is_some_and(|solid| solid.background_color == 0x00ff_ffff && solid.pattern_type <= 0)
++    // HwpStudio: a white box with a thin black line is the default 직사각형, whose line
++    // 한글 draws in a group as anywhere else; only the text-only box's line is dropped.
++    text_only_box
+ }
+ 
+ fn push_placeholder_render_node(
+@@ -672,6 +664,19 @@
              if inline_pos.is_some() {
                  return;
              }

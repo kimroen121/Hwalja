@@ -817,6 +817,41 @@ impl EditSession {
             _ => Err(EditError::UnsupportedTarget),
         }
     }
+    /// 개체 묶기 takes two or more drawing objects or pictures of the body in one section.
+    /// rhwp joins their offsets as they are, so all must be placed against the same things,
+    /// and the same paragraph when against one.
+    pub(super) fn validate_group(&self, objects: &[ObjectRef]) -> Result<(), EditError> {
+        use rhwp::model::shape::{HorzRelTo, VertRelTo};
+        let mut placed = None;
+        for (i, o) in objects.iter().enumerate() {
+            let common = match self.control(o)? {
+                Control::Shape(s) if o.kind == ObjectKind::Shape => s.common(),
+                Control::Picture(p) if o.kind == ObjectKind::Picture => &p.common,
+                _ => return Err(EditError::UnsupportedTarget),
+            };
+            let para =
+                common.vert_rel_to == VertRelTo::Para || common.horz_rel_to == HorzRelTo::Para;
+            let place = (
+                o.section,
+                common.vert_rel_to,
+                common.horz_rel_to,
+                para.then_some(o.paragraph),
+            );
+            if o.cell.is_some()
+                || o.note.is_some()
+                || common.treat_as_char
+                || objects[..i].contains(o)
+                || placed.is_some_and(|p| p != place)
+            {
+                return Err(EditError::UnsupportedTarget);
+            }
+            placed = Some(place);
+        }
+        if objects.len() < 2 {
+            return Err(EditError::UnsupportedTarget);
+        }
+        Ok(())
+    }
     pub(super) fn validate_shape(&self, command: &EditCommand) -> Result<(), EditError> {
         let EditCommand::InsertShape {
             position,
