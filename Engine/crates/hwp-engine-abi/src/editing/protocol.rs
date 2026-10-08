@@ -110,11 +110,19 @@ pub enum EditCommand {
         position: EditPosition,
         column: bool,
     },
-    /// A new table at `position` in the body; the caret moves into its first cell.
+    /// A new table at `position` in the body; the caret moves into its first cell. With
+    /// `width` (or `height`), in HWPUNIT, its columns (rows) share it evenly (표 만들기 크기
+    /// 지정); `treat_as_char`, 글자처럼 취급.
     InsertTable {
         position: EditPosition,
         rows: u16,
         columns: u16,
+        #[serde(default)]
+        width: Option<u32>,
+        #[serde(default)]
+        height: Option<u32>,
+        #[serde(default, rename = "treatAsChar")]
+        treat_as_char: bool,
     },
     /// An embedded PNG or JPEG, placed in body text at `position`.
     InsertPicture {

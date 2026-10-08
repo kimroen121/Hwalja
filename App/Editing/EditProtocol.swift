@@ -80,7 +80,8 @@ enum EditCommand: Encodable, Sendable {
     case formatParagraphs(EditSelection, ParaStyle)
     /// A new page (or column) from `position` in the body.
     case pageBreak(EditPosition, column: Bool)
-    case insertTable(EditPosition, rows: Int, columns: Int)
+    /// `width` and `height` (HWPUNIT) shared evenly by the columns and rows; `asCharacter`, 글자처럼 취급.
+    case insertTable(EditPosition, rows: Int, columns: Int, width: UInt32? = nil, height: UInt32? = nil, asCharacter: Bool = false)
     case insertPicture(EditPosition, data: Data, width: UInt32, height: UInt32,
                        naturalWidth: UInt32, naturalHeight: UInt32,
                        extension: String, description: String)
@@ -140,7 +141,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole
+             numbering, number, hide, name, control, kinds, whole, treatAsChar
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -176,11 +177,14 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("break", forKey: .kind)
             try c.encode(position, forKey: .position)
             try c.encode(column, forKey: .column)
-        case let .insertTable(position, rows, columns):
+        case let .insertTable(position, rows, columns, width, height, asCharacter):
             try c.encode("insertTable", forKey: .kind)
             try c.encode(position, forKey: .position)
             try c.encode(rows, forKey: .rows)
             try c.encode(columns, forKey: .columns)
+            try c.encodeIfPresent(width, forKey: .width)
+            try c.encodeIfPresent(height, forKey: .height)
+            try c.encode(asCharacter, forKey: .treatAsChar)
         case let .insertPicture(position, data, width, height, naturalWidth, naturalHeight, ext, description):
             try c.encode("insertPicture", forKey: .kind)
             try c.encode(position, forKey: .position)

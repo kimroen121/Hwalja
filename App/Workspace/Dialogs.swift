@@ -9,8 +9,10 @@ extension Viewer {
     func insertBreak(column: Bool) {
         document?.edit(undoManager) { $0.map { .pageBreak($0.ordered.start, column: column) } }
     }
-    func insertTable(rows: Int, columns: Int) {
-        document?.edit(undoManager) { $0.map { .insertTable($0.ordered.start, rows: rows, columns: columns) } }
+    func insertTable(rows: Int, columns: Int, width: UInt32? = nil, height: UInt32? = nil, asCharacter: Bool = false) {
+        document?.edit(undoManager) {
+            $0.map { .insertTable($0.ordered.start, rows: rows, columns: columns, width: width, height: height, asCharacter: asCharacter) }
+        }
     }
     /// Asks for an image file and puts it at the caret.
     func insertPicture() {
@@ -71,24 +73,77 @@ extension Viewer {
     }
 }
 
-/// 표 만들기: row and column counts.
+/// 표 만들기, as the web editor's: 줄/칸, 크기 지정 and 기타.
 struct TableSheet: View {
     @ObservedObject var viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var rows = 5.0
     @State private var columns = 5.0
+    /// 0 단에 맞춤, 1 문단에 맞춤, 2 임의 값.
+    @State private var widthKind = 0
+    /// 0 자동, 1 임의 값.
+    @State private var heightKind = 0
+    @State private var width = 0.0
+    @State private var height = 0.0
+    @State private var asCharacter = false
+    /// The width rhwp gives a new table (the paper less its margins and the table's own),
+    /// and the paragraph's margins, in millimeters.
+    @State private var column = 150.0
+    @State private var paragraphMargins = 0.0
+
+    /// A new row's height as rhwp makes it: one line and the cell's inner margins.
+    private static let rowHeight = 1282
 
     var body: some View {
-        DialogFrame("표 만들기") {
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow { FieldLabel("줄 개수"); SpinField(value: $rows, unit: "", range: 1...1000) }
-                GridRow { FieldLabel("칸 개수"); SpinField(value: $columns, unit: "", range: 1...256) }
+        DialogFrame("표 만들기", confirmTitle: "만들기") {
+            VStack(alignment: .leading, spacing: 14) {
+                GroupTitle("줄/칸")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow { FieldLabel("줄 개수"); SpinField(value: $rows, unit: "", range: 1...1000) }
+                    GridRow { FieldLabel("칸 개수"); SpinField(value: $columns, unit: "", range: 1...256) }
+                }
+                .padding(.leading, 12)
+                GroupTitle("크기 지정")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("너비")
+                        ChoiceField($widthKind, [(0, "단에 맞춤"), (1, "문단에 맞춤"), (2, "임의 값")], minWidth: 100)
+                        SpinField(value: Binding { shownWidth } set: { width = $0 }, unit: "mm", range: 1...1000)
+                            .disabled(widthKind != 2)
+                    }
+                    GridRow {
+                        FieldLabel("높이")
+                        ChoiceField($heightKind, [(0, "자동"), (1, "임의 값")], minWidth: 100)
+                        SpinField(value: Binding { shownHeight } set: { height = $0 }, unit: "mm", range: 1...1000)
+                            .disabled(heightKind != 1)
+                    }
+                }
+                .padding(.leading, 12)
+                GroupTitle("기타")
+                Toggle("글자처럼 취급", isOn: $asCharacter).padding(.leading, 12)
             }
         } confirm: {
-            viewer.insertTable(rows: Int(rows), columns: Int(columns))
+            viewer.insertTable(rows: Int(rows), columns: Int(columns),
+                               width: widthKind == 0 ? nil : Units.units(shownWidth),
+                               height: heightKind == 0 ? nil : Units.units(shownHeight), asCharacter: asCharacter)
             dismiss()
         }
+        .task {
+            guard let document = viewer.document,
+                  let page = try? await document.pageSetup(section: document.selection?.focus.target.section ?? 0)
+            else { return }
+            column = Units.millimeters(Int(page.width) - Int(page.marginLeft) - Int(page.marginRight) - 566)
+            let paragraph = document.format?.paragraph
+            paragraphMargins = ((paragraph?.marginLeft ?? 0) + (paragraph?.marginRight ?? 0)) * 25.4 / 72
+            width = column
+        }
+        .onChange(of: widthKind) { old, kind in if kind == 2 { width = shownWidth(for: old) } }
+        .onChange(of: heightKind) { _, kind in if kind == 1 { height = Units.millimeters(Int(rows) * Self.rowHeight) } }
     }
+
+    private var shownWidth: Double { widthKind == 2 ? width : shownWidth(for: widthKind) }
+    private func shownWidth(for kind: Int) -> Double { kind == 1 ? max(1, column - paragraphMargins) : column }
+    private var shownHeight: Double { heightKind == 1 ? height : Units.millimeters(Int(rows) * Self.rowHeight) }
 }
 
 /// 셀 나누기: rows and columns for each covered cell.

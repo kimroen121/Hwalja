@@ -143,6 +143,9 @@ fn header_footer_ranges_preserve_field_markers() {
             position: point(target.clone(), 0),
             rows: 1,
             columns: 1,
+            width: None,
+            height: None,
+            treat_as_char: false,
         },
         EditCommand::InsertEquation {
             position: point(target.clone(), 0),
@@ -2168,6 +2171,9 @@ fn inserts_tables_where_the_caret_is() {
                     position: point(target, scalar),
                     rows: 2,
                     columns: 3,
+                    width: None,
+                    height: None,
+                    treat_as_char: false,
                 },
             )
             .unwrap_or_else(|e| panic!("{format} {paragraph}:{scalar} {e:?}"));
@@ -2316,6 +2322,9 @@ fn structure_edits_on_corpus() {
                 position: position.clone(),
                 rows: 2,
                 columns: 2,
+                width: None,
+                height: None,
+                treat_as_char: false,
             });
             for endnote in [false, true] {
                 commands.push(EditCommand::InsertNote {
@@ -2641,6 +2650,9 @@ fn transparent_lines_show_on_pages_but_not_in_the_pdf() {
         position: point(body(), 0),
         rows: 2,
         columns: 2,
+        width: None,
+        height: None,
+        treat_as_char: false,
     };
     let cell = run(&mut s, insert).unwrap().selection.unwrap().focus.target;
     // A table without lines, laid out again by an edit in it.
@@ -2679,6 +2691,9 @@ fn cell_blocks_merge_split_and_equalize() {
             position: point(body(), 0),
             rows: 3,
             columns: 3,
+            width: None,
+            height: None,
+            treat_as_char: false,
         };
         let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
         let host = caret.target.paragraph as usize;
@@ -2775,6 +2790,9 @@ fn table_borders_are_found_and_dragged() {
             position: point(body(), 0),
             rows: 2,
             columns: 3,
+            width: None,
+            height: None,
+            treat_as_char: false,
         };
         let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
         let lines = s.table_lines(s.revision, 0).unwrap();
@@ -3213,6 +3231,9 @@ fn pictures_and_equations_go_into_a_table_cell() {
         position: point(body(), 0),
         rows: 2,
         columns: 2,
+        width: None,
+        height: None,
+        treat_as_char: false,
     };
     let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
     let picture = EditCommand::InsertPicture {
@@ -3271,6 +3292,9 @@ fn a_table_cell_picture_resizes_deletes_undoes_and_round_trips_both_formats() {
                 position: point(body(), 0),
                 rows: 1,
                 columns: 1,
+                width: None,
+                height: None,
+                treat_as_char: false,
             },
         )
         .unwrap()
@@ -3956,6 +3980,9 @@ fn block_calculations_fill_the_empty_cells_to_the_right_and_below() {
             position: point(body(), 0),
             rows: 3,
             columns: 3,
+            width: None,
+            height: None,
+            treat_as_char: false,
         };
         let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
         let at = |s: &EditSession, row: u16, col: u16| {
@@ -4167,6 +4194,9 @@ fn copies_paste_with_their_formats() {
             position: point(body(), 0),
             rows: 1,
             columns: 1,
+            width: None,
+            height: None,
+            treat_as_char: false,
         },
     )
     .unwrap()
@@ -4405,4 +4435,52 @@ fn a_range_through_a_paragraph_takes_its_table() {
     assert_eq!(s.paragraph(&at(1)).unwrap().text, "가X");
     run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(tables(&s), 1);
+}
+#[test]
+fn tables_are_made_at_a_size_and_as_characters() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 2,
+            columns: 3,
+            width: Some(30_000),
+            height: Some(8_000),
+            treat_as_char: true,
+        };
+        let cell = run(&mut s, insert).unwrap().selection.unwrap().focus.target;
+        let table = ObjectRef {
+            kind: ObjectKind::Table,
+            section: 0,
+            paragraph: cell.paragraph,
+            control: cell.cell.unwrap().control,
+            cell: None,
+            note: None,
+        };
+        let props = s.object_props(&table).unwrap();
+        assert_eq!(props.treat_as_char, Some(true), "{format}");
+        let Control::Table(made) = &s.core.document().sections[0].paragraphs
+            [table.paragraph as usize]
+            .controls[table.control as usize]
+        else {
+            panic!("no table")
+        };
+        let first_row: u32 = made
+            .cells
+            .iter()
+            .filter(|c| c.row == 0)
+            .map(|c| c.width)
+            .sum();
+        assert_eq!(first_row, 30_000, "{format}");
+        assert!(made.cells.iter().all(|c| c.height == 4_000), "{format}");
+        let tiny = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 2,
+            columns: 3,
+            width: Some(100),
+            height: None,
+            treat_as_char: false,
+        };
+        assert!(run(&mut s, tiny).is_err());
+    }
 }

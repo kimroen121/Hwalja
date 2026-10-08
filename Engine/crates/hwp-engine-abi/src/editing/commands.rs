@@ -400,10 +400,18 @@ impl EditSession {
                 position,
                 rows,
                 columns,
+                width,
+                height,
+                ..
             } => {
                 body_only(&position.target)?;
                 self.validate_position(position)?;
-                if (1..=1000).contains(rows)
+                let size = |v: &Option<u32>, n: u16| {
+                    v.is_none_or(|v| (n as u32 * 200..=1_000_000).contains(&v))
+                };
+                if size(width, *columns)
+                    && size(height, *rows)
+                    && (1..=1000).contains(rows)
                     && (1..=256).contains(columns)
                     && *rows as u32 * *columns as u32 <= 10_000
                 {
@@ -1131,6 +1139,9 @@ impl EditSession {
                 position,
                 rows,
                 columns,
+                width,
+                height,
+                treat_as_char,
             } => {
                 let t = &position.target;
                 let json = self.core.create_table_native(
@@ -1148,6 +1159,59 @@ impl EditSession {
                         .map(|v| v as u32)
                         .ok_or(EditError::RenderFailed)
                 };
+                let (s, p, c) = (t.section, field("paraIdx")?, field("controlIdx")?);
+                if width.is_some() || height.is_some() {
+                    let cells: Vec<(u16, u16)> = self.core.document().sections[s as usize]
+                        .paragraphs[p as usize]
+                        .controls
+                        .get(c as usize)
+                        .and_then(|control| match control {
+                            Control::Table(table) => Some(
+                                table
+                                    .cells
+                                    .iter()
+                                    .map(|cell| (cell.col_span.max(1), cell.row_span.max(1)))
+                                    .collect(),
+                            ),
+                            _ => None,
+                        })
+                        .ok_or(EditError::RenderFailed)?;
+                    // ponytail: one reflow per cell; a single table resize if large tables lag.
+                    for (index, (across, down)) in cells.into_iter().enumerate() {
+                        let mut props = serde_json::Map::new();
+                        if let Some(w) = width {
+                            props.insert(
+                                "width".into(),
+                                (w / *columns as u32 * across as u32).into(),
+                            );
+                        }
+                        if let Some(h) = height {
+                            props.insert("height".into(), (h / *rows as u32 * down as u32).into());
+                        }
+                        self.core.set_cell_properties_native(
+                            s as usize,
+                            p as usize,
+                            c as usize,
+                            index,
+                            &Value::Object(props).to_string(),
+                        )?;
+                    }
+                }
+                if *treat_as_char {
+                    let table = ObjectRef {
+                        kind: ObjectKind::Table,
+                        section: s,
+                        paragraph: p,
+                        control: c,
+                        cell: None,
+                        note: None,
+                    };
+                    let props = ObjectProps {
+                        treat_as_char: Some(true),
+                        ..Default::default()
+                    };
+                    self.set_object(&table, &props)?;
+                }
                 Ok(EditSelection::caret(EditPosition {
                     target: EditTarget {
                         section: t.section,
