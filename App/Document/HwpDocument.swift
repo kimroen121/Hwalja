@@ -474,6 +474,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func bookmarks() async throws -> [Bookmark] {
         try await session.bookmarks()
     }
+    func outline() async throws -> [OutlineItem] {
+        try await session.outline()
+    }
     func statistics() async throws -> Statistics {
         try await session.statistics()
     }

@@ -33,8 +33,12 @@ extension Viewer {
     func changeBookmark(_ mark: Bookmark, name: String?) {
         document?.edit(undoManager) { _ in .changeBookmark(mark.position.target, control: mark.control, name: name) }
     }
-    func go(to mark: Bookmark) {
-        document?.select { _ in .caret(mark.position) }
+    func go(to mark: Bookmark) { go(to: mark.position) }
+    /// Moves the caret to `position` and typing back to the page.
+    func go(to position: EditPosition) {
+        document?.select { _ in .caret(position) }
+        // After the click that asked for it, which focuses its list.
+        DispatchQueue.main.async { [canvas] in canvas.window?.makeFirstResponder(canvas.editor) }
     }
     /// 조판 부호 지우기 in the selected range, or in the whole body.
     func eraseCodes(_ kinds: [CodeKind]) {

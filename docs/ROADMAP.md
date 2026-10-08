@@ -96,7 +96,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 - [ ] 주석 상황 탭(`toolbox/state_annotations.htm`): 각주·미주 안에 커서가 있을 때. 주석 지우기·이전/다음 주석·닫기 명령이 먼저 필요하다.
 - [ ] 그림·글맵시·차트·메모·양식 개체 탭의 나머지 그룹(크기, 정렬, 회전, 개체 보호 등)은 그 명령을 만들 때 더한다.
 - [ ] 상황 선의 나머지: 오른쪽 끝의 보기 선택 아이콘과 쪽 이동 아이콘, 줄·구역을 누르면 찾아가기의 줄·구역 찾기(찾아가기에 줄·구역이 생기면), 수정 상태(삽입/수정을 만들 때).
-- [ ] 작업 창의 나머지: 개요 보기(4단계, `get_outline_navigation_native`), 클립보드, 2024의 「+」(감춘 작업 창 열기)는 작업 창이 늘면.
+- [ ] 작업 창의 나머지: 클립보드, 2024의 「+」(감춘 작업 창 열기)는 작업 창이 늘면.
 
 ### 3. 메뉴 막대와 빠른 메뉴
 
@@ -108,8 +108,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
 - [ ] 개체 선택 아이콘(`draw/drawing(select).htm`): 끌어서 여러 개체 고르기, Alt+클릭으로 겹친 개체 돌아가며 고르기, Tab으로 쪽의 개체 차례로 고르기. Shift+클릭과 개체 묶기는 됨.
-- [ ] 개요 보기 작업 창(`view/workwindow/workwindow(outlinenumbering).htm`): `get_outline_navigation_native`.
-- [ ] 책갈피 작업 창(`view/workwindow/bookmark/bookmark.htm`): 책갈피 명령은 이미 있음.
 - [ ] 문서 정보의 글꼴 정보·그림 정보 탭: `get_document_info`, 그림 목록.
 - [ ] 문서 암호 설정·변경/해제(`file/password/password.htm`): `export_hwp_with_adapter_with_password`, `export_hwpx_native_with_password`.
 - [ ] 셀 테두리/배경 › 각 셀마다 적용·하나의 셀처럼 적용, 표 테두리/배경(`table/cellborder/cellborder.htm`, `table/tableborder/tableborder.htm`): `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.

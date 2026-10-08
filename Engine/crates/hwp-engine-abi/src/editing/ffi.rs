@@ -131,6 +131,8 @@ enum Request {
     },
     /// The 책갈피 of the body.
     Bookmarks,
+    /// 개요 보기's 개요 문단.
+    Outline,
     /// 문서 정보's 문서 통계.
     Statistics,
     /// 상황 선 for the caret at `position`.
@@ -307,6 +309,7 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         }
         Request::PageHide { target } => HwpEditResult::ok(session.page_hide(&target)?, Vec::new()),
         Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),
+        Request::Outline => HwpEditResult::ok(session.outline()?, Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
         Request::Status { revision, position } => {
             HwpEditResult::ok(session.status(revision, &position)?, Vec::new())

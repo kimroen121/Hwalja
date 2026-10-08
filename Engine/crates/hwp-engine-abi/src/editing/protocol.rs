@@ -433,6 +433,14 @@ pub struct Bookmark {
     pub position: EditPosition,
     pub control: u32,
 }
+/// A 개요 문단 of 개요 보기: its 수준 (1–7), its number as drawn, and its text.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OutlineItem {
+    pub level: u8,
+    pub number: String,
+    pub title: String,
+    pub position: EditPosition,
+}
 /// 문서 정보 › 문서 통계: the document's 분량, table cells counted as paragraphs.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -1075,6 +1075,13 @@ struct DocumentTests {
         #expect(try await document.pageHide(body) == PageHide())
         let statistics = try await document.statistics()
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
+        #expect(try await document.outline().isEmpty)
+        let item = { (level: UInt8) in
+            OutlineItem(level: level, number: "", title: "", position: EditPosition(target: body, scalar: 0))
+        }
+        let tree = OutlineNode.tree([1, 2, 3, 2, 1, 3].map(item))
+        #expect(tree.map(\.id) == [0, 4] && tree[0].children?.map(\.id) == [1, 3])
+        #expect(tree[0].children?[0].children?.map(\.id) == [2] && tree[1].children?.map(\.id) == [5])
     }
 
     /// The 상황 선 follows the caret: 줄, 칸 and 글자 수 once typing pauses, and a cell's address.

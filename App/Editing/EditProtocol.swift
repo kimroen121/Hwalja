@@ -953,6 +953,14 @@ struct Bookmark: Decodable, Hashable, Sendable {
     var control: UInt32
 }
 
+/// 개요 보기's 개요 문단: its 수준 (1–7), its number as drawn, and its text.
+struct OutlineItem: Decodable, Hashable, Sendable {
+    var level: UInt8
+    var number: String
+    var title: String
+    var position: EditPosition
+}
+
 /// 문서 정보 › 문서 통계.
 struct Statistics: Decodable, Hashable, Sendable {
     var characters, charactersWithoutSpaces, hanja, words, lines, paragraphs, pages, manuscript: UInt32
@@ -1015,6 +1023,7 @@ enum EngineRequest: Encodable, Sendable {
     case noteShape(section: UInt32, footnote: Bool)
     case pageHide(EditTarget)
     case bookmarks
+    case outline
     case statistics
     case status(revision: UInt64, EditPosition)
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
@@ -1108,6 +1117,8 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(target, forKey: .target)
         case .bookmarks:
             try c.encode("bookmarks", forKey: .op)
+        case .outline:
+            try c.encode("outline", forKey: .op)
         case .statistics:
             try c.encode("statistics", forKey: .op)
         case let .status(revision, position):

@@ -178,6 +178,33 @@ impl EditSession {
         }
         found
     }
+    /// 개요 보기: the body's 개요 문단 with text, in document order.
+    pub fn outline(&self) -> Result<Vec<OutlineItem>, EditError> {
+        let json: serde_json::Value =
+            serde_json::from_str(&self.core.get_outline_navigation_native()?)
+                .map_err(|_| EditError::RenderFailed)?;
+        let items = json["outline"].as_array().cloned().unwrap_or_default();
+        Ok(items
+            .iter()
+            .filter(|i| !i["title"].as_str().unwrap_or("").is_empty())
+            .map(|i| OutlineItem {
+                level: i["level"].as_u64().unwrap_or(1) as u8,
+                number: i["number"].as_str().unwrap_or("").into(),
+                title: i["title"].as_str().unwrap_or("").into(),
+                position: EditPosition {
+                    target: EditTarget {
+                        section: i["section"].as_u64().unwrap_or(0) as u32,
+                        paragraph: i["paragraph"].as_u64().unwrap_or(0) as u32,
+                        cell: None,
+                        note: None,
+                        header_footer: None,
+                    },
+                    scalar: 0,
+                    upstream: false,
+                },
+            })
+            .collect())
+    }
     pub(super) fn add_bookmark(&mut self, p: &EditPosition, name: &str) -> Result<(), EditError> {
         let at = logical::spot(get(self.core.document(), &p.target)?, p.scalar).text;
         let reply = self.core.add_bookmark_native(

@@ -5321,3 +5321,24 @@ fn footnote_numbers_are_drawn_in_their_shape() {
         assert!(drawn(&s, number) && !drawn(&s, "1"), "{format}");
     }
 }
+#[test]
+fn outline_lists_outline_paragraphs_with_text() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let style =
+        |s: &EditSession, name: &str| s.styles().iter().find(|t| t.name == name).unwrap().id;
+    for (paragraph, name) in [(0, "개요 1"), (1, "개요 1"), (2, "개요 2")] {
+        let command = EditCommand::ApplyStyle {
+            selection: EditSelection::caret(point(commands::at_index(&body(), paragraph), 0)),
+            style: style(&s, name),
+        };
+        run(&mut s, command).unwrap();
+    }
+    // The empty first paragraph is not a 개요 문단.
+    let items = s.outline().unwrap();
+    let got: Vec<_> = items
+        .iter()
+        .map(|i| (i.level, i.title.as_str(), i.position.target.paragraph))
+        .collect();
+    assert_eq!(got, [(1, "가👨‍👩‍👧‍👦e\u{301} 끝", 1), (2, "보존 문단", 2)]);
+    assert!(items.iter().all(|i| !i.number.is_empty()), "{items:?}");
+}

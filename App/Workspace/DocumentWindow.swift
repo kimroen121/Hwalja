@@ -520,14 +520,15 @@ private struct Canvas: NSViewRepresentable {
 }
 
 /// Page thumbnails; a page's image is redrawn only when the engine replaced that page.
-/// 작업 창 that work: 쪽 모양 보기, 스타일 and 책갈피.
+/// 작업 창 that work: 쪽 모양 보기, 스타일, 책갈피 and 개요 보기.
 enum TaskPane: String, CaseIterable {
-    case pages = "쪽 모양 보기", styles = "스타일", bookmarks = "책갈피"
+    case pages = "쪽 모양 보기", styles = "스타일", bookmarks = "책갈피", outline = "개요 보기"
     var symbol: String {
         switch self {
         case .pages: "doc.on.doc"
         case .styles: "textformat"
         case .bookmarks: "bookmark"
+        case .outline: "list.bullet.indent"
         }
     }
 }
@@ -553,6 +554,7 @@ private struct TaskPaneView: View {
                 case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
                 case .styles: StylePane(document: document, viewer: viewer)
                 case .bookmarks: BookmarkPane(viewer: viewer)
+                case .outline: OutlinePane(document: document, viewer: viewer)
                 }
             }
             .frame(width: 200)
@@ -566,6 +568,66 @@ private struct TaskPaneView: View {
             .padding(.vertical, 6)
             .frame(width: 36)
         }
+    }
+}
+
+/// [개요 보기] 작업 창: the 개요 문단 as a tree by 수준, kept current as the text changes; a
+/// click moves the caret to that paragraph.
+private struct OutlinePane: View {
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
+    @State private var nodes: [OutlineNode] = []
+    @State private var chosen: Int?
+    /// Every 개요 shows until its 수준 is folded.
+    @State private var folded: Set<Int> = []
+
+    var body: some View {
+        List(selection: $chosen) {
+            ForEach(nodes) { row($0) }
+        }
+        .task(id: document.reply.revision) {
+            await document.settle()
+            nodes = OutlineNode.tree((try? await document.outline()) ?? [])
+        }
+    }
+
+    private func row(_ node: OutlineNode) -> AnyView {
+        let title = Text(node.item.number.isEmpty ? node.item.title : "\(node.item.number) \(node.item.title)")
+            .lineLimit(1)
+            .help(node.item.title)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            // A tap rather than the selection, so the same 개요 moves the caret again.
+            .simultaneousGesture(TapGesture().onEnded {
+                chosen = node.id
+                viewer.go(to: node.item.position)
+            })
+            .tag(node.id)
+        guard let children = node.children else { return AnyView(title) }
+        let open = Binding { !folded.contains(node.id) } set: { if $0 { folded.remove(node.id) } else { folded.insert(node.id) } }
+        return AnyView(DisclosureGroup(isExpanded: open) { ForEach(children) { row($0) } } label: { title })
+    }
+}
+
+/// A 개요 문단 with the deeper ones that follow it.
+struct OutlineNode: Identifiable {
+    let id: Int
+    let item: OutlineItem
+    var children: [OutlineNode]?
+
+    static func tree(_ items: [OutlineItem]) -> [OutlineNode] {
+        var rest = items.enumerated().map { OutlineNode(id: $0.offset, item: $0.element) }[...]
+        return take(&rest, deeperThan: 0)
+    }
+    private static func take(_ rest: inout ArraySlice<OutlineNode>, deeperThan level: UInt8) -> [OutlineNode] {
+        var nodes: [OutlineNode] = []
+        while var node = rest.first, node.item.level > level {
+            rest.removeFirst()
+            let children = take(&rest, deeperThan: node.item.level)
+            node.children = children.isEmpty ? nil : children
+            nodes.append(node)
+        }
+        return nodes
     }
 }
 
