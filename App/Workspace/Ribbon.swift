@@ -177,12 +177,12 @@ struct ToolRow: View {
         RowDivider()
         Group {
             ToolTile("글머리표", Icon.bullets, action: {
-                editor.format(head == "Bullet" ? ParaStyle(head: "None") : ParaStyle(head: "Bullet", bullet: FormatChoices.bullets[0]))
+                MenuItems.toggleList(editor, head: head, bullet: true)
             }, choices: {
                 FormatChoices.bullets.map { bullet in Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) } }
             })
             ToolTile("문단 번호", Icon.numbering, action: {
-                editor.format(head == "Number" ? ParaStyle(head: "None") : ParaStyle(head: "Number", numbering: 0))
+                MenuItems.toggleList(editor, head: head, bullet: false)
             }, choices: {
                 FormatChoices.numberings.indices.map { kind in
                     Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) { editor.format(ParaStyle(head: "Number", numbering: kind)) }

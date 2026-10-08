@@ -225,7 +225,7 @@ struct DocumentTests {
     @Test func quickMenuFollowsTheSelection() {
         let titles = { (context: EditingContext) in MenuItems.quickMenu(Viewer(), context).compactMap { $0?.title } }
         let text = titles(EditingContext(hasSelection: true, hasRange: true))
-        #expect(text.starts(with: ["오려 두기", "복사하기", "붙이기", "지우기"]) && text.contains("글자 모양…"))
+        #expect(text.starts(with: ["오려두기", "복사하기", "붙여넣기", "삭제"]) && text.contains("글자 모양…") && text.contains("문자표…"))
         #expect(!text.contains("개체 속성…"))
         let picture = titles(EditingContext(hasSelection: true, object: .picture))
         #expect(picture.contains("원본 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))
@@ -234,7 +234,7 @@ struct DocumentTests {
 
     @Test func quickMenuOffersDeletionForObjects() {
         let titles = MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true, object: .shape)).compactMap { $0?.title }
-        #expect(titles.contains("지우기"))
+        #expect(titles.contains("삭제"))
     }
 
     @Test func quickMenuKeepsCopyButDisablesMutationsInLockedDocuments() throws {
@@ -243,9 +243,9 @@ struct DocumentTests {
         let items = MenuItems.quickMenu(Viewer(), context).compactMap { $0 }
         let enabled = { (title: String) in items.first { $0.title == title }?.enabled }
         #expect(enabled("복사하기") == true)
-        #expect(enabled("오려 두기") == false)
-        #expect(enabled("붙이기") == false)
-        #expect(enabled("지우기") == false)
+        #expect(enabled("오려두기") == false)
+        #expect(enabled("붙여넣기") == false)
+        #expect(enabled("삭제") == false)
     }
 
     /// 문단 부호 and 조판 부호 redraw the pages without touching the document or undo.

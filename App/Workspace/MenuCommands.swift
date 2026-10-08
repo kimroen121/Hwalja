@@ -1,8 +1,8 @@
 import SwiftUI
 
-// The macOS menu bar follows Hancom Office Web's menus: their order (파일·편집·보기·입력·
-// 서식·쪽·표), groups, names and icons. It lists only commands that work
-// (docs/ROADMAP.md has the full list); the system's own File and Edit items stay.
+// The macOS menu bar follows 한/글 2024's menus: their order (파일·편집·보기·입력·
+// 서식·쪽·표), items and names. It lists only commands that work
+// (docs/FEATURES.md has the full list); the system's own items keep their macOS names.
 
 /// Sends an action to the focused document through the responder chain.
 @MainActor func send(_ action: Selector) {
@@ -88,27 +88,39 @@ struct MenuItems {
         }
     }
 
+    /// 글머리표 적용/해제 and 문단 번호 적용/해제: each use turns the paragraph's head on or off.
+    static func toggleList(_ editor: PageEditor, head: String?, bullet: Bool) {
+        let kind = bullet ? "Bullet" : "Number"
+        editor.format(head == kind ? ParaStyle(head: "None")
+                      : bullet ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0]) : ParaStyle(head: kind, numbering: 0))
+    }
+
     static let blockFunctions: [(title: String, function: BlockFunction)] = [
         ("블록 합계", .sum), ("블록 평균", .average), ("블록 곱", .product),
     ]
 
-    /// 빠른 메뉴 (right click), in Hancom Office Web's order and names, for what the
-    /// selection is: text, an object, or cells.
+    /// 빠른 메뉴 (right click), in 한/글 2024's names, for what the selection is: text, an
+    /// object, or cells. The clipboard commands keep their macOS names.
     static func quickMenu(_ viewer: Viewer, _ context: EditingContext) -> [Choice?] {
         let editor = viewer.canvas.editor
         let selected = context.hasRange || context.object != nil
         var items: [Choice?] = [
-            Choice(title: "오려 두기", symbol: Icon.cut, key: "x", enabled: selected && !context.locked) { send(#selector(PageEditor.cut(_:))) },
+            Choice(title: "오려두기", symbol: Icon.cut, key: "x", enabled: selected && !context.locked) { send(#selector(PageEditor.cut(_:))) },
             Choice(title: "복사하기", symbol: Icon.copy, key: "c", enabled: selected) { send(#selector(PageEditor.copy(_:))) },
-            Choice(title: "붙이기", symbol: Icon.paste, key: "v", enabled: context.hasSelection && !context.locked) { send(#selector(PageEditor.paste(_:))) },
+            Choice(title: "붙여넣기", symbol: Icon.paste, key: "v", enabled: context.hasSelection && !context.locked) { send(#selector(PageEditor.paste(_:))) },
         ]
         if selected {
-            items.append(Choice(title: "지우기", symbol: Icon.delete, enabled: !context.locked) {
+            items.append(Choice(title: "삭제", symbol: Icon.delete, enabled: !context.locked) {
                 editor.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
             })
         }
         if context.canFormat, context.object == nil {
             items += [
+                nil,
+                Choice(title: "문자표…", symbol: Icon.symbols, key: String(Character(UnicodeScalar(NSF10FunctionKey)!))) {
+                    viewer.insertingSymbols = true
+                },
+                Choice(title: "프린트…", symbol: Icon.print, key: "p") { send(#selector(DocumentCanvas.printDocument(_:))) },
                 nil,
                 Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.editingCharShape = true },
                 Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.editingParaShape = true },
@@ -199,13 +211,15 @@ struct MenuItems {
         item("PDF로 저장하기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
             .keyboardShortcut("e", modifiers: [.command, .shift])
         Divider()
+        item("문서 정보…", Icon.documentInfo) { viewer?.showDocumentInfo() }
+            .disabled(viewer == nil)
+    }
+    @ViewBuilder var print: some View {
         item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
             .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!)), modifiers: [])
             .disabled(viewer == nil || context.locked)
         item("프린트…", Icon.print) { send(#selector(DocumentCanvas.printDocument(_:))) }
             .keyboardShortcut("p")
-        item("문서 정보…", Icon.documentInfo) { viewer?.showDocumentInfo() }
-            .disabled(viewer == nil)
     }
 
     /// 편집 items after the system's clipboard commands.
@@ -222,9 +236,6 @@ struct MenuItems {
                 .keyboardShortcut("f")
             item("찾아 바꾸기…", Icon.replace) { viewer?.showFind(replace: true) }
                 .keyboardShortcut("f", modifiers: [.command, .option])
-            item("찾아가기…", Icon.goTo) { viewer?.goingToPage = true }
-                .keyboardShortcut("g", modifiers: [.command, .option])
-            Divider()
             Group {
                 Button("다음 찾기") { viewer?.findNext() }
                     .keyboardShortcut("g")
@@ -235,6 +246,9 @@ struct MenuItems {
             Button("선택 부분으로 찾기") { viewer?.findSelection() }
                 .keyboardShortcut("e")
                 .disabled(!context.hasRange)
+            Divider()
+            item("찾아가기…", Icon.goTo) { viewer?.goingToPage = true }
+                .keyboardShortcut("g", modifiers: [.command, .option])
         }
         .disabled(viewer == nil)
     }
@@ -247,19 +261,22 @@ struct MenuItems {
                 Button("실제 크기") { send(#selector(DocumentCanvas.zoomToActualSize(_:))) }.keyboardShortcut("0")
                 Divider()
                 ZoomItems(viewer: viewer, position: viewer.position)
-            } label: { Label("확대/축소", systemImage: "plus.magnifyingglass") }
-            Menu {
-                ForEach([(1, "한 쪽"), (2, "두 쪽"), (3, "세 쪽")], id: \.0) { count, title in
-                    toggle(title, viewer.columns == count) { viewer.columns = count }
+                Divider()
+                Menu("쪽 모양") {
+                    ForEach([(1, "한 쪽"), (2, "두 쪽"), (3, "세 쪽")], id: \.0) { count, title in
+                        toggle(title, viewer.columns == count) { viewer.columns = count }
+                    }
                 }
-            } label: { Label("쪽 모양", systemImage: "rectangle.split.2x1") }
+            } label: { Label("확대/축소", systemImage: "plus.magnifyingglass") }
             toggle("쪽 윤곽", viewer.showsOutline) { viewer.showsOutline.toggle() }
             Menu {
                 toggle("조판 부호", viewer.showsControlCodes) { viewer.showsControlCodes.toggle() }
                 toggle("문단 부호", viewer.showsParagraphMarks) { viewer.showsParagraphMarks.toggle() }
                 toggle("투명 선", viewer.showsTransparentLines) { viewer.showsTransparentLines.toggle() }
-                toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
             } label: { Label("표시/숨기기", systemImage: Icon.paragraphMarks) }
+            Menu {
+                toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
+            } label: { Label("격자", systemImage: "grid") }
             Divider()
             Menu {
                 toggle("기본", viewer.showsTools) { viewer.showsTools.toggle() }
@@ -288,23 +305,13 @@ struct MenuItems {
         item("그림…", Icon.picture) { viewer?.insertPicture() }
             .disabled(!context.canPicture)
         Group {
-            item("표…", Icon.table) { viewer?.insertingTable = true }
+            item("표 만들기…", Icon.table) { viewer?.insertingTable = true }
             item("글상자", Icon.textbox) { viewer?.draw("textbox") }
         }
         .disabled(!context.inBody)
         item("수식…", Icon.equation) { viewer?.newEquation() }
             .disabled(!context.canPicture)
         Group {
-            Divider()
-            item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
-                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF10FunctionKey)!)))
-                .disabled(!context.hasSelection)
-            Divider()
-            Menu {
-                item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
-                item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
-            } label: { Label("주석", systemImage: Icon.footnote) }
-                .disabled(!context.inBody)
             Menu {
                 ForEach(Captions.all, id: \.value) { caption in
                     if caption.value == "None" { Divider() }
@@ -312,6 +319,17 @@ struct MenuItems {
                 }
             } label: { Label("캡션 넣기", systemImage: Icon.caption) }
                 .disabled(!context.canCaption)
+            Divider()
+            Menu {
+                item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
+                item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
+            } label: { Label("주석", systemImage: Icon.footnote) }
+                .disabled(!context.inBody)
+            Divider()
+            item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF10FunctionKey)!)))
+                .disabled(!context.hasSelection)
+            Divider()
             item("책갈피…", Icon.bookmark) { viewer?.bookmarking = true }
                 .disabled(!context.inBody)
         }
@@ -321,10 +339,14 @@ struct MenuItems {
         let text = document?.format?.text
         Group {
             item("글자 모양…", Icon.charShape) { viewer?.editingCharShape = true }.keyboardShortcut("l", modifiers: [.command, .option])
-            Divider()
             item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t", modifiers: [.command, .option])
-            item("글머리표 모양…", "list.bullet") { viewer?.editingList = "글머리표" }
+            Divider()
             item("문단 번호 모양…", "list.number") { viewer?.editingList = "문단 번호" }
+            if let editor {
+                let head = document?.format?.paragraph.head
+                toggle("문단 번호 적용/해제", head == "Number") { Self.toggleList(editor, head: head, bullet: false) }
+                toggle("글머리표 적용/해제", head == "Bullet") { Self.toggleList(editor, head: head, bullet: true) }
+            }
         }
         .disabled(!context.canFormat)
         Group {
@@ -458,7 +480,7 @@ struct MenuBarCommands: Commands {
             Divider()
             items.file
         }
-        CommandGroup(replacing: .printItem) {}
+        CommandGroup(replacing: .printItem) { items.print }
         CommandGroup(after: .pasteboard) {
             Divider()
             items.styleCopy

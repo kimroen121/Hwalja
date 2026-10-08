@@ -26,11 +26,18 @@ struct DocumentWindow: View {
 
     private var editor: some View {
         VStack(spacing: 0) {
-            ToolRow(document: document, viewer: viewer, expanded: viewer.showsTools)
-            Divider()
-            if viewer.showsFormat {
-                FormatRow(document: document, editor: viewer.canvas.editor)
+            VStack(spacing: 0) {
+                ToolRow(document: document, viewer: viewer, expanded: viewer.showsTools)
                 Divider()
+                if viewer.showsFormat {
+                    FormatRow(document: document, editor: viewer.canvas.editor)
+                    Divider()
+                }
+            }
+            // As in 한/글: the tool boxes' 빠른 메뉴 shows or hides them.
+            .contextMenu {
+                Toggle("기본", isOn: $viewer.showsTools)
+                Toggle("서식", isOn: $viewer.showsFormat)
             }
             if viewer.finding { FindBar(viewer: viewer) }
             HStack(spacing: 0) {
