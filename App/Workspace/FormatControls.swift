@@ -76,6 +76,13 @@ struct FormatRow: View {
     var body: some View {
         let text = document.format?.text, paragraph = document.format?.paragraph, context = document.context
         HStack(spacing: 3) {
+            // 한/글 2024's order: 새 문서·불러오기·저장하기, 인쇄, 되돌리기·다시 실행, 스타일 … 줄 간격.
+            ToolIcon("새 문서", symbol: Icon.newDocument) { NSDocumentController.shared.newDocument(nil) }
+            ToolIcon("불러오기", symbol: Icon.open) { NSDocumentController.shared.openDocument(nil) }
+            ToolIcon("저장하기", symbol: Icon.save) { send(#selector(NSDocument.save(_:))) }
+            RowDivider()
+            ToolIcon("인쇄", symbol: Icon.print) { send(#selector(DocumentCanvas.printDocument(_:))) }
+            RowDivider()
             ToolIcon("되돌리기", symbol: Icon.undo) { send(Selector(("undo:"))) }
                 .disabled(!context.canUndo)
             ToolIcon("다시 실행", symbol: Icon.redo) { send(Selector(("redo:"))) }
@@ -113,11 +120,8 @@ struct FormatRow: View {
                 ShapeMenu(title: "취소선", colorTitle: "취소선 색", pick: editor.format,
                           shape: { CharStyle(strikethrough: true, strikeShape: $0) },
                           color: { CharStyle(strikethrough: true, strikeColor: $0) })
-                RowDivider()
                 ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
                           colors: FormatChoices.colors) { editor.format(CharStyle(color: $0)) }
-                ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
-                          colors: FormatChoices.highlights, clears: true) { editor.format(CharStyle(shade: $0)) }
             }
             .disabled(!context.canFormat)
             RowDivider()
@@ -128,31 +132,6 @@ struct FormatRow: View {
                 }
                 RowDivider()
                 SpacingField(paragraph: paragraph, editor: editor)
-                RowDivider()
-                let head = paragraph?.head
-                ToolIcon("글머리표", symbol: "list.bullet", on: head == "Bullet") {
-                    editor.format(head == "Bullet" ? ParaStyle(head: "None") : ParaStyle(head: "Bullet", bullet: FormatChoices.bullets[0]))
-                }
-                MenuArrow(title: "글머리표") {
-                    FormatChoices.bullets.map { bullet in
-                        Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
-                    }
-                }
-                ToolIcon("문단 번호", symbol: "list.number", on: head == "Number") {
-                    editor.format(head == "Number" ? ParaStyle(head: "None") : ParaStyle(head: "Number", numbering: 0))
-                }
-                MenuArrow(title: "문단 번호") {
-                    FormatChoices.numberings.indices.map { kind in
-                        Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) {
-                            editor.format(ParaStyle(head: "Number", numbering: kind))
-                        }
-                    }
-                }
-                Group {
-                    ToolIcon("한 수준 증가", symbol: Icon.levelUp) { editor.stepLevel(by: 1) }
-                    ToolIcon("한 수준 감소", symbol: Icon.levelDown) { editor.stepLevel(by: -1) }
-                }
-                .disabled(!context.inList)
             }
             .disabled(!context.canFormat)
             Spacer(minLength: 0)
@@ -330,7 +309,7 @@ struct Chevron: View {
 }
 
 /// A color button: the symbol over a bar of the current color, with a palette.
-private struct ColorMenu: View {
+struct ColorMenu: View {
     let title: String, symbol: String, current: String
     let colors: [String]
     /// Offers `FormatChoices.none` after the colors.

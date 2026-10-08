@@ -157,9 +157,13 @@ struct ToolRow: View {
         StyleGallery(document: document, editor: viewer.canvas.editor)
             .disabled(!context.canApplyStyle)
         RowDivider()
-        shapes(context)
-        RowDivider()
         let editor = viewer.canvas.editor, head = document.format?.paragraph.head
+        shapes(context)
+        ColorMenu(title: "형광펜", symbol: "highlighter", current: document.format?.text.shade ?? "#ffffff",
+                  colors: FormatChoices.highlights, clears: true) { editor.format(CharStyle(shade: $0)) }
+            .padding(.top, 3)
+            .disabled(!context.canFormat)
+        RowDivider()
         Group {
             ToolTile("글머리표", Icon.bullets, action: {
                 editor.format(head == "Bullet" ? ParaStyle(head: "None") : ParaStyle(head: "Bullet", bullet: FormatChoices.bullets[0]))
@@ -546,6 +550,7 @@ enum Icon {
         static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
+    static let newDocument = "doc.badge.plus", open = "folder"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"
     static let zoomIn = "plus.magnifyingglass", zoomOut = "minus.magnifyingglass", actualSize = "1.magnifyingglass"
