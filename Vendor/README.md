@@ -28,6 +28,7 @@
 - tags each equation group, on the page and in the preview, with its script, layout box, size and color, so the app can set it with SwiftMath;
 - fits fallback color emoji glyphs to their HWP layout advances so consecutive emoji do not paint over one another or the caret.
 - refreshes the per-line indentation flag after paragraph reflow, so a section-leading paragraph applies new first-line and hanging indents instead of inheriting stale stored geometry.
+- pastes inline HTML with no block (part of a paragraph, as browsers copy it) as one paragraph with its formats, and reads `<b>`, `<i>` and `<u>` with attributes (`<b style=…>`, as Safari copies).
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

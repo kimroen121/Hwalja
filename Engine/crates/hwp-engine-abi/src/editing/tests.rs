@@ -4527,3 +4527,45 @@ fn tables_are_made_at_a_size_and_as_characters() {
         assert!(run(&mut s, tiny).is_err());
     }
 }
+
+/// Part of a paragraph copied in a browser comes in as one paragraph with its bold and italic.
+#[test]
+fn html_from_browsers_keeps_its_formats_in_one_paragraph() {
+    let samples = [
+        // Chrome: styled spans and an <em>, no paragraph.
+        "<meta charset='utf-8'><span style=\"color: rgb(0, 0, 0); font-weight: 700;\">굵게</span><span style=\"color: rgb(0, 0, 0);\"> </span><em style=\"color: rgb(0, 0, 0);\">기울</em>",
+        // Safari: <b> and <i> with styles.
+        "<meta charset=\"UTF-8\"><b style=\"font-family: -apple-system;\">굵게</b><span style=\"font-family: -apple-system;\"> </span><i style=\"font-family: -apple-system;\">기울</i>",
+        "<b>굵게</b> <i>기울</i>",
+    ];
+    for html in samples {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+        replace(&mut s, body(), 0, all, "").unwrap();
+        run(
+            &mut s,
+            EditCommand::Paste {
+                selection: EditSelection::caret(point(body(), 0)),
+                copy: None,
+                html: Some(html.into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(s.paragraph(&body()).unwrap().text, "굵게 기울", "{html}");
+        let at = |scalar| {
+            s.format(s.revision, &point(body(), scalar), None)
+                .unwrap()
+                .text
+        };
+        assert_eq!(
+            (at(1).bold, at(1).italic),
+            (Some(true), Some(false)),
+            "{html}"
+        );
+        assert_eq!(
+            (at(5).bold, at(5).italic),
+            (Some(false), Some(true)),
+            "{html}"
+        );
+    }
+}

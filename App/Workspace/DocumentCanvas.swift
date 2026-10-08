@@ -1197,7 +1197,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let board = pasteboard
         let mark = board.string(forType: Self.copyType)?.split(separator: ":")
         let copy = mark.flatMap { $0.count == 2 && String($0[0]) == model?.copyID ? UInt64($0[1]) : nil }
-        let html = board.string(forType: .html), text = board.string(forType: .string)
+        var html = board.string(forType: .html)
+        let text = board.string(forType: .string)
+        // Pages, TextEdit and Notes put rich text without HTML.
+        if html == nil, copy == nil, board.availableType(from: [.rtfd, .rtf]) != nil,
+           let rich = board.readObjects(forClasses: [NSAttributedString.self])?.first as? NSAttributedString {
+            html = Self.html(rich)
+        }
         if copy != nil || html != nil || text != nil {
             model?.paste(copy: copy, html: html, text: text, undoManager)
         } else if let image = NSImage(pasteboard: board), let data = image.tiffRepresentation {
@@ -1205,6 +1211,35 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         } else {
             NSSound.beep()
         }
+    }
+    /// Rich text as the HTML the engine reads: a paragraph a line, each run with its font,
+    /// size, color, bold, italic, underline and strikethrough.
+    static func html(_ text: NSAttributedString) -> String {
+        let string = text.string as NSString
+        var html = ""
+        string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: .byParagraphs) { _, line, _, _ in
+            html += "<p>"
+            text.enumerateAttributes(in: line) { attributes, run, _ in
+                var css = ""
+                if let font = attributes[.font] as? NSFont {
+                    let traits = font.fontDescriptor.symbolicTraits
+                    css += "font-family:'\(font.familyName ?? "")';font-size:\(font.pointSize)pt;"
+                    if traits.contains(.bold) { css += "font-weight:bold;" }
+                    if traits.contains(.italic) { css += "font-style:italic;" }
+                }
+                if let color = (attributes[.foregroundColor] as? NSColor)?.usingColorSpace(.sRGB) {
+                    css += String(format: "color:#%02x%02x%02x;", Int(color.redComponent * 255), Int(color.greenComponent * 255),
+                                  Int(color.blueComponent * 255))
+                }
+                if attributes[.underlineStyle] as? Int ?? 0 != 0 { css += "text-decoration:underline;" }
+                if attributes[.strikethroughStyle] as? Int ?? 0 != 0 { css += "text-decoration:line-through;" }
+                let escaped = string.substring(with: run).replacingOccurrences(of: "&", with: "&amp;")
+                    .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+                html += "<span style=\"\(css)\">\(escaped)</span>"
+            }
+            html += "</p>"
+        }
+        return html
     }
     @objc func delete(_ sender: Any?) { replaceSelection(with: "") }
     /// Selects all text of the body or of the cell holding the caret.

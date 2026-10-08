@@ -2836,3 +2836,65 @@ diff --git a/src/serializer/doc_info.rs b/src/serializer/doc_info.rs
              }
              // 추가 채우기 속성: size(u32) = 0, 이어서 미확인 바이트로 alpha(u8).
              // hwplib 및 parse_fill(additional_size 만큼 skip 후 종류별 1바이트를
+diff --git a/src/document_core/commands/html_import.rs b/src/document_core/commands/html_import.rs
+--- a/src/document_core/commands/html_import.rs
++++ b/src/document_core/commands/html_import.rs
+@@ -486,6 +486,18 @@
+                 html
+             }
+         };
++
++        // A run of inline content with no block (a part of one paragraph, as browsers copy
++        // it) is one paragraph, keeping its formats.
++        let lower = content.to_lowercase();
++        let blocks = ["<p", "<div", "<table", "<ul", "<ol", "<li", "<br", "<h", "<tr", "<img", "<blockquote"];
++        if !blocks.iter().any(|tag| lower.contains(tag)) {
++            let mut para = Paragraph::default();
++            self.parse_inline_content(&mut para, &content.replace(['\r', '\n'], " "));
++            if !para.text.trim().is_empty() {
++                return vec![para];
++            }
++        }
+ 
+         // 최상위 태그 파싱
+         let mut pos = 0;
+@@ -780,6 +792,12 @@
+ 
+                 let tag_str: String = chars[pos..=tag_end].iter().collect();
+                 let tag_lower = tag_str.to_lowercase();
++                // An opening tag of this name, with attributes or without (<b style=…>).
++                let opens = |name: &str| {
++                    tag_lower[1..].strip_prefix(name).is_some_and(|rest| {
++                        rest.starts_with(|c: char| c == '>' || c.is_whitespace())
++                    })
++                };
+ 
+                 if tag_lower.starts_with("<span") {
+                     // [붙여넣기 무한루프/응답없음 방지] span_end_tag(깊이 인식 탐색)가 이미
+@@ -813,7 +831,7 @@
+ 
+                     pos = span_end_tag;
+                     continue;
+-                } else if tag_lower.starts_with("<b>") || tag_lower.starts_with("<strong") {
++                } else if opens("b") || opens("strong") {
+                     inherited_bold = true;
+                     pos = tag_end + 1;
+                     continue;
+@@ -821,7 +839,7 @@
+                     inherited_bold = false;
+                     pos = tag_end + 1;
+                     continue;
+-                } else if tag_lower.starts_with("<i>") || tag_lower.starts_with("<em") {
++                } else if opens("i") || opens("em") {
+                     inherited_italic = true;
+                     pos = tag_end + 1;
+                     continue;
+@@ -829,7 +847,7 @@
+                     inherited_italic = false;
+                     pos = tag_end + 1;
+                     continue;
+-                } else if tag_lower.starts_with("<u>") {
++                } else if opens("u") {
+                     inherited_underline = true;
+                     pos = tag_end + 1;
+                     continue;
