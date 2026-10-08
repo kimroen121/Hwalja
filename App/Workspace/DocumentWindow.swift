@@ -26,10 +26,8 @@ struct DocumentWindow: View {
 
     private var editor: some View {
         VStack(spacing: 0) {
-            if viewer.showsTools {
-                ToolRow(document: document, viewer: viewer)
-                Divider()
-            }
+            ToolRow(document: document, viewer: viewer, expanded: viewer.showsTools)
+            Divider()
             if viewer.showsFormat {
                 FormatRow(document: document, editor: viewer.canvas.editor)
                 Divider()

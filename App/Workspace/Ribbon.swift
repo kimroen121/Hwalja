@@ -15,8 +15,11 @@ struct ToolRow: View {
     @State private var spans: [String: CGRect] = [:]
     static let menuTabs = ["편집", "보기", "입력", "서식", "쪽"]
 
-    init(document: HwpDocument, viewer: Viewer, contextTab: String? = nil) {
-        (self.document, self.viewer, _contextTab) = (document, viewer, State(initialValue: contextTab))
+    /// Folded (기본 도구 상자 접기), only the tabs show.
+    let expanded: Bool
+
+    init(document: HwpDocument, viewer: Viewer, expanded: Bool = true, contextTab: String? = nil) {
+        (self.document, self.viewer, self.expanded, _contextTab) = (document, viewer, expanded, State(initialValue: contextTab))
     }
 
     /// The 개체 탭 and 상황 탭 for what is selected.
@@ -39,6 +42,10 @@ struct ToolRow: View {
                     if name == extra.first { Divider().frame(height: 14).padding(.horizontal, 4) }
                     tabButton(name, selected: tab == name, object: extra.contains(name))
                 }
+                Spacer(minLength: 0)
+                ToolIcon("기본 도구 상자 접기/펴기", symbol: expanded ? "chevron.up" : "chevron.down") {
+                    viewer.showsTools.toggle()
+                }
             }
             .coordinateSpace(.named("tabs"))
             .overlay(alignment: .topLeading) {
@@ -57,11 +64,13 @@ struct ToolRow: View {
             .padding(.horizontal, 7)
             .padding(.top, 5)
             // A narrow window scrolls the row instead of squeezing it.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 2) { tiles(tab, context) }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 5)
-                    .padding(.bottom, 8)
+            if expanded {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 2) { tiles(tab, context) }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 5)
+                        .padding(.bottom, 8)
+                }
             }
         }
         .onChange(of: extra) { old, new in
@@ -99,6 +108,8 @@ struct ToolRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // As in 한/글, a double click on a tab folds or unfolds the 기본 도구 상자.
+        .simultaneousGesture(TapGesture(count: 2).onEnded { viewer.showsTools.toggle() })
         .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
     }
 
