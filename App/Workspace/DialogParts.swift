@@ -77,7 +77,7 @@ struct DialogTabs<Content: View>: NSViewRepresentable {
     }
 }
 
-/// One of a few choices, in AppKit's segmented control, set up like `DialogTabs`'s bar.
+/// One of a few choices, in the segmented control `DialogTabs`'s bar is made of.
 struct DialogChoice: NSViewRepresentable {
     @Binding var selection: Int
     let titles: [String]
@@ -85,8 +85,10 @@ struct DialogChoice: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSSegmentedControl {
-        let control = SheetSegments(labels: titles, trackingMode: .selectOne,
-                                    target: context.coordinator, action: #selector(Coordinator.choose(_:)))
+        // The tab view's own bar draws in the tabs' style rather than the accent color.
+        let kind = NSClassFromString("NSTabViewSegmentedControl") as? NSSegmentedControl.Type ?? SheetSegments.self
+        let control = kind.init(labels: titles, trackingMode: .selectOne,
+                                target: context.coordinator, action: #selector(Coordinator.choose(_:)))
         control.setContentHuggingPriority(.required, for: .horizontal)
         return control
     }
