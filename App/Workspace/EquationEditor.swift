@@ -284,7 +284,7 @@ struct EquationEditor: View {
     }
 
     var body: some View {
-        DialogFrame("수식 편집", confirmTitle: "넣기", canConfirm: valid) {
+        DialogFrame("수식 편집기", confirmTitle: "넣기", canConfirm: valid) {
             editor
         } confirm: {
             Task {

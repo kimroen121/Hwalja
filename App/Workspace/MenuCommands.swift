@@ -65,10 +65,10 @@ struct MenuItems {
         }]
     }
     static func brightness(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 없음")
+        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 효과 없음")
     }
     static func contrast(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 없음")
+        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 효과 없음")
     }
     private static func steps(_ viewer: Viewer, _ key: WritableKeyPath<ObjectProps, Int32?>,
                               more: String, less: String, none: String) -> [Choice?] {
@@ -202,7 +202,7 @@ struct MenuItems {
 
     /// 파일 items beyond the system's New, Open, Save and Revert.
     @ViewBuilder var file: some View {
-        item("PDF로 내보내기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
+        item("PDF로 저장하기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
             .keyboardShortcut("e", modifiers: [.command, .shift])
         Divider()
         item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
@@ -343,8 +343,8 @@ struct MenuItems {
             toggle("취소선", text?.strikethrough == true) { editor?.toggleStrikethrough() }
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Divider()
-            Button("글자 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
-            Button("글자 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
+            Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
+            Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
         }
         .disabled(!context.canFormat)
         Divider()
@@ -384,7 +384,7 @@ struct MenuItems {
         .disabled(viewer == nil || context.locked)
         Group {
             item("새 번호로 시작…", Icon.newNumber) { viewer?.startingNumber = true }
-            item("현재 쪽만 감추기…", Icon.pageHide) { viewer?.showPageHide() }
+            item("감추기…", Icon.pageHide) { viewer?.showPageHide() }
         }
         .disabled(!context.inBody)
         Divider()

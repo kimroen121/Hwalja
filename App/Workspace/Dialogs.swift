@@ -156,7 +156,7 @@ struct SplitCellSheet: View {
     @State private var mergeFirst = false
 
     var body: some View {
-        DialogFrame("셀 나누기") {
+        DialogFrame("셀 나누기", confirmTitle: "나누기") {
             VStack(alignment: .leading, spacing: 12) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow { FieldLabel("줄 개수"); SpinField(value: $rows, unit: "", range: 1...256) }
@@ -200,7 +200,7 @@ struct PageSetupSheet: View {
     ]
 
     var body: some View {
-        DialogFrame("편집 용지") {
+        DialogFrame("편집 용지", confirmTitle: "설정") {
             VStack(alignment: .leading, spacing: 14) {
                 GroupTitle("용지 종류")
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {

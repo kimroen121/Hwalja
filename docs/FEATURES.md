@@ -36,7 +36,7 @@
 | XML 문서 | — | `file/xml_document.htm` |  |
 | 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기 △ |
 | 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 저장 설정 △, 인터넷 문서·텍스트 파일·한/글 97·XML △, 블록 저장하기 △ |
-| PDF로 저장하기 | ● | `file/to_pdf.htm` | 지금 이름은 「PDF로 내보내기…」. 1단계에서 이름 바꿈 |
+| PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
 | 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●. 문서 요약 △(rhwp에 요약 쓰기 없음), 글꼴 정보 ○ `get_document_info`, 그림 정보 ○, 저작권 △ |
 | DAISY 문서 | — | `file/daisy_document.htm` |  |
@@ -160,7 +160,7 @@
 | 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
 | 쪽 번호 매기기 | ◐ | `format/pagenumber.htm` | 머리말·꼬리말의 쪽 번호 ●. 쪽 번호 매기기 대화 상자(번호 위치·모양) △ 확인 필요 |
 | 새 번호로 시작 | ● | `format/new_number.htm` |  |
-| 감추기 | ● | `format/hide.htm` | 지금 이름은 「현재 쪽만 감추기…」. 메뉴 이름은 「감추기」 |
+| 감추기 | ● | `format/hide.htm` |  |
 | 줄 번호 | △ | `view/line_number.htm` |  |
 | 쪽 나누기 | ● | `format/break/page_break.htm` |  |
 | 단 나누기 | ● | `format/break/column_break.htm` |  |

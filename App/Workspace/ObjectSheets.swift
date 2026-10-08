@@ -125,7 +125,7 @@ struct ObjectSheet: View {
     private var kind: ObjectKind { state.object.kind }
 
     var body: some View {
-        DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성") {
+        DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성", confirmTitle: "설정") {
             DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
                        + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])) { tab in
                 switch tab {

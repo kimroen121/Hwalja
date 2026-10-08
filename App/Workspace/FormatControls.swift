@@ -130,18 +130,18 @@ struct FormatRow: View {
                 SpacingField(paragraph: paragraph, editor: editor)
                 RowDivider()
                 let head = paragraph?.head
-                ToolIcon("글머리표 매기기", symbol: "list.bullet", on: head == "Bullet") {
+                ToolIcon("글머리표", symbol: "list.bullet", on: head == "Bullet") {
                     editor.format(head == "Bullet" ? ParaStyle(head: "None") : ParaStyle(head: "Bullet", bullet: FormatChoices.bullets[0]))
                 }
-                MenuArrow(title: "글머리표 매기기") {
+                MenuArrow(title: "글머리표") {
                     FormatChoices.bullets.map { bullet in
                         Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
                     }
                 }
-                ToolIcon("문단 번호 매기기", symbol: "list.number", on: head == "Number") {
+                ToolIcon("문단 번호", symbol: "list.number", on: head == "Number") {
                     editor.format(head == "Number" ? ParaStyle(head: "None") : ParaStyle(head: "Number", numbering: 0))
                 }
-                MenuArrow(title: "문단 번호 매기기") {
+                MenuArrow(title: "문단 번호") {
                     FormatChoices.numberings.indices.map { kind in
                         Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) {
                             editor.format(ParaStyle(head: "Number", numbering: kind))

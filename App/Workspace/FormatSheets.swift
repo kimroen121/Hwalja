@@ -175,7 +175,7 @@ struct CharShapeSheet: View {
     }
 
     var body: some View {
-        DialogFrame("글자 모양") {
+        DialogFrame("글자 모양", confirmTitle: "설정") {
             DialogTabs(selection: $tab, titles: ["기본", "확장"]) { tab in
                 Group { if tab == "확장" { extended } else { basic } }.padding(16)
             }
@@ -363,7 +363,7 @@ struct ParaShapeSheet: View {
     private enum FirstLine: Hashable { case normal, indent, hang }
 
     var body: some View {
-        DialogFrame("문단 모양") {
+        DialogFrame("문단 모양", confirmTitle: "설정") {
             DialogTabs(selection: $tab, titles: ["기본", "테두리/배경"]) { tab in
                 Group {
                     if tab == "기본" {
@@ -459,7 +459,7 @@ struct ParaShapeSheet: View {
                     ChoiceField(unit(\.koreanBreakUnit, 1), [(1, "글자"), (0, "어절")], minWidth: 90)
                 }
                 GridRow {
-                    FieldLabel("영문 단위")
+                    FieldLabel("영어 단위")
                     ChoiceField(unit(\.englishBreakUnit, 0), [(0, "단어"), (1, "하이픈"), (2, "글자")], minWidth: 90)
                 }
             }
@@ -510,7 +510,7 @@ struct ListSheet: View {
     }
 
     var body: some View {
-        DialogFrame("글머리표 및 문단 번호") {
+        DialogFrame("글머리표 및 문단 번호", confirmTitle: "설정") {
             DialogTabs(selection: $tab, titles: ["글머리표", "문단 번호"]) { tab in
                 if tab == "글머리표" {
                     VStack(alignment: .leading, spacing: 8) {
