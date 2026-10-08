@@ -308,6 +308,92 @@ private enum PagePictogram {
     }
 }
 
+/// 문자표, as the web editor's: 문자 영역, 문자 선택, 최근 사용한 문자 and 입력 문자; 넣기 puts
+/// 입력 문자 at the caret.
+struct SymbolSheet: View {
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var area = 0
+    @State private var text = ""
+    @AppStorage("recentSymbols") private var recent = ""
+
+    /// 문자 영역 in the web editor's names and order. 일반 문장 부호 is the web editor's set;
+    /// ponytail: the others are the matching Unicode blocks, not Hancom's own tables.
+    static let areas: [(name: String, characters: [String])] = [
+        ("일반 문장 부호", "–—―‘’‚“”„†‡•‥…‰′″‹›※‧".map(String.init)),
+        ("기호1", scalars(0x2600...0x26FF)),
+        ("기호2", scalars(0x2700...0x27BF)),
+        ("통화 기호", "$¢£¥₩".map(String.init) + scalars(0x20A0...0x20C0)),
+        ("글자 모양 기호", scalars(0x2100...0x214F)),
+        ("숫자 형식", scalars(0x2150...0x218B)),
+        ("화살표", scalars(0x2190...0x21FF)),
+        ("괄호", "()[]{}".map(String.init) + scalars(0x3008...0x301B)),
+        ("수학 연산자", scalars(0x2200...0x22FF)),
+        ("그리스어", scalars(0x0391...0x03A9) + scalars(0x03B1...0x03C9)),
+        ("단위기호", scalars(0x3380...0x33DF)),
+        ("원문자", scalars(0x2460...0x2473) + scalars(0x3251...0x325F) + scalars(0x32B1...0x32BF)
+            + scalars(0x24B6...0x24E9) + scalars(0x3260...0x327B)),
+        ("괄호문자", scalars(0x2474...0x2487) + scalars(0x249C...0x24B5) + scalars(0x3200...0x321C)),
+        ("상자 그리기", scalars(0x2500...0x257F)),
+        ("도형", scalars(0x25A0...0x25FF)),
+    ]
+    private static func scalars(_ range: ClosedRange<UInt32>) -> [String] {
+        range.compactMap(Unicode.Scalar.init).filter { $0.properties.generalCategory != .unassigned }.map { String($0) }
+    }
+    private static let columns = Array(repeating: GridItem(.fixed(30), spacing: 0), count: 11)
+
+    var body: some View {
+        DialogFrame("문자표", confirmTitle: "넣기", canConfirm: !text.isEmpty) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("문자 영역")
+                        List(Self.areas.indices, id: \.self, selection: Binding { area } set: { area = $0 ?? area }) {
+                            Text(Self.areas[$0].name)
+                        }
+                        .listStyle(.bordered)
+                        .frame(width: 180, height: 372)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("문자 선택")
+                        ScrollView {
+                            cells(Self.areas[area].characters)
+                        }
+                        .frame(width: 346, height: 270, alignment: .topLeading)
+                        .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
+                        GroupTitle("최근 사용한 문자").padding(.top, 8)
+                        cells(recent.map(String.init))
+                            .frame(width: 346, height: 32, alignment: .topLeading)
+                            .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
+                    }
+                }
+                HStack(spacing: 10) {
+                    GroupTitle("입력 문자")
+                    TextField("", text: $text).textFieldStyle(.roundedBorder)
+                }
+            }
+        } confirm: {
+            viewer.document?.type(text, viewer.undoManager)
+            let used = text.reduce(into: [Character]()) { if !$0.contains($1) { $0.append($1) } }
+            recent = String((used + recent.filter { !used.contains($0) }).prefix(11))
+            dismiss()
+        }
+    }
+
+    /// Characters in a grid; choosing one adds it to 입력 문자.
+    private func cells(_ characters: [String]) -> some View {
+        LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 0) {
+            ForEach(characters, id: \.self) { character in
+                Button { text += character } label: {
+                    Text(character).font(.system(size: 17)).frame(width: 30, height: 30).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            }
+        }
+    }
+}
+
 extension HwpDocument {
     /// Puts an image at the caret in the body or a table cell (beside the table, floating), at its own size up to the text width, in
     /// the line like a character. PNG and JPEG go in as they are; other images as PNG, or

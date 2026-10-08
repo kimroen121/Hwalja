@@ -89,7 +89,7 @@ struct ToolRow: View {
         RowDivider()
         notes(context)
         RowDivider()
-        ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
+        ToolTile("문자표", Icon.symbols) { viewer.insertingSymbols = true }
             .disabled(!context.hasSelection)
         RowDivider()
         shapes(context)
@@ -150,7 +150,7 @@ struct ToolRow: View {
         .disabled(!context.inBody)
         ToolTile("수식", Icon.equation) { viewer.newEquation() }
             .disabled(!context.canPicture)
-        ToolTile("문자표", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
+        ToolTile("문자표", Icon.symbols) { viewer.insertingSymbols = true }
             .disabled(!context.hasSelection)
         RowDivider()
         notes(context)

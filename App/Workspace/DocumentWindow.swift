@@ -56,6 +56,7 @@ struct DocumentWindow: View {
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.startingNumber) { NewNumberSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.bookmarking) { BookmarkSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.insertingSymbols) { SymbolSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.erasingCodes) { EraseCodesSheet(viewer: viewer) }
         .sheet(isPresented: Binding(get: { viewer.pageHide != nil }, set: { if !$0 { viewer.pageHide = nil } })) {
             if let hide = viewer.pageHide { PageHideSheet(viewer: viewer, hide: hide) }
@@ -195,6 +196,7 @@ final class Viewer: ObservableObject {
     /// 새 번호로 시작, 책갈피 and 조판 부호 지우기, while open; 현재 쪽만 감추기 and 문서 정보 with what they show.
     @Published var startingNumber = false
     @Published var bookmarking = false
+    @Published var insertingSymbols = false
     @Published var erasingCodes = false
     @Published var pageHide: PageHide?
     @Published var documentInfo: DocumentInfo?

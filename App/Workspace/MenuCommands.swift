@@ -300,7 +300,7 @@ struct MenuItems {
             .disabled(!context.canPicture)
         Group {
             Divider()
-            item("문자표…", Icon.symbols) { NSApp.orderFrontCharacterPalette(nil) }
+            item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
                 .disabled(!context.hasSelection)
             Divider()
             Menu {
