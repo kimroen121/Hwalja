@@ -1192,6 +1192,12 @@ struct DocumentTests {
         viewer.setPageBorder(border, section: 0, whole: true)
         await document.settle()
         #expect(try await document.pageBorder(section: 0) == border)
+        var setup = try await document.sectionSetup(section: 0)
+        setup.pageNum = 3
+        setup.hideEmptyLine.toggle()
+        viewer.setSection(setup, section: 0, whole: false)
+        await document.settle()
+        #expect(try await document.sectionSetup(section: 0) == setup)
         let revision = document.reply.revision
         viewer.headerFooter(footer: false, pageNumber: .center)
         viewer.headerFooter(footer: true, pageNumber: nil)
@@ -1501,6 +1507,7 @@ struct DocumentTests {
             ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("pageBorder", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer))),
+            ("section", AnyView(SectionSheet(section: 0, setup: try await document.sectionSetup(section: 0), viewer: viewer))),
             ("pageBackground", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer,
                                                        tab: "배경"))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",

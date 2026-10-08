@@ -429,6 +429,8 @@ struct MenuItems {
             }
         } label: { Label("단", systemImage: Icon.columns) }
         .disabled(viewer == nil || context.locked)
+        item("구역 설정…", Icon.section) { viewer?.showSectionSetup() }
+            .disabled(viewer == nil || context.locked)
     }
     private func headerItems(footer: Bool) -> some View {
         ForEach(Self.headerShapes, id: \.title) { shape in

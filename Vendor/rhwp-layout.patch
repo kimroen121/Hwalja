@@ -3427,7 +3427,62 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
 diff --git a/src/document_core/queries/rendering.rs b/src/document_core/queries/rendering.rs
 --- a/src/document_core/queries/rendering.rs
 +++ b/src/document_core/queries/rendering.rs
-@@ -7245,6 +7245,14 @@
+@@ -3014,6 +3014,8 @@
+         json: &str,
+     ) -> Result<String, HwpError> {
+         self.apply_section_def_json(section_idx, json)?;
++        // 개체 시작 번호가 바뀌었을 수 있다.
++        crate::parser::assign_auto_numbers(&mut self.document);
+         let page_count = self.recompose_and_paginate();
+         Ok(format!("{{\"ok\":true,\"pageCount\":{}}}", page_count))
+     }
+@@ -3024,6 +3026,7 @@
+         for idx in 0..count {
+             self.apply_section_def_json(idx, json)?;
+         }
++        crate::parser::assign_auto_numbers(&mut self.document);
+         let page_count = self.recompose_and_paginate();
+         Ok(format!("{{\"ok\":true,\"pageCount\":{}}}", page_count))
+     }
+@@ -5071,8 +5074,18 @@
+                 }
+             }
+ 
+-            // 구역 간 쪽번호 연속: NewNumber(Page) 컨트롤이 없으면 이전 구역에서 이어짐
+-            if idx > 0 && carry_last_page_number > 0 {
++            // 구역 간 쪽번호 연속: NewNumber(Page) 컨트롤이 없으면 이전 구역에서 이어짐.
++            // 구역 설정의 시작 쪽 번호: page_num 이 있으면 그 번호(사용자), 없으면
++            // 이어지는 번호를 page_num_type 에 따라 홀수(1)·짝수(2)로 맞춘다.
++            let next = if idx > 0 { carry_last_page_number + 1 } else { 1 };
++            let start = match (section.section_def.page_num, section.section_def.page_num_type) {
++                (n, _) if n > 0 => n as u32,
++                (_, 1) if next % 2 == 0 => next + 1,
++                (_, 2) if next % 2 == 1 => next + 1,
++                _ => next,
++            };
++            if start > 1 {
++                let carry_last_page_number = start - 1;
+                 use crate::model::control::{AutoNumberType, Control};
+                 let has_new_number = section.paragraphs.iter().any(|p|
+                     p.controls.iter().any(|c| matches!(c, Control::NewNumber(nn) if nn.number_type == AutoNumberType::Page))
+@@ -5091,6 +5104,16 @@
+                 }
+             }
+ 
++            // 구역 설정의 첫 쪽에만 머리말/꼬리말 감추기.
++            if let Some(first) = result.pages.first_mut() {
++                if section.section_def.hide_header {
++                    first.active_header = None;
++                }
++                if section.section_def.hide_footer {
++                    first.active_footer = None;
++                }
++            }
++
+             // 맞쪽 편집 layout 은 구역 간 쪽번호 carry 이후 최종 page_number 기준으로 갱신한다.
+             apply_page_number_layouts_for_section(&mut result, section);
+ 
+@@ -7245,6 +7268,14 @@
              .unwrap_or((false, false));
          self.layout_engine
              .set_page_border_fill_first_page_only(first_page_border, first_page_fill);
@@ -3536,3 +3591,15 @@ diff --git a/src/serializer/hwpx/section.rs b/src/serializer/hwpx/section.rs
          } else if first {
              "SHOW_FIRST"
          } else {
+diff --git a/src/parser/mod.rs b/src/parser/mod.rs
+--- a/src/parser/mod.rs
++++ b/src/parser/mod.rs
+@@ -1196,7 +1196,7 @@
+ 
+ /// 문서 내 모든 AutoNumber 컨트롤에 번호를 할당한다.
+ /// NewNumber 컨트롤을 만나면 해당 종류의 카운터를 리셋한다.
+-pub(crate) fn assign_auto_numbers(doc: &mut Document) {
++pub fn assign_auto_numbers(doc: &mut Document) {
+     use crate::model::control::AutoNumberType;
+ 
+     // 번호 종류별 카운터 — DocProperties 시작번호로 초기화

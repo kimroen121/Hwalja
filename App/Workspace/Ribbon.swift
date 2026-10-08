@@ -219,6 +219,9 @@ struct ToolRow: View {
         .disabled(!context.inBody)
         RowDivider()
         columns(context)
+        RowDivider()
+        ToolTile("구역 설정", Icon.section) { viewer.showSectionSetup() }
+            .disabled(context.locked)
     }
 
     // MARK: 개체 탭과 상황 탭
@@ -574,7 +577,7 @@ enum Icon {
     static let objectProps = "slider.horizontal.3", pictureEffect = "camera.filters"
     static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
-    static let pageBorder = "square.dashed.inset.filled"
+    static let pageBorder = "square.dashed.inset.filled", section = "rectangle.split.1x2"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"

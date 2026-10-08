@@ -10,3 +10,4 @@ HwpStudio.xcodeproj/
 Tests/PrivateFixtures/
 .DS_Store
 docs/superpowers/
+.vscode/

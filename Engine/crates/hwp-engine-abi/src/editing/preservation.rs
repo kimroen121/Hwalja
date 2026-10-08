@@ -230,6 +230,9 @@ pub(super) fn check(
         EditCommand::SetPageBorder { section, whole, .. } => {
             return check_page_border(before, after, *section, *whole)
         }
+        EditCommand::SetSection { section, whole, .. } => {
+            return check_section(before, after, *section, *whole)
+        }
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
             position: EditPosition { target, .. },
@@ -793,6 +796,31 @@ fn check_page_border(
         }
         (x.raw_stream, y.raw_stream) = (None, None);
     }
+    same_rest(&mut a, &mut b, section)
+}
+/// 구역 설정 changed only the sections' definitions and, through the 개체 시작 번호,
+/// the numbers of 그림, 표 and 수식.
+fn check_section(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    whole: bool,
+) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for s in commands::page_sections(before, section, whole) {
+        let (x, y) = (&mut a.sections[s], &mut b.sections[s]);
+        x.section_def = y.section_def.clone();
+        for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
+            for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+                if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
+                    *c = d.clone();
+                }
+            }
+        }
+        (x.raw_stream, y.raw_stream) = (None, None);
+    }
+    rhwp::parser::assign_auto_numbers(&mut a);
     same_rest(&mut a, &mut b, section)
 }
 /// A paste replaced the paragraphs the selection spanned with others, and may have

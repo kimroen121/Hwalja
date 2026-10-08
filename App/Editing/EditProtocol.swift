@@ -127,6 +127,8 @@ enum EditCommand: Encodable, Sendable {
     case setPage(section: UInt32, PageSetup, whole: Bool = false)
     /// 쪽 테두리/배경; with `whole`, of every section.
     case setPageBorder(section: UInt32, PageBorder, whole: Bool)
+    /// 구역 설정; with `whole`, of every section.
+    case setSection(section: UInt32, SectionSetup, whole: Bool)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
     /// 머리말/꼬리말 지우기: the definition `target` is in.
@@ -149,7 +151,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -231,6 +233,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setPageBorder", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
+            try c.encode(whole, forKey: .whole)
+        case let .setSection(section, setup, whole):
+            try c.encode("setSection", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(setup, forKey: .setup)
             try c.encode(whole, forKey: .whole)
         case let .headerFooter(section, footer, pageNumber):
             try c.encode("headerFooter", forKey: .kind)
@@ -546,6 +553,24 @@ struct PageBorder: Codable, Hashable, Sendable {
     /// 배경 by color; nil when it is a 그러데이션 or 그림, which then stays.
     var fill: PageFill?
     var fillArea: FillArea
+}
+/// 구역 설정: 시작 쪽 번호 (`pageNum`, 0 continuing; `pageNumType` 0 이어서, 1 홀수, 2 짝수),
+/// 개체 시작 번호 (0 continuing), the 첫 쪽에만 감추기 flags, 빈 줄 감추기, and 단 사이 간격
+/// and 기본 탭 간격 in HWPUNIT.
+struct SectionSetup: Codable, Hashable, Sendable {
+    var pageNum: UInt16
+    var pageNumType: UInt8
+    var pictureNum: UInt16
+    var tableNum: UInt16
+    var equationNum: UInt16
+    var columnSpacing: Int32
+    var defaultTabSpacing: UInt32
+    var hideHeader: Bool
+    var hideFooter: Bool
+    var hideMasterPage: Bool
+    var hideBorder: Bool
+    var hideFill: Bool
+    var hideEmptyLine: Bool
 }
 /// Line kind (0 none, 1 solid, …), width (an index into `Swatches.widths`) and `#rrggbb`.
 struct BorderSide: Codable, Hashable, Sendable {
@@ -903,6 +928,7 @@ enum EngineRequest: Encodable, Sendable {
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
     case pageBorder(section: UInt32)
+    case sectionSetup(section: UInt32)
     case pageHide(EditTarget)
     case bookmarks
     case statistics
@@ -981,6 +1007,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(section, forKey: .section)
         case let .pageBorder(section):
             try c.encode("pageBorder", forKey: .op)
+            try c.encode(section, forKey: .section)
+        case let .sectionSetup(section):
+            try c.encode("sectionSetup", forKey: .op)
             try c.encode(section, forKey: .section)
         case let .pageHide(target):
             try c.encode("pageHide", forKey: .op)

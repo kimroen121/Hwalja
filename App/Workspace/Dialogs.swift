@@ -104,6 +104,18 @@ extension Viewer {
     func setPageBorder(_ border: PageBorder, section: UInt32, whole: Bool) {
         document?.edit(undoManager) { _ in .setPageBorder(section: section, border, whole: whole) }
     }
+    /// Opens 구역 설정 for the section holding the caret.
+    func showSectionSetup() {
+        guard let document else { return }
+        let section = document.selection?.focus.target.section ?? 0
+        Task {
+            guard let setup = try? await document.sectionSetup(section: section) else { return NSSound.beep() }
+            sectionSetup = (section, setup)
+        }
+    }
+    func setSection(_ setup: SectionSetup, section: UInt32, whole: Bool) {
+        document?.edit(undoManager) { _ in .setSection(section: section, setup, whole: whole) }
+    }
     /// 세로 or 가로 for the section holding the caret.
     func setOrientation(landscape: Bool) {
         guard let document else { return }
@@ -400,7 +412,7 @@ struct PageBorderSheet: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 22)
             }
-            .frame(width: 520, height: 418)
+            .frame(width: 520, height: 412)
             HStack(spacing: 10) {
                 Text("적용 범위")
                 ChoiceField($whole, [(true, "문서 전체"), (false, "현재 구역")], minWidth: 100).fixedSize()
@@ -604,6 +616,98 @@ struct PageBorderSheet: View {
         Binding { border.fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
             border.fill?[keyPath: key] = $0
         }
+    }
+}
+
+/// 구역 설정: 시작 쪽 번호, 개체 시작 번호, 기타 and 적용 범위.
+struct SectionSheet: View {
+    let section: UInt32
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var setup: SectionSetup
+    @State private var whole = true
+
+    init(section: UInt32, setup: SectionSetup, viewer: Viewer) {
+        self.section = section
+        self.viewer = viewer
+        _setup = State(initialValue: setup)
+    }
+
+    var body: some View {
+        DialogFrame("구역 설정", confirmTitle: "설정") {
+            VStack(alignment: .leading, spacing: 14) {
+                GroupTitle("시작 쪽 번호")
+                HStack(spacing: 10) {
+                    FieldLabel("종류")
+                    ChoiceField(Binding { setup.pageNum > 0 ? 3 : Int(setup.pageNumType) } set: { kind in
+                        if kind == 3 {
+                            (setup.pageNum, setup.pageNumType) = (max(setup.pageNum, 1), 0)
+                        } else {
+                            (setup.pageNum, setup.pageNumType) = (0, UInt8(kind))
+                        }
+                    }, [(0, "이어서"), (1, "홀수"), (2, "짝수"), (3, "사용자")], minWidth: 70)
+                    SpinField(value: number(\.pageNum), unit: "", range: 1...65535, digits: 0)
+                        .disabled(setup.pageNum == 0)
+                }
+                .padding(.leading, 12)
+                GroupTitle("개체 시작 번호")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    start("그림", \.pictureNum)
+                    start("표", \.tableNum)
+                    start("수식", \.equationNum)
+                }
+                .padding(.leading, 12)
+                GroupTitle("기타")
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("첫 쪽에만 머리말/꼬리말 감추기", isOn: Binding { setup.hideHeader && setup.hideFooter } set: {
+                        (setup.hideHeader, setup.hideFooter) = ($0, $0)
+                    })
+                    Toggle("첫 쪽에만 바탕쪽 감추기", isOn: $setup.hideMasterPage)
+                    Toggle("첫 쪽에만 테두리/배경 감추기", isOn: Binding { setup.hideBorder && setup.hideFill } set: {
+                        (setup.hideBorder, setup.hideFill) = ($0, $0)
+                    })
+                    Toggle("빈 줄 감추기", isOn: $setup.hideEmptyLine)
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            FieldLabel("단 사이 간격")
+                            SpinField(value: Binding { Units.millimeters(setup.columnSpacing) } set: { setup.columnSpacing = Units.units($0) },
+                                      unit: "mm", range: 0...100)
+                        }
+                        GridRow {
+                            FieldLabel("기본 탭 간격")
+                            // Stored at 200 to the point: 8000 is 한/글's 40pt.
+                            SpinField(value: Binding { Double(setup.defaultTabSpacing) / 200 } set: {
+                                setup.defaultTabSpacing = UInt32(($0 * 200).rounded())
+                            }, unit: "pt", range: 1...141)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(.leading, 12)
+                Divider()
+                HStack(spacing: 10) {
+                    Text("적용 범위")
+                    ChoiceField($whole, [(true, "문서 전체"), (false, "현재 구역")], minWidth: 100).fixedSize()
+                }
+            }
+        } confirm: {
+            viewer.setSection(setup, section: section, whole: whole)
+            dismiss()
+        }
+    }
+
+    /// 이어서 or 사용자 and its number.
+    private func start(_ title: String, _ key: WritableKeyPath<SectionSetup, UInt16>) -> some View {
+        GridRow {
+            FieldLabel(title)
+            ChoiceField(Binding { setup[keyPath: key] > 0 } set: { setup[keyPath: key] = $0 ? max(setup[keyPath: key], 1) : 0 },
+                        [(false, "이어서"), (true, "사용자")], minWidth: 70)
+            SpinField(value: number(key), unit: "", range: 1...65535, digits: 0)
+                .disabled(setup[keyPath: key] == 0)
+        }
+    }
+    private func number(_ key: WritableKeyPath<SectionSetup, UInt16>) -> Binding<Double> {
+        Binding { Double(max(setup[keyPath: key], 1)) } set: { setup[keyPath: key] = UInt16($0) }
     }
 }
 

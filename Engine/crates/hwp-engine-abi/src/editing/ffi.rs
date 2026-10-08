@@ -109,6 +109,10 @@ enum Request {
     PageBorder {
         section: u32,
     },
+    /// 구역 설정 of a section.
+    SectionSetup {
+        section: u32,
+    },
     /// 현재 쪽만 감추기 of a body paragraph.
     PageHide {
         target: EditTarget,
@@ -278,6 +282,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         }
         Request::PageBorder { section } => {
             HwpEditResult::ok(session.page_border(section)?, Vec::new())
+        }
+        Request::SectionSetup { section } => {
+            HwpEditResult::ok(session.section_setup(section)?, Vec::new())
         }
         Request::PageHide { target } => HwpEditResult::ok(session.page_hide(&target)?, Vec::new()),
         Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),

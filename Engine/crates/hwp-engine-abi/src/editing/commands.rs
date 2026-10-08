@@ -503,11 +503,19 @@ impl EditSession {
                 self.section_exists(*section)?;
                 validate_page(page)
             }
+            EditCommand::SetSection { section, setup, .. } => {
+                self.section_exists(*section)?;
+                if super::sections::valid_setup(setup) {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
             EditCommand::SetPageBorder {
                 section, border, ..
             } => {
                 self.section_exists(*section)?;
-                if super::page_border::valid(border) {
+                if super::sections::valid(border) {
                     Ok(())
                 } else {
                     Err(EditError::InvalidInput)
@@ -1415,6 +1423,14 @@ impl EditSession {
                 for s in page_sections(self.core.document(), *section, *whole) {
                     self.core.set_page_def_native(s, &json)?;
                 }
+                Ok(self.kept(*section))
+            }
+            EditCommand::SetSection {
+                section,
+                setup,
+                whole,
+            } => {
+                self.set_section(*section, setup, *whole)?;
                 Ok(self.kept(*section))
             }
             EditCommand::SetPageBorder {

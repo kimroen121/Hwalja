@@ -281,6 +281,13 @@ pub enum EditCommand {
         #[serde(default)]
         whole: bool,
     },
+    /// 구역 설정 of one section, or with `whole` of every section.
+    SetSection {
+        section: u32,
+        setup: SectionSetup,
+        #[serde(default)]
+        whole: bool,
+    },
     /// 머리말/꼬리말 지우기: the definition `target` (a 머리말 or 꼬리말 paragraph) is in.
     DeleteHeaderFooter {
         target: EditTarget,
@@ -687,6 +694,26 @@ pub struct PageBorder {
     /// 배경 by color; unset when it is a 그러데이션 or 그림, which then stays.
     pub fill: Option<PageFill>,
     pub fill_area: FillArea,
+}
+/// 구역 설정: 시작 쪽 번호 (`page_num`, 0 continuing; `page_num_type` 0 이어서, 1 홀수,
+/// 2 짝수), 개체 시작 번호 (0 continuing), the 첫 쪽에만 감추기 flags, 빈 줄 감추기, and
+/// 단 사이 간격 and 기본 탭 간격 in HWPUNIT.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionSetup {
+    pub page_num: u16,
+    pub page_num_type: u8,
+    pub picture_num: u16,
+    pub table_num: u16,
+    pub equation_num: u16,
+    pub column_spacing: i32,
+    pub default_tab_spacing: u32,
+    pub hide_header: bool,
+    pub hide_footer: bool,
+    pub hide_master_page: bool,
+    pub hide_border: bool,
+    pub hide_fill: bool,
+    pub hide_empty_line: bool,
 }
 /// A border line: kind (0 none, 1 solid, 2 dash, …), width (an index as in
 /// `CharStyle::border_width`) and `#rrggbb`.

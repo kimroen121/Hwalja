@@ -100,6 +100,9 @@ final class EditSession: @unchecked Sendable {
     func pageBorder(section: UInt32) async throws -> PageBorder {
         try await decode(send(.pageBorder(section: section)))
     }
+    func sectionSetup(section: UInt32) async throws -> SectionSetup {
+        try await decode(send(.sectionSetup(section: section)))
+    }
     func pageHide(_ target: EditTarget) async throws -> PageHide {
         try await decode(send(.pageHide(target)))
     }

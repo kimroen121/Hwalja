@@ -11,11 +11,11 @@ mod latex;
 mod logical;
 mod navigation;
 mod objects;
-mod page_border;
 #[cfg(test)]
 mod preservation;
 mod protocol;
 mod save;
+mod sections;
 mod stops;
 mod styles;
 pub use protocol::*;
@@ -343,6 +343,7 @@ impl EditSession {
             }),
             EditCommand::SetPage { .. }
             | EditCommand::SetPageBorder { .. }
+            | EditCommand::SetSection { .. }
             | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }

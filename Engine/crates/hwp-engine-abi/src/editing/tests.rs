@@ -2554,6 +2554,61 @@ fn sets_paper_and_margins() {
     }
 }
 #[test]
+fn section_setup_numbers_pages_and_hides_the_first_footer() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let footer = EditCommand::HeaderFooter {
+            section: 0,
+            footer: true,
+            page_number: Some(Placement::Center),
+        };
+        run(&mut s, footer).unwrap();
+        let new_page = EditCommand::Break {
+            position: point(body(), 1),
+            column: false,
+        };
+        run(&mut s, new_page).unwrap();
+        let shows = |s: &EditSession, page, number: u32| {
+            s.core
+                .render_page_svg_native(page)
+                .unwrap()
+                .contains(&format!(">{number}<"))
+        };
+        assert!(shows(&s, 0, 1) && shows(&s, 1, 2), "{format}");
+        let mut setup = s.section_setup(0).unwrap();
+        let set = |setup: SectionSetup| EditCommand::SetSection {
+            section: 0,
+            setup,
+            whole: false,
+        };
+        setup.page_num_type = 2;
+        run(&mut s, set(setup.clone())).unwrap();
+        assert!(
+            !shows(&s, 0, 1) && shows(&s, 0, 2) && shows(&s, 1, 3),
+            "{format}"
+        );
+        setup.page_num = 5;
+        setup.hide_footer = true;
+        run(&mut s, set(setup.clone())).unwrap();
+        assert_eq!(s.section_setup(0).unwrap(), setup, "{format}");
+        assert!(!shows(&s, 0, 5) && shows(&s, 1, 6), "{format}");
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        let reopened = EditSession::open(&saved).unwrap();
+        assert_eq!(reopened.section_setup(0).unwrap(), setup, "{format}");
+        assert!(shows(&reopened, 1, 6), "{format}");
+        setup.default_tab_spacing = 0;
+        assert!(run(&mut s, set(setup)).is_err());
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert!(shows(&s, 0, 2), "{format}");
+    }
+}
+#[test]
 fn page_borders_and_backgrounds_go_on_their_pages() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, true)).unwrap();

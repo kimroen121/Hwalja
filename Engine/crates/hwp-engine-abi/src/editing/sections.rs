@@ -1,4 +1,5 @@
-//! 쪽 테두리/배경: a section's border and background, with the pages they go on.
+//! A section's definition: 쪽 테두리/배경 (its border and background, with the pages they
+//! go on) and 구역 설정.
 use super::commands::page_sections;
 use super::*;
 use rhwp::model::{control::Control, document::SectionDef};
@@ -11,6 +12,14 @@ const SIDES: [&str; 4] = ["borderLeft", "borderRight", "borderTop", "borderBotto
 fn color(text: &str) -> bool {
     text.strip_prefix('#')
         .is_some_and(|hex| hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+}
+/// 기본 탭 간격 and 단 사이 간격 up to 100 mm.
+const MAX_GAP: u32 = 28346;
+
+pub(super) fn valid_setup(setup: &SectionSetup) -> bool {
+    setup.page_num_type <= 2
+        && (1..=MAX_GAP).contains(&setup.default_tab_spacing)
+        && (0..=MAX_GAP as i32).contains(&setup.column_spacing)
 }
 pub(super) fn valid(border: &PageBorder) -> bool {
     border
@@ -157,6 +166,43 @@ impl EditSession {
             }
             self.core
                 .set_page_border_fill_native(s, &props.to_string())?;
+        }
+        Ok(())
+    }
+    /// 구역 설정 of a section.
+    pub fn section_setup(&self, section: u32) -> Result<SectionSetup, EditError> {
+        serde_json::from_str(&self.core.get_section_def_native(section as usize)?)
+            .map_err(|_| EditError::RenderFailed)
+    }
+    pub(super) fn set_section(
+        &mut self,
+        section: u32,
+        setup: &SectionSetup,
+        whole: bool,
+    ) -> Result<(), EditError> {
+        // 첫 쪽에만 테두리/배경 감추기 and 쪽 테두리/배경's 첫 쪽만 share the flags: hiding
+        // the first page takes 첫 쪽만 off.
+        let pages = |hide: bool, first: bool| pages(hide, first && !hide);
+        for s in page_sections(self.core.document(), section, whole) {
+            let sec = &mut self.core.document_mut().sections[s];
+            let sd = &sec.section_def;
+            let (border, fill) = (
+                pages(setup.hide_border, sd.first_page_border),
+                pages(setup.hide_fill, sd.first_page_fill),
+            );
+            set_pages(&mut sec.section_def, border, fill);
+            for c in sec.paragraphs.iter_mut().flat_map(|p| &mut p.controls) {
+                if let Control::SectionDef(sd) = c {
+                    set_pages(sd, border, fill);
+                    break;
+                }
+            }
+        }
+        let json = serde_json::to_string(setup).map_err(|_| EditError::InvalidInput)?;
+        if whole {
+            self.core.set_section_def_all_native(&json)?;
+        } else {
+            self.core.set_section_def_native(section as usize, &json)?;
         }
         Ok(())
     }
