@@ -491,6 +491,16 @@ impl EditSession {
         {
             return Err(EditError::InvalidInput);
         }
+        if props.shadow_type.is_some_and(|v| v > 10)
+            || props.shadow_alpha.is_some_and(|v| v > 255)
+            || props.round_rate.is_some_and(|v| v > 50)
+            || props
+                .tb_vertical_align
+                .as_deref()
+                .is_some_and(|v| !["Top", "Center", "Bottom"].contains(&v))
+        {
+            return Err(EditError::InvalidInput);
+        }
         let valid = props.width.is_none_or(|v| (1..=1_000_000).contains(&v))
             && props.height.is_none_or(|v| (1..=1_000_000).contains(&v))
             && [
@@ -509,6 +519,12 @@ impl EditSession {
                 props.crop_top,
                 props.crop_bottom,
                 props.cell_spacing,
+                props.shadow_offset_x,
+                props.shadow_offset_y,
+                props.tb_margin_left,
+                props.tb_margin_right,
+                props.tb_margin_top,
+                props.tb_margin_bottom,
             ]
             .into_iter()
             .all(length)
@@ -563,11 +579,13 @@ impl EditSession {
             && one_of(&props.fill_type, &["none", "solid"])
             && props.fill_pat_type.is_none_or(|v| (-1..=6).contains(&v))
             && props.fill_alpha.is_none_or(|v| v <= 255)
-            && (o.kind == ObjectKind::Shape
+            // A picture's 선 is its color, width and 종류.
+            && (matches!(o.kind, ObjectKind::Shape | ObjectKind::Picture)
                 || (props.border_color.is_none()
                     && props.border_width.is_none()
-                    && props.line_type.is_none()
-                    && props.line_end_shape.is_none()
+                    && props.line_type.is_none()))
+            && (o.kind == ObjectKind::Shape
+                || (props.line_end_shape.is_none()
                     && props.arrow_start.is_none()
                     && props.arrow_end.is_none()
                     && props.arrow_start_size.is_none()
@@ -576,7 +594,18 @@ impl EditSession {
                     && props.fill_bg_color.is_none()
                     && props.fill_pat_color.is_none()
                     && props.fill_pat_type.is_none()
-                    && props.fill_alpha.is_none()))
+                    && props.fill_alpha.is_none()
+                    && props.shadow_type.is_none()
+                    && props.shadow_color.is_none()
+                    && props.shadow_offset_x.is_none()
+                    && props.shadow_offset_y.is_none()
+                    && props.shadow_alpha.is_none()
+                    && props.tb_margin_left.is_none()
+                    && props.tb_margin_right.is_none()
+                    && props.tb_margin_top.is_none()
+                    && props.tb_margin_bottom.is_none()
+                    && props.tb_vertical_align.is_none()
+                    && props.round_rate.is_none()))
             && props.original_width.is_none()
             && props.original_height.is_none();
         if valid {

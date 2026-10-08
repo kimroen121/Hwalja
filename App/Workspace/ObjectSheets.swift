@@ -20,6 +20,8 @@ struct ObjectSheetState: Identifiable {
     var cell: (target: EditTarget, props: CellProps)?
     /// A 직선, the one drawing object with 화살표.
     var line = false
+    /// A drawing object with a 글상자.
+    var textBox = false
 }
 
 extension Viewer {
@@ -38,7 +40,8 @@ extension Viewer {
         Task {
             if let placed = document.object {
                 guard let props = try? await document.objectProps(placed.object) else { return NSSound.beep() }
-                objectSheet = ObjectSheetState(object: placed.object, props: props, line: placed.ends != nil)
+                objectSheet = ObjectSheetState(object: placed.object, props: props, line: placed.ends != nil,
+                                               textBox: placed.textBox == true)
             } else if document.selection?.focus.target.cell != nil {
                 guard let sheet = await tableSheet() else { return NSSound.beep() }
                 objectSheet = sheet
@@ -149,10 +152,13 @@ struct ObjectSheet: View {
 
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성", confirmTitle: "설정") {
-            DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
+            DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["선", "그림"] : [])
                        + (kind == .table ? ["테두리", "배경"] : [])
-                       + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])) { tab in
+                       + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])
+                       + (state.textBox ? ["글상자"] : []) + (kind == .shape ? ["그림자"] : [])) { tab in
                 switch tab {
+                case "글상자": textBoxTab
+                case "그림자": shadow
                 case "테두리": tableBorder
                 case "배경": tableBackground
                 case "선": line
@@ -312,8 +318,10 @@ struct ObjectSheet: View {
                                 images: Array(Swatches.lineKinds.prefix(12)), minWidth: 100)
                 }
                 GridRow {
-                    FieldLabel("끝 모양")
-                    ChoiceField(index(\.lineEndShape), Swatches.lineEnds.indices.map { ($0, "") }, images: Swatches.lineEnds, minWidth: 100)
+                    if kind == .shape {
+                        FieldLabel("끝 모양")
+                        ChoiceField(index(\.lineEndShape), Swatches.lineEnds.indices.map { ($0, "") }, images: Swatches.lineEnds, minWidth: 100)
+                    }
                     FieldLabel("굵기")
                     SpinField(value: Binding { (Double(props.borderWidth ?? 0) / Units.perMillimeter * 100).rounded() / 100 }
                                   set: { props.borderWidth = Units.units($0) },
@@ -321,16 +329,153 @@ struct ObjectSheet: View {
                 }
             }
             .padding(.leading, 12)
-            GroupTitle("화살표")
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow { arrow("시작 모양", \.arrowStart, start: true); arrow("끝 모양", \.arrowEnd, start: false) }
-                GridRow { arrowSize("시작 크기", \.arrowStartSize, start: true); arrowSize("끝 크기", \.arrowEndSize, start: false) }
+            if kind == .shape {
+                GroupTitle("화살표")
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow { arrow("시작 모양", \.arrowStart, start: true); arrow("끝 모양", \.arrowEnd, start: false) }
+                    GridRow { arrowSize("시작 크기", \.arrowStartSize, start: true); arrowSize("끝 크기", \.arrowEndSize, start: false) }
+                }
+                .padding(.leading, 12)
+                .disabled(!state.line)
             }
-            .padding(.leading, 12)
-            .disabled(!state.line)
+            if props.roundRate != nil {
+                GroupTitle("사각형 모서리 곡률")
+                HStack(spacing: 4) {
+                    ForEach([(UInt32(0), "직각"), (20, "둥근 모양"), (50, "반원")], id: \.0) { rate, title in
+                        Button { props.roundRate = rate } label: { Pictogram.corner(rate) }
+                            .buttonStyle(ToolButtonStyle(on: props.roundRate == rate))
+                            .help(title)
+                            .accessibilityLabel(title)
+                    }
+                    LabeledField("곡률 지정") {
+                        SpinField(value: Binding { Double(props.roundRate ?? 0) } set: { props.roundRate = UInt32($0) },
+                                  unit: "%", range: 0...50)
+                    }
+                    .padding(.leading, 12)
+                }
+                .padding(.leading, 12)
+            }
             Spacer(minLength: 0)
         }
         .padding(16)
+    }
+
+    /// 글상자: 안쪽 여백 (with 모두) and 세로 정렬.
+    private var textBoxTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("안쪽 여백")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow { length("왼쪽", \.tbMarginLeft); length("위쪽", \.tbMarginTop) }
+                GridRow { length("오른쪽", \.tbMarginRight); length("아래쪽", \.tbMarginBottom) }
+                GridRow {
+                    FieldLabel("모두")
+                    SpinField(value: Binding { Units.millimeters(props.tbMarginLeft ?? 0) } set: { value in
+                        let units: Int32 = Units.units(value)
+                        (props.tbMarginLeft, props.tbMarginRight, props.tbMarginTop, props.tbMarginBottom) = (units, units, units, units)
+                    }, unit: "mm", range: 0...1000)
+                }
+            }
+            .padding(.leading, 12)
+            GroupTitle("속성")
+            LabeledField("세로 정렬") {
+                Picker("", selection: text(\.tbVerticalAlign, "Top")) {
+                    Text("위").tag("Top")
+                    Text("가운데").tag("Center")
+                    Text("아래").tag("Bottom")
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+            }
+            .padding(.leading, 12)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+
+    /// 그림자 종류 in the dialog's order, with where each puts the shadow (in 2 mm steps).
+    private static let shadows: [(type: UInt32, title: String, x: Int32, y: Int32)] = [
+        (0, "그림자 없음", 0, 0), (9, "작게", -1, -1), (10, "크게", -1, -1),
+        (1, "왼쪽 위", -1, -1), (3, "왼쪽 아래", -1, 1), (2, "오른쪽 위", 1, -1), (4, "오른쪽 아래", 1, 1),
+        (5, "왼쪽 뒤", -1, 1), (7, "왼쪽 앞", -1, 1), (6, "오른쪽 뒤", 1, 1), (8, "오른쪽 앞", 1, 1),
+    ]
+    /// 그림자: 종류, 그림자 색, 가로·세로 방향 이동 (위로 양수) with the 1 mm steps, and 투명도.
+    private var shadow: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("종류")
+            HStack(spacing: 4) {
+                ForEach(Self.shadows, id: \.type) { kind in
+                    Button {
+                        props.shadowType = kind.type
+                        props.shadowOffsetX = kind.x * 567
+                        props.shadowOffsetY = kind.y * 567
+                        if kind.type != 0, props.shadowColor == nil { props.shadowColor = 0xb2b2b2 }
+                    } label: { Pictogram.shadow(kind.type) }
+                        .buttonStyle(ToolButtonStyle(on: (props.shadowType ?? 0) == kind.type))
+                        .help(kind.title)
+                        .accessibilityLabel(kind.title)
+                }
+            }
+            .padding(.leading, 12)
+            GroupTitle("그림자")
+            HStack(alignment: .top, spacing: 24) {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("그림자 색")
+                        ColorWell(hex: color(\.shadowColor, "#b2b2b2"))
+                    }
+                    GridRow {
+                        FieldLabel("가로 방향 이동")
+                        SpinField(value: millimeters(\.shadowOffsetX), unit: "mm", range: -100...100)
+                    }
+                    GridRow {
+                        FieldLabel("세로 방향 이동")
+                        SpinField(value: Binding { -Units.millimeters(props.shadowOffsetY ?? 0) } set: { props.shadowOffsetY = Units.units(-$0) },
+                                  unit: "mm", range: -100...100)
+                    }
+                    GridRow {
+                        FieldLabel("투명도")
+                        SpinField(value: Binding { (Double(props.shadowAlpha ?? 0) / 2.55).rounded() } set: { props.shadowAlpha = UInt32(($0 * 2.55).rounded()) },
+                                  unit: "%", range: 0...100)
+                    }
+                }
+                Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+                    ForEach([[(-1, -1, "왼쪽 위"), (0, -1, "위"), (1, -1, "오른쪽 위")],
+                             [(-1, 0, "왼쪽"), (0, 0, "기본 값으로 설정"), (1, 0, "오른쪽")],
+                             [(-1, 1, "왼쪽 아래"), (0, 1, "아래"), (1, 1, "오른쪽 아래")]], id: \.first!.2) { row in
+                        GridRow {
+                            ForEach(row, id: \.2) { dx, dy, title in
+                                ToolIcon(title, symbol: dx == 0 && dy == 0 ? "arrow.counterclockwise" : Self.arrow(dx, dy)) {
+                                    if dx == 0 && dy == 0 {
+                                        let kind = Self.shadows.first { $0.type == (props.shadowType ?? 0) }
+                                        (props.shadowOffsetX, props.shadowOffsetY) = ((kind?.x ?? 0) * 567, (kind?.y ?? 0) * 567)
+                                    } else {
+                                        props.shadowOffsetX = (props.shadowOffsetX ?? 0) + Int32(dx) * 283
+                                        props.shadowOffsetY = (props.shadowOffsetY ?? 0) + Int32(dy) * 283
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.leading, 12)
+            .disabled((props.shadowType ?? 0) == 0)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+    private static func arrow(_ dx: Int, _ dy: Int) -> String {
+        switch (dx, dy) {
+        case (-1, -1): "arrow.up.left"
+        case (0, -1): "arrow.up"
+        case (1, -1): "arrow.up.right"
+        case (-1, 0): "arrow.left"
+        case (1, 0): "arrow.right"
+        case (-1, 1): "arrow.down.left"
+        case (0, 1): "arrow.down"
+        default: "arrow.down.right"
+        }
     }
 
     private var fill: some View {
@@ -500,6 +645,50 @@ private struct CaptionGrid: View {
 /// in the accent color only when chosen.
 private enum Pictogram {
     static func ink(_ on: Bool) -> Color { on ? .accentColor : .secondary }
+    /// 사각형 모서리 곡률: a rectangle with corners `rate` % round.
+    static func corner(_ rate: UInt32) -> some View {
+        Canvas { context, size in
+            let box = CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 5)
+            let radius = min(box.width, box.height) * CGFloat(rate) / 100
+            context.stroke(Path(roundedRect: box, cornerRadius: radius), with: .color(.primary), lineWidth: 1.5)
+        }
+        .frame(width: 26, height: 22)
+        .padding(2)
+    }
+    /// 그림자 종류 `type`: a box with its shadow, none for 0.
+    static func shadow(_ type: UInt32) -> some View {
+        Canvas { context, size in
+            let box = CGRect(x: size.width * 0.25, y: size.height * 0.25, width: size.width * 0.5, height: size.height * 0.5)
+            let step: CGFloat = 3
+            var shade: Path?
+            switch type {
+            case 1: shade = Path(box.offsetBy(dx: -step, dy: -step))
+            case 2: shade = Path(box.offsetBy(dx: step, dy: -step))
+            case 3: shade = Path(box.offsetBy(dx: -step, dy: step))
+            case 4: shade = Path(box.offsetBy(dx: step, dy: step))
+            case 9: shade = Path(box.insetBy(dx: box.width / 6, dy: box.height / 6).offsetBy(dx: -box.width / 4, dy: -box.height / 4))
+            case 10: shade = Path(box.insetBy(dx: -box.width / 6, dy: -box.height / 6).offsetBy(dx: -step, dy: -step))
+            case 5...8:
+                // 뒤 rises behind the box, 앞 falls in front of it; to the 왼쪽 or 오른쪽.
+                let left = type == 5 || type == 7, back = type == 5 || type == 6
+                let lean = (left ? -1 : 1) * box.width / 2
+                let edge = back ? box.minY + box.height / 2 : box.maxY
+                shade = Path { p in
+                    p.move(to: CGPoint(x: box.minX, y: box.maxY))
+                    p.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
+                    p.addLine(to: CGPoint(x: box.maxX + lean, y: edge + (back ? 0 : box.height / 2)))
+                    p.addLine(to: CGPoint(x: box.minX + lean, y: edge + (back ? 0 : box.height / 2)))
+                    p.closeSubpath()
+                }
+            default: break
+            }
+            if let shade { context.fill(shade, with: .color(.secondary.opacity(0.6))) }
+            context.fill(Path(box), with: .color(Color(nsColor: .controlBackgroundColor)))
+            context.stroke(Path(box), with: .color(.primary), lineWidth: 1)
+        }
+        .frame(width: 26, height: 22)
+        .padding(2)
+    }
     static func wrap(_ value: String, on: Bool) -> some View {
         Canvas { context, size in
             let c = context, ink = ink(on)

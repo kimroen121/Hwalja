@@ -645,6 +645,22 @@ pub struct ObjectProps {
     pub cell_spacing: Option<i32>,
     /// Tables: 표 테두리/배경, its four sides and 배경.
     pub table_border: Option<CellBorder>,
+    /// Drawing objects' 그림자: 종류 (0 none, 1 왼쪽 위, 2 오른쪽 위, 3 왼쪽 아래, 4 오른쪽
+    /// 아래, 5 왼쪽 뒤, 6 오른쪽 뒤, 7 왼쪽 앞, 8 오른쪽 앞, 9 작게, 10 크게), color
+    /// (0x00bbggrr), offsets (HWPUNIT, y down) and 투명도 (0 opaque – 255).
+    pub shadow_type: Option<u32>,
+    pub shadow_color: Option<u32>,
+    pub shadow_offset_x: Option<i32>,
+    pub shadow_offset_y: Option<i32>,
+    pub shadow_alpha: Option<u32>,
+    /// 글상자: 안쪽 여백 (HWPUNIT) and 세로 정렬 (Top, Center, Bottom).
+    pub tb_margin_left: Option<i32>,
+    pub tb_margin_right: Option<i32>,
+    pub tb_margin_top: Option<i32>,
+    pub tb_margin_bottom: Option<i32>,
+    pub tb_vertical_align: Option<String>,
+    /// Rectangles: 사각형 모서리 곡률, 0–50 %.
+    pub round_rate: Option<u32>,
     pub script: Option<String>,
     /// HWPUNIT (100 per point).
     pub font_size: Option<u32>,

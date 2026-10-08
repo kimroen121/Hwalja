@@ -5557,3 +5557,105 @@ fn table_borders_and_backgrounds_are_set() {
         assert_eq!(s.object_props(&table).unwrap(), before, "{format}");
     }
 }
+#[test]
+fn shadows_text_boxes_corners_and_picture_lines() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let insert = EditCommand::InsertShape {
+            position: point(body(), 0),
+            shape: "rectangle".into(),
+            x: 10_000,
+            y: 20_000,
+            width: 14_000,
+            height: 6_000,
+            flip: false,
+        };
+        run(&mut s, insert).unwrap();
+        let rectangle = s.placed(0).unwrap()[0].object.clone();
+        run(
+            &mut s,
+            EditCommand::SetTextBox {
+                object: rectangle.clone(),
+                attach: true,
+            },
+        )
+        .unwrap();
+        let change = ObjectProps {
+            shadow_type: Some(4),
+            shadow_color: Some(0x00808080),
+            shadow_offset_x: Some(567),
+            shadow_offset_y: Some(567),
+            shadow_alpha: Some(0),
+            tb_margin_left: Some(1_000),
+            tb_vertical_align: Some("Center".into()),
+            round_rate: Some(20),
+            ..Default::default()
+        };
+        run(
+            &mut s,
+            EditCommand::SetObject {
+                object: rectangle.clone(),
+                props: change.clone(),
+            },
+        )
+        .unwrap();
+        let check = |s: &EditSession| {
+            let p = s.object_props(&rectangle).unwrap();
+            assert_eq!(
+                (
+                    p.shadow_type,
+                    p.shadow_color,
+                    p.shadow_offset_x,
+                    p.shadow_offset_y,
+                    p.tb_margin_left,
+                    p.tb_vertical_align,
+                    p.round_rate
+                ),
+                (
+                    change.shadow_type,
+                    change.shadow_color,
+                    change.shadow_offset_x,
+                    change.shadow_offset_y,
+                    change.tb_margin_left,
+                    change.tb_vertical_align.clone(),
+                    change.round_rate
+                ),
+                "{format}"
+            );
+        };
+        check(&s);
+        // The shadow is drawn under the rectangle, moved 2 mm right and down.
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        assert!(svg.contains("<g transform=\"translate(7.56"), "{format}");
+        check(&EditSession::open(&s.export(save).unwrap()).unwrap());
+        run(&mut s, picture_at(point(body(), 1))).unwrap();
+        let picture = s
+            .placed(0)
+            .unwrap()
+            .into_iter()
+            .find(|o| o.object.kind == ObjectKind::Picture)
+            .unwrap()
+            .object;
+        let line = ObjectProps {
+            line_type: Some(2),
+            border_width: Some(100),
+            border_color: Some(0x000000ff),
+            ..Default::default()
+        };
+        run(
+            &mut s,
+            EditCommand::SetObject {
+                object: picture.clone(),
+                props: line,
+            },
+        )
+        .unwrap();
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let p = reopened.object_props(&picture).unwrap();
+        assert_eq!(
+            (p.line_type, p.border_width, p.border_color),
+            (Some(2), Some(100), Some(0x000000ff)),
+            "{format}"
+        );
+    }
+}

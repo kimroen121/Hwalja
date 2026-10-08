@@ -287,7 +287,36 @@ diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_co
 diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_core/commands/object_ops/picture.rs
 --- a/src/document_core/commands/object_ops/picture.rs
 +++ b/src/document_core/commands/object_ops/picture.rs
-@@ -1236,16 +1236,22 @@
+@@ -463,7 +463,7 @@
+                 // 바깥 여백
+                 "\"outerMarginLeft\":{},\"outerMarginTop\":{},\"outerMarginRight\":{},\"outerMarginBottom\":{},",
+                 // 테두리
+-                "\"borderColor\":{},\"borderWidth\":{},",
++                "\"borderColor\":{},\"borderWidth\":{},\"lineType\":{},",
+                 // 캡션
+                 "\"hasCaption\":{},\"captionDirection\":\"{}\",\"captionVertAlign\":\"{}\",",
+                 "\"captionWidth\":{},\"captionSpacing\":{},\"captionMaxWidth\":{},\"captionIncludeMargin\":{}{}}}"
+@@ -489,7 +489,7 @@
+             // 바깥 여백
+             c.margin.left, c.margin.top, c.margin.right, c.margin.bottom,
+             // 테두리
+-            pic.border_color, pic.border_width,
++            pic.border_color, pic.border_width, pic.border_attr.attr & 0x3F,
+             // 캡션
+             pic.caption.is_some(),
+             pic.caption.as_ref().map_or("Bottom", |cap| match cap.direction {
+@@ -1216,6 +1216,10 @@
+         }
+         if let Some(v) = json_i32(props_json, "borderWidth") {
+             pic.border_width = v;
++        }
++        // 선 종류: bits 0-5 of the border line's attributes, as for drawing objects.
++        if let Some(v) = json_u32(props_json, "lineType") {
++            pic.border_attr.attr = (pic.border_attr.attr & !0x3F) | (v & 0x3F);
+         }
+ 
+         // description
+@@ -1236,16 +1240,22 @@
                          number_type: crate::model::control::AutoNumberType::Picture,
                          ..Default::default()
                      };
@@ -316,7 +345,7 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
                      // attr bit 29: 캡션 존재 플래그 (한컴 호환성)
                      pic.common.attr |= 1 << 29;
                  }
-@@ -1366,6 +1372,12 @@
+@@ -1366,6 +1376,12 @@
                      *offset -= 8;
                  }
              }
@@ -332,7 +361,27 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
 diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
 --- a/src/document_core/commands/object_ops/shape.rs
 +++ b/src/document_core/commands/object_ops/shape.rs
-@@ -1061,6 +1061,12 @@
+@@ -558,6 +558,9 @@
+             }
+             if let Some(v) = crate::document_core::helpers::json_i32(props_json, "shadowOffsetY") {
+                 d.shadow_offset_y = v;
++            }
++            if let Some(v) = crate::document_core::helpers::json_u32(props_json, "shadowAlpha") {
++                d.shadow_alpha = v.min(255) as u8;
+             }
+ 
+             // TextBox 속성 업데이트
+@@ -922,6 +925,9 @@
+             if let Some(v) = crate::document_core::helpers::json_i32(props_json, "shadowOffsetY") {
+                 d.shadow_offset_y = v;
+             }
++            if let Some(v) = crate::document_core::helpers::json_u32(props_json, "shadowAlpha") {
++                d.shadow_alpha = v.min(255) as u8;
++            }
+             if let Some(ref mut tb) = d.text_box {
+                 if let Some(v) = json_i32(props_json, "tbMarginLeft") {
+                     tb.margin_left = v as i16;
+@@ -1061,6 +1067,12 @@
              for offset in para.char_offsets.iter_mut() {
                  if *offset >= threshold {
                      *offset -= 8;
@@ -345,20 +394,20 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
                  }
              }
          }
-@@ -2184,6 +2190,12 @@
+@@ -2182,6 +2194,12 @@
+                 for offset in para.char_offsets.iter_mut() {
+                     if *offset >= threshold {
                          *offset -= 8;
-                     }
-                 }
++                    }
++                }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
-+                    }
-+                }
+                     }
+                 }
              }
- 
-             para.controls.remove(ci);
-@@ -2526,7 +2538,73 @@
+@@ -2526,7 +2544,73 @@
                          auto_num.suffix_char = suffix_char;
                          auto_num.number = endnote.number;
                          auto_num.assigned_number = endnote.number;
@@ -432,7 +481,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
                  }
              }
          }
-@@ -2597,10 +2675,22 @@
+@@ -2597,10 +2681,22 @@
  
      /// 현재 구역의 미주 모양을 조회한다.
      pub fn get_endnote_shape_native(&self, section_idx: usize) -> Result<String, HwpError> {
@@ -456,7 +505,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
          let separator_enabled = shape.separator_length != 0
              || shape.separator_line_type != 0
              || shape.separator_line_width != 0;
-@@ -2662,11 +2752,26 @@
+@@ -2662,11 +2758,26 @@
          section_idx: usize,
          props_json: &str,
      ) -> Result<String, HwpError> {
@@ -484,7 +533,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
  
              if let Some(v) = crate::document_core::helpers::json_str(props_json, "numberFormat") {
                  shape.number_format =
-@@ -2684,8 +2789,9 @@
+@@ -2684,8 +2795,9 @@
              if let Some(v) = crate::document_core::helpers::json_u16(props_json, "startNumber") {
                  shape.start_number = v.max(1);
              }
@@ -496,7 +545,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
              }
              if let Some(v) = Self::hwpunit16_from_json(props_json, "separatorMarginTop") {
                  let above = v.max(0);
-@@ -2741,13 +2847,23 @@
+@@ -2741,13 +2853,23 @@
              let prefix_char = shape.prefix_char;
              let suffix_char = shape.suffix_char;
              let mut next_number = start_number;
@@ -3267,7 +3316,54 @@ diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
 diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
 --- a/src/renderer/svg.rs
 +++ b/src/renderer/svg.rs
-@@ -583,14 +583,20 @@
+@@ -534,6 +534,18 @@
+             }
+             RenderNodeType::Rectangle(rect) => {
+                 self.open_shape_transform(&rect.transform, &node.bbox);
++                let corner = if rect.corner_radius > 0.0 {
++                    format!(" rx=\"{0}\" ry=\"{0}\"", rect.corner_radius)
++                } else {
++                    String::new()
++                };
++                self.draw_shadow(
++                    &rect.style,
++                    &format!(
++                        "rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"{corner}",
++                        node.bbox.x, node.bbox.y, node.bbox.width, node.bbox.height
++                    ),
++                );
+                 self.draw_rect_with_gradient(
+                     node.bbox.x,
+                     node.bbox.y,
+@@ -552,6 +564,16 @@
+                 self.open_shape_transform(&ellipse.transform, &node.bbox);
+                 let cx = node.bbox.x + node.bbox.width / 2.0;
+                 let cy = node.bbox.y + node.bbox.height / 2.0;
++                self.draw_shadow(
++                    &ellipse.style,
++                    &format!(
++                        "ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\"",
++                        cx,
++                        cy,
++                        node.bbox.width / 2.0,
++                        node.bbox.height / 2.0
++                    ),
++                );
+                 self.draw_ellipse_with_gradient(
+                     cx,
+                     cy,
+@@ -569,6 +591,10 @@
+             }
+             RenderNodeType::Path(path) => {
+                 self.open_shape_transform(&path.transform, &node.bbox);
++                self.draw_shadow(
++                    &path.style,
++                    &format!("path d=\"{}\"", Self::path_data(&path.commands)),
++                );
+                 self.draw_path_with_gradient(&path.commands, &path.style, path.gradient.as_deref());
+             }
+             RenderNodeType::Equation(eq) => {
+@@ -583,14 +609,20 @@
                  };
                  let scale_y = 1.0_f64;
                  let needs_scale = (scale_x - 1.0).abs() > 0.01 || (scale_y - 1.0).abs() > 0.01;
@@ -3290,7 +3386,7 @@ diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
                          node.bbox.x, node.bbox.y,
                      ));
                  }
-@@ -1027,25 +1033,25 @@
+@@ -1027,25 +1059,25 @@
          let fg = color_to_svg(info.pattern_color);
          let sz = 6; // 패턴 타일 크기 (px)
  
@@ -3313,10 +3409,10 @@ diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
                           <line x1=\"0\" y1=\"0\" x2=\"{sz}\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
 -            4 => // 십자 (+++++)
 +            4 => // 대각선 (/////)
-+                format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
 +                         <line x1=\"{sz}\" y1=\"0\" x2=\"0\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
 +            5 => // 십자 (+++++)
-                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
++                format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
                           <line x1=\"3\" y1=\"0\" x2=\"3\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>\
                           <line x1=\"0\" y1=\"3\" x2=\"{sz}\" y2=\"3\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
 -            5 => // 격자 (xxxxx)
@@ -3324,7 +3420,67 @@ diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
                  format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
                           <line x1=\"0\" y1=\"0\" x2=\"{sz}\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>\
                           <line x1=\"{sz}\" y1=\"0\" x2=\"0\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
-@@ -3582,9 +3588,13 @@
+@@ -1361,8 +1393,59 @@
+         }
+ 
+         self.output.push_str(&format!("<ellipse {}/>\n", attrs));
++    }
++
++    /// 그리기 개체의 그림자: the shape (`element`, an SVG tag with its geometry) filled with
++    /// the shadow color, moved by the shadow's offset, under the shape.
++    /// ponytail: every 그림자 종류 is drawn as a moved copy; 작게·크게 and the slanted 뒤·앞
++    /// kinds keep the shape's size and slant until someone needs them exact.
++    fn draw_shadow(&mut self, style: &ShapeStyle, element: &str) {
++        let Some(shadow) = &style.shadow else {
++            return;
++        };
++        let opacity = if shadow.alpha > 0 {
++            format!(" fill-opacity=\"{:.3}\"", 1.0 - shadow.alpha as f64 / 255.0)
++        } else {
++            String::new()
++        };
++        self.output.push_str(&format!(
++            "<g transform=\"translate({},{})\"><{} fill=\"{}\"{}/></g>\n",
++            shadow.offset_x,
++            shadow.offset_y,
++            element,
++            color_to_svg(shadow.color),
++            opacity
++        ));
+     }
+ 
++    /// SVG path data for `commands`.
++    fn path_data(commands: &[PathCommand]) -> String {
++        let mut d = String::new();
++        for cmd in commands {
++            match cmd {
++                PathCommand::MoveTo(x, y) => d.push_str(&format!("M{} {} ", x, y)),
++                PathCommand::LineTo(x, y) => d.push_str(&format!("L{} {} ", x, y)),
++                PathCommand::CurveTo(x1, y1, x2, y2, x, y) => {
++                    d.push_str(&format!("C{} {} {} {} {} {} ", x1, y1, x2, y2, x, y))
++                }
++                PathCommand::ArcTo(rx, ry, x_rot, large_arc, sweep, x, y) => {
++                    d.push_str(&format!(
++                        "A{} {} {} {} {} {} {} ",
++                        rx,
++                        ry,
++                        x_rot,
++                        if *large_arc { 1 } else { 0 },
++                        if *sweep { 1 } else { 0 },
++                        x,
++                        y
++                    ));
++                }
++                PathCommand::ClosePath => d.push_str("Z "),
++            }
++        }
++        d.trim().to_string()
++    }
++
+     /// 그라데이션을 포함한 패스 그리기 (렌더 트리 전용)
+     fn draw_path_with_gradient(
+         &mut self,
+@@ -3582,9 +3665,13 @@
  }
  
  fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64) -> String {
@@ -3338,7 +3494,7 @@ diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
      {
          return String::new();
      }
-@@ -3596,7 +3606,10 @@
+@@ -3596,7 +3683,10 @@
      } else {
          1.0
      };
@@ -3790,6 +3946,35 @@ diff --git a/src/parser/hwpx/section.rs b/src/parser/hwpx/section.rs
                  if sec_def.hide_fill {
                      sec_def.flags |= 0x0010;
                  } else {
+@@ -2796,6 +2798,8 @@
+     let mut border_y = [0i32; 4];
+     let mut img_dim: (u32, u32) = (0, 0); // [#1389] hp:imgDim 원본 이미지 픽셀 크기
+     let mut href: Option<String> = None;
++    // 그림의 선 (`<hp:lineShape>`), as for drawing objects.
++    let mut line_shape: Option<ShapeBorderLine> = None;
+     let mut picture_instance_id = 0;
+     let mut effects = PictureEffects::default();
+     let mut reverse = false;
+@@ -2947,6 +2951,7 @@
+                             }
+                         }
+                     }
++                    b"lineShape" => line_shape = Some(parse_line_shape_attr(ce)),
+                     // [#1389] 원본 이미지 픽셀 크기 — verbatim 적재
+                     b"imgDim" => {
+                         for attr in ce.attributes().flatten() {
+@@ -3180,6 +3185,11 @@
+     pic.padding = padding;
+     pic.border_x = border_x;
+     pic.border_y = border_y;
++    if let Some(bl) = line_shape {
++        pic.border_color = bl.color;
++        pic.border_width = bl.width;
++        pic.border_attr = bl;
++    }
+     pic.instance_id = picture_instance_id;
+     pic.effects = effects;
+     pic.caption = caption;
 diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
 --- a/src/renderer/layout.rs
 +++ b/src/renderer/layout.rs
@@ -4311,3 +4496,19 @@ diff --git a/src/document_core/commands/styles.rs b/src/document_core/commands/s
 +        true
 +    }
 +}
+diff --git a/src/serializer/hwpx/picture.rs b/src/serializer/hwpx/picture.rs
+--- a/src/serializer/hwpx/picture.rs
++++ b/src/serializer/hwpx/picture.rs
+@@ -109,6 +109,12 @@
+     // [#1501] 그룹 자식 pic 의 transMatrix(render_tx/sx) 보존 — 종전 identity 고정 출력은
+     // 그룹 내 자식을 원점·고유크기로 붕괴시켰다. shape.rs 의 raw_rendering 디코더 공유.
+     super::shape::write_rendering_info(w, &pic.shape_attr)?;
++    // 그림의 선, only when it has one so pictures without stay as they were written.
++    if pic.border_attr.attr & 0x3F != 0 {
++        let mut line = pic.border_attr.clone();
++        (line.color, line.width) = (pic.border_color, pic.border_width);
++        super::shape::write_line_shape(w, &line)?;
++    }
+     write_img_rect(w, pic)?;
+     write_img_clip(w, pic)?;
+     write_in_margin(w, pic)?;

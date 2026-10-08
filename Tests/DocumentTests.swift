@@ -1614,6 +1614,22 @@ struct DocumentTests {
             ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                                                                      props: ObjectProps(pageBreak: 2, repeatHeader: true)),
                                              viewer: viewer, tab: "표"))),
+            ("shapeShadow", AnyView(ObjectSheet(state: ObjectSheetState(
+                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
+                props: ObjectProps(shadowType: 4, shadowColor: 0xb2b2b2, shadowOffsetX: 567, shadowOffsetY: 567, shadowAlpha: 0,
+                                   tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141,
+                                   tbVerticalAlign: "Center", roundRate: 20),
+                textBox: true), viewer: viewer, tab: "그림자"))),
+            ("shapeTextBox", AnyView(ObjectSheet(state: ObjectSheetState(
+                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
+                props: ObjectProps(tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141, tbVerticalAlign: "Center"),
+                textBox: true), viewer: viewer, tab: "글상자"))),
+            ("shapeLine", AnyView(ObjectSheet(state: ObjectSheetState(
+                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
+                props: ObjectProps(roundRate: 20, borderColor: 0, borderWidth: 33, lineType: 1)), viewer: viewer, tab: "선"))),
+            ("pictureLine", AnyView(ObjectSheet(state: ObjectSheetState(
+                object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
+                props: ObjectProps(borderColor: 0xff, borderWidth: 100, lineType: 2)), viewer: viewer, tab: "선"))),
             ("tableBorder", AnyView(TableBorderSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(cellSpacing: 283, tableBorder: CellBorder(

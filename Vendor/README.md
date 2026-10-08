@@ -43,6 +43,7 @@
 - adds `replace_font_native` for 문서 정보 › 글꼴 정보's 글꼴 바꾸기: every 글자 모양 using a font in one 언어 (or all) takes another, and the document is laid out again.
 - opens `set_cell_zone_properties_native` to callers outside the crate, for 셀 테두리/배경's 하나의 셀처럼 적용.
 - lets `set_table_properties_native` take the table's own 테두리/배경 (표 테두리/배경), laid over the border fill it has.
+- 개체 속성: drawing objects take 그림자 투명도; pictures read and write their 선 종류, and HWPX keeps a picture's `<hp:lineShape>`; SVG draws a drawing object's 그림자 as the shape moved by its offset, under it.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

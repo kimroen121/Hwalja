@@ -526,6 +526,22 @@ struct ObjectProps: PartialFormat {
     var cellSpacing: Int32?
     /// Tables: 표 테두리/배경, its four sides and 배경.
     var tableBorder: CellBorder?
+    /// Drawing objects' 그림자: 종류 (0 none, 1 왼쪽 위, 2 오른쪽 위, 3 왼쪽 아래, 4 오른쪽 아래,
+    /// 5 왼쪽 뒤, 6 오른쪽 뒤, 7 왼쪽 앞, 8 오른쪽 앞, 9 작게, 10 크게), color (0x00bbggrr),
+    /// offsets (HWPUNIT, y down) and 투명도 (0 opaque – 255).
+    var shadowType: UInt32?
+    var shadowColor: UInt32?
+    var shadowOffsetX: Int32?
+    var shadowOffsetY: Int32?
+    var shadowAlpha: UInt32?
+    /// 글상자: 안쪽 여백 and 세로 정렬 (Top, Center, Bottom).
+    var tbMarginLeft: Int32?
+    var tbMarginRight: Int32?
+    var tbMarginTop: Int32?
+    var tbMarginBottom: Int32?
+    var tbVerticalAlign: String?
+    /// Rectangles: 사각형 모서리 곡률, 0–50 %.
+    var roundRate: UInt32?
     var script: String?
     /// HWPUNIT, 100 per point.
     var fontSize: UInt32?
