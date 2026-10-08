@@ -88,6 +88,9 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageBorder != nil }, set: { if !$0 { viewer.pageBorder = nil } })) {
             if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
         }
+        .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
+        .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
+        .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
         .sheet(isPresented: Binding(get: { viewer.noteShapes != nil }, set: { if !$0 { viewer.noteShapes = nil } })) {
             if let shapes = viewer.noteShapes {
                 NoteShapeSheet(section: shapes.section, footnote: shapes.footnote, endnote: shapes.endnote, viewer: viewer)
@@ -278,6 +281,10 @@ final class Viewer: ObservableObject {
     @Published var pageBorder: (section: UInt32, border: PageBorder)?
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
     @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
+    /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.
+    @Published var editingStyles = false
+    @Published var styleEditor: StyleEditor?
+    @Published var replacingStyle: StyleInfo?
 
     // Find and replace.
     @Published var finding = false
@@ -544,7 +551,7 @@ private struct TaskPaneView: View {
                 .frame(height: 34)
                 switch pane {
                 case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
-                case .styles: StylePane(document: document, editor: viewer.canvas.editor)
+                case .styles: StylePane(document: document, viewer: viewer)
                 case .bookmarks: BookmarkPane(viewer: viewer)
                 }
             }
@@ -562,22 +569,58 @@ private struct TaskPaneView: View {
     }
 }
 
-/// [스타일] 작업 창: the styles, the caret's marked; a click applies one.
+/// [스타일] 작업 창: the styles, the caret's marked; a click applies one. The tools below
+/// work on the caret's style; a style's quick menu on that style.
 private struct StylePane: View {
     @ObservedObject var document: HwpDocument
-    let editor: PageEditor
+    let viewer: Viewer
     var body: some View {
-        List(document.styles, id: \.id) { style in
-            Button { document.applyStyle(style.id, editor.undoManager) } label: {
-                Label(style.name, systemImage: style.id == document.format?.style ? "checkmark" : "paragraphsign")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+        let current = document.styles.first { $0.id == document.format?.style }
+        VStack(spacing: 0) {
+            List(document.styles, id: \.id) { style in
+                Button { document.applyStyle(style.id, viewer.undoManager) } label: {
+                    Label(style.name, systemImage: style.id == current?.id
+                        ? "checkmark" : style.paragraphStyle ? "paragraphsign" : "textformat")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!document.context.canApplyStyle)
+                .contextMenu {
+                    Button("스타일 추가/편집") { edit(style) }
+                    Button("커서 위치의 스타일로 바꾸기") { viewer.restyleFromCaret(style.id) }
+                    Button("스타일 지우기") { delete(style) }.disabled(style.id == 0)
+                }
+                .disabled(document.context.locked)
             }
-            .buttonStyle(.plain)
-            .disabled(!document.context.canApplyStyle)
+            .listStyle(.plain)
+            Divider()
+            HStack(spacing: 2) {
+                tool("스타일 추가", "plus") { viewer.styleEditor = viewer.newStyle() }
+                tool("스타일 편집", "pencil") { if let current { edit(current) } }.disabled(current == nil)
+                tool("스타일 지우기", "minus") { if let current { delete(current) } }.disabled((current?.id ?? 0) == 0)
+                tool("스타일 위로", "arrow.up") { if let current { viewer.moveStyle(current.id, up: true) } }
+                    .disabled((current?.id ?? 0) < 2)
+                tool("스타일 아래로", "arrow.down") { if let current { viewer.moveStyle(current.id, up: false) } }
+                    .disabled(current.map { $0.id == 0 || Int($0.id) + 1 >= document.styles.count } ?? true)
+                Spacer()
+            }
+            .padding(4)
+            .disabled(document.context.locked)
         }
-        .listStyle(.plain)
         .task { await document.loadStyles() }
+    }
+    private func edit(_ style: StyleInfo) {
+        Task { viewer.styleEditor = await viewer.styleEditor(style) }
+    }
+    private func delete(_ style: StyleInfo) {
+        viewer.deleteStyle(style) { viewer.replacingStyle = $0 }
+    }
+    private func tool(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(width: 22, height: 20) }
+            .buttonStyle(ToolButtonStyle())
+            .help(title)
+            .accessibilityLabel(title)
     }
 }
 

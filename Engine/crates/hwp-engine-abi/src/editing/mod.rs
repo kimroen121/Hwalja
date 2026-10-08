@@ -345,6 +345,11 @@ impl EditSession {
             | EditCommand::SetPageBorder { .. }
             | EditCommand::SetSection { .. }
             | EditCommand::SetNoteShape { .. }
+            | EditCommand::AddStyle { .. }
+            | EditCommand::EditStyle { .. }
+            | EditCommand::DeleteStyle { .. }
+            | EditCommand::MoveStyle { .. }
+            | EditCommand::RestyleFromCaret { .. }
             | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }
@@ -451,6 +456,12 @@ impl EditSession {
                 }
                 Err(self.roll_back(current, error))
             }
+        }
+    }
+    /// Takes the app's selection, which may have moved since the last edit.
+    pub fn keep_selection(&mut self, selection: Option<EditSelection>) {
+        if selection.is_some() {
+            self.selection = selection;
         }
     }
     fn publish(&mut self, rendered: Rendered, selection: Option<EditSelection>) {

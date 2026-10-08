@@ -236,6 +236,11 @@ pub(super) fn check(
         EditCommand::SetNoteShape { section, whole, .. } => {
             return check_note_shape(before, after, *section, *whole)
         }
+        EditCommand::AddStyle { .. }
+        | EditCommand::EditStyle { .. }
+        | EditCommand::DeleteStyle { .. }
+        | EditCommand::MoveStyle { .. }
+        | EditCommand::RestyleFromCaret { .. } => return check_styles(before, after),
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
             position: EditPosition { target, .. },
@@ -800,6 +805,72 @@ fn check_page_border(
         (x.raw_stream, y.raw_stream) = (None, None);
     }
     same_rest(&mut a, &mut b, section)
+}
+/// A style command changed only the styles, the shapes in DocInfo and which style and
+/// shapes paragraphs refer to; no text or control.
+fn check_styles(before: &Document, after: &Document) -> Result<(), EditError> {
+    fn unstyle(paragraphs: &mut [Paragraph]) {
+        for p in paragraphs {
+            p.style_id = 0;
+            p.para_shape_id = 0;
+            p.char_shapes.clear();
+            for c in &mut p.controls {
+                match c {
+                    Control::Table(t) => {
+                        for cell in &mut t.cells {
+                            unstyle(&mut cell.paragraphs);
+                        }
+                        if let Some(c) = &mut t.caption {
+                            unstyle(&mut c.paragraphs);
+                        }
+                    }
+                    Control::Shape(s) => {
+                        if let Some(d) = s.drawing_mut() {
+                            if let Some(b) = &mut d.text_box {
+                                unstyle(&mut b.paragraphs);
+                            }
+                            if let Some(c) = &mut d.caption {
+                                unstyle(&mut c.paragraphs);
+                            }
+                        }
+                    }
+                    Control::Picture(p) => {
+                        if let Some(c) = &mut p.caption {
+                            unstyle(&mut c.paragraphs);
+                        }
+                    }
+                    Control::Footnote(n) => unstyle(&mut n.paragraphs),
+                    Control::Endnote(n) => unstyle(&mut n.paragraphs),
+                    Control::Header(h) => unstyle(&mut h.paragraphs),
+                    Control::Footer(h) => unstyle(&mut h.paragraphs),
+                    _ => {}
+                }
+            }
+        }
+    }
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let info = &mut doc.doc_info;
+        info.styles.clear();
+        info.char_shapes.clear();
+        info.para_shapes.clear();
+        info.numberings.clear();
+        info.bullets.clear();
+        info.font_faces.clear();
+        info.raw_stream = None;
+        info.raw_stream_dirty = false;
+        for s in &mut doc.sections {
+            unstyle(&mut s.paragraphs);
+            s.raw_stream = None;
+            normalize(&mut s.paragraphs);
+        }
+    }
+    if same(&mut a, &mut b) {
+        Ok(())
+    } else {
+        Err(EditError::PreservationFailed)
+    }
 }
 /// 각주/미주 모양 changed only the sections' definitions and the notes' numbers and
 /// number shapes.

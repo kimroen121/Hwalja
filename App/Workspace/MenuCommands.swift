@@ -362,6 +362,9 @@ struct MenuItems {
             Button("한 수준 감소") { editor?.stepLevel(by: -1) }
         }
         .disabled(!context.canFormat || !context.inList)
+        item("스타일…", Icon.styles) { viewer?.editingStyles = true }
+            .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!)), modifiers: [])
+            .disabled(viewer == nil)
         Divider()
         item("개체 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(context.locked || (context.object == nil && !context.inTable))

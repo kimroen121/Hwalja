@@ -76,6 +76,14 @@ enum EditCommand: Encodable, Sendable {
     case mergePrevious(EditPosition)
     /// 스타일 `style` (an index into the document's styles) for the selected paragraphs.
     case applyStyle(EditSelection, style: UInt32)
+    /// 스타일 추가하기 from the shapes at a position, 스타일 편집하기, 스타일 지우기 (its
+    /// paragraphs take `replacement`), 한 줄 위로/아래로 이동하기, and 커서 위치의 스타일로
+    /// 바꾸기.
+    case addStyle(EditPosition, StyleSpec)
+    case editStyle(UInt32, StyleSpec)
+    case deleteStyle(UInt32, replacement: UInt32)
+    case moveStyle(UInt32, up: Bool)
+    case restyleFromCaret(UInt32, EditPosition)
     case formatText(EditSelection, CharStyle)
     case formatParagraphs(EditSelection, ParaStyle)
     /// A new page (or column) from `position` in the body.
@@ -153,7 +161,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -256,6 +264,26 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("applyStyle", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(style, forKey: .style)
+        case let .addStyle(position, spec):
+            try c.encode("addStyle", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(spec, forKey: .style)
+        case let .editStyle(style, spec):
+            try c.encode("editStyle", forKey: .kind)
+            try c.encode(style, forKey: .style)
+            try c.encode(spec, forKey: .spec)
+        case let .deleteStyle(style, replacement):
+            try c.encode("deleteStyle", forKey: .kind)
+            try c.encode(style, forKey: .style)
+            try c.encode(replacement, forKey: .replacement)
+        case let .moveStyle(style, up):
+            try c.encode("moveStyle", forKey: .kind)
+            try c.encode(style, forKey: .style)
+            try c.encode(up, forKey: .up)
+        case let .restyleFromCaret(style, position):
+            try c.encode("restyleFromCaret", forKey: .kind)
+            try c.encode(style, forKey: .style)
+            try c.encode(position, forKey: .position)
         case let .mergeCells(selection):
             try c.encode("mergeCells", forKey: .kind)
             try c.encode(selection, forKey: .selection)
@@ -822,9 +850,35 @@ struct ParagraphInfo: Decodable, Sendable {
 }
 
 /// One of the document's styles.
-struct StyleInfo: Decodable, Hashable, Sendable {
+struct StyleInfo: Decodable, Hashable, Identifiable, Sendable {
     var id: UInt32
     var name: String
+    var englishName: String
+    /// 문단 스타일, else 글자 스타일.
+    var paragraphStyle: Bool
+    /// 다음 문단에 적용할 스타일.
+    var next: UInt32
+}
+
+/// A style's names, kind and next style, and the changes to lay over its shapes: `text`
+/// holds the 대표 change and then each 언어 set apart.
+struct StyleSpec: Encodable, Hashable, Sendable {
+    var name: String
+    var englishName: String
+    var paragraphStyle: Bool
+    var next: UInt32
+    var text: [CharStyle] = []
+    var paragraph = ParaStyle()
+}
+
+extension EditCommand {
+    /// Whether the command may change the list of styles.
+    var changesStyles: Bool {
+        switch self {
+        case .addStyle, .editStyle, .deleteStyle, .moveStyle, .restyleFromCaret, .undo, .redo: true
+        default: false
+        }
+    }
 }
 
 /// 번호 종류 of 새 번호로 시작, in the dialog's order.
@@ -944,7 +998,8 @@ enum SaveFormat: String, Encodable, Sendable {
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.
 enum EngineRequest: Encodable, Sendable {
-    case apply(revision: UInt64, EditCommand, amend: Bool)
+    /// With the app's `selection`, which commands that leave the text alone keep.
+    case apply(revision: UInt64, EditCommand, amend: Bool, selection: EditSelection? = nil)
     case paragraph(EditTarget)
     case hitTest(revision: UInt64, page: UInt32, x: Double, y: Double, includeHeaderFooter: Bool)
     case caret(revision: UInt64, EditPosition)
@@ -955,6 +1010,7 @@ enum EngineRequest: Encodable, Sendable {
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
     case pageBorder(section: UInt32)
+    case styleFormat(UInt32)
     case sectionSetup(section: UInt32)
     case noteShape(section: UInt32, footnote: Bool)
     case pageHide(EditTarget)
@@ -983,7 +1039,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -994,9 +1050,10 @@ enum EngineRequest: Encodable, Sendable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         switch self {
-        case let .apply(revision, command, amend):
+        case let .apply(revision, command, amend, selection):
             try c.encode("apply", forKey: .op)
             try c.encode(Apply(revision: revision, command: command, amend: amend), forKey: .request)
+            try c.encodeIfPresent(selection, forKey: .selection)
         case let .paragraph(target):
             try c.encode("paragraph", forKey: .op)
             try c.encode(target, forKey: .target)
@@ -1033,6 +1090,9 @@ enum EngineRequest: Encodable, Sendable {
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
             try c.encode(section, forKey: .section)
+        case let .styleFormat(style):
+            try c.encode("styleFormat", forKey: .op)
+            try c.encode(style, forKey: .style)
         case let .pageBorder(section):
             try c.encode("pageBorder", forKey: .op)
             try c.encode(section, forKey: .section)

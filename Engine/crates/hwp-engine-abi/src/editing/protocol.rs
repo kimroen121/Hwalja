@@ -95,6 +95,33 @@ pub enum EditCommand {
         selection: EditSelection,
         style: u32,
     },
+    /// 스타일 추가하기: a style at the end of the list, from the shapes at `position`
+    /// with `text` (one change per 언어 set apart) and `paragraph` laid over them.
+    AddStyle {
+        position: EditPosition,
+        style: StyleSpec,
+    },
+    /// 스타일 편집하기: its names and next style, and `text` and `paragraph` laid over its
+    /// shapes; the paragraphs with the style follow, except where set apart by hand.
+    EditStyle {
+        style: u32,
+        spec: StyleSpec,
+    },
+    /// 스타일 지우기: the paragraphs with it take `replacement`.
+    DeleteStyle {
+        style: u32,
+        replacement: u32,
+    },
+    /// 한 줄 위로 이동하기 (`up`) or 한 줄 아래로 이동하기.
+    MoveStyle {
+        style: u32,
+        up: bool,
+    },
+    /// 커서 위치의 스타일로 바꾸기: the style takes the shapes at `position`.
+    RestyleFromCaret {
+        style: u32,
+        position: EditPosition,
+    },
     /// Character format over the selected text (one container, any number of paragraphs).
     FormatText {
         selection: EditSelection,
@@ -974,6 +1001,21 @@ pub struct Format {
     /// The caret is in a 글상자 (addressed like a table cell).
     pub text_box: bool,
     pub fonts: Vec<String>,
+}
+/// A style's names, kind and next style, and the changes to lay over its shapes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StyleSpec {
+    pub name: String,
+    pub english_name: String,
+    /// 스타일 종류: 문단, else 글자.
+    pub paragraph_style: bool,
+    /// 다음 문단에 적용할 스타일.
+    pub next: u32,
+    #[serde(default)]
+    pub text: Vec<CharStyle>,
+    #[serde(default)]
+    pub paragraph: ParaStyle,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ParagraphInfo {

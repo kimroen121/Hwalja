@@ -3605,6 +3605,15 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
 diff --git a/src/document_core/queries/rendering.rs b/src/document_core/queries/rendering.rs
 --- a/src/document_core/queries/rendering.rs
 +++ b/src/document_core/queries/rendering.rs
+@@ -2999,7 +2999,7 @@
+     }
+ 
+     /// 재조판 + 재페이지네이션 수행
+-    fn recompose_and_paginate(&mut self) -> u32 {
++    pub(crate) fn recompose_and_paginate(&mut self) -> u32 {
+         self.rebuild_embedded_exact_font_sources();
+         self.recompose_all_with_horizontal_shaping();
+         self.mark_all_sections_dirty();
 @@ -3014,6 +3014,8 @@
          json: &str,
      ) -> Result<String, HwpError> {
@@ -3874,3 +3883,348 @@ diff --git a/src/renderer/layout/picture_footnote.rs b/src/renderer/layout/pictu
  
      let prefix_str = if prefix != '\0' {
          prefix.to_string()
+diff --git a/src/document_core/commands/mod.rs b/src/document_core/commands/mod.rs
+--- a/src/document_core/commands/mod.rs
++++ b/src/document_core/commands/mod.rs
+@@ -8,6 +8,7 @@
+ mod header_footer_ops;
+ mod html_import;
+ mod object_ops;
++mod styles;
+ // [#3565] 대형 문서 결함을 이분법으로 좁히기 위한 쪽 범위 추출.
+ pub mod page_extract;
+ mod table_ops;
+diff --git a/src/document_core/commands/styles.rs b/src/document_core/commands/styles.rs
+--- a/src/document_core/commands/styles.rs
++++ b/src/document_core/commands/styles.rs
+@@ -0,0 +1,330 @@
++//! 스타일 추가·편집·지우기·이동 (네이티브). wasm 의 getStyleList 등과 같은 동작을
++//! DocumentCore 에서 쓸 수 있게 하고, 지우기·이동은 본문 밖 문단(셀, 글상자, 캡션,
++//! 주석, 머리말/꼬리말)의 스타일 번호까지 맞춘다.
++
++use crate::document_core::helpers::{json_escape, json_i32, json_str};
++use crate::document_core::DocumentCore;
++use crate::model::control::Control;
++use crate::model::paragraph::Paragraph;
++use crate::model::shape::ShapeObject;
++use crate::model::style::Style;
++
++/// 문단 목록과 그 안의 모든 문단(표 셀, 글상자, 캡션, 주석, 머리말/꼬리말)에 `f` 를 부른다.
++fn each_paragraph_mut(paragraphs: &mut [Paragraph], f: &mut dyn FnMut(&mut Paragraph)) {
++    fn shape(s: &mut ShapeObject, f: &mut dyn FnMut(&mut Paragraph)) {
++        if let ShapeObject::Group(g) = s {
++            for child in &mut g.children {
++                shape(child, f);
++            }
++            if let Some(c) = &mut g.caption {
++                each_paragraph_mut(&mut c.paragraphs, f);
++            }
++        }
++        if let ShapeObject::Picture(p) = s {
++            if let Some(c) = &mut p.caption {
++                each_paragraph_mut(&mut c.paragraphs, f);
++            }
++        }
++        if let Some(d) = s.drawing_mut() {
++            if let Some(b) = &mut d.text_box {
++                each_paragraph_mut(&mut b.paragraphs, f);
++            }
++            if let Some(c) = &mut d.caption {
++                each_paragraph_mut(&mut c.paragraphs, f);
++            }
++        }
++    }
++    for p in paragraphs {
++        f(p);
++        for c in &mut p.controls {
++            match c {
++                Control::Table(t) => {
++                    for cell in &mut t.cells {
++                        each_paragraph_mut(&mut cell.paragraphs, f);
++                    }
++                    if let Some(c) = &mut t.caption {
++                        each_paragraph_mut(&mut c.paragraphs, f);
++                    }
++                }
++                Control::Shape(s) => shape(s, f),
++                Control::Picture(p) => {
++                    if let Some(c) = &mut p.caption {
++                        each_paragraph_mut(&mut c.paragraphs, f);
++                    }
++                }
++                Control::Footnote(n) => each_paragraph_mut(&mut n.paragraphs, f),
++                Control::Endnote(n) => each_paragraph_mut(&mut n.paragraphs, f),
++                Control::Header(h) => each_paragraph_mut(&mut h.paragraphs, f),
++                Control::Footer(h) => each_paragraph_mut(&mut h.paragraphs, f),
++                Control::HiddenComment(h) => each_paragraph_mut(&mut h.paragraphs, f),
++                _ => {}
++            }
++        }
++    }
++}
++
++impl DocumentCore {
++    /// 문서의 모든 문단(본문 밖 포함)과 바탕쪽 문단에 `f` 를 부른다.
++    fn each_document_paragraph_mut(&mut self, f: &mut dyn FnMut(&mut Paragraph)) {
++        for section in &mut self.document.sections {
++            each_paragraph_mut(&mut section.paragraphs, f);
++            for master in &mut section.section_def.master_pages {
++                each_paragraph_mut(&mut master.paragraphs, f);
++            }
++            section.raw_stream = None;
++        }
++    }
++
++    /// 스타일 목록: [{ id, name, englishName, type, nextStyleId, paraShapeId, charShapeId }]
++    pub fn style_list_native(&self) -> String {
++        let items: Vec<String> = self
++            .document
++            .doc_info
++            .styles
++            .iter()
++            .enumerate()
++            .map(|(i, s)| {
++                format!(
++                    "{{\"id\":{},\"name\":\"{}\",\"englishName\":\"{}\",\"type\":{},\"nextStyleId\":{},\"paraShapeId\":{},\"charShapeId\":{}}}",
++                    i,
++                    json_escape(&s.local_name),
++                    json_escape(&s.english_name),
++                    s.style_type,
++                    s.next_style_id,
++                    s.para_shape_id,
++                    s.char_shape_id
++                )
++            })
++            .collect();
++        format!("[{}]", items.join(","))
++    }
++
++    /// 스타일의 글자 모양 속성 JSON (`build_char_properties_json_by_id` 와 같은 형식).
++    pub fn style_char_properties_native(&self, style_id: usize) -> Option<String> {
++        let style = self.document.doc_info.styles.get(style_id)?;
++        Some(self.build_char_properties_json_by_id(style.char_shape_id))
++    }
++
++    /// 스타일의 문단 모양 속성 JSON (`build_para_properties_json` 와 같은 형식).
++    pub fn style_para_properties_native(&self, style_id: usize) -> Option<String> {
++        let style = self.document.doc_info.styles.get(style_id)?;
++        Some(self.build_para_properties_json(style.para_shape_id, 0))
++    }
++
++    /// 스타일 이름·영문 이름·다음 문단 스타일을 바꾼다.
++    /// json: {"name":"...", "englishName":"...", "nextStyleId":0}
++    pub fn update_style_native(&mut self, style_id: usize, json: &str) -> bool {
++        let Some(style) = self.document.doc_info.styles.get_mut(style_id) else {
++            return false;
++        };
++        if let Some(name) = json_str(json, "name") {
++            style.local_name = name;
++        }
++        if let Some(en) = json_str(json, "englishName") {
++            style.english_name = en;
++        }
++        if let Some(v) = json_i32(json, "nextStyleId") {
++            style.next_style_id = v as u8;
++        }
++        style.raw_data = None;
++        self.document.doc_info.raw_stream_dirty = true;
++        true
++    }
++
++    /// 스타일의 글자 모양·문단 모양을 바꾼다. 형식은 apply_char_format_native /
++    /// apply_para_format_native 의 JSON 과 같다. 그 스타일의 문단에 전파한다.
++    pub fn update_style_shapes_native(
++        &mut self,
++        style_id: usize,
++        char_mods_json: &str,
++        para_mods_json: &str,
++    ) -> bool {
++        let Some(style) = self.document.doc_info.styles.get(style_id).cloned() else {
++            return false;
++        };
++        let mut char_shape_id = style.char_shape_id;
++        let mut para_shape_id = style.para_shape_id;
++        if !char_mods_json.is_empty() && char_mods_json != "{}" {
++            let mods = crate::document_core::helpers::parse_char_shape_mods(char_mods_json);
++            if let Some(cs) = self.document.doc_info.char_shapes.get(char_shape_id as usize) {
++                let new_cs = mods.apply_to(cs);
++                self.document.doc_info.char_shapes.push(new_cs);
++                char_shape_id = (self.document.doc_info.char_shapes.len() - 1) as u16;
++            }
++        }
++        if !para_mods_json.is_empty() && para_mods_json != "{}" {
++            let mods = crate::document_core::helpers::parse_para_shape_mods(para_mods_json);
++            if let Some(ps) = self.document.doc_info.para_shapes.get(para_shape_id as usize) {
++                let new_ps = mods.apply_to(ps);
++                self.document.doc_info.para_shapes.push(new_ps);
++                para_shape_id = (self.document.doc_info.para_shapes.len() - 1) as u16;
++            }
++        }
++        self.relink_style_native(style_id, char_shape_id, para_shape_id)
++    }
++
++    /// 스타일이 쓰는 글자 모양·문단 모양을 바꾸고(커서 위치의 스타일로 바꾸기 포함),
++    /// 그 스타일의 문단 가운데 스타일 모양을 그대로 쓰던 곳을 새 모양으로 바꾼다.
++    /// 사용자가 직접 바꾼 모양은 둔다.
++    pub fn relink_style_native(
++        &mut self,
++        style_id: usize,
++        char_shape_id: u16,
++        para_shape_id: u16,
++    ) -> bool {
++        let (Some(style), true, true) = (
++            self.document.doc_info.styles.get(style_id).cloned(),
++            (char_shape_id as usize) < self.document.doc_info.char_shapes.len(),
++            (para_shape_id as usize) < self.document.doc_info.para_shapes.len(),
++        ) else {
++            return false;
++        };
++        {
++            let s = &mut self.document.doc_info.styles[style_id];
++            s.char_shape_id = char_shape_id;
++            s.para_shape_id = para_shape_id;
++            s.raw_data = None;
++        }
++        self.document.doc_info.raw_stream_dirty = true;
++        let (old_cs, old_ps) = (style.char_shape_id as u32, style.para_shape_id);
++        let sid = style_id as u8;
++        let paragraph_style = style.style_type == 0;
++        self.each_document_paragraph_mut(&mut |p| {
++            if p.style_id == sid {
++                if paragraph_style && p.para_shape_id == old_ps {
++                    p.para_shape_id = para_shape_id;
++                }
++                p.replace_style_char_shape_preserving_overrides(old_cs, char_shape_id as u32);
++            }
++        });
++        self.rebuild_resolved_styles();
++        self.recompose_and_paginate();
++        true
++    }
++
++    /// 새 스타일을 끝에 만든다. 모양은 `baseCharShapeId`/`baseParaShapeId`(없으면 바탕글).
++    /// json: {"name":"...", "englishName":"...", "type":0, "nextStyleId":0,
++    /// "baseCharShapeId":n, "baseParaShapeId":n}. 반환값: 새 스타일 ID, 실패면 -1.
++    pub fn create_style_native(&mut self, json: &str) -> i32 {
++        let styles = &self.document.doc_info.styles;
++        if styles.len() >= u8::MAX as usize {
++            return -1;
++        }
++        let (fallback_cs, fallback_ps) = styles
++            .first()
++            .map(|s| (s.char_shape_id, s.para_shape_id))
++            .unwrap_or((0, 0));
++        let id = |key: &str, len: usize, fallback: u16| {
++            json_i32(json, key)
++                .filter(|id| *id >= 0 && (*id as usize) < len)
++                .map(|id| id as u16)
++                .unwrap_or(fallback)
++        };
++        let char_shape_id = id(
++            "baseCharShapeId",
++            self.document.doc_info.char_shapes.len(),
++            fallback_cs,
++        );
++        let para_shape_id = id(
++            "baseParaShapeId",
++            self.document.doc_info.para_shapes.len(),
++            fallback_ps,
++        );
++        self.document.doc_info.styles.push(Style {
++            raw_data: None,
++            local_name: json_str(json, "name").unwrap_or_default(),
++            english_name: json_str(json, "englishName").unwrap_or_default(),
++            style_type: json_i32(json, "type").unwrap_or(0) as u8,
++            next_style_id: json_i32(json, "nextStyleId").unwrap_or(0) as u8,
++            lang_id: 1042,
++            para_shape_id,
++            char_shape_id,
++            lock_form: false,
++        });
++        self.document.doc_info.raw_stream_dirty = true;
++        self.rebuild_resolved_styles();
++        (self.document.doc_info.styles.len() - 1) as i32
++    }
++
++    /// 스타일을 지운다. 그 스타일의 문단은 `replacement` 스타일이 되고(글자 스타일이면
++    /// 문단 스타일 모양으로 돌아간다), 뒤 스타일 번호는 하나씩 당겨진다. 바탕글(0)은
++    /// 지울 수 없다.
++    pub fn delete_style_native(&mut self, style_id: usize, replacement: usize) -> bool {
++        let styles = &self.document.doc_info.styles;
++        if style_id == 0
++            || style_id >= styles.len()
++            || replacement >= styles.len()
++            || replacement == style_id
++        {
++            return false;
++        }
++        let gone = styles[style_id].clone();
++        let to = styles[replacement].clone();
++        let (sid, rid) = (style_id as u8, replacement as u8);
++        // 지운 스타일 다음 번호를 당긴 새 번호.
++        let renumber = move |id: u8| if id > sid { id - 1 } else { id };
++        self.each_document_paragraph_mut(&mut |p| {
++            if p.style_id == sid {
++                if gone.style_type == 0 {
++                    if p.para_shape_id == gone.para_shape_id {
++                        p.para_shape_id = to.para_shape_id;
++                    }
++                    p.style_id = rid;
++                }
++                p.replace_style_char_shape_preserving_overrides(
++                    gone.char_shape_id as u32,
++                    to.char_shape_id as u32,
++                );
++            }
++            p.style_id = renumber(p.style_id);
++        });
++        let styles = &mut self.document.doc_info.styles;
++        styles.remove(style_id);
++        for s in styles.iter_mut() {
++            s.next_style_id = if s.next_style_id == sid {
++                renumber(rid)
++            } else {
++                renumber(s.next_style_id)
++            };
++            s.raw_data = None;
++        }
++        self.document.doc_info.raw_stream_dirty = true;
++        self.rebuild_resolved_styles();
++        self.recompose_and_paginate();
++        true
++    }
++
++    /// 스타일을 목록에서 한 줄 위(`up`)나 아래로 옮긴다. 바탕글(0)은 맨 위에 둔다.
++    pub fn move_style_native(&mut self, style_id: usize, up: bool) -> bool {
++        let len = self.document.doc_info.styles.len();
++        let other = if up {
++            style_id.checked_sub(1)
++        } else {
++            Some(style_id + 1)
++        };
++        let Some(other) = other.filter(|&o| o >= 1 && o < len && style_id >= 1 && style_id < len)
++        else {
++            return false;
++        };
++        let (a, b) = (style_id as u8, other as u8);
++        let swap = move |id: u8| {
++            if id == a {
++                b
++            } else if id == b {
++                a
++            } else {
++                id
++            }
++        };
++        self.each_document_paragraph_mut(&mut |p| p.style_id = swap(p.style_id));
++        let styles = &mut self.document.doc_info.styles;
++        styles.swap(style_id, other);
++        for s in styles.iter_mut() {
++            s.next_style_id = swap(s.next_style_id);
++            s.raw_data = None;
++        }
++        self.document.doc_info.raw_stream_dirty = true;
++        self.rebuild_resolved_styles();
++        true
++    }
++}

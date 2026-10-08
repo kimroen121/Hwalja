@@ -155,6 +155,8 @@ struct CharShapeSheet: View {
     /// Each 언어's own font and scales, as they were.
     let languages: [CharStyle]
     let viewer: Viewer
+    /// Where the changes go: the selection, or a style being edited.
+    var apply: ((CharStyle) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var style: CharStyle
     @State private var edited: [CharStyle]
@@ -165,8 +167,10 @@ struct CharShapeSheet: View {
     /// 언어별 설정's choices, in the web editor's order.
     static let languageNames = ["한글", "영문", "한자", "일어", "외국어", "기호", "사용자"]
 
-    init(style: CharStyle, languages: [CharStyle], viewer: Viewer, tab: String = "기본") {
+    init(style: CharStyle, languages: [CharStyle], viewer: Viewer, tab: String = "기본",
+         apply: ((CharStyle) -> Void)? = nil) {
         original = style
+        self.apply = apply
         self.languages = languages
         _tab = State(initialValue: tab)
         self.viewer = viewer
@@ -181,13 +185,14 @@ struct CharShapeSheet: View {
             }
             .frame(width: 520, height: 330)
         } confirm: {
-            viewer.applyCharShape(style.changesWithBorderFill(from: original))
+            let send = apply ?? viewer.applyCharShape
+            send(style.changesWithBorderFill(from: original))
             // Then each 언어 set apart from 대표.
             for (index, (now, was)) in zip(edited, languages).enumerated() {
                 var change = now.changes(from: was)
                 guard change != CharStyle() else { continue }
                 change.language = index
-                viewer.applyCharShape(change)
+                send(change)
             }
             dismiss()
         }
@@ -349,12 +354,15 @@ struct CharShapeSheet: View {
 struct ParaShapeSheet: View {
     let original: ParaStyle
     let viewer: Viewer
+    /// Where the change goes: the selection, or a style being edited.
+    var apply: ((ParaStyle) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var style: ParaStyle
     @State private var tab: String
 
-    init(style: ParaStyle, viewer: Viewer, tab: String = "기본") {
+    init(style: ParaStyle, viewer: Viewer, tab: String = "기본", apply: ((ParaStyle) -> Void)? = nil) {
         original = style
+        self.apply = apply
         _tab = State(initialValue: tab)
         self.viewer = viewer
         _style = State(initialValue: style)
@@ -383,7 +391,7 @@ struct ParaShapeSheet: View {
             if change.lineSpacing != nil || change.lineSpacingKind != nil {
                 (change.lineSpacing, change.lineSpacingKind) = (style.lineSpacing, style.lineSpacingKind)
             }
-            viewer.applyParaShape(change)
+            (apply ?? viewer.applyParaShape)(change)
             dismiss()
         }
     }

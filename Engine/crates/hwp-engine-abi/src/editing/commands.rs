@@ -402,6 +402,11 @@ impl EditSession {
                 super::format::validate_char(style)
             }
             EditCommand::ApplyStyle { selection, style } => self.validate_style(selection, *style),
+            EditCommand::AddStyle { .. }
+            | EditCommand::EditStyle { .. }
+            | EditCommand::DeleteStyle { .. }
+            | EditCommand::MoveStyle { .. }
+            | EditCommand::RestyleFromCaret { .. } => self.validate_style_command(command),
             EditCommand::InsertShape { .. } => self.validate_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 self.validate_range(selection)?;
@@ -1207,6 +1212,14 @@ impl EditSession {
                 Ok(selection.clone())
             }
             EditCommand::ApplyStyle { selection, style } => self.apply_style(selection, *style),
+            EditCommand::AddStyle { .. }
+            | EditCommand::EditStyle { .. }
+            | EditCommand::DeleteStyle { .. }
+            | EditCommand::MoveStyle { .. }
+            | EditCommand::RestyleFromCaret { .. } => {
+                self.run_style_command(command)?;
+                Ok(self.kept(0))
+            }
             EditCommand::InsertShape { .. } => self.insert_shape(command),
             EditCommand::FormatParagraphs { selection, style } => {
                 let (start, end) = ordered(selection);

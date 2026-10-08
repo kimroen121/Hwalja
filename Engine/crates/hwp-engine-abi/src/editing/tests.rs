@@ -3350,6 +3350,93 @@ fn line_break_units_are_set_and_read() {
 }
 
 #[test]
+fn styles_are_added_edited_moved_and_deleted() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let count = s.styles().len() as u32;
+        let size = |s: &EditSession| {
+            let f = s.format(s.revision, &point(body(), 0), None).unwrap();
+            (f.style, f.text.size, f.text.bold)
+        };
+        let base = size(&s).1;
+        let spec = |name: &str, size: f64| StyleSpec {
+            name: name.into(),
+            english_name: "Big".into(),
+            paragraph_style: true,
+            next: 0,
+            text: vec![CharStyle {
+                size: Some(size),
+                bold: Some(true),
+                ..Default::default()
+            }],
+            paragraph: ParaStyle {
+                margin_left: Some(10.0),
+                ..Default::default()
+            },
+        };
+        let add = EditCommand::AddStyle {
+            position: point(body(), 0),
+            style: spec("큰 제목", 14.0),
+        };
+        run(&mut s, add).unwrap();
+        let added = s.styles().last().unwrap().clone();
+        assert_eq!((added.id, added.name.as_str()), (count, "큰 제목"));
+        assert_eq!(s.style_format(count).unwrap().text.size, Some(14.0));
+        let apply = EditCommand::ApplyStyle {
+            selection: EditSelection::caret(point(body(), 0)),
+            style: count,
+        };
+        run(&mut s, apply).unwrap();
+        assert_eq!(size(&s), (count, Some(14.0), Some(true)), "{format}");
+        let edit = EditCommand::EditStyle {
+            style: count,
+            spec: spec("큰 제목 2", 16.0),
+        };
+        run(&mut s, edit).unwrap();
+        assert_eq!(size(&s), (count, Some(16.0), Some(true)), "{format}");
+        assert_eq!(s.styles()[count as usize].name, "큰 제목 2");
+        let up = EditCommand::MoveStyle {
+            style: count,
+            up: true,
+        };
+        run(&mut s, up).unwrap();
+        assert_eq!(size(&s), (count - 1, Some(16.0), Some(true)), "{format}");
+        assert_eq!(s.styles()[count as usize - 1].name, "큰 제목 2");
+        let reopened = EditSession::open(
+            &s.export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(size(&reopened), size(&s), "{format}");
+        assert_eq!(reopened.styles()[count as usize - 1].english_name, "Big");
+        let delete = EditCommand::DeleteStyle {
+            style: count - 1,
+            replacement: 0,
+        };
+        run(&mut s, delete).unwrap();
+        assert_eq!(s.styles().len() as u32, count);
+        assert_eq!(size(&s).0, 0, "{format}");
+        assert_eq!(size(&s).1, base, "{format}");
+        let restyle = EditCommand::RestyleFromCaret {
+            style: 1,
+            position: point(body(), 0),
+        };
+        run(&mut s, restyle).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(size(&s).0, count - 1, "{format}");
+        let base_style = EditCommand::DeleteStyle {
+            style: 0,
+            replacement: 1,
+        };
+        assert!(run(&mut s, base_style).is_err());
+    }
+}
+#[test]
 fn styles_apply_to_paragraphs() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, true)).unwrap();

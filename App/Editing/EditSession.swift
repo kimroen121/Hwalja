@@ -58,8 +58,9 @@ final class EditSession: @unchecked Sendable {
     }
 
     /// `amend` folds the edit into the latest undo step (IME composition).
-    func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false) async throws -> Output {
-        try await send(.apply(revision: revision, command, amend: amend), Output.init)
+    func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false,
+               selection: EditSelection? = nil) async throws -> Output {
+        try await send(.apply(revision: revision, command, amend: amend, selection: selection), Output.init)
     }
     func paragraph(_ target: EditTarget) async throws -> ParagraphInfo {
         try await decode(send(.paragraph(target)))
@@ -96,6 +97,9 @@ final class EditSession: @unchecked Sendable {
     }
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await decode(send(.pageSetup(section: section)))
+    }
+    func styleFormat(_ style: UInt32) async throws -> Format {
+        try await decode(send(.styleFormat(style)))
     }
     func pageBorder(section: UInt32) async throws -> PageBorder {
         try await decode(send(.pageBorder(section: section)))

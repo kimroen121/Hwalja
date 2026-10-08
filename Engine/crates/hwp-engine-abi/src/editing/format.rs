@@ -320,7 +320,7 @@ pub(super) struct Languages {
     offset: Option<i8>,
 }
 impl Languages {
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.fonts.iter().all(Option::is_none)
             && self.ratio.is_none()
             && self.spacing.is_none()
@@ -328,7 +328,7 @@ impl Languages {
             && self.offset.is_none()
     }
     /// `props` with the change laid over the run's `own` shape.
-    fn over(&self, own: &rhwp::model::style::CharShape, props: &str) -> String {
+    pub(super) fn over(&self, own: &rhwp::model::style::CharShape, props: &str) -> String {
         let mut map: Map<String, Value> = serde_json::from_str(props).unwrap_or_default();
         let (mut fonts, mut ratios, mut spacings, mut sizes, mut offsets) = (
             own.font_ids,
@@ -889,7 +889,24 @@ impl EditSession {
                     .get_para_properties_at_native(t.section as usize, index(t)),
             ),
         };
-        let (text, para) = (parse(text)?, parse(para)?);
+        let style = get(self.core.document(), t)?.style_id as u32;
+        Ok(self.format_of(
+            &parse(text)?,
+            &parse(para)?,
+            self.paragraph_shape(t)?,
+            style,
+            super::commands::in_text_box(self.core.document(), t),
+        ))
+    }
+    /// A format from rhwp's character and paragraph properties and the paragraph shape.
+    pub(super) fn format_of(
+        &self,
+        text: &Value,
+        para: &Value,
+        shape: &rhwp::model::style::ParaShape,
+        style: u32,
+        text_box: bool,
+    ) -> Format {
         let flag = |key: &str| text.get(key).and_then(Value::as_bool);
         let font = text
             .get("fontFamily")
@@ -905,7 +922,6 @@ impl EditSession {
         let number = |v: &Value, key: &str| v.get(key).and_then(Value::as_f64);
         let first = |key: &str| text.get(key).and_then(|a| a.get(0)).and_then(Value::as_f64);
         let on = |key: &str| text.get(key).and_then(Value::as_i64).map(|v| v != 0);
-        let shape = self.paragraph_shape(t)?;
         let head = para
             .get("headType")
             .and_then(Value::as_str)
@@ -920,10 +936,9 @@ impl EditSession {
         };
         let para_flag = |key: &str| para.get(key).and_then(Value::as_bool);
         let para_unit = |key: &str| para.get(key).and_then(Value::as_u64).map(|v| v as u8);
-        let style = get(self.core.document(), t)?.style_id as u32;
-        let (line, width, border, fill, pattern_color, pattern) = read_border_fill(&text);
+        let (line, width, border, fill, pattern_color, pattern) = read_border_fill(text);
         let (p_line, p_width, p_border, p_fill, p_pattern_color, p_pattern) =
-            read_border_fill(&para);
+            read_border_fill(para);
         let at = |key: &str, l: usize| text.get(key).and_then(|a| a.get(l)).and_then(Value::as_f64);
         let languages = (0..7)
             .map(|l| CharStyle {
@@ -939,10 +954,10 @@ impl EditSession {
                 ..Default::default()
             })
             .collect();
-        Ok(Format {
+        Format {
             style,
             languages,
-            text_box: super::commands::in_text_box(self.core.document(), t),
+            text_box,
             text: CharStyle {
                 language: None,
                 font: Some(font),
@@ -1035,6 +1050,6 @@ impl EditSession {
                     .map(|value| value as u32),
             },
             fonts,
-        })
+        }
     }
 }

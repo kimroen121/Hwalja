@@ -129,10 +129,11 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     /// Format at the caret (or at the end of the selection), with any pending style.
     private(set) var format: Format? { willSet { objectWillChange.send() } }
-    /// The document's styles, read once.
+    /// The document's styles, read again after a command that may change them.
     private(set) var styles: [StyleInfo] = [] {
         didSet { objectWillChange.send() }
     }
+    private var stylesChanged = false
     /// A character format chosen at a caret, for the next text typed there.
     private var pendingStyle: (at: EditPosition, style: CharStyle)?
     private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
@@ -476,9 +477,14 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func statistics() async throws -> Statistics {
         try await session.statistics()
     }
-    /// Reads the document's styles the first time they are wanted.
+    /// Reads the document's styles the first time they are wanted, and after they change.
     func loadStyles() async {
-        if styles.isEmpty, let list = try? await session.styles() { styles = list }
+        guard styles.isEmpty || stylesChanged else { return }
+        stylesChanged = false
+        if let list = try? await session.styles(), list != styles { styles = list }
+    }
+    func styleFormat(_ style: UInt32) async throws -> Format {
+        try await session.styleFormat(style)
     }
     /// 상황 선 for `position` in the current revision.
     func pictureFile(_ object: ObjectRef) async throws -> (data: Data, extension: String) {
@@ -576,7 +582,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
     private func apply(_ command: EditCommand, amend: Bool) async throws {
-        let output = try await session.apply(command, at: revision, amend: amend)
+        let output = try await session.apply(command, at: revision, amend: amend, selection: selection)
+        if command.changesStyles { stylesChanged = true }
         staged.append(output)
         reply = output.reply
         // Changing an object leaves the text caret where it was.

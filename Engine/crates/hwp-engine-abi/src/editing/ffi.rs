@@ -16,6 +16,9 @@ const REQUEST_LIMIT: usize = 8 * 1024 * 1024;
 enum Request {
     Apply {
         request: Box<EditRequest>,
+        /// The app's selection, which commands that leave the text alone keep.
+        #[serde(default)]
+        selection: Option<EditSelection>,
     },
     Paragraph {
         target: EditTarget,
@@ -93,6 +96,10 @@ enum Request {
     },
     /// The document's styles, in order.
     Styles,
+    /// A style's character and paragraph shapes, as a `Format`.
+    StyleFormat {
+        style: u32,
+    },
     /// Shows or hides 문단 부호 and 조판 부호.
     ShowMarks {
         paragraph: bool,
@@ -181,7 +188,8 @@ fn state(session: &EditSession) -> *mut HwpEditResult {
 }
 fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditResult, EditError> {
     Ok(match request {
-        Request::Apply { request } => {
+        Request::Apply { request, selection } => {
+            session.keep_selection(selection);
             session.apply(*request)?;
             state(session)
         }
@@ -274,6 +282,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             )
         }
         Request::Styles => HwpEditResult::ok(session.styles(), Vec::new()),
+        Request::StyleFormat { style } => {
+            HwpEditResult::ok(session.style_format(style)?, Vec::new())
+        }
         Request::ShowMarks {
             paragraph,
             control,

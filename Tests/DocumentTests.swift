@@ -1192,6 +1192,25 @@ struct DocumentTests {
         viewer.setPageBorder(border, section: 0, whole: true)
         await document.settle()
         #expect(try await document.pageBorder(section: 0) == border)
+        let count = document.styles.count
+        var editor = try #require(viewer.newStyle())
+        editor.spec.name = "큰 제목"
+        editor.spec.text = [CharStyle(size: 20)]
+        viewer.finishStyle(editor, editor.spec)
+        await document.settle()
+        #expect(document.styles.count == count + 1 && document.styles.last?.name == "큰 제목")
+        document.applyStyle(UInt32(count), viewer.undoManager)
+        await document.settle()
+        #expect(document.format?.style == UInt32(count) && document.format?.text.size == 20)
+        // Commands that leave the text alone keep the caret where the user put it.
+        let caret = EditSelection.caret(EditPosition(target: EditTarget(section: 0, paragraph: 0, cell: nil), scalar: 1))
+        document.selection = caret
+        viewer.moveStyle(UInt32(count), up: true)
+        await document.settle()
+        #expect(document.styles[count - 1].name == "큰 제목" && document.selection == caret)
+        viewer.deleteStyle(UInt32(count - 1), replacement: 0)
+        await document.settle()
+        #expect(document.styles.count == count && document.format?.style == 0)
         var note = try await document.noteShape(section: 0, footnote: false)
         note.numberFormat = "upperRoman"
         note.numbering = "restartSection"
@@ -1513,6 +1532,8 @@ struct DocumentTests {
             ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("pageBorder", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer))),
+            ("styles", AnyView(StyleSheet(document: document, viewer: viewer))),
+            ("styleEdit", AnyView(StyleEditSheet(editor: try #require(viewer.newStyle()), styles: document.styles, viewer: viewer))),
             ("notes", AnyView(NoteShapeSheet(section: 0, footnote: try await document.noteShape(section: 0, footnote: true),
                                              endnote: try await document.noteShape(section: 0, footnote: false), viewer: viewer))),
             ("section", AnyView(SectionSheet(section: 0, setup: try await document.sectionSetup(section: 0), viewer: viewer))),

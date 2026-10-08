@@ -93,7 +93,7 @@
 | 안내선 | △ | `view/object_move_guideline/guideline(objectmoveguideline).htm` | 앱 쪽 작업 |
 | 문서 보기 색 | △ | `view/document_view_color.htm` | 앱 쪽 작업(표시만 바꿈). 사용자 색 △ |
 | 도구 상자 | ◐ | `view/toolbar/toolbar.htm#bc-1` | 2단계에서 2024 구성으로 바꿈. 사용자 설정은 범위 밖 |
-| 작업 창 | ◐ | `view/workwindow/workwindow.htm` | 오른쪽 작업 창과 세로 아이콘 줄: 쪽 모양 보기·스타일(목록과 적용)·책갈피 ●. 개요 보기 ○, 클립보드 △, 나머지 범위 밖 |
+| 작업 창 | ◐ | `view/workwindow/workwindow.htm` | 오른쪽 작업 창과 세로 아이콘 줄: 쪽 모양 보기·스타일(목록과 적용, 추가·편집·지우기·위로·아래로 아이콘과 빠른 메뉴)·책갈피 ●. 개요 보기 ○, 클립보드 △, 나머지 범위 밖 |
 | 문서 창 | ◐ | `view/document_window.htm` | 가로 눈금자 ● (탭 표시 △), 상황 선 ◐, 세로 눈금자 △, 문서 탭은 macOS 창 탭 |
 | 편집 화면 나누기 | △ | `window/division/division.htm` | 앱 쪽 작업 |
 | 창 배열 | — | `window/arrange/arrange_windows.htm` | macOS 윈도우 메뉴 |
@@ -144,7 +144,7 @@
 | 개요 번호 모양 | △ | `format/outline/outline_numbering(paragraph_number).htm` |  |
 | 개요 적용/해제 | △ | `format/outline/outline_numbering(attributes_cancel).htm` |  |
 | 한 수준 증가/감소 | ● | `format/outline/outline_numbering(depth).htm` |  |
-| 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(추가·편집·지우기) ○ wasm `get_style_list`·`update_style`·`create_style`·`delete_style` |
+| 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(F6): 스타일 목록, 추가하기·편집하기(이름, 영문 이름, 종류, 다음 문단에 적용할 스타일, 문단 모양·글자 모양)·지우기(바꿀 스타일 선택)·커서 위치의 스타일로 바꾸기·한 줄 위로/아래로 이동하기, 문단 모양 정보·글자 모양 정보·현재 커서 위치 스타일 ●. 문단 모양 미리 보기, 글머리표/문단 번호 단추·정보, 글자 스타일 해제, 스타일 가져오기·내보내기는 △ |
 | 스타일마당 | △ | `format/style_templates/style_templates.htm` | 서식 파일 자료 필요 |
 | 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 2024 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 그림 탭, 도형의 선·채우기 탭. 글상자·그림자 탭과 그림의 선 탭 없음. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
 
@@ -303,7 +303,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | ROADMAP 「창 구성」의 규칙으로 옮겼다. macOS 표준과 겹치는 것(정렬, 지우기 Ctrl+E, 줄 지우기 Ctrl+BackSpace, 다른 이름으로 저장하기)은 macOS 단축키를 쓴다. 연속 단축키와 Insert 키 단축키는 없다. 남은 것은 그 기능을 만들 때 넣는다(스타일 F6, 맨 앞으로 Shift+Page Up 등). |
+| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | ROADMAP 「창 구성」의 규칙으로 옮겼다. macOS 표준과 겹치는 것(정렬, 지우기 Ctrl+E, 줄 지우기 Ctrl+BackSpace, 다른 이름으로 저장하기)은 macOS 단축키를 쓴다. 연속 단축키와 Insert 키 단축키는 없다. 남은 것은 그 기능을 만들 때 넣는다(맨 앞으로 Shift+Page Up 등). |
 
 ## 사용권
 
