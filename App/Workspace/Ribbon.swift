@@ -15,31 +15,37 @@ struct ToolRow: View {
     var body: some View {
         let context = document.context
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 18) {
+            HStack(spacing: 0) {
                 ForEach(Self.tabs, id: \.self) { name in
                     Button { withAnimation(.snappy(duration: 0.25)) { tab = name } } label: {
                         Text(name)
                             .font(.system(size: 13, weight: tab == name ? .semibold : .regular))
                             .foregroundStyle(tab == name ? .primary : .secondary)
                             .padding(.vertical, 4)
-                            .overlay(alignment: .bottom) {
+                            .background(alignment: .bottom) {
                                 // As in Word: a line under the selected tab, a little longer under the pointer.
-                                if tab == name {
-                                    Capsule()
-                                        .frame(height: 3)
-                                        .padding(.horizontal, hovered == name ? -4 : 0)
-                                        .matchedGeometryEffect(id: "underline", in: underline)
-                                        .offset(y: 1.5)
-                                }
+                                Color.clear
+                                    .frame(height: 3)
+                                    .padding(.horizontal, hovered == name ? -4 : 0)
+                                    .matchedGeometryEffect(id: name, in: underline)
                             }
+                            // The gap between tabs is part of them, so a click beside a name still lands.
+                            .padding(.horizontal, 9)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
-                    .animation(.easeOut(duration: 0.15), value: hovered)
                 }
             }
-            .padding(.horizontal, 16)
+            .overlay {
+                // One line, moved from tab to tab.
+                Capsule()
+                    .matchedGeometryEffect(id: tab, in: underline, isSource: false)
+                    .offset(y: 1.5)
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeOut(duration: 0.15), value: hovered)
+            .padding(.horizontal, 7)
             .padding(.top, 5)
             // A narrow window scrolls the row instead of squeezing it.
             ScrollView(.horizontal, showsIndicators: false) {
