@@ -245,7 +245,16 @@ struct ToolRow: View {
             ToolTile("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
             ToolTile("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
             ToolTile("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
-            RowDivider()
+        }
+        .disabled(!context.cellBlock || context.locked)
+        RowDivider()
+        Group {
+            ToolTile("표 나누기", Icon.splitTable) { viewer.editTable(.split) }
+            ToolTile("표 붙이기", Icon.attachTable) { viewer.editTable(.attach) }
+        }
+        .disabled(context.locked)
+        RowDivider()
+        Group {
             ToolTile("블록 계산식", Icon.blockCalculation, choices: {
                 MenuItems.blockFunctions.map { function in
                     Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
@@ -564,6 +573,7 @@ enum Icon {
     static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
+    static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"
         static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"

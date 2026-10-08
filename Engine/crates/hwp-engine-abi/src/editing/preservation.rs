@@ -195,12 +195,14 @@ pub(super) fn check(
         EditCommand::InsertEquation { position, .. } => {
             return check_inserted_equation(before, after, &position.target)
         }
-        EditCommand::EditTable { cell, .. } => return check_table(before, after, cell),
+        EditCommand::EditTable { cell, change } => {
+            return check_table(before, after, cell, Some(*change))
+        }
         EditCommand::MergeCells { selection }
         | EditCommand::SplitCells { selection, .. }
         | EditCommand::EqualizeCells { selection, .. }
         | EditCommand::CalculateBlock { selection, .. } => {
-            return check_table(before, after, &selection.anchor.target)
+            return check_table(before, after, &selection.anchor.target, None)
         }
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
@@ -571,7 +573,12 @@ fn check_inserted_note(
     same_rest(&mut a, &mut b, target.section)
 }
 /// Row and column edits may only change the table holding `cell`.
-fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result<(), EditError> {
+fn check_table(
+    before: &Document,
+    after: &Document,
+    cell: &EditTarget,
+    change: Option<TableChange>,
+) -> Result<(), EditError> {
     let control = cell
         .cell
         .as_ref()
@@ -579,6 +586,21 @@ fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result
         .control as usize;
     let mut a = before.clone();
     let mut b = after.clone();
+    // 표 나누기 adds an empty paragraph and the new table's; 표 붙이기 takes the next
+    // table's paragraph and the blank ones before it.
+    let (s, host) = (cell.section as usize, cell.paragraph as usize);
+    match change {
+        Some(TableChange::Split) => drop_next_table(&mut b, s, host, 2)?,
+        Some(TableChange::Attach) => {
+            let n = before.sections[s].paragraphs.len()
+                - after.sections[s]
+                    .paragraphs
+                    .len()
+                    .min(before.sections[s].paragraphs.len());
+            drop_next_table(&mut a, s, host, n)?
+        }
+        _ => {}
+    }
     for doc in [&mut a, &mut b] {
         let host = doc.sections[cell.section as usize]
             .paragraphs
@@ -596,6 +618,29 @@ fn check_table(before: &Document, after: &Document, cell: &EditTarget) -> Result
         return Err(EditError::PreservationFailed);
     }
     same_rest(&mut a, &mut b, cell.section)
+}
+/// Removes the `n` paragraphs after `host`: blank ones, then one holding only a table.
+fn drop_next_table(
+    doc: &mut Document,
+    section: usize,
+    host: usize,
+    n: usize,
+) -> Result<(), EditError> {
+    let paragraphs = &mut doc.sections[section].paragraphs;
+    if n == 0 || host + n >= paragraphs.len() {
+        return Err(EditError::PreservationFailed);
+    }
+    let gone: Vec<Paragraph> = paragraphs.drain(host + 1..=host + n).collect();
+    let (table, blanks) = gone.split_last().ok_or(EditError::PreservationFailed)?;
+    let blank = |p: &Paragraph| p.text.trim().is_empty() && p.controls.is_empty();
+    if blanks.iter().all(blank)
+        && table.text.trim().is_empty()
+        && matches!(&table.controls[..], [Control::Table(_)])
+    {
+        Ok(())
+    } else {
+        Err(EditError::PreservationFailed)
+    }
 }
 /// An object edit may only change the body paragraph holding the object, and append
 /// DocInfo entries.

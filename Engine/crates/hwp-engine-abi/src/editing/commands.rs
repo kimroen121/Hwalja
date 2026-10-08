@@ -715,6 +715,22 @@ impl EditSession {
                 self.core
                     .delete_table_column_native(s, host, control, col)?;
             }
+            TableChange::Split => {
+                self.core.split_table_native(s, host, control, row)?;
+                // The caret's row heads the new table, two paragraphs on.
+                let back = EditTarget {
+                    paragraph: target.paragraph + 2,
+                    cell: Some(CellTarget {
+                        control: 0,
+                        ..c.clone()
+                    }),
+                    ..target.clone()
+                };
+                return self.caret_in_cell(&back, 0, col);
+            }
+            TableChange::Attach => {
+                self.core.merge_table_with_next_native(s, host, control)?;
+            }
         }
         self.caret_in_cell(target, row, col)
     }

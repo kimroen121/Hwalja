@@ -439,6 +439,9 @@ struct MenuItems {
             .disabled(!context.inTable)
         Divider()
         Group {
+            item("표 나누기", Icon.splitTable) { viewer?.editTable(.split) }
+            item("표 붙이기", Icon.attachTable) { viewer?.editTable(.attach) }
+            Divider()
             Menu {
                 Button("위쪽에 줄 추가하기") { viewer?.editTable(.insertRowAbove) }
                 Button("아래쪽에 줄 추가하기") { viewer?.editTable(.insertRowBelow) }
@@ -454,7 +457,7 @@ struct MenuItems {
             Divider()
             item("셀 나누기…", Icon.splitCells) { viewer?.splittingCells = true }
         }
-        .disabled(!context.inTable)
+        .disabled(!context.inTable || context.locked)
         Group {
             item("셀 합치기", Icon.mergeCells) { viewer?.editCells { .mergeCells($0) } }
             Button("셀 높이를 같게") { viewer?.editCells { .equalizeCells($0, height: true) } }

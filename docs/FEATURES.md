@@ -240,8 +240,8 @@
 | 차트 만들기 | △ | `table/chart/chart(createchart).htm#bc-1` | 차트와 같음 |
 | 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 2024 탭은 기본·여백/캡션·테두리·배경·표·셀. 앱은 기본·여백/캡션·표·셀. 테두리·배경 탭 ○ |
 | 셀 테두리/배경 | ○ | `table/cellborder/cellborder.htm` | 앱에 없음. 각 셀마다 적용(테두리·배경·대각선)·하나의 셀처럼 적용: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties` |
-| 표 나누기 | ○ | `table/table(dividing).htm` | `split_table_native` |
-| 표 붙이기 | ○ | `table/table(attach).htm` | `merge_table_with_next_native` |
+| 표 나누기 | ● | `table/table(dividing).htm` | 표 메뉴, 표 레이아웃 탭. 첫 줄에서는 한/글의 알림 대신 경고음 |
+| 표 붙이기 | ● | `table/table(attach).htm` | 표 메뉴, 표 레이아웃 탭. 붙일 표가 없으면 경고음 |
 | 줄/칸 추가하기 | ◐ | `table/table(ins).htm` | 위쪽·아래쪽·왼쪽·오른쪽 ●. 대화 상자(줄/칸 수) △ |
 | 줄/칸 지우기 | ● | `table/table(del).htm` |  |
 | 셀 나누기 | ● | `table/table(divide).htm` |  |

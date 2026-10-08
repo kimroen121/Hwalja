@@ -229,19 +229,34 @@ impl EditSession {
         let doc = self.core.document();
         let para = get(doc, t)?;
         let spot = logical::spot(para, p.scalar);
-        let raw = para.char_offsets.get(spot.text).copied().unwrap_or(u32::MAX);
-        let mut line = para.line_segs.iter().rposition(|s| s.text_start <= raw).unwrap_or(0);
+        let raw = para
+            .char_offsets
+            .get(spot.text)
+            .copied()
+            .unwrap_or(u32::MAX);
+        let mut line = para
+            .line_segs
+            .iter()
+            .rposition(|s| s.text_start <= raw)
+            .unwrap_or(0);
         // At a wrapped line's end the caret shows after the line before.
         if p.upstream && line > 0 && para.line_segs[line].text_start == raw {
             line -= 1;
         }
         let start = para.line_segs.get(line).map_or(0, |s| s.text_start);
-        let start = para.char_offsets.iter().position(|&o| o >= start).unwrap_or(0);
+        let start = para
+            .char_offsets
+            .iter()
+            .position(|&o| o >= start)
+            .unwrap_or(0);
         let mut status = CaretStatus {
             page: rect.page + 1,
             column: 1,
             line: line as u32 + 1,
-            character: p.scalar.saturating_sub(logical::position(para, start, false)) + 1,
+            character: p
+                .scalar
+                .saturating_sub(logical::position(para, start, false))
+                + 1,
             section: t.section + 1,
             sections: doc.sections.len() as u32,
             cell: None,
@@ -250,7 +265,8 @@ impl EditSession {
         let body = t.cell.is_none() && t.note.is_none() && t.header_footer.is_none();
         let host_line = if body { line } else { 0 };
         if let Some((_, column, in_page)) =
-            self.core.line_place_native(t.section as usize, t.paragraph as usize, host_line)
+            self.core
+                .line_place_native(t.section as usize, t.paragraph as usize, host_line)
         {
             status.column = column as u32 + 1;
             if body {

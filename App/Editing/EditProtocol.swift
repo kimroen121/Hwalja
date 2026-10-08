@@ -478,6 +478,8 @@ struct CellProps: PartialFormat {
 
 enum TableChange: String, Encodable, Sendable {
     case insertRowAbove, insertRowBelow, insertColumnLeft, insertColumnRight, deleteRow, deleteColumn
+    /// 표 나누기 and 표 붙이기.
+    case split, attach
 }
 
 /// A section's paper in HWPUNIT (1/7200 inch); `width` and `height` describe it upright.

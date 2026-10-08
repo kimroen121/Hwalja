@@ -583,6 +583,10 @@ pub enum TableChange {
     InsertColumnRight,
     DeleteRow,
     DeleteColumn,
+    /// 표 나누기: the caret's row starts a new table.
+    Split,
+    /// 표 붙이기: the next table, with only empty paragraphs between, joins this one.
+    Attach,
 }
 /// A section's paper in HWPUNIT (1/7200 inch). `width` and `height` describe the paper
 /// upright; `landscape` turns it.

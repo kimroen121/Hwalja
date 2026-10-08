@@ -100,14 +100,13 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 ### 3. 메뉴 막대와 빠른 메뉴
 
-- [ ] 새 기능을 만들 때 그 기능의 메뉴 항목을 `menu/*.htm` 순서대로 해당 메뉴에 더한다(예: 쪽 › 쪽 테두리/배경, 표 › 표 나누기·표 붙이기). 「표」 메뉴는 늘 두고 표 밖에서는 항목을 흐리게 한다.
+- [ ] 새 기능을 만들 때 그 기능의 메뉴 항목을 `menu/*.htm` 순서대로 해당 메뉴에 더한다(예: 쪽 › 쪽 테두리/배경, 표 › 표 뒤집기). 「표」 메뉴는 늘 두고 표 밖에서는 항목을 흐리게 한다.
 - [ ] 빠른 메뉴: 도움말은 상태별 전체 목록을 주지 않고 기능 페이지마다 「빠른 메뉴에서 [항목]」으로만 적는다. 그 항목(하이퍼링크 고치기·지우기, 메모 지우기, 그림 파일로 저장, 다각형 편집, 스타일 추가/편집 등)은 기능을 만들 때 빠른 메뉴에도 넣는다.
 
 ### 4. rhwp에 있는 기능 연결 (FEATURES의 ○)
 
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
-- [ ] 표 나누기·표 붙이기(`table/table(dividing).htm`, `table(attach).htm`): `split_table_native`, `merge_table_with_next_native`.
 - [ ] 개체 묶기(`draw/drawing(group).htm`): `group_shapes_native`. 개체 풀기는 됨.
 - [ ] 표 뒤집기(`table/table(transform).htm`): `transpose_table_cells_in_place_native`. 도움말의 뒤집기 방식(줄·칸·줄/칸 기준, 90도 회전) 중 rhwp가 하는 것만 넣고 나머지는 △로 남긴다.
 - [ ] 그림 탭의 바꾸기/저장(`toolbox/object_picture.htm`): `assign_picture_image_native`(크기·위치 유지).

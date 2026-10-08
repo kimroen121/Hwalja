@@ -2306,6 +2306,36 @@ fn edits_table_rows_and_columns() {
     .is_err());
 }
 #[test]
+fn splits_and_attaches_tables() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = |paragraph, index| EditTarget {
+        section: 0,
+        paragraph,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: index,
+            paragraph: 0,
+        }),
+        note: None,
+        header_footer: None,
+    };
+    let table = |s: &mut EditSession, cell, change| run(s, EditCommand::EditTable { cell, change });
+    table(&mut s, cell(2, 0), TableChange::InsertRowBelow).unwrap();
+    // Not from the first row, as in 한/글.
+    assert!(table(&mut s, cell(2, 0), TableChange::Split).is_err());
+    let reply = table(&mut s, cell(2, 2), TableChange::Split).unwrap();
+    assert_eq!(reply.selection.unwrap().focus.target.paragraph, 4);
+    assert_eq!(
+        (table_shape(&s, 2), table_shape(&s, 4)),
+        ((1, 2, 2), (1, 2, 2))
+    );
+    table(&mut s, cell(2, 0), TableChange::Attach).unwrap();
+    assert_eq!(table_shape(&s, 2), (2, 2, 4));
+    // Nothing follows to attach.
+    assert!(table(&mut s, cell(2, 0), TableChange::Attach).is_err());
+    s.export(SaveFormat::Hwpx).unwrap();
+}
+#[test]
 fn sets_paper_and_margins() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, true)).unwrap();
@@ -4603,12 +4633,27 @@ fn html_from_browsers_keeps_its_formats_in_one_paragraph() {
 fn status_counts_lines_on_the_page_and_names_cells() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
     let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
-    replace(&mut s, body(), 0, all, &"가나다라마바사아자차카타파하 ".repeat(20)).unwrap();
+    replace(
+        &mut s,
+        body(),
+        0,
+        all,
+        &"가나다라마바사아자차카타파하 ".repeat(20),
+    )
+    .unwrap();
     let revision = s.reply().revision;
     let status = |s: &EditSession, p: EditPosition| s.status(revision, &p).unwrap();
     let first = status(&s, point(body(), 3));
     assert_eq!(
-        (first.page, first.column, first.line, first.character, first.section, first.sections, first.cell),
+        (
+            first.page,
+            first.column,
+            first.line,
+            first.character,
+            first.section,
+            first.sections,
+            first.cell
+        ),
         (1, 1, 2, 4, 1, 1, None)
     );
     assert_eq!(first.characters, s.statistics().characters);
@@ -4618,13 +4663,32 @@ fn status_counts_lines_on_the_page_and_names_cells() {
         .find(|&k| status(&s, point(body(), k)).line == 3)
         .unwrap();
     assert_eq!(status(&s, point(body(), next)).character, 1);
-    let end = status(&s, EditPosition { upstream: true, ..point(body(), next) });
+    let end = status(
+        &s,
+        EditPosition {
+            upstream: true,
+            ..point(body(), next)
+        },
+    );
     assert_eq!((end.line, end.character), (2, next + 1));
-    let empty = status(&s, point(EditTarget { paragraph: 0, ..body() }, 0));
+    let empty = status(
+        &s,
+        point(
+            EditTarget {
+                paragraph: 0,
+                ..body()
+            },
+            0,
+        ),
+    );
     assert_eq!((empty.line, empty.character), (1, 1));
     let cell = EditTarget {
         paragraph: 2,
-        cell: Some(CellTarget { control: 0, cell: 1, paragraph: 0 }),
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 1,
+            paragraph: 0,
+        }),
         ..body()
     };
     assert_eq!(status(&s, point(cell, 0)).cell.as_deref(), Some("B1"));
