@@ -2235,18 +2235,28 @@ fn sets_paper_and_margins() {
         let width = s.core.get_page_info_native(0).unwrap();
         page.landscape = !page.landscape;
         page.margin_left += 2835;
+        page.binding = 1;
         run(
             &mut s,
             EditCommand::SetPage {
                 section: 0,
                 page: page.clone(),
+                whole: false,
             },
         )
         .unwrap();
         assert_eq!(s.page_setup(0).unwrap(), page);
         assert_ne!(s.core.get_page_info_native(0).unwrap(), width);
         page.margin_left = page.width.max(page.height);
-        assert!(run(&mut s, EditCommand::SetPage { section: 0, page }).is_err());
+        assert!(run(
+            &mut s,
+            EditCommand::SetPage {
+                section: 0,
+                page,
+                whole: false,
+            }
+        )
+        .is_err());
     }
 }
 /// Opt-in: `HWP_CORPUS=<folder> cargo test --release structure_edits_on_corpus -- --ignored --nocapture`.
@@ -2351,7 +2361,11 @@ fn structure_edits_on_corpus() {
         }
         let mut page = opened.page_setup(0).unwrap();
         page.margin_left += 283;
-        commands.push(EditCommand::SetPage { section: 0, page });
+        commands.push(EditCommand::SetPage {
+            section: 0,
+            page,
+            whole: false,
+        });
         for command in commands {
             let mut s = EditSession::open(&bytes).unwrap();
             runs += 1;

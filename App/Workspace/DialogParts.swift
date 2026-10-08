@@ -458,3 +458,23 @@ struct ChoiceField<Value: Hashable>: View {
         }, below: anchor.view)
     }
 }
+
+/// Choices shown as pictures in a row, as the web dialogs show 본문과의 배치 and 쪽 경계에서.
+struct IconTiles<Value: Hashable, Picture: View>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: String)]
+    @ViewBuilder let picture: (Value, Bool) -> Picture
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(options, id: \.value) { option in
+                Button { selection = option.value } label: {
+                    picture(option.value, selection == option.value).frame(width: 30, height: 30).padding(4)
+                }
+                .buttonStyle(ToolButtonStyle(on: selection == option.value))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                .help(option.title)
+                .accessibilityLabel(option.title)
+            }
+        }
+    }
+}

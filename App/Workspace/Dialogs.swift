@@ -53,8 +53,8 @@ extension Viewer {
             pageSetup = (section, page)
         }
     }
-    func setPage(_ page: PageSetup, section: UInt32) {
-        document?.edit(undoManager) { _ in .setPage(section: section, page) }
+    func setPage(_ page: PageSetup, section: UInt32, whole: Bool = false) {
+        document?.edit(undoManager) { _ in .setPage(section: section, page, whole: whole) }
     }
     /// Replaces the section's 머리말 (or 꼬리말) for every page, turning 쪽 윤곽 on to show it.
     func headerFooter(footer: Bool, pageNumber: Placement?) {
@@ -119,12 +119,14 @@ struct SplitCellSheet: View {
     }
 }
 
-/// 편집 용지: paper size and orientation, and margins, in millimeters.
+/// 편집 용지, laid out like the web editor's: 용지 종류, 용지 방향, 제본, 용지 여백 (in
+/// millimeters), and 적용 범위.
 struct PageSetupSheet: View {
     let section: UInt32
     @ObservedObject var viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var page: PageSetup
+    @State private var whole = true
 
     init(section: UInt32, page: PageSetup, viewer: Viewer) {
         self.section = section
@@ -132,9 +134,14 @@ struct PageSetupSheet: View {
         _page = State(initialValue: page)
     }
 
+    /// 용지 종류, in Hancom's names and order.
     private static let papers: [(name: String, width: Double, height: Double)] = [
-        ("A3", 297, 420), ("A4", 210, 297), ("A5", 148, 210), ("B4", 257, 364), ("B5", 182, 257),
-        ("레터", 215.9, 279.4), ("리걸", 215.9, 355.6),
+        ("프린트 132", 335.3, 279.4), ("레터", 215.9, 279.4), ("B5(46배판)", 182, 257), ("B4(타블로이드판)", 257, 364),
+        ("A4(국배판)", 210, 297), ("A3(국배배판)", 297, 420), ("리갈", 215.9, 355.6), ("A6(문고판)", 105, 148),
+        ("A5(국판)", 148, 210), ("신국판", 148, 225), ("크라운판", 176, 248), ("Executive", 184.1, 266.7),
+        ("Executive(JIS)", 216, 329.9), ("Envelope DL", 110, 220), ("Envelope C5", 162, 229),
+        ("Envelope B5", 176, 250), ("Envelope Monarch", 98.4, 190.5), ("점자출력용지", 230, 279.4),
+        ("16절지(국판)", 159, 234),
     ]
 
     var body: some View {
@@ -144,19 +151,30 @@ struct PageSetupSheet: View {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
                         FieldLabel("종류")
-                        ChoiceField(paper, Self.papers.map { (Optional($0.name), $0.name) } + [(nil, "사용자 정의")])
-                        FieldLabel("용지 방향")
-                        Picker("용지 방향", selection: $page.landscape) {
-                            Text("세로").tag(false)
-                            Text("가로").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
+                        ChoiceField(paper, Self.papers.map {
+                            (Optional($0.name), "\($0.name) [\($0.width.formatted()) x \($0.height.formatted()) mm]")
+                        } + [(nil, "사용자 정의")], minWidth: 300)
+                        .gridCellColumns(3)
                     }
                     GridRow { field("폭", \.width); field("길이", \.height) }
                 }
                 .padding(.leading, 12)
+                HStack(alignment: .top, spacing: 48) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("용지 방향")
+                        IconTiles(selection: $page.landscape, options: [(false, "세로"), (true, "가로")]) { landscape, on in
+                            PagePictogram.orientation(landscape, on: on)
+                        }
+                        .padding(.leading, 12)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        GroupTitle("제본")
+                        IconTiles(selection: $page.binding, options: [(UInt8(0), "한쪽"), (1, "맞쪽"), (2, "위로")]) { binding, on in
+                            PagePictogram.binding(binding, on: on)
+                        }
+                        .padding(.leading, 12)
+                    }
+                }
                 GroupTitle("용지 여백")
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow { field("위쪽", \.marginTop); field("아래쪽", \.marginBottom) }
@@ -165,9 +183,14 @@ struct PageSetupSheet: View {
                     GridRow { field("제본", \.marginGutter) }
                 }
                 .padding(.leading, 12)
+                Divider()
+                HStack(spacing: 10) {
+                    Text("적용 범위")
+                    ChoiceField($whole, [(true, "문서 전체"), (false, "현재 구역")], minWidth: 100).fixedSize()
+                }
             }
         } confirm: {
-            viewer.setPage(page, section: section)
+            viewer.setPage(page, section: section, whole: whole)
             dismiss()
         }
     }
@@ -187,6 +210,46 @@ struct PageSetupSheet: View {
         FieldLabel(title)
         SpinField(value: Binding { Units.millimeters(page[keyPath: key]) } set: { page[keyPath: key] = Units.units($0) },
                   unit: "mm", range: 0...1000)
+    }
+}
+
+/// 용지 방향 and 제본 as the web dialog draws them: a page with lines of text, and pages
+/// with 가 (and 나) by their bound edge.
+private enum PagePictogram {
+    static func orientation(_ landscape: Bool, on: Bool) -> some View {
+        Canvas { context, size in
+            let ink: Color = on ? .accentColor : .secondary
+            let (w, h) = landscape ? (size.width * 0.9, size.height * 0.62) : (size.width * 0.62, size.height * 0.9)
+            let page = CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
+            context.stroke(Path(page), with: .color(ink), lineWidth: 1)
+            for y in stride(from: page.minY + 4, to: page.maxY - 3, by: 3) {
+                context.fill(Path(CGRect(x: page.minX + 4, y: y, width: page.width - 8, height: 1)), with: .color(ink))
+            }
+        }
+    }
+    static func binding(_ binding: UInt8, on: Bool) -> some View {
+        Canvas { context, size in
+            let ink: Color = on ? .accentColor : .secondary
+            let font = Font.system(size: binding == 1 ? 8 : 13, weight: .medium)
+            let page = CGRect(x: size.width * 0.18, y: size.height * 0.05, width: size.width * 0.64, height: size.height * 0.9)
+            switch binding {
+            case 1:
+                let wide = CGRect(x: size.width * 0.05, y: page.minY, width: size.width * 0.9, height: page.height)
+                context.stroke(Path(wide), with: .color(ink), lineWidth: 1)
+                context.stroke(Path { $0.move(to: CGPoint(x: wide.midX, y: wide.minY)); $0.addLine(to: CGPoint(x: wide.midX, y: wide.maxY)) },
+                               with: .color(ink), style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                context.draw(Text("가").font(font).foregroundColor(ink), at: CGPoint(x: wide.minX + wide.width / 4, y: wide.midY))
+                context.draw(Text("나").font(font).foregroundColor(ink), at: CGPoint(x: wide.maxX - wide.width / 4, y: wide.midY))
+            default:
+                context.stroke(Path(page), with: .color(ink), lineWidth: 1)
+                let top = binding == 2
+                let marks = top
+                    ? stride(from: page.minX + 3, to: page.maxX - 1, by: 4).map { CGRect(x: $0, y: page.minY - 1.5, width: 1, height: 3) }
+                    : stride(from: page.minY + 3, to: page.maxY - 1, by: 4).map { CGRect(x: page.minX - 1.5, y: $0, width: 3, height: 1) }
+                for mark in marks { context.fill(Path(mark), with: .color(ink)) }
+                context.draw(Text("가").font(font).foregroundColor(ink), at: CGPoint(x: page.midX, y: page.midY))
+            }
+        }
     }
 }
 

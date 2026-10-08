@@ -216,6 +216,14 @@ pub(super) fn body_only(t: &EditTarget) -> Result<(), EditError> {
     }
     body_or_cell(t)
 }
+/// The sections `SetPage` changes.
+pub(super) fn page_sections(doc: &Document, section: u32, whole: bool) -> std::ops::Range<usize> {
+    if whole {
+        0..doc.sections.len()
+    } else {
+        section as usize..section as usize + 1
+    }
+}
 fn validate_page(page: &PageSetup) -> Result<(), EditError> {
     let (width, height) = if page.landscape {
         (page.height, page.width)
@@ -228,9 +236,10 @@ fn validate_page(page: &PageSetup) -> Result<(), EditError> {
         + page.margin_bottom as u64
         + page.margin_header as u64
         + page.margin_footer as u64;
-    if sides
-        .iter()
-        .all(|&s| (CENTIMETER..=100 * CENTIMETER).contains(&s))
+    if page.binding <= 2
+        && sides
+            .iter()
+            .all(|&s| (CENTIMETER..=100 * CENTIMETER).contains(&s))
         && across + (CENTIMETER as u64) <= width as u64
         && down + (CENTIMETER as u64) <= height as u64
     {
@@ -463,7 +472,7 @@ impl EditSession {
                     _ => Ok(()),
                 }
             }
-            EditCommand::SetPage { section, page } => {
+            EditCommand::SetPage { section, page, .. } => {
                 self.section_exists(*section)?;
                 validate_page(page)
             }
@@ -1239,9 +1248,15 @@ impl EditSession {
                 }))
             }
             EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
-            EditCommand::SetPage { section, page } => {
+            EditCommand::SetPage {
+                section,
+                page,
+                whole,
+            } => {
                 let json = serde_json::to_string(page).map_err(|_| EditError::InvalidInput)?;
-                self.core.set_page_def_native(*section as usize, &json)?;
+                for s in page_sections(self.core.document(), *section, *whole) {
+                    self.core.set_page_def_native(s, &json)?;
+                }
                 Ok(self.kept(*section))
             }
             EditCommand::DeleteHeaderFooter { target } => {

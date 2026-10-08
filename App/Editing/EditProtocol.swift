@@ -116,7 +116,8 @@ enum EditCommand: Encodable, Sendable {
     case mergeCells(EditSelection)
     case splitCells(EditSelection, rows: Int, columns: Int, equalHeight: Bool, mergeFirst: Bool)
     case equalizeCells(EditSelection, height: Bool)
-    case setPage(section: UInt32, PageSetup)
+    /// With `whole`, every section (적용 범위 문서 전체).
+    case setPage(section: UInt32, PageSetup, whole: Bool = false)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
     /// 머리말/꼬리말 지우기: the definition `target` is in.
@@ -139,7 +140,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds
+             numbering, number, hide, name, control, kinds, whole
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -204,10 +205,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("editTable", forKey: .kind)
             try c.encode(cell, forKey: .cell)
             try c.encode(change, forKey: .change)
-        case let .setPage(section, page):
+        case let .setPage(section, page, whole):
             try c.encode("setPage", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(page, forKey: .page)
+            try c.encode(whole, forKey: .whole)
         case let .headerFooter(section, footer, pageNumber):
             try c.encode("headerFooter", forKey: .kind)
             try c.encode(section, forKey: .section)
@@ -486,6 +488,8 @@ struct PageSetup: Codable, Hashable, Sendable {
     var marginFooter: UInt32
     var marginGutter: UInt32
     var landscape: Bool
+    /// 제본: 0 한쪽, 1 맞쪽, 2 위로.
+    var binding: UInt8
 }
 
 struct EditReply: Decodable, Sendable {

@@ -205,7 +205,9 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
-        EditCommand::SetPage { section, .. } => return check_page(before, after, *section),
+        EditCommand::SetPage { section, whole, .. } => {
+            return check_page(before, after, *section, *whole)
+        }
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
             position: EditPosition { target, .. },
@@ -659,21 +661,26 @@ fn check_hosts(
     same_rest(&mut a, &mut b, section)
 }
 /// Page setup may only change the section's paper and margins.
-fn check_page(before: &Document, after: &Document, section: u32) -> Result<(), EditError> {
+fn check_page(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    whole: bool,
+) -> Result<(), EditError> {
     let mut a = before.clone();
     let mut b = after.clone();
-    let (x, y) = (
-        &mut a.sections[section as usize],
-        &b.sections[section as usize],
-    );
-    x.section_def.page_def = y.section_def.page_def.clone();
-    // The section's first paragraph carries its own copy of the definition.
-    for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
-        for (c, d) in p.controls.iter_mut().zip(&q.controls) {
-            if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
-                c.page_def = d.page_def.clone();
+    for s in commands::page_sections(before, section, whole) {
+        let (x, y) = (&mut a.sections[s], &mut b.sections[s]);
+        x.section_def.page_def = y.section_def.page_def.clone();
+        // The section's first paragraph carries its own copy of the definition.
+        for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
+            for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+                if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
+                    c.page_def = d.page_def.clone();
+                }
             }
         }
+        (x.raw_stream, y.raw_stream) = (None, None);
     }
     same_rest(&mut a, &mut b, section)
 }

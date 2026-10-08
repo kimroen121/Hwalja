@@ -237,10 +237,13 @@ pub enum EditCommand {
         selection: EditSelection,
         function: BlockFunction,
     },
-    /// Paper and margins of one section.
+    /// Paper and margins of one section, or with `whole` of every section (적용 범위
+    /// 문서 전체).
     SetPage {
         section: u32,
         page: PageSetup,
+        #[serde(default)]
+        whole: bool,
     },
     /// 머리말/꼬리말 지우기: the definition `target` (a 머리말 or 꼬리말 paragraph) is in.
     DeleteHeaderFooter {
@@ -570,6 +573,8 @@ pub struct PageSetup {
     pub margin_footer: u32,
     pub margin_gutter: u32,
     pub landscape: bool,
+    /// 제본: 0 한쪽, 1 맞쪽, 2 위로.
+    pub binding: u8,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
