@@ -1148,6 +1148,20 @@ fn picture_insert_undo_and_save_round_trip() {
 }
 
 #[test]
+fn inserting_a_small_inline_picture_does_not_add_a_page() {
+    for format in ["hwp", "hwpx"] {
+        let mut session = EditSession::open(&plain_document(format, false)).unwrap();
+        let pages_before = session.core.page_count();
+        run(&mut session, picture_at(point(body(), 1))).unwrap();
+        assert_eq!(
+            session.core.page_count(),
+            pages_before,
+            "a 100 px inline picture fits the existing page ({format})"
+        );
+    }
+}
+
+#[test]
 fn equation_insert_undo_and_save_round_trip() {
     for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
         let mut session = EditSession::open(&plain_document(format, false)).unwrap();
