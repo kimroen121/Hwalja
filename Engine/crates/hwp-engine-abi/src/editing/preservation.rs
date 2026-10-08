@@ -319,7 +319,9 @@ pub(super) fn check(
         | EditCommand::MoveLineEnd { object, .. }
         | EditCommand::SetTextBox { object, .. }
         | EditCommand::ResizeTable { table: object, .. } => {
-            return check_host(before, after, object.section, object.paragraph)
+            // A table's new 그림 배경 adds its image.
+            let after = &with_images_of(before, after);
+            return check_host(before, after, object.section, object.paragraph);
         }
         EditCommand::SetCell { cell, .. }
         | EditCommand::SetCellBorder {
@@ -329,7 +331,11 @@ pub(super) fn check(
                     ..
                 },
             ..
-        } => return check_host(before, after, cell.section, cell.paragraph),
+        } => {
+            // A cell's new 그림 배경 adds its image.
+            let after = &with_images_of(before, after);
+            return check_host(before, after, cell.section, cell.paragraph);
+        }
         EditCommand::Order { object, .. } => return check_order(before, after, object.section),
         EditCommand::HeaderFooter {
             section, footer, ..
@@ -446,6 +452,17 @@ fn clear_note_numbers(doc: &mut Document) {
     }
 }
 /// One binary-data record and its payload were appended, the earlier ones unchanged.
+/// `after` without the one image a 그림 배경 added, when it added one.
+fn with_images_of(before: &Document, after: &Document) -> Document {
+    let mut b = after.clone();
+    if one_image_added(before, after) {
+        b.bin_data_content.truncate(before.bin_data_content.len());
+        b.doc_info
+            .bin_data_list
+            .truncate(before.doc_info.bin_data_list.len());
+    }
+    b
+}
 fn one_image_added(before: &Document, after: &Document) -> bool {
     after.bin_data_content.len() == before.bin_data_content.len() + 1
         && after.doc_info.bin_data_list.len() == before.doc_info.bin_data_list.len() + 1

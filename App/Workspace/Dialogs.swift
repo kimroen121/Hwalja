@@ -635,40 +635,150 @@ struct LineFields: View {
 /// 그림, kept as it is until one is chosen.
 struct FillFields: View {
     @Binding var fill: PageFill?
+    /// 셀·표 배경 also take a 그러데이션 or a 그림.
+    var extended = false
+    @State private var file: String?
+
+    /// 그림 채우기 유형, in the engine's order.
+    private static let modes = ["바둑판식으로-모두", "바둑판식으로-가로/위", "바둑판식으로-가로/아래", "바둑판식으로-세로/왼쪽",
+                                "바둑판식으로-세로/오른쪽", "크기에 맞추어", "가운데로", "가운데 위로", "가운데 아래로",
+                                "왼쪽 가운데로", "왼쪽 위로", "왼쪽 아래로", "오른쪽 가운데로", "오른쪽 위로", "오른쪽 아래로"]
+    /// 0 색 채우기 없음, 1 색, 2 그러데이션, 3 그림; -1 for a fill shown as none of them.
+    private var kind: Int {
+        guard let fill else { return -1 }
+        if fill.gradient != nil { return 2 }
+        if fill.image != nil { return 3 }
+        return fill.color == "none" && fill.pattern == 0 ? 0 : 1
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("", selection: Binding { fill.map { $0.color == "none" && $0.pattern == 0 ? 0 : 1 } ?? -1 } set: {
-                var new = fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
-                if $0 == 0 {
-                    (new.color, new.pattern) = ("none", 0)
-                } else if new.color == "none" {
-                    new.color = "#ffffff"
-                }
-                fill = new
-            }) {
+            Picker("", selection: Binding { kind } set: { choose($0) }) {
                 Text("색 채우기 없음").tag(0)
                 Text("색").tag(1)
+                if extended {
+                    Text("그러데이션").tag(2)
+                    Text("그림").tag(3)
+                }
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    FieldLabel("면 색")
-                    ColorWell(hex: color(\.color, "#ffffff"))
-                }
-                GridRow {
-                    FieldLabel("무늬 색")
-                    ColorWell(hex: color(\.patternColor, "#000000"))
-                }
-                GridRow {
-                    FieldLabel("무늬 모양")
-                    ChoiceField(Binding { Int(fill?.pattern ?? 0) } set: { fill?.pattern = UInt8($0) },
-                                Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+            switch kind {
+            case 2: gradientFields.padding(.leading, 20)
+            case 3: imageFields.padding(.leading, 20)
+            default: colorFields.padding(.leading, 20).disabled(kind != 1)
+            }
+        }
+    }
+    private func choose(_ kind: Int) {
+        var new = fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
+        (new.gradient, new.image) = (nil, nil)
+        switch kind {
+        case 0: (new.color, new.pattern) = ("none", 0)
+        case 2: new.gradient = Gradient()
+        case 3: return pickImage()
+        default: if new.color == "none" { new.color = "#ffffff" }
+        }
+        fill = new
+    }
+    private var colorFields: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            GridRow {
+                FieldLabel("면 색")
+                ColorWell(hex: color(\.color, "#ffffff"))
+            }
+            GridRow {
+                FieldLabel("무늬 색")
+                ColorWell(hex: color(\.patternColor, "#000000"))
+            }
+            GridRow {
+                FieldLabel("무늬 모양")
+                ChoiceField(Binding { Int(fill?.pattern ?? 0) } set: { fill?.pattern = UInt8($0) },
+                            Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+            }
+        }
+    }
+    private var gradientFields: some View {
+        let g = Binding { fill?.gradient ?? Gradient() } set: { fill?.gradient = $0 }
+        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            GridRow {
+                FieldLabel("시작 색")
+                ColorWell(hex: Binding { g.wrappedValue.colors[0] } set: { g.wrappedValue.colors[0] = $0 })
+                FieldLabel("끝 색")
+                ColorWell(hex: Binding { g.wrappedValue.colors[1] } set: { g.wrappedValue.colors[1] = $0 })
+            }
+            GridRow {
+                FieldLabel("모양")
+                ChoiceField(Binding { g.wrappedValue.kind } set: { g.wrappedValue.kind = $0 },
+                            [(UInt8(1), "줄무늬"), (2, "원형"), (3, "원뿔형"), (4, "사각형")], minWidth: 90)
+                FieldLabel("기울임")
+                SpinField(value: number(g, \.angle), unit: "°", range: 0...359)
+            }
+            GridRow {
+                FieldLabel("가로 중심")
+                SpinField(value: number(g, \.centerX), unit: "%", range: 0...100)
+                FieldLabel("세로 중심")
+                SpinField(value: number(g, \.centerY), unit: "%", range: 0...100)
+            }
+            GridRow {
+                FieldLabel("번짐 정도")
+                SpinField(value: number(g, \.blur), unit: "", range: 0...255)
+                FieldLabel("번짐 중심")
+                SpinField(value: number(g, \.stepCenter), unit: "", range: 0...100)
+            }
+        }
+    }
+    private var imageFields: some View {
+        let i = Binding { fill?.image ?? ImageBrush() } set: { fill?.image = $0 }
+        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            GridRow {
+                FieldLabel("그림 파일")
+                HStack {
+                    Text(file ?? "").lineLimit(1).truncationMode(.middle).frame(maxWidth: 160, alignment: .leading)
+                    Button("그림 선택…") { pickImage() }
                 }
             }
-            .padding(.leading, 20)
-            .disabled(fill.map { $0.color == "none" && $0.pattern == 0 } ?? true)
+            GridRow {
+                FieldLabel("채우기 유형")
+                ChoiceField(Binding { Int(i.wrappedValue.mode) } set: { i.wrappedValue.mode = UInt8($0) },
+                            Array(Self.modes.enumerated()).map { ($0.offset, $0.element) }, minWidth: 160)
+            }
+            GridRow {
+                FieldLabel("그림 효과")
+                ChoiceField(Binding { i.wrappedValue.effect } set: { i.wrappedValue.effect = $0 },
+                            [(UInt8(0), "원래 그림"), (1, "회색조"), (2, "흑백")], minWidth: 100)
+            }
+            GridRow {
+                FieldLabel("밝기")
+                SpinField(value: number(i, \.brightness), unit: "%", range: -100...100)
+            }
+            GridRow {
+                FieldLabel("대비")
+                SpinField(value: number(i, \.contrast), unit: "%", range: -100...100)
+            }
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                Toggle("워터마크 효과", isOn: Binding { i.wrappedValue.brightness == 70 && i.wrappedValue.contrast == -50 } set: {
+                    (i.wrappedValue.brightness, i.wrappedValue.contrast) = $0 ? (70, -50) : (0, 0)
+                })
+            }
         }
+    }
+    /// 그림 선택: an image file for the 배경, kept in the document.
+    private func pickImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
+        var new = fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
+        new.gradient = nil
+        var image = new.image ?? ImageBrush()
+        (image.data, image.extension, image.binId) = (data, url.pathExtension.lowercased(), 0)
+        new.image = image
+        fill = new
+        file = url.lastPathComponent
+    }
+    private func number<T, V: BinaryInteger>(_ value: Binding<T>, _ key: WritableKeyPath<T, V>) -> Binding<Double> {
+        Binding { Double(value.wrappedValue[keyPath: key]) } set: { value.wrappedValue[keyPath: key] = V(clamping: Int($0.rounded())) }
     }
     private func color(_ key: WritableKeyPath<PageFill, String>, _ fallback: String) -> Binding<String> {
         Binding { fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
@@ -1157,7 +1267,7 @@ struct CellBorderSheet: View {
             DialogTabs(selection: $tab, titles: ["테두리", "배경", "대각선"]) { tab in
                 Group {
                     switch tab {
-                    case "배경": FillFields(fill: $fill).padding(.leading, 12)
+                    case "배경": FillFields(fill: $fill, extended: true).padding(.leading, 12)
                     case "대각선": diagonals
                     default: lines
                     }

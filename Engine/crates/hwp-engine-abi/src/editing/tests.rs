@@ -2729,6 +2729,8 @@ fn page_borders_and_backgrounds_go_on_their_pages() {
             color: "#abcdef".into(),
             pattern_color: "#000000".into(),
             pattern: 0,
+            gradient: None,
+            image: None,
         });
         border.fill_pages = ApplyPages::FirstOnly;
         let set = |border: PageBorder| EditCommand::SetPageBorder {
@@ -5447,6 +5449,8 @@ fn cell_borders_backgrounds_and_diagonals() {
             color: "#0000ff".into(),
             pattern_color: "#000000".into(),
             pattern: 0,
+            gradient: None,
+            image: None,
         };
         let before = s.cell_border(&at(&s, 2, 2)).unwrap();
         // 각 셀마다 적용: the block's outside takes the thick line, its inside stays.
@@ -5534,6 +5538,8 @@ fn table_borders_and_backgrounds_are_set() {
             color: "#ffeecc".into(),
             pattern_color: "#000000".into(),
             pattern: 0,
+            gradient: None,
+            image: None,
         });
         let set = EditCommand::SetObject {
             object: table.clone(),
@@ -5705,5 +5711,121 @@ fn linked_pictures_change_path_and_go_in() {
             path: "/tmp/c.png".into(),
         };
         assert!(run(&mut s, embedded).is_err());
+    }
+}
+#[test]
+fn cell_and_table_backgrounds_take_gradients_and_pictures() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+        let cell = EditTarget {
+            section: 0,
+            paragraph: 2,
+            cell: Some(CellTarget {
+                control: 0,
+                cell: 0,
+                paragraph: 0,
+            }),
+            note: None,
+            header_footer: None,
+        };
+        let gradient = PageFill {
+            color: "none".into(),
+            pattern_color: "#000000".into(),
+            pattern: 0,
+            gradient: Some(Gradient {
+                kind: 2,
+                colors: vec!["#ffffff".into(), "#3366cc".into()],
+                angle: 45,
+                center_x: 50,
+                center_y: 50,
+                blur: 0,
+                step_center: 50,
+            }),
+            image: None,
+        };
+        let set = EditCommand::SetCellBorder {
+            selection: EditSelection::caret(point(cell.clone(), 0)),
+            all: false,
+            one: false,
+            border: CellBorder {
+                fill: Some(gradient.clone()),
+                ..Default::default()
+            },
+        };
+        run(&mut s, set).unwrap();
+        assert_eq!(
+            s.cell_border(&cell).unwrap().fill,
+            Some(gradient.clone()),
+            "{format}"
+        );
+        assert!(
+            s.core
+                .render_page_svg_native(0)
+                .unwrap()
+                .contains("Gradient"),
+            "{format}"
+        );
+        let table = ObjectRef {
+            kind: ObjectKind::Table,
+            section: 0,
+            paragraph: 2,
+            control: 0,
+            cell: None,
+            note: None,
+        };
+        let picture = PageFill {
+            color: "none".into(),
+            pattern_color: "#000000".into(),
+            pattern: 0,
+            gradient: None,
+            image: Some(ImageBrush {
+                data: Some("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=".into()),
+                extension: Some("png".into()),
+                bin_id: 0,
+                mode: 5,
+                effect: 1,
+                brightness: 10,
+                contrast: -10,
+            }),
+        };
+        let mut border = s.object_props(&table).unwrap().table_border.unwrap();
+        border.fill = Some(picture);
+        let set = EditCommand::SetObject {
+            object: table.clone(),
+            props: ObjectProps {
+                table_border: Some(border),
+                ..Default::default()
+            },
+        };
+        run(&mut s, set).unwrap();
+        let check = |s: &EditSession| {
+            let image = s
+                .object_props(&table)
+                .unwrap()
+                .table_border
+                .unwrap()
+                .fill
+                .unwrap()
+                .image
+                .unwrap();
+            assert!(image.bin_id > 0, "{format}");
+            assert_eq!(
+                (image.mode, image.effect, image.brightness, image.contrast),
+                (5, 1, 10, -10),
+                "{format}"
+            );
+            assert_eq!(
+                s.cell_border(&cell)
+                    .unwrap()
+                    .fill
+                    .unwrap()
+                    .gradient
+                    .unwrap()
+                    .colors[1],
+                "#3366cc"
+            );
+        };
+        check(&s);
+        check(&EditSession::open(&s.export(save).unwrap()).unwrap());
     }
 }

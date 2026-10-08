@@ -811,7 +811,7 @@ struct TableBackgroundTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("채우기")
-            FillFields(fill: Binding { props.tableBorder?.fill } set: { props.tableBorder?.fill = $0 })
+            FillFields(fill: Binding { props.tableBorder?.fill } set: { props.tableBorder?.fill = $0 }, extended: true)
                 .padding(.leading, 12)
             Spacer(minLength: 0)
         }

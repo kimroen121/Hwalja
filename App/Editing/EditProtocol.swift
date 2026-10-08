@@ -693,6 +693,31 @@ struct PageFill: Codable, Hashable, Sendable {
     var color: String
     var patternColor: String
     var pattern: UInt8
+    /// 셀·표 배경 only: a 그러데이션 or 그림 in place of the color.
+    var gradient: Gradient?
+    var image: ImageBrush?
+}
+/// 그러데이션: 모양 (1 줄무늬, 2 원형, 3 원뿔형, 4 사각형), 시작 색 and 끝 색, 기울임, 가로/세로
+/// 중심 (%), 번짐 정도 and 번짐 중심 (%).
+struct Gradient: Codable, Hashable, Sendable {
+    var kind: UInt8 = 1
+    var colors = ["#ffffff", "#000000"]
+    var angle: Int16 = 0
+    var centerX: Int16 = 50
+    var centerY: Int16 = 50
+    var blur: UInt8 = 0
+    var stepCenter: UInt8 = 50
+}
+/// 그림 배경: a new image (`data` with its `extension`) or the document's (`binId`); 채우기
+/// 유형, 그림 효과 (0 원래 그림, 1 회색조, 2 흑백), 밝기 and 대비.
+struct ImageBrush: Codable, Hashable, Sendable {
+    var data: Data?
+    var `extension`: String?
+    var binId: UInt16 = 0
+    var mode: UInt8 = 5
+    var effect: UInt8 = 0
+    var brightness: Int8 = 0
+    var contrast: Int8 = 0
 }
 /// 적용 쪽: 모두, 첫 쪽 제외, 첫 쪽만.
 enum ApplyPages: String, Codable, Sendable {

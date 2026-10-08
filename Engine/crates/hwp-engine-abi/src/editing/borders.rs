@@ -33,14 +33,32 @@ pub(super) fn border_json(
         }
     }
     if let Some(f) = &border.fill {
-        let plain = f.color == "none" && f.pattern == 0;
-        j.insert(
-            "fillType".into(),
-            json!(if plain { "none" } else { "solid" }),
-        );
-        j.insert("fillColor".into(), json!(f.color));
-        j.insert("patternColor".into(), json!(f.pattern_color));
-        j.insert("patternType".into(), json!(f.pattern));
+        if let Some(g) = &f.gradient {
+            j.insert("fillType".into(), json!("gradient"));
+            j.insert("gradientType".into(), json!(g.kind));
+            j.insert("gradientColors".into(), json!(g.colors));
+            j.insert("gradientAngle".into(), json!(g.angle));
+            j.insert("gradientCenterX".into(), json!(g.center_x));
+            j.insert("gradientCenterY".into(), json!(g.center_y));
+            j.insert("gradientBlur".into(), json!(g.blur));
+            j.insert("gradientStepCenter".into(), json!(g.step_center));
+        } else if let Some(i) = &f.image {
+            j.insert("fillType".into(), json!("image"));
+            j.insert("imageBinDataId".into(), json!(i.bin_id));
+            j.insert("imageMode".into(), json!(i.mode));
+            j.insert("imageEffect".into(), json!(i.effect));
+            j.insert("imageBrightness".into(), json!(i.brightness));
+            j.insert("imageContrast".into(), json!(i.contrast));
+        } else {
+            let plain = f.color == "none" && f.pattern == 0;
+            j.insert(
+                "fillType".into(),
+                json!(if plain { "none" } else { "solid" }),
+            );
+            j.insert("fillColor".into(), json!(f.color));
+            j.insert("patternColor".into(), json!(f.pattern_color));
+            j.insert("patternType".into(), json!(f.pattern));
+        }
     }
     if let Some(d) = &border.diagonal {
         j.insert("diagonalLine".into(), json!(d.line.line));
@@ -63,8 +81,27 @@ fn props(base: u16, sides: [Option<&BorderSide>; 4], border: &CellBorder) -> Str
 }
 /// Whether `border`'s lines, colors and shapes are ones rhwp takes.
 pub(super) fn valid_border(border: &CellBorder) -> bool {
+    let color = |c: &String| c.starts_with('#') && c.len() == 7;
     let fill_ok = border.fill.as_ref().is_none_or(|f| {
-        f.pattern <= 6 && (f.color == "none" || f.color.len() == 7) && f.pattern_color.len() == 7
+        f.pattern <= 6
+            && (f.color == "none" || f.color.len() == 7)
+            && f.pattern_color.len() == 7
+            && f.gradient.as_ref().is_none_or(|g| {
+                (1..=4).contains(&g.kind)
+                    && g.colors.len() == 2
+                    && g.colors.iter().all(color)
+                    && (0..=100).contains(&g.center_x)
+                    && (0..=100).contains(&g.center_y)
+                    && g.step_center <= 100
+            })
+            && f.image.as_ref().is_none_or(|i| {
+                i.mode < 16
+                    && i.effect <= 3
+                    && (-100..=100).contains(&i.brightness)
+                    && (-100..=100).contains(&i.contrast)
+                    && (i.data.is_some() || i.bin_id > 0)
+                    && i.data.as_ref().is_none_or(|d| d.len() <= 8_000_000)
+            })
     });
     let diagonal_ok = border
         .diagonal
@@ -74,6 +111,21 @@ pub(super) fn valid_border(border: &CellBorder) -> bool {
 }
 
 impl EditSession {
+    /// `border` with a new 그림 배경 put into the document, so it names it by its id.
+    pub(super) fn stored_fill(&mut self, border: &CellBorder) -> Result<CellBorder, EditError> {
+        use base64::Engine;
+        let mut border = border.clone();
+        if let Some(image) = border.fill.as_mut().and_then(|f| f.image.as_mut()) {
+            if let Some(data) = image.data.take() {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|_| EditError::InvalidInput)?;
+                let ext = image.extension.take().unwrap_or_else(|| "png".into());
+                image.bin_id = self.core.register_embedded_bin_data(&bytes, &ext);
+            }
+        }
+        Ok(border)
+    }
     /// 셀 테두리/배경 of the cell holding `t`, as drawn (a zone over it included).
     pub fn cell_border(&self, t: &EditTarget) -> Result<CellBorder, EditError> {
         commands::get(self.core.document(), t)?;
@@ -107,7 +159,14 @@ impl EditSession {
                 None,
             ],
             fill: match fill {
-                Some(f) if f.gradient.is_some() || f.image.is_some() => None,
+                // A fill drawn neither as one color, a 그러데이션 nor a 그림 stays.
+                Some(f)
+                    if (f.gradient.is_some() || f.image.is_some())
+                        && !["gradient", "image"]
+                            .contains(&v["fillType"].as_str().unwrap_or("")) =>
+                {
+                    None
+                }
                 _ => Some(PageFill {
                     color: if v["fillType"] == "solid" {
                         text(&v["fillColor"])
@@ -116,6 +175,27 @@ impl EditSession {
                     },
                     pattern_color: text(&v["patternColor"]),
                     pattern: (v["patternType"].as_u64().unwrap_or(0) as u8).min(6),
+                    gradient: (v["fillType"] == "gradient").then(|| Gradient {
+                        kind: v["gradientType"].as_u64().unwrap_or(1) as u8,
+                        colors: v["gradientColors"]
+                            .as_array()
+                            .map(|a| a.iter().map(text).collect())
+                            .unwrap_or_default(),
+                        angle: v["gradientAngle"].as_i64().unwrap_or(0) as i16,
+                        center_x: v["gradientCenterX"].as_i64().unwrap_or(0) as i16,
+                        center_y: v["gradientCenterY"].as_i64().unwrap_or(0) as i16,
+                        blur: v["gradientBlur"].as_u64().unwrap_or(0) as u8,
+                        step_center: v["gradientStepCenter"].as_u64().unwrap_or(50) as u8,
+                    }),
+                    image: (v["fillType"] == "image").then(|| ImageBrush {
+                        data: None,
+                        extension: None,
+                        bin_id: v["imageBinDataId"].as_u64().unwrap_or(0) as u16,
+                        mode: v["imageMode"].as_u64().unwrap_or(0) as u8,
+                        effect: v["imageEffect"].as_u64().unwrap_or(0) as u8,
+                        brightness: v["imageBrightness"].as_i64().unwrap_or(0) as i8,
+                        contrast: v["imageContrast"].as_i64().unwrap_or(0) as i8,
+                    }),
                 }),
             },
             diagonal: Some(Diagonal {
@@ -152,6 +232,7 @@ impl EditSession {
         one: bool,
         border: &CellBorder,
     ) -> Result<(), EditError> {
+        let border = &self.stored_fill(border)?;
         let t = &selection.anchor.target;
         let c = t.cell.as_ref().ok_or(EditError::UnsupportedTarget)?;
         let (s, p, control) = (t.section as usize, t.paragraph as usize, c.control as usize);

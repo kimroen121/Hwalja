@@ -209,6 +209,8 @@ impl EditSession {
                     },
                     pattern_color: text(&v["patternColor"]),
                     pattern: number(&v["patternType"]).min(6),
+                    gradient: None,
+                    image: None,
                 }),
             },
             fill_area: match v["fillArea"].as_str() {

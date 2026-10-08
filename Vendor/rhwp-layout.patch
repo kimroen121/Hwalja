@@ -305,17 +305,17 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
              // 캡션
              pic.caption.is_some(),
              pic.caption.as_ref().map_or("Bottom", |cap| match cap.direction {
-@@ -1216,6 +1216,10 @@
-         }
+@@ -1217,6 +1217,10 @@
          if let Some(v) = json_i32(props_json, "borderWidth") {
              pic.border_width = v;
-+        }
+         }
 +        // 선 종류: bits 0-5 of the border line's attributes, as for drawing objects.
 +        if let Some(v) = json_u32(props_json, "lineType") {
 +            pic.border_attr.attr = (pic.border_attr.attr & !0x3F) | (v & 0x3F);
-         }
++        }
  
          // description
+         if let Some(v) = json_str(props_json, "description") {
 @@ -1236,16 +1240,22 @@
                          number_type: crate::model::control::AutoNumberType::Picture,
                          ..Default::default()
@@ -345,19 +345,28 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
                      // attr bit 29: 캡션 존재 플래그 (한컴 호환성)
                      pic.common.attr |= 1 << 29;
                  }
-@@ -1366,6 +1376,12 @@
+@@ -1364,6 +1374,12 @@
+             for offset in para.char_offsets.iter_mut() {
+                 if *offset >= threshold {
                      *offset -= 8;
-                 }
-             }
++                }
++            }
 +            // HwpStudio: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
-+                }
-+            }
+                 }
+             }
          }
- 
-         // 컨트롤 및 ctrl_data_record 제거
+@@ -1401,7 +1417,7 @@
+     /// 최댓값+1 로 채번한다 — 순번 채번은 storage id 에 구멍이 있는 문서에서
+     /// 기존 이미지와 스트림 이름이 충돌해 저장 시 이미지가 뒤바뀌거나
+     /// 소실된다. (insert_picture_native 와 그림 지정이 규칙 공유.)
+-    fn register_embedded_bin_data(&mut self, image_data: &[u8], extension: &str) -> u16 {
++    pub fn register_embedded_bin_data(&mut self, image_data: &[u8], extension: &str) -> u16 {
+         use crate::model::bin_data::{
+             BinData, BinDataCompression, BinDataContent, BinDataStatus, BinDataType,
+         };
 diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
 --- a/src/document_core/commands/object_ops/shape.rs
 +++ b/src/document_core/commands/object_ops/shape.rs
@@ -668,7 +677,59 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
      }
  
      /// 행/열 바꿈 복사 버퍼를 커서 위치에 새 표로 생성해 붙여넣는다.
-@@ -1259,7 +1312,7 @@
+@@ -1193,6 +1246,34 @@
+                          color_ref_to_css(sf.pattern_color), sf.pattern_type)
+                     }
+                     _ => ("none", "#ffffff".to_string(), "#000000".to_string(), 0),
++                };
++                // 그러데이션 and 그림 배경, for 셀·표 테두리/배경.
++                let extra_fill = match bf.fill.fill_type {
++                    FillType::Gradient => bf.fill.gradient.as_ref().map(|g| {
++                        let colors: Vec<String> =
++                            g.colors.iter().map(|c| format!("\"{}\"", color_ref_to_css(*c))).collect();
++                        format!(
++                            ",\"gradientType\":{},\"gradientAngle\":{},\"gradientCenterX\":{},\"gradientCenterY\":{},\"gradientBlur\":{},\"gradientStepCenter\":{},\"gradientColors\":[{}]",
++                            g.gradient_type, g.angle, g.center_x, g.center_y, g.blur, g.step_center, colors.join(",")
++                        )
++                    }),
++                    FillType::Image => bf.fill.image.as_ref().map(|img| {
++                        let mode = crate::document_core::html_table_import::IMAGE_FILL_MODES
++                            .iter()
++                            .position(|m| *m == img.fill_mode)
++                            .unwrap_or(0);
++                        format!(
++                            ",\"imageBinDataId\":{},\"imageMode\":{},\"imageEffect\":{},\"imageBrightness\":{},\"imageContrast\":{}",
++                            img.bin_data_id, mode, img.effect, img.brightness, img.contrast
++                        )
++                    }),
++                    _ => None,
++                }
++                .unwrap_or_default();
++                let fill_type_str = match (fill_type_str, bf.fill.fill_type) {
++                    ("none", FillType::Gradient) if !extra_fill.is_empty() => "gradient",
++                    ("none", FillType::Image) if !extra_fill.is_empty() => "image",
++                    (other, _) => other,
+                 };
+                 let mut diagonal_slash = (bf.attr >> 2) & 0x07;
+                 let mut diagonal_backslash = (bf.attr >> 5) & 0x07;
+@@ -1208,7 +1289,7 @@
+                     center_line = CenterLine::None;
+                 }
+                 format!(
+-                    "\"borderFillId\":{},{},\"fillType\":\"{}\",\"fillColor\":\"{}\",\"patternColor\":\"{}\",\"patternType\":{},\"diagonalLine\":{},\"diagonalSlash\":{},\"diagonalBackSlash\":{},\"diagonalWidth\":{},\"diagonalColor\":\"{}\",\"centerLine\":\"{}\"",
++                    "\"borderFillId\":{},{},\"fillType\":\"{}\",\"fillColor\":\"{}\",\"patternColor\":\"{}\",\"patternType\":{},\"diagonalLine\":{},\"diagonalSlash\":{},\"diagonalBackSlash\":{},\"diagonalWidth\":{},\"diagonalColor\":\"{}\",\"centerLine\":\"{}\"{}",
+                     bf_id,
+                     borders_json.join(","),
+                     fill_type_str, fill_color, pat_color, pat_type,
+@@ -1218,6 +1299,7 @@
+                     bf.diagonal.width,
+                     color_ref_to_css(bf.diagonal.color),
+                     center_line.as_hwpx(),
++                    extra_fill,
+                 )
+             }
+             None => {
+@@ -1259,7 +1341,7 @@
          Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
      }
  
@@ -677,7 +738,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -1824,7 +1877,7 @@
+@@ -1824,7 +1906,7 @@
      }
  
      /// 선택 영역을 하나의 셀처럼 취급하는 cellzone 테두리/배경 속성을 적용한다.
@@ -686,7 +747,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          &mut self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2783,7 +2836,7 @@
+@@ -2783,7 +2865,7 @@
      }
  
      /// 표 속성을 조회한다 (네이티브).
@@ -695,7 +756,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2823,34 +2876,34 @@
+@@ -2823,34 +2905,34 @@
          let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
              u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
          } else {
@@ -736,7 +797,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          };
  
          // 캡션 정보
-@@ -2911,12 +2964,12 @@
+@@ -2911,12 +2993,12 @@
          let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
              i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
          } else {
@@ -751,7 +812,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          };
          let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
          let allow_overlap = (table.attr >> 14) & 0x01 != 0;
-@@ -2968,8 +3021,29 @@
+@@ -2968,8 +3050,29 @@
              .map(|(idx, s)| (idx as u8, s.para_shape_id, s.char_shape_id as u32))
              .unwrap_or((0, 0, 0));
  
@@ -781,7 +842,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          if let Some(v) = json_i16(json, "cellSpacing") {
              table.cell_spacing = v;
          }
-@@ -3155,6 +3229,16 @@
+@@ -3155,6 +3258,16 @@
          }
  
          // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
@@ -798,19 +859,36 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
              if let Some(v) = json_i16(json, "outerLeft") {
                  table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
-@@ -3666,6 +3750,12 @@
+@@ -3277,14 +3390,9 @@
+             || json.contains("\"diagonalWidth\"")
+             || json.contains("\"diagonalColor\"")
+             || json.contains("\"centerLine\"");
++        // 표 테두리/배경 is the table's own (set above); the cells keep theirs, as in 한/글.
+         if has_border_fill_change {
+-            let new_bf_id = self.create_border_fill_from_json(json);
+-            let table = self.get_table_mut(section_idx, parent_para_idx, control_idx)?;
+-            table.border_fill_id = new_bf_id;
+-            for cell in &mut table.cells {
+-                cell.border_fill_id = new_bf_id;
+-            }
+-            table.dirty = true;
++            self.get_table_mut(section_idx, parent_para_idx, control_idx)?.dirty = true;
+         }
+ 
+         // 캡션 생성/수정/삭제 후에는 문서 전체 AutoNumber를 다시 배정한다.
+@@ -3664,6 +3772,12 @@
+                 for offset in para.char_offsets.iter_mut() {
+                     if *offset >= threshold {
                          *offset -= 8;
-                     }
-                 }
++                    }
++                }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
-+                    }
-+                }
+                     }
+                 }
              }
- 
-             // 컨트롤 및 대응하는 ctrl_data_record 제거
 diff --git a/src/document_core/commands/text_editing.rs b/src/document_core/commands/text_editing.rs
 --- a/src/document_core/commands/text_editing.rs
 +++ b/src/document_core/commands/text_editing.rs
@@ -4512,3 +4590,128 @@ diff --git a/src/serializer/hwpx/picture.rs b/src/serializer/hwpx/picture.rs
      write_img_rect(w, pic)?;
      write_img_clip(w, pic)?;
      write_in_margin(w, pic)?;
+diff --git a/src/document_core/helpers.rs b/src/document_core/helpers.rs
+--- a/src/document_core/helpers.rs
++++ b/src/document_core/helpers.rs
+@@ -1527,16 +1527,10 @@
+         if a.borders[i].color != b.borders[i].color {
+             return false;
+         }
+-    }
+-    // fill 비교 (fill_type + solid color)
+-    if a.fill.fill_type != b.fill.fill_type {
+-        return false;
+     }
+-    match (&a.fill.solid, &b.fill.solid) {
+-        (Some(sa), Some(sb)) => sa.background_color == sb.background_color,
+-        (None, None) => true,
+-        _ => false,
+-    }
++    // fill 비교: 종류와 단색·무늬·그러데이션·그림 모두 (한 가지만 보면 다른 배경이 같은
++    // 항목으로 재사용된다).
++    format!("{:?}", a.fill) == format!("{:?}", b.fill)
+ }
+ 
+ #[cfg(test)]
+diff --git a/src/document_core/html_table_import.rs b/src/document_core/html_table_import.rs
+--- a/src/document_core/html_table_import.rs
++++ b/src/document_core/html_table_import.rs
+@@ -775,6 +775,55 @@
+         self.document.doc_info.border_fills.len() as u16
+     }
+ 
++    /// 셀·표 배경의 그러데이션 (`gradientType` 1 줄무늬 … 4 사각형, `gradientAngle`,
++    /// `gradientCenterX/Y`, `gradientBlur`, `gradientStepCenter`, `gradientColors`) 또는
++    /// 그림 (`imageBinDataId`, `imageMode` as `IMAGE_FILL_MODES`, `imageEffect`,
++    /// `imageBrightness`, `imageContrast`).
++    pub(crate) fn gradient_or_image_fill(json: &str) -> crate::model::style::Fill {
++        use crate::model::style::{Fill, FillType, GradientFill, ImageFill};
++        let v: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
++        let int = |key: &str| v[key].as_i64().unwrap_or(0);
++        if v["fillType"] == "image" {
++            let mode = IMAGE_FILL_MODES
++                .get(int("imageMode") as usize)
++                .copied()
++                .unwrap_or_default();
++            return Fill {
++                fill_type: FillType::Image,
++                image: Some(ImageFill {
++                    fill_mode: mode,
++                    brightness: int("imageBrightness").clamp(-100, 100) as i8,
++                    contrast: int("imageContrast").clamp(-100, 100) as i8,
++                    effect: int("imageEffect").clamp(0, 3) as u8,
++                    bin_data_id: int("imageBinDataId").clamp(0, u16::MAX as i64) as u16,
++                }),
++                ..Default::default()
++            };
++        }
++        let colors: Vec<u32> = v["gradientColors"]
++            .as_array()
++            .map(|a| {
++                a.iter()
++                    .filter_map(|c| c.as_str().and_then(crate::document_core::helpers::css_color_to_bgr))
++                    .collect()
++            })
++            .unwrap_or_default();
++        Fill {
++            fill_type: FillType::Gradient,
++            gradient: Some(GradientFill {
++                gradient_type: int("gradientType").clamp(1, 4) as i16,
++                angle: int("gradientAngle").rem_euclid(360) as i16,
++                center_x: int("gradientCenterX").clamp(0, 100) as i16,
++                center_y: int("gradientCenterY").clamp(0, 100) as i16,
++                blur: int("gradientBlur").clamp(0, 255) as i16,
++                step_center: int("gradientStepCenter").clamp(0, 100) as u8,
++                colors,
++                positions: Vec::new(),
++            }),
++            ..Default::default()
++        }
++    }
++
+     /// JSON에서 border/fill 속성을 파싱하여 BorderFill을 생성/재사용한다.
+     /// 프론트엔드 글자 테두리/배경 대화상자에서 호출된다.
+     pub(crate) fn create_border_fill_from_json(&mut self, json: &str) -> u16 {
+@@ -849,6 +898,8 @@
+                     }),
+                     ..Default::default()
+                 }
++            } else if fill_type_str == "gradient" || fill_type_str == "image" {
++                Self::gradient_or_image_fill(json)
+             } else {
+                 Fill::default()
+             };
+@@ -1097,3 +1148,15 @@
+         );
+     }
+ }
++
++/// 그림 채우기 유형 in the order `imageMode` numbers them: 바둑판식으로 (모두, 가로/위,
++/// 가로/아래, 세로/왼쪽, 세로/오른쪽), 크기에 맞추어, 가운데로, 가운데 위로, 가운데 아래로,
++/// 왼쪽 가운데로, 왼쪽 위로, 왼쪽 아래로, 오른쪽 가운데로, 오른쪽 위로, 오른쪽 아래로.
++pub(crate) const IMAGE_FILL_MODES: [crate::model::style::ImageFillMode; 16] = {
++    use crate::model::style::ImageFillMode::*;
++    [
++        TileAll, TileHorzTop, TileHorzBottom, TileVertLeft, TileVertRight, FitToSize, Center,
++        CenterTop, CenterBottom, LeftCenter, LeftTop, LeftBottom, RightCenter, RightTop,
++        RightBottom, None,
++    ]
++};
+diff --git a/src/serializer/hwpx/header.rs b/src/serializer/hwpx/header.rs
+--- a/src/serializer/hwpx/header.rs
++++ b/src/serializer/hwpx/header.rs
+@@ -392,7 +392,13 @@
+     // fillBrush: 도형과 동일한 fillBrush 구조를 공유한다.
+     // 종전 Stage 1 은 빈 래퍼만 출력해 winBrush(배경색)/gradation/imgBrush 를
+     // 전부 잃었다. 파서가 채운 Fill 을 shape 의 검증된 역매핑으로 직렬화한다.
+-    super::shape::write_fill_brush(w, &bf.fill, ctx)?;
++    // 테두리/배경의 imgBrush 는 bright·contrast 를 HWP5 와 반대로 적는다 — 파서
++    // (parser/hwpx/header.rs 의 imgBrush)가 바꿔 읽는 것과 맞춘다.
++    let mut fill = bf.fill.clone();
++    if let Some(img) = fill.image.as_mut() {
++        std::mem::swap(&mut img.brightness, &mut img.contrast);
++    }
++    super::shape::write_fill_brush(w, &fill, ctx)?;
+ 
+     end_tag(w, "hh:borderFill")?;
+     Ok(())

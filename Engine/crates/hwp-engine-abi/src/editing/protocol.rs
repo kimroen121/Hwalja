@@ -868,6 +868,40 @@ pub struct PageFill {
     pub color: String,
     pub pattern_color: String,
     pub pattern: u8,
+    /// 셀·표 배경 only: a 그러데이션 or 그림 in place of the color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Gradient>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageBrush>,
+}
+/// 그러데이션: 모양 (1 줄무늬, 2 원형, 3 원뿔형, 4 사각형), 시작 색 and 끝 색, 기울임 (degrees),
+/// 가로/세로 중심 (%), 번짐 정도 (steps) and 번짐 중심 (%).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gradient {
+    pub kind: u8,
+    pub colors: Vec<String>,
+    pub angle: i16,
+    pub center_x: i16,
+    pub center_y: i16,
+    pub blur: u8,
+    pub step_center: u8,
+}
+/// 그림 배경: a new image (`data`, base64, with its `extension`) or the one the document
+/// has (`bin_id`); 채우기 유형 (rhwp's `IMAGE_FILL_MODES` order), 그림 효과 (0 원래 그림, 1
+/// 회색조, 2 흑백), 밝기 and 대비 (−100–100).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageBrush {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension: Option<String>,
+    pub bin_id: u16,
+    pub mode: u8,
+    pub effect: u8,
+    pub brightness: i8,
+    pub contrast: i8,
 }
 /// 적용 쪽: 모두, 첫 쪽 제외, 첫 쪽만.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

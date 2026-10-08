@@ -1619,6 +1619,12 @@ struct DocumentTests {
                 fill: PageFill(color: "#ccddee", patternColor: "#000000", pattern: 0),
                 diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: false, backSlash: true, center: 0)),
                 tab: "테두리"), viewer: viewer))),
+            ("cellGradient", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
+                fill: PageFill(color: "none", patternColor: "#000000", pattern: 0, gradient: Gradient(kind: 2, colors: ["#ffffff", "#3366cc"]))),
+                tab: "배경"), viewer: viewer))),
+            ("cellPicture", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
+                fill: PageFill(color: "none", patternColor: "#000000", pattern: 0, image: ImageBrush(binId: 1, mode: 5))),
+                tab: "배경"), viewer: viewer))),
             ("cellDiagonal", AnyView(CellBorderSheet(editing: CellBorderEditing(one: true, block: true, border: CellBorder(
                 diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: true, backSlash: false, center: 0)),
                 tab: "대각선"), viewer: viewer))),

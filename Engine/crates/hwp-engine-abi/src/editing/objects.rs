@@ -651,7 +651,11 @@ impl EditSession {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         let mut json = object_json(props);
         json.remove("tableBorder");
-        if let Some(b) = &props.table_border {
+        let table_border = match &props.table_border {
+            Some(b) => Some(self.stored_fill(b)?),
+            None => None,
+        };
+        if let Some(b) = &table_border {
             let s = &b.sides;
             json.extend(super::borders::border_json(
                 [s[0].as_ref(), s[1].as_ref(), s[2].as_ref(), s[3].as_ref()],
