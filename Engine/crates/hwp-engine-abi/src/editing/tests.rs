@@ -3913,6 +3913,48 @@ fn picture_at(position: EditPosition) -> EditCommand {
         description: "p.png".into(),
     }
 }
+#[test]
+fn pictures_are_replaced_in_place_and_saved_out() {
+    use base64::Engine;
+    const RED: &str = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==";
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        run(&mut s, picture_at(point(body(), 0))).unwrap();
+        let first = |s: &EditSession| {
+            (0..s.core.page_count())
+                .find_map(|page| s.placed(page).unwrap().into_iter().next())
+                .unwrap()
+                .object
+        };
+        let object = first(&s);
+        let size = |s: &EditSession| {
+            let p = s.object_props(&object).unwrap();
+            (p.width, p.height)
+        };
+        let before = size(&s);
+        let replace = EditCommand::ReplacePicture {
+            object: object.clone(),
+            data: RED.into(),
+            natural_width: 2,
+            natural_height: 2,
+            extension: "png".into(),
+        };
+        run(&mut s, replace).unwrap_or_else(|e| panic!("{format}: {e:?}"));
+        // The frame keeps its size; 삽입 그림 저장하기 gives the new image.
+        assert_eq!(size(&s), before, "{format}");
+        let red = base64::engine::general_purpose::STANDARD
+            .decode(RED)
+            .unwrap();
+        assert_eq!(
+            s.picture_file(&object).unwrap(),
+            ("png".into(), red.clone()),
+            "{format}"
+        );
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let again = first(&reopened);
+        assert_eq!(reopened.picture_file(&again).unwrap().1, red, "{format}");
+    }
+}
 fn second() -> EditTarget {
     commands::at_index(&body(), 2)
 }

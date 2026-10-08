@@ -71,6 +71,10 @@ enum Request {
     ObjectProps {
         object: ObjectRef,
     },
+    /// 삽입 그림 저장하기: a picture's image file, its extension in the JSON.
+    PictureFile {
+        object: ObjectRef,
+    },
     CellProps {
         cell: EditTarget,
     },
@@ -226,6 +230,10 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         } => HwpEditResult::ok(session.place(revision, &object, page)?, Vec::new()),
         Request::ObjectProps { object } => {
             HwpEditResult::ok(session.object_props(&object)?, Vec::new())
+        }
+        Request::PictureFile { object } => {
+            let (extension, data) = session.picture_file(&object)?;
+            HwpEditResult::ok(serde_json::json!({ "extension": extension }), data)
         }
         Request::CellProps { cell } => HwpEditResult::ok(session.cell_props(&cell)?, Vec::new()),
         Request::ConvertEquation { text, from_latex } => {

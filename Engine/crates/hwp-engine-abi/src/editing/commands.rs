@@ -186,6 +186,27 @@ pub(super) fn header_footer_at(doc: &Document, s: usize, footer: bool) -> Option
             Some((p, c))
         })
 }
+/// A picture's image as `InsertPicture` and `ReplacePicture` take it: base64 PNG or JPEG
+/// of up to 5 MiB, at most 20,000 pixels a side and 100 million in all.
+fn validate_image(data: &str, width: u32, height: u32, extension: &str) -> Result<(), EditError> {
+    if data.len() > 7 * 1024 * 1024 {
+        return Err(EditError::ResourceLimit);
+    }
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|_| EditError::InvalidInput)?;
+    if decoded.is_empty()
+        || decoded.len() > 5 * 1024 * 1024
+        || !matches!(extension, "png" | "jpg" | "jpeg")
+        || !(1..=20_000).contains(&width)
+        || !(1..=20_000).contains(&height)
+        || width as u64 * height as u64 > 100_000_000
+    {
+        Err(EditError::InvalidInput)
+    } else {
+        Ok(())
+    }
+}
 /// The table holding `t`'s cell, in the body. rhwp's table functions reach only the
 /// body's, so a cell in a note, 머리말 or 꼬리말 has none here.
 pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> {
@@ -434,20 +455,9 @@ impl EditSession {
             } => {
                 body_or_cell(&position.target)?;
                 self.validate_position(position)?;
-                if data.len() > 7 * 1024 * 1024 {
-                    return Err(EditError::ResourceLimit);
-                }
-                let decoded = base64::engine::general_purpose::STANDARD
-                    .decode(data)
-                    .map_err(|_| EditError::InvalidInput)?;
-                if decoded.is_empty()
-                    || decoded.len() > 5 * 1024 * 1024
-                    || !matches!(extension.as_str(), "png" | "jpg" | "jpeg")
-                    || !(1..=1_000_000).contains(width)
+                validate_image(data, *natural_width, *natural_height, extension)?;
+                if !(1..=1_000_000).contains(width)
                     || !(1..=1_000_000).contains(height)
-                    || !(1..=20_000).contains(natural_width)
-                    || !(1..=20_000).contains(natural_height)
-                    || *natural_width as u64 * *natural_height as u64 > 100_000_000
                     || description.len() > 1024
                 {
                     Err(EditError::InvalidInput)
@@ -575,6 +585,19 @@ impl EditSession {
                 self.validate_drawing(object, |s| matches!(s, ShapeObject::Group(_)))
             }
             EditCommand::Group { objects } => self.validate_group(objects),
+            EditCommand::ReplacePicture {
+                object,
+                data,
+                natural_width,
+                natural_height,
+                extension,
+            } => {
+                if object.kind != ObjectKind::Picture || object.note.is_some() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                self.validate_object(object, &ObjectProps::default())?;
+                validate_image(data, *natural_width, *natural_height, extension)
+            }
             EditCommand::SetTextBox { object, attach } => self.validate_drawing(object, |s| {
                 s.drawing().is_some_and(|d| d.text_box.is_some() != *attach)
             }),
@@ -1482,6 +1505,28 @@ impl EditSession {
                     object.section as usize,
                     object.paragraph as usize,
                     object.control as usize,
+                )?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::ReplacePicture {
+                object,
+                data,
+                natural_width,
+                natural_height,
+                extension,
+            } => {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|_| EditError::InvalidInput)?;
+                self.core.assign_picture_image_native(
+                    object.section as usize,
+                    object.paragraph as usize,
+                    &objects::path(&Self::host(object)),
+                    object.control as usize,
+                    &bytes,
+                    *natural_width,
+                    *natural_height,
+                    extension,
                 )?;
                 Ok(self.kept(object.section))
             }

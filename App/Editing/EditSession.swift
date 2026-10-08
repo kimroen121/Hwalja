@@ -131,6 +131,13 @@ final class EditSession: @unchecked Sendable {
     func objectProps(_ object: ObjectRef) async throws -> ObjectProps {
         try await decode(send(.objectProps(object)))
     }
+    /// The image a picture shows, as stored, and its file extension.
+    func pictureFile(_ object: ObjectRef) async throws -> (data: Data, extension: String) {
+        try await send(.pictureFile(object)) { payload in
+            struct File: Decodable { var `extension`: String }
+            return (payload.data, try JSONDecoder().decode(File.self, from: payload.json).extension)
+        }
+    }
     func cellProps(_ cell: EditTarget) async throws -> CellProps {
         try await decode(send(.cellProps(cell)))
     }

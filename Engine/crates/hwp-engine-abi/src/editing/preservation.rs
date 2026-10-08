@@ -192,6 +192,18 @@ pub(super) fn check(
         EditCommand::InsertPicture { position, .. } => {
             return check_inserted_picture(before, after, &position.target)
         }
+        EditCommand::ReplacePicture { object, .. } => {
+            // One image is added; the old one stays, as other pictures may share it.
+            if !one_image_added(before, after) {
+                return Err(EditError::PreservationFailed);
+            }
+            let mut b = after.clone();
+            b.bin_data_content.truncate(before.bin_data_content.len());
+            b.doc_info
+                .bin_data_list
+                .truncate(before.doc_info.bin_data_list.len());
+            return check_host(before, &b, object.section, object.paragraph);
+        }
         EditCommand::InsertEquation { position, .. } => {
             return check_inserted_equation(before, after, &position.target)
         }
@@ -384,6 +396,21 @@ fn clear_note_numbers(doc: &mut Document) {
         clear(&mut s.paragraphs);
     }
 }
+/// One binary-data record and its payload were appended, the earlier ones unchanged.
+fn one_image_added(before: &Document, after: &Document) -> bool {
+    after.bin_data_content.len() == before.bin_data_content.len() + 1
+        && after.doc_info.bin_data_list.len() == before.doc_info.bin_data_list.len() + 1
+        && format!("{:?}", before.bin_data_content)
+            == format!(
+                "{:?}",
+                &after.bin_data_content[..before.bin_data_content.len()]
+            )
+        && format!("{:?}", before.doc_info.bin_data_list)
+            == format!(
+                "{:?}",
+                &after.doc_info.bin_data_list[..before.doc_info.bin_data_list.len()]
+            )
+}
 /// A picture insertion may add one picture and its one binary-data record; the rest of
 /// the document, including every previous binary payload, must remain unchanged.
 fn check_inserted_picture(
@@ -391,19 +418,7 @@ fn check_inserted_picture(
     after: &Document,
     target: &EditTarget,
 ) -> Result<(), EditError> {
-    if after.bin_data_content.len() != before.bin_data_content.len() + 1
-        || after.doc_info.bin_data_list.len() != before.doc_info.bin_data_list.len() + 1
-        || format!("{:?}", before.bin_data_content)
-            != format!(
-                "{:?}",
-                &after.bin_data_content[..before.bin_data_content.len()]
-            )
-        || format!("{:?}", before.doc_info.bin_data_list)
-            != format!(
-                "{:?}",
-                &after.doc_info.bin_data_list[..before.doc_info.bin_data_list.len()]
-            )
-    {
+    if !one_image_added(before, after) {
         return Err(EditError::PreservationFailed);
     }
     let mut a = before.clone();

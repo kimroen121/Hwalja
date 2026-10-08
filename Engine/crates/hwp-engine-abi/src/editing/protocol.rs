@@ -200,6 +200,17 @@ pub enum EditCommand {
         dx: i32,
         dy: i32,
     },
+    /// 그림 바꾸기: another image in the picture, which keeps its size and place.
+    ReplacePicture {
+        object: ObjectRef,
+        /// Base64, as `InsertPicture`'s.
+        data: String,
+        #[serde(rename = "naturalWidth")]
+        natural_width: u32,
+        #[serde(rename = "naturalHeight")]
+        natural_height: u32,
+        extension: String,
+    },
     /// 개체 풀기: a group of drawing objects of the body into its members.
     Ungroup {
         object: ObjectRef,

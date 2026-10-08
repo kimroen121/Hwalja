@@ -299,6 +299,10 @@ struct ToolRow: View {
         ToolTile("그림", Icon.picture) { viewer.insertPicture() }
             .disabled(!context.canPicture)
         Group {
+            ToolTile("바꾸기/저장", Icon.replacePicture, choices: {
+                [Choice(title: "그림 바꾸기…") { viewer.replacePicture() },
+                 Choice(title: "삽입 그림 저장하기…") { viewer.savePicture() }]
+            })
             ToolTile("원본 그림으로", Icon.originalPicture) { MenuItems.restorePicture(viewer) }
             RowDivider()
             ToolTile("그림 속성", Icon.objectProps) { viewer.showObjectProperties() }
@@ -575,6 +579,7 @@ enum Icon {
     static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
+    static let replacePicture = "photo.badge.arrow.down"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

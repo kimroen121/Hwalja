@@ -28,6 +28,32 @@ extension Viewer {
             document?.insertPicture(data, name: url.lastPathComponent, undoManager)
         }
     }
+    /// 그림 바꾸기: an image file in place of the selected picture, at its size.
+    func replacePicture() {
+        guard document?.object?.object.kind == .picture else { return NSSound.beep() }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
+            document?.replacePicture(data, undoManager)
+        }
+    }
+    /// 삽입 그림 저장하기: the selected picture's image to a file, in its own format.
+    func savePicture() {
+        guard let document, let object = document.object?.object, object.kind == .picture else { return NSSound.beep() }
+        Task {
+            guard let file = try? await document.pictureFile(object) else { return NSSound.beep() }
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "그림.\(file.extension)"
+            panel.allowedContentTypes = UTType(filenameExtension: file.extension).map { [$0] } ?? []
+            guard await panel.begin() == .OK, let url = panel.url else { return }
+            do { try file.data.write(to: url) } catch { NSSound.beep() }
+        }
+    }
     func insertNote(endnote: Bool) {
         document?.edit(undoManager) { $0.map { .insertNote($0.ordered.start, endnote: endnote) } }
     }
@@ -457,6 +483,14 @@ extension HwpDocument {
     /// Puts an image at the caret in the body or a table cell (beside the table, floating), at its own size up to the text width, in
     /// the line like a character. PNG and JPEG go in as they are; other images as PNG, or
     /// as JPEG when they would not fit the engine's 5 MB.
+    /// 그림 바꾸기 for the selected picture.
+    func replacePicture(_ data: Data, _ undoManager: UndoManager?) {
+        guard let object = object?.object, object.kind == .picture, let picture = Picture(data) else { return NSSound.beep() }
+        edit(undoManager) { _ in
+            .replacePicture(object, data: picture.data, naturalWidth: picture.width, naturalHeight: picture.height,
+                            extension: picture.ext)
+        }
+    }
     func insertPicture(_ data: Data, name: String, _ undoManager: UndoManager?) {
         guard let position = selection?.ordered.start, position.target.note == nil,
               let picture = Picture(data)

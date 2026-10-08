@@ -454,6 +454,28 @@ struct DocumentTests {
         #expect(try await document.objectProps(try #require(picture).object).treatAsChar == true)
     }
 
+    /// 그림 바꾸기 puts another image in the selected picture; 삽입 그림 저장하기 gives it back.
+    @Test func picturesAreReplacedAndSavedOut() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
+        let red = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="))
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(nil) { _ in .insertPicture(EditPosition(target: self.body, scalar: 0), data: png, width: 7_500, height: 7_500,
+                                                  naturalWidth: 1, naturalHeight: 1, extension: "png", description: "p.png") }
+        await document.settle()
+        var found: PlacedObject?
+        for y in stride(from: 0.0, to: 1000, by: 5) where found == nil {
+            for x in stride(from: 0.0, to: 800, by: 10) where found == nil {
+                found = try await document.objectAt(page: 0, x: x, y: y)
+            }
+        }
+        document.object = try #require(found)
+        document.replacePicture(red, nil)
+        await document.settle()
+        let file = try await document.pictureFile(try #require(found).object)
+        #expect(file.data == red && file.extension == "png")
+    }
+
     /// Changing an object leaves the text caret where it was.
     @Test func objectChangesKeepTheCaret() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))

@@ -106,6 +106,8 @@ enum EditCommand: Encodable, Sendable {
     case ungroup(ObjectRef)
     /// 개체 묶기.
     case group([ObjectRef])
+    /// 그림 바꾸기: another image in the picture, which keeps its size and place.
+    case replacePicture(ObjectRef, data: Data, naturalWidth: UInt32, naturalHeight: UInt32, extension: String)
     /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
     case setTextBox(ObjectRef, attach: Bool)
     /// Moves an equation to another place in the text.
@@ -315,6 +317,13 @@ enum EditCommand: Encodable, Sendable {
         case let .group(objects):
             try c.encode("group", forKey: .kind)
             try c.encode(objects, forKey: .objects)
+        case let .replacePicture(object, data, naturalWidth, naturalHeight, ext):
+            try c.encode("replacePicture", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(data, forKey: .data)
+            try c.encode(naturalWidth, forKey: .naturalWidth)
+            try c.encode(naturalHeight, forKey: .naturalHeight)
+            try c.encode(ext, forKey: .extension)
         case let .setTextBox(object, attach):
             try c.encode("setTextBox", forKey: .kind)
             try c.encode(object, forKey: .object)
@@ -858,6 +867,8 @@ enum EngineRequest: Encodable, Sendable {
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
     case objectProps(ObjectRef)
+    /// 삽입 그림 저장하기: the picture's image file.
+    case pictureFile(ObjectRef)
     case cellProps(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
     /// An equation script as LaTeX, or with `fromLatex`, LaTeX as a script.
@@ -952,6 +963,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(page, forKey: .page)
         case let .objectProps(object):
             try c.encode("objectProps", forKey: .op)
+            try c.encode(object, forKey: .object)
+        case let .pictureFile(object):
+            try c.encode("pictureFile", forKey: .op)
             try c.encode(object, forKey: .object)
         case let .cellProps(cell):
             try c.encode("cellProps", forKey: .op)

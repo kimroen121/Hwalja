@@ -41,7 +41,7 @@ fn index(json: &Value, key: &str) -> Option<u32> {
 }
 /// rhwp's path from a body paragraph to the cell, 글상자 or caption paragraph `t` names;
 /// empty in the body.
-fn path(t: &EditTarget) -> Vec<(usize, usize, usize)> {
+pub(super) fn path(t: &EditTarget) -> Vec<(usize, usize, usize)> {
     t.cell
         .iter()
         .map(|c| (c.control as usize, c.cell as usize, c.paragraph as usize))
@@ -386,6 +386,23 @@ impl EditSession {
             })
             .ok_or(EditError::UnsupportedTarget)
     }
+    /// The image a picture shows, as stored, with its file extension.
+    pub fn picture_file(&self, o: &ObjectRef) -> Result<(String, Vec<u8>), EditError> {
+        let Control::Picture(picture) = self.control(o)? else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let id = picture.image_attr.bin_data_id;
+        let data = self.core.get_bin_data_image_data_native(id)?;
+        let extension = self
+            .core
+            .document()
+            .bin_data_content
+            .get(usize::from(id.saturating_sub(1)))
+            .map(|c| c.extension.to_lowercase())
+            .filter(|e| !e.is_empty())
+            .unwrap_or_else(|| "png".into());
+        Ok((extension, data))
+    }
     pub fn object_props(&self, o: &ObjectRef) -> Result<ObjectProps, EditError> {
         self.control(o)?;
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
@@ -648,7 +665,7 @@ impl EditSession {
         Ok(())
     }
     /// The paragraph that holds `o`.
-    fn host(o: &ObjectRef) -> EditTarget {
+    pub(super) fn host(o: &ObjectRef) -> EditTarget {
         EditTarget {
             section: o.section,
             paragraph: o.paragraph,

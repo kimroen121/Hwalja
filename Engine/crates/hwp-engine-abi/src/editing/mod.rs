@@ -306,6 +306,7 @@ impl EditSession {
             | EditCommand::DeleteObject { object }
             | EditCommand::Order { object, .. }
             | EditCommand::Ungroup { object }
+            | EditCommand::ReplacePicture { object, .. }
             | EditCommand::MoveLineEnd { object, .. }
             | EditCommand::SetTextBox { object, .. }
             | EditCommand::ResizeTable { table: object, .. } => Some(EditPosition {

@@ -107,7 +107,7 @@
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
 | 도형 | ◐ | `draw/drawing(polygon).htm` | 직선·직사각형·타원·호·글상자 ●. 다각형·곡선·자유선·개체 연결선 △. 새 그리기 속성 △ |
-| 그림 | ◐ | `insert/figure/figure(figure).htm` | 그림 넣기 ●. 그리기마당 △(자료 필요), 스크린 샷 △, 연결 그림 새로 고침 △, 그림에서 글자 가져오기 — |
+| 그림 | ◐ | `insert/figure/figure(figure).htm` | 그림 넣기 ●. 그림 탭의 바꾸기/저장(그림 바꾸기, 삽입 그림 저장하기) ●, 바꾼 그림의 옛 데이터는 파일에 남는다. 그리기마당 △(자료 필요), 스크린 샷 △, 연결 그림 새로 고침 △, 그림에서 글자 가져오기 — |
 | 표 | ◐ | `table/table(table).htm` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
 | 차트 | △ | `table/chart/chart(createchart).htm` | rhwp가 차트를 새로 만들지 못함. 데이터 편집은 ○ `get/set_chart_data_native` |
 | 글상자 | ◐ | `insert/textbox/textbox.htm#bc-1` | 넣기 ●. 글상자 연결·세로쓰기 △ |

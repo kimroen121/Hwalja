@@ -481,6 +481,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         if styles.isEmpty, let list = try? await session.styles() { styles = list }
     }
     /// 상황 선 for `position` in the current revision.
+    func pictureFile(_ object: ObjectRef) async throws -> (data: Data, extension: String) {
+        try await session.pictureFile(object)
+    }
     func status(at position: EditPosition) async throws -> CaretStatus {
         try await session.status(revision: revision, at: position)
     }
