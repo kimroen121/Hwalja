@@ -45,7 +45,7 @@
 - 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchHostedTyping`.
 
 ### 개발 도구
-- [ ] 저장소 루트의 `cargo fmt --manifest-path Engine/Cargo.toml --all -- --check`가 생성된 `build/rhwp`까지 검사하다 없는 테스트 target 때문에 실패함. 추적 소스만 보는 `make fmt-check`를 두거나 생성 엔진을 포맷 대상에서 빼야 함. 지금은 `Engine/`에서 `cargo fmt`를 돌리고 `git diff --check`로 확인.
+- [x] `make fmt-check`가 Git에 추적된 `Engine/**/*.rs`만 검사하므로 생성된 `build/rhwp`의 누락 테스트 target에 영향받지 않음.
 
 ### 한컴과 비교
 - [ ] 서식의 한컴 시각 일치: 진하게는 화면 표시용 face가 bold로 바뀌는 것까지 테스트함. 기울임·밑줄·취소선·글자 크기·색·형광펜, 글자·문단 테두리와 배경은 HWP/HWPX 저장 후 한컴 PDF와 비교해야 함(저장·다시 읽기는 테스트함).

@@ -120,7 +120,8 @@ fn missing_lineseg_page_fragment_reserves_layout_safety_once() {
     core.create_blank_document_native().unwrap();
     core.insert_text_native(0, 0, 0, "앞").unwrap();
     core.split_paragraph_native(0, 0, 1, None).unwrap();
-    core.insert_text_native(0, 1, 0, &"가 ".repeat(400)).unwrap();
+    core.insert_text_native(0, 1, 0, &"가 ".repeat(400))
+        .unwrap();
 
     let mut document = core.document().clone();
     document.sections[0].paragraphs[0].line_segs.clear();

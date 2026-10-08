@@ -543,8 +543,7 @@ fn editing_imported_header_marks_reflowed_lines_as_synthetic() {
         })
         .unwrap();
     assert!(
-        para
-            .line_segs
+        para.line_segs
             .iter()
             .all(|line| line.tag & LineSeg::TAG_IMPLEMENTATION_PROPERTY != 0),
         "edited header/footer rows must not retain imported LINE_SEG provenance"
@@ -2800,7 +2799,10 @@ fn page_number_placeholder_is_not_a_document_character() {
     .unwrap();
     let after = s.statistics();
     assert_eq!(after.characters, before.characters);
-    assert_eq!(after.characters_without_spaces, before.characters_without_spaces);
+    assert_eq!(
+        after.characters_without_spaces,
+        before.characters_without_spaces
+    );
 }
 #[test]
 fn notes_are_inserted_and_edited() {

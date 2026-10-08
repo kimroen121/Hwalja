@@ -1,4 +1,4 @@
-.PHONY: engine test test-rust test-swift app run dist clean
+.PHONY: engine test test-rust test-swift fmt-check app run dist clean
 SWIFT_ARCHS ?= arm64
 SWIFT_FLAGS = -c release $(foreach a,$(SWIFT_ARCHS),--arch $(a))
 
@@ -11,6 +11,8 @@ test-rust:
 	cargo test --manifest-path Engine/Cargo.toml --locked --workspace
 test-swift: engine
 	swift test
+fmt-check:
+	git ls-files -z 'Engine/**/*.rs' | xargs -0 rustfmt --edition 2021 --check
 
 app: engine
 	swift build $(SWIFT_FLAGS)
