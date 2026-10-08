@@ -27,6 +27,7 @@
 - draws equations in STIX Two Math (its math italic letters for variables) and takes the integral, radical, bracket, arrow and accent signs from that font, grown by its MATH table's size variants and part assemblies, the layout giving radicals, brackets and integrals the glyphs' widths; 상호 관계 arrows span what is written over and under them;
 - tags each equation group, on the page and in the preview, with its script, layout box, size and color, so the app can set it with SwiftMath;
 - fits fallback color emoji glyphs to their HWP layout advances so consecutive emoji do not paint over one another or the caret.
+- refreshes the per-line indentation flag after paragraph reflow, so a section-leading paragraph applies new first-line and hanging indents instead of inheriting stale stored geometry.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

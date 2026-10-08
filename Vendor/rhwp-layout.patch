@@ -2748,3 +2748,30 @@ index 3e52ea0..5738bec 100644
      format!(
          " textLength=\"{:.4}\" lengthAdjust=\"spacingAndGlyphs\"",
          text_length
+diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
+index 4472819..4c574b9 100644
+--- a/src/renderer/composer/line_breaking.rs
++++ b/src/renderer/composer/line_breaking.rs
+@@ -3783,0 +3784,16 @@ fn reflow_line_segs_impl(
++    let apply_reflow_indent_tag = |seg: &mut LineSeg, visual_line_idx: usize| {
++        // `make_line_seg` deliberately starts from the closest stored row, but
++        // indentation is a property of the freshly projected physical row.
++        // Keeping the stored bit after paragraph formatting makes the renderer
++        // treat that stale row as authoritative and suppress the new indent.
++        seg.tag &= !LineSeg::TAG_INDENTATION;
++        if crate::renderer::equation_tac_flow::paragraph_line_indent(
++            indent_px,
++            visual_line_idx,
++        )
++        .abs()
++            > f64::EPSILON
++        {
++            seg.tag |= LineSeg::TAG_INDENTATION;
++        }
++    };
+@@ -3794,0 +3811 @@ fn reflow_line_segs_impl(
++        let visual_line_idx = new_line_segs.len();
+@@ -3795,0 +3813 @@ fn reflow_line_segs_impl(
++        apply_reflow_indent_tag(&mut text_seg, visual_line_idx);
+@@ -3822,0 +3841 @@ fn reflow_line_segs_impl(
++            apply_reflow_indent_tag(&mut control_seg, new_line_segs.len());
