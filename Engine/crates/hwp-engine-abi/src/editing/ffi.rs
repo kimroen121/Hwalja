@@ -81,6 +81,10 @@ enum Request {
     CellProps {
         cell: EditTarget,
     },
+    /// 셀 테두리/배경 of the cell holding `cell`, as drawn.
+    CellBorder {
+        cell: EditTarget,
+    },
     /// A display list of the equation in `data`, its size in the JSON.
     #[serde(rename_all = "camelCase")]
     EquationPreview {
@@ -272,6 +276,7 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             HwpEditResult::ok(serde_json::json!({ "extension": extension }), data)
         }
         Request::CellProps { cell } => HwpEditResult::ok(session.cell_props(&cell)?, Vec::new()),
+        Request::CellBorder { cell } => HwpEditResult::ok(session.cell_border(&cell)?, Vec::new()),
         Request::ConvertEquation { text, from_latex } => {
             if text.chars().count() > objects::SCRIPT_LIMIT * 4 {
                 return Err(EditError::InvalidInput);

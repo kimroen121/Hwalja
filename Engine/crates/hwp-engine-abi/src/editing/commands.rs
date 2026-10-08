@@ -609,6 +609,9 @@ impl EditSession {
             | EditCommand::EqualizeCells { .. }
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
+            EditCommand::SetCellBorder {
+                selection, border, ..
+            } => self.validate_cell_border(selection, border),
             EditCommand::DeleteObject { object } => {
                 if (object.cell.is_some() && object.kind == ObjectKind::Table)
                     || object.note.is_some()
@@ -1560,6 +1563,15 @@ impl EditSession {
             EditCommand::SetCell { cell, props } => {
                 self.set_cell(cell, props)?;
                 Ok(self.kept(cell.section))
+            }
+            EditCommand::SetCellBorder {
+                selection,
+                all,
+                one,
+                border,
+            } => {
+                self.set_cell_border(selection, *all, *one, border)?;
+                Ok(selection.clone())
             }
             EditCommand::MoveObject { object, to } => {
                 Ok(EditSelection::caret(self.move_object(object, to)?))

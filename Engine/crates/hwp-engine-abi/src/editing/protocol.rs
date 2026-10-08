@@ -199,6 +199,14 @@ pub enum EditCommand {
         object: ObjectRef,
         props: ObjectProps,
     },
+    /// 셀 테두리/배경 of the cells `selection` covers, or (`all`) of every cell of its
+    /// table: 각 셀마다 적용, or (`one`) 하나의 셀처럼 적용.
+    SetCellBorder {
+        selection: EditSelection,
+        all: bool,
+        one: bool,
+        border: CellBorder,
+    },
     /// Changes the properties `props` sets of the cell holding `cell`.
     SetCell {
         cell: EditTarget,
@@ -809,6 +817,26 @@ pub struct BorderSide {
     pub line: u8,
     pub width: u8,
     pub color: String,
+}
+/// 셀 테두리/배경: 왼쪽, 오른쪽, 위쪽 and 아래쪽 of the cells (of the block, for 각 셀마다
+/// 적용), then the 가로 and 세로 lines inside it; 배경 by color (unset when it is a
+/// 그러데이션 or 그림, which then stays); and 대각선. What is unset stays.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellBorder {
+    pub sides: [Option<BorderSide>; 6],
+    pub fill: Option<PageFill>,
+    pub diagonal: Option<Diagonal>,
+}
+/// 대각선: its line, ＼ (`back_slash`) and ／ (`slash`), and 중심선 (0 none, 1 가로, 2 세로,
+/// 3 both); a 중심선 takes the place of the diagonals.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Diagonal {
+    pub line: BorderSide,
+    pub slash: bool,
+    pub back_slash: bool,
+    pub center: u8,
 }
 /// 면 색 (`#rrggbb`, or `none` for 색 채우기 없음), 무늬 색 and 무늬 모양 (0 none, 1–6).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

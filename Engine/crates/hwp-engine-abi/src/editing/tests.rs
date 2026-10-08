@@ -5410,3 +5410,103 @@ fn pictures_are_listed_with_their_pages() {
     assert!(p.name.ends_with(".png"), "{}", p.name);
     assert_eq!(s.picture_file(&p.object).unwrap().0, "png");
 }
+#[test]
+fn cell_borders_backgrounds_and_diagonals() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 3,
+            columns: 3,
+            width: None,
+            height: None,
+            treat_as_char: false,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let at = |s: &EditSession, row: u16, col: u16| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            let cell = t
+                .cells
+                .iter()
+                .position(|c| (c.row, c.col) == (row, col))
+                .unwrap();
+            let mut target = caret.target.clone();
+            target.cell.as_mut().unwrap().cell = cell as u32;
+            target
+        };
+        let block = |s: &EditSession| EditSelection {
+            anchor: point(at(s, 0, 0), 0),
+            focus: point(at(s, 1, 1), 0),
+        };
+        let thick = BorderSide {
+            line: 1,
+            width: 7,
+            color: "#ff0000".into(),
+        };
+        let blue = PageFill {
+            color: "#0000ff".into(),
+            pattern_color: "#000000".into(),
+            pattern: 0,
+        };
+        let before = s.cell_border(&at(&s, 2, 2)).unwrap();
+        // 각 셀마다 적용: the block's outside takes the thick line, its inside stays.
+        let each = EditCommand::SetCellBorder {
+            selection: block(&s),
+            all: false,
+            one: false,
+            border: CellBorder {
+                sides: [
+                    Some(thick.clone()),
+                    Some(thick.clone()),
+                    Some(thick.clone()),
+                    Some(thick.clone()),
+                    None,
+                    None,
+                ],
+                fill: Some(blue.clone()),
+                diagonal: Some(Diagonal {
+                    line: thick.clone(),
+                    slash: false,
+                    back_slash: true,
+                    center: 0,
+                }),
+            },
+        };
+        run(&mut s, each).unwrap();
+        let corner = s.cell_border(&at(&s, 0, 0)).unwrap();
+        assert_eq!(corner.sides[0].as_ref(), Some(&thick), "{format}");
+        assert_ne!(corner.sides[1].as_ref(), Some(&thick), "{format}");
+        assert_eq!(corner.fill.as_ref(), Some(&blue), "{format}");
+        assert!(corner.diagonal.as_ref().unwrap().back_slash, "{format}");
+        assert_eq!(s.cell_border(&at(&s, 2, 2)).unwrap(), before, "{format}");
+        // 하나의 셀처럼 적용 draws over the cells without changing them.
+        let one = EditCommand::SetCellBorder {
+            selection: block(&s),
+            all: false,
+            one: true,
+            border: CellBorder {
+                diagonal: Some(Diagonal {
+                    line: thick.clone(),
+                    slash: false,
+                    back_slash: false,
+                    center: 3,
+                }),
+                ..Default::default()
+            },
+        };
+        run(&mut s, one).unwrap();
+        let table = commands::table(s.core.document(), &caret.target).unwrap();
+        assert_eq!(table.zones.len(), 1, "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let t = commands::table(reopened.core.document(), &caret.target).unwrap();
+        assert_eq!(t.zones.len(), 1, "{format}");
+        assert_eq!(
+            reopened.cell_border(&at(&reopened, 0, 0)).unwrap().fill,
+            Some(blue.clone()),
+            "{format}"
+        );
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(s.cell_border(&at(&s, 0, 0)).unwrap(), before, "{format}");
+    }
+}

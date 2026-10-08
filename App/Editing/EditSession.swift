@@ -169,6 +169,9 @@ final class EditSession: @unchecked Sendable {
     func cellProps(_ cell: EditTarget) async throws -> CellProps {
         try await decode(send(.cellProps(cell)))
     }
+    func cellBorder(_ cell: EditTarget) async throws -> CellBorder {
+        try await decode(send(.cellBorder(cell)))
+    }
     /// An equation laid out by the engine's renderer, as on the page.
     func equationPreview(_ script: String, fontSize: UInt32, color: UInt32) async throws -> PageDisplay {
         try await send(.equationPreview(script: script, fontSize: fontSize, color: color)) { payload in

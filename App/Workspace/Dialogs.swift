@@ -93,6 +93,18 @@ extension Viewer {
         document?.edit(undoManager) { _ in .setPage(section: section, page, whole: whole) }
     }
     /// Opens 쪽 테두리/배경 for the section holding the caret.
+    /// 셀 테두리/배경 from the cell holding the caret: 각 셀마다 적용, or `one` 하나의 셀처럼 적용.
+    func showCellBorder(one: Bool, tab: String = "테두리") {
+        guard let document, let selection = document.selection, selection.anchor.target.cell != nil else { return NSSound.beep() }
+        let block = document.context.cellBlock
+        Task {
+            guard let border = try? await document.cellBorder(selection.anchor.target) else { return NSSound.beep() }
+            cellBorder = CellBorderEditing(one: one, block: block, border: border, tab: tab)
+        }
+    }
+    func setCellBorder(_ border: CellBorder, all: Bool, one: Bool) {
+        document?.edit(undoManager) { selection in selection.map { .setCellBorder($0, all: all, one: one, border) } }
+    }
     func showPageBorder() {
         guard let document else { return }
         let section = document.selection?.focus.target.section ?? 0
@@ -446,23 +458,7 @@ struct PageBorderSheet: View {
             HStack(alignment: .top, spacing: 28) {
                 VStack(alignment: .leading, spacing: 8) {
                     GroupTitle("테두리")
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow {
-                            FieldLabel("종류")
-                            ChoiceField(Binding { Int(line.line) } set: { line.line = UInt8($0) },
-                                        Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
-                        }
-                        GridRow {
-                            FieldLabel("굵기")
-                            ChoiceField(Binding { Int(line.width) } set: { line.width = UInt8($0) },
-                                        Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, minWidth: 100)
-                        }
-                        GridRow {
-                            FieldLabel("색")
-                            ColorWell(hex: $line.color)
-                        }
-                    }
-                    .padding(.leading, 12)
+                    LineFields(line: $line).padding(.leading, 12)
                     Toggle("선 종류 바로 적용", isOn: $instant).padding(.leading, 12)
                     Button("테두리 사용 안 함") {
                         line.line = 0
@@ -522,11 +518,8 @@ struct PageBorderSheet: View {
                                 (CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY)),
                                 (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY)),
                                 (CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))]
-                    for (side, (from, to)) in zip(border.sides, ends) where side.line != 0 {
-                        let width = Swatches.widths[min(Int(side.width), Swatches.widths.count - 1)]
-                        let dash: [CGFloat] = switch side.line { case 2: [5, 3]; case 3: [1.5, 2]; case 4, 5: [7, 2, 1.5, 2]; case 6: [12, 5]; default: [] }
-                        context.stroke(Path { $0.move(to: from); $0.addLine(to: to) }, with: .color(HexColor.color(side.color)),
-                                       style: StrokeStyle(lineWidth: max(1, width * 2), dash: dash))
+                    for (side, (from, to)) in zip(border.sides, ends) {
+                        LineFields.stroke(context, side, from, to)
                     }
                 }
                 .frame(width: 110, height: 140)
@@ -584,40 +577,7 @@ struct PageBorderSheet: View {
     private var background: some View {
         VStack(alignment: .leading, spacing: 12) {
             GroupTitle("채우기")
-            VStack(alignment: .leading, spacing: 8) {
-                Picker("", selection: Binding { border.fill.map { $0.color == "none" && $0.pattern == 0 ? 0 : 1 } ?? -1 } set: {
-                    var fill = border.fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
-                    if $0 == 0 {
-                        (fill.color, fill.pattern) = ("none", 0)
-                    } else if fill.color == "none" {
-                        fill.color = "#ffffff"
-                    }
-                    border.fill = fill
-                }) {
-                    Text("색 채우기 없음").tag(0)
-                    Text("색").tag(1)
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
-                        FieldLabel("면 색")
-                        ColorWell(hex: fill(\.color, "#ffffff"))
-                    }
-                    GridRow {
-                        FieldLabel("무늬 색")
-                        ColorWell(hex: fill(\.patternColor, "#000000"))
-                    }
-                    GridRow {
-                        FieldLabel("무늬 모양")
-                        ChoiceField(Binding { Int(border.fill?.pattern ?? 0) } set: { border.fill?.pattern = UInt8($0) },
-                                    Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
-                    }
-                }
-                .padding(.leading, 20)
-                .disabled(border.fill.map { $0.color == "none" && $0.pattern == 0 } ?? true)
-            }
-            .padding(.leading, 12)
+            FillFields(fill: $border.fill).padding(.leading, 12)
             HStack(spacing: 28) {
                 LabeledField("적용 쪽") { ChoiceField($border.fillPages, Self.pages, minWidth: 90) }
                 LabeledField("채울 영역") {
@@ -626,9 +586,81 @@ struct PageBorderSheet: View {
             }
         }
     }
-    private func fill(_ key: WritableKeyPath<PageFill, String>, _ fallback: String) -> Binding<String> {
-        Binding { border.fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
-            border.fill?[keyPath: key] = $0
+}
+
+/// A line's 종류, 굵기 and 색.
+struct LineFields: View {
+    @Binding var line: BorderSide
+    /// Draws `side` from `from` to `to` in a 미리 보기, roughly as the page will.
+    static func stroke(_ context: GraphicsContext, _ side: BorderSide, _ from: CGPoint, _ to: CGPoint) {
+        guard side.line != 0 else { return }
+        let width = Swatches.widths[min(Int(side.width), Swatches.widths.count - 1)]
+        let dash: [CGFloat] = switch side.line { case 2: [5, 3]; case 3: [1.5, 2]; case 4, 5: [7, 2, 1.5, 2]; case 6: [12, 5]; default: [] }
+        context.stroke(Path { $0.move(to: from); $0.addLine(to: to) }, with: .color(HexColor.color(side.color)),
+                       style: StrokeStyle(lineWidth: max(1, width * 2), dash: dash))
+    }
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            GridRow {
+                FieldLabel("종류")
+                ChoiceField(Binding { Int(line.line) } set: { line.line = UInt8($0) },
+                            Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
+            }
+            GridRow {
+                FieldLabel("굵기")
+                ChoiceField(Binding { Int(line.width) } set: { line.width = UInt8($0) },
+                            Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, minWidth: 100)
+            }
+            GridRow {
+                FieldLabel("색")
+                ColorWell(hex: $line.color)
+            }
+        }
+    }
+}
+
+/// 채우기: 색 채우기 없음, or 색 with 면 색, 무늬 색 and 무늬 모양. No fill is a 그러데이션 or
+/// 그림, kept as it is until one is chosen.
+struct FillFields: View {
+    @Binding var fill: PageFill?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("", selection: Binding { fill.map { $0.color == "none" && $0.pattern == 0 ? 0 : 1 } ?? -1 } set: {
+                var new = fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
+                if $0 == 0 {
+                    (new.color, new.pattern) = ("none", 0)
+                } else if new.color == "none" {
+                    new.color = "#ffffff"
+                }
+                fill = new
+            }) {
+                Text("색 채우기 없음").tag(0)
+                Text("색").tag(1)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("면 색")
+                    ColorWell(hex: color(\.color, "#ffffff"))
+                }
+                GridRow {
+                    FieldLabel("무늬 색")
+                    ColorWell(hex: color(\.patternColor, "#000000"))
+                }
+                GridRow {
+                    FieldLabel("무늬 모양")
+                    ChoiceField(Binding { Int(fill?.pattern ?? 0) } set: { fill?.pattern = UInt8($0) },
+                                Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+                }
+            }
+            .padding(.leading, 20)
+            .disabled(fill.map { $0.color == "none" && $0.pattern == 0 } ?? true)
+        }
+    }
+    private func color(_ key: WritableKeyPath<PageFill, String>, _ fallback: String) -> Binding<String> {
+        Binding { fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
+            fill?[keyPath: key] = $0
         }
     }
 }
@@ -1053,5 +1085,278 @@ private struct Picture {
         guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
         return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+}
+
+/// 셀 테두리/배경 as opened: 하나의 셀처럼 (`one`) or each cell, over a block or not, from
+/// the caret's cell.
+struct CellBorderEditing: Identifiable {
+    let id = UUID()
+    let one: Bool
+    let block: Bool
+    let border: CellBorder
+    let tab: String
+}
+
+/// [셀 테두리/배경]: 테두리, 배경 and 대각선 tabs; 적용 범위 for 각 셀마다 적용. Only what is
+/// changed here changes in the cells.
+struct CellBorderSheet: View {
+    let editing: CellBorderEditing
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var tab: String
+    /// 왼쪽, 오른쪽, 위쪽, 아래쪽, 가로 and 세로 as shown.
+    @State private var sides: [BorderSide]
+    @State private var touched: Set<Int> = []
+    @State private var fill: PageFill?
+    @State private var diagonal: Diagonal
+    @State private var all: Bool
+    /// The 종류, 굵기 and 색 the side buttons put on.
+    @State private var line: BorderSide
+    /// 선 모양 바로 적용: changing the line changes the sides whose button is down.
+    @State private var instant = true
+    @State private var pressed: Set<Int> = []
+    /// Each side's line before its button last put one on.
+    @State private var previous: [BorderSide]
+
+    private static let none = BorderSide(line: 0, width: 0, color: "#000000")
+
+    init(editing: CellBorderEditing, viewer: Viewer) {
+        self.editing = editing
+        self.viewer = viewer
+        let b = editing.border
+        let shown = b.sides.prefix(4).map { $0 ?? Self.none }
+        // Inside a block the 가로 and 세로 lines start as the caret cell's 아래쪽 and 오른쪽.
+        let sides = shown + [shown[3], shown[1]]
+        _tab = State(initialValue: editing.tab)
+        _sides = State(initialValue: sides)
+        _fill = State(initialValue: b.fill)
+        _diagonal = State(initialValue: b.diagonal ?? Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"),
+                                                                 slash: false, backSlash: false, center: 0))
+        _all = State(initialValue: !editing.block)
+        _line = State(initialValue: sides.first { $0.line != 0 } ?? BorderSide(line: 1, width: 0, color: "#000000"))
+        _previous = State(initialValue: sides)
+    }
+
+    var body: some View {
+        DialogFrame("셀 테두리/배경", confirmTitle: "설정") {
+            DialogTabs(selection: $tab, titles: ["테두리", "배경", "대각선"]) { tab in
+                Group {
+                    switch tab {
+                    case "배경": FillFields(fill: $fill).padding(.leading, 12)
+                    case "대각선": diagonals
+                    default: lines
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 22)
+            }
+            .frame(width: 520, height: 330)
+            if !editing.one {
+                HStack(spacing: 10) {
+                    Text("적용 범위")
+                    ChoiceField($all, editing.block ? [(true, "모든 셀"), (false, "선택된 셀")] : [(true, "모든 셀")], minWidth: 100)
+                        .fixedSize()
+                }
+            }
+        } confirm: {
+            var border = CellBorder()
+            for side in touched { border.sides[side] = sides[side] }
+            if fill != editing.border.fill { border.fill = fill }
+            if diagonal != editing.border.diagonal { border.diagonal = diagonal }
+            viewer.setCellBorder(border, all: all, one: editing.one)
+            dismiss()
+        }
+        .onChange(of: line) { _, line in
+            guard instant else { return }
+            for side in pressed {
+                sides[side] = line
+                touched.insert(side)
+            }
+        }
+    }
+
+    /// The sides a block shows: its outside, and inside it for 각 셀마다 적용.
+    private var shown: [Int] { editing.one ? [0, 1, 2, 3] : [0, 1, 2, 3, 4, 5] }
+
+    private var lines: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("테두리")
+                LineFields(line: $line).padding(.leading, 12)
+                Toggle("선 모양 바로 적용", isOn: $instant).padding(.leading, 12)
+            }
+            preview
+        }
+    }
+
+    /// 미리 보기 with the side buttons around it: the lines across above, the lines down
+    /// beside, and 모두, 바깥쪽 and 안쪽 below.
+    private var preview: some View {
+        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                HStack(spacing: 4) {
+                    sideButton("위쪽", [2])
+                    if !editing.one { sideButton("가로", [4]) }
+                    sideButton("아래쪽", [3])
+                }
+                .gridCellAnchor(.bottom)
+            }
+            GridRow {
+                VStack(spacing: 4) {
+                    sideButton("왼쪽", [0])
+                    if !editing.one { sideButton("세로", [5]) }
+                    sideButton("오른쪽", [1])
+                }
+                .gridCellAnchor(.trailing)
+                Canvas { context, size in
+                    let box = CGRect(origin: .zero, size: size).insetBy(dx: 8, dy: 8)
+                    context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
+                    let split = !editing.one
+                    let cells = split ? [CGRect(x: box.minX, y: box.minY, width: box.width / 2, height: box.height / 2),
+                                         CGRect(x: box.midX, y: box.minY, width: box.width / 2, height: box.height / 2),
+                                         CGRect(x: box.minX, y: box.midY, width: box.width / 2, height: box.height / 2),
+                                         CGRect(x: box.midX, y: box.midY, width: box.width / 2, height: box.height / 2)] : [box]
+                    for cell in cells {
+                        if let fill, fill.color != "none" { context.fill(Path(cell), with: .color(HexColor.color(fill.color))) }
+                        let d = diagonal
+                        var marks: [(CGPoint, CGPoint)] = []
+                        if d.center == 0 {
+                            if d.backSlash { marks.append((CGPoint(x: cell.minX, y: cell.minY), CGPoint(x: cell.maxX, y: cell.maxY))) }
+                            if d.slash { marks.append((CGPoint(x: cell.minX, y: cell.maxY), CGPoint(x: cell.maxX, y: cell.minY))) }
+                        }
+                        if d.center & 1 != 0 { marks.append((CGPoint(x: cell.minX, y: cell.midY), CGPoint(x: cell.maxX, y: cell.midY))) }
+                        if d.center & 2 != 0 { marks.append((CGPoint(x: cell.midX, y: cell.minY), CGPoint(x: cell.midX, y: cell.maxY))) }
+                        for (from, to) in marks { LineFields.stroke(context, d.line, from, to) }
+                    }
+                    LineFields.stroke(context, sides[0], CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY))
+                    LineFields.stroke(context, sides[1], CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY))
+                    LineFields.stroke(context, sides[2], CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY))
+                    LineFields.stroke(context, sides[3], CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))
+                    if split {
+                        LineFields.stroke(context, sides[4], CGPoint(x: box.minX, y: box.midY), CGPoint(x: box.maxX, y: box.midY))
+                        LineFields.stroke(context, sides[5], CGPoint(x: box.midX, y: box.minY), CGPoint(x: box.midX, y: box.maxY))
+                    }
+                }
+                .frame(width: 140, height: 140)
+            }
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                HStack(spacing: 4) {
+                    sideButton("모두", shown)
+                    if !editing.one {
+                        sideButton("바깥쪽", [0, 1, 2, 3])
+                        sideButton("안쪽", [4, 5])
+                    }
+                }
+            }
+        }
+    }
+    /// A side button: puts the line on its sides, or takes it back off.
+    private func sideButton(_ title: String, _ which: [Int]) -> some View {
+        let down = which.allSatisfy(pressed.contains)
+        return Button {
+            for side in which {
+                if down {
+                    sides[side] = previous[side]
+                    pressed.remove(side)
+                } else if !pressed.contains(side) {
+                    previous[side] = sides[side]
+                    sides[side] = line
+                    pressed.insert(side)
+                }
+                touched.insert(side)
+            }
+        } label: {
+            Canvas { context, size in
+                let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+                context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                let path = Path { path in
+                    for side in which {
+                        let (from, to): (CGPoint, CGPoint) = switch side {
+                        case 0: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY))
+                        case 1: (CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY))
+                        case 2: (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY))
+                        case 3: (CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))
+                        case 4: (CGPoint(x: box.minX, y: box.midY), CGPoint(x: box.maxX, y: box.midY))
+                        default: (CGPoint(x: box.midX, y: box.minY), CGPoint(x: box.midX, y: box.maxY))
+                        }
+                        path.move(to: from)
+                        path.addLine(to: to)
+                    }
+                }
+                context.stroke(path, with: .color(.primary), lineWidth: 2)
+            }
+            .frame(width: 22, height: 22)
+            .padding(3)
+        }
+        .buttonStyle(ToolButtonStyle(on: down))
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    private var diagonals: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("대각선")
+                LineFields(line: $diagonal.line).padding(.leading, 12)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                GroupTitle("＼ 대각선")
+                HStack(spacing: 4) {
+                    mark("대각선 없애기", on: !diagonal.backSlash, []) { diagonal.backSlash = false }
+                    mark("＼ 대각선", on: diagonal.backSlash, [(0, 0, 1, 1)]) { (diagonal.backSlash, diagonal.center) = (true, 0) }
+                }
+                GroupTitle("／ 대각선")
+                HStack(spacing: 4) {
+                    mark("대각선 없애기", on: !diagonal.slash, []) { diagonal.slash = false }
+                    mark("／ 대각선", on: diagonal.slash, [(0, 1, 1, 0)]) { (diagonal.slash, diagonal.center) = (true, 0) }
+                }
+                // rhwp keeps no 중심선 in a cell zone.
+                if !editing.one { centers }
+            }
+        }
+    }
+    private var centers: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GroupTitle("＋ 중심선")
+            HStack(spacing: 4) {
+                let lines: [[(CGFloat, CGFloat, CGFloat, CGFloat)]] =
+                    [[], [(0, 0.5, 1, 0.5)], [(0.5, 0, 0.5, 1)], [(0, 0.5, 1, 0.5), (0.5, 0, 0.5, 1)]]
+                ForEach(0..<4) { center in
+                    mark(["중심선 없애기", "가로 중심선", "세로 중심선", "가로세로 중심선"][center],
+                         on: diagonal.center == center, lines[center]) {
+                        diagonal.center = UInt8(center)
+                        if center != 0 { (diagonal.slash, diagonal.backSlash) = (false, false) }
+                    }
+                }
+            }
+        }
+    }
+    /// A 대각선 or 중심선 button, drawn as its lines across a cell; one put on gets a line
+    /// to draw with.
+    private func mark(_ title: String, on: Bool, _ lines: [(CGFloat, CGFloat, CGFloat, CGFloat)],
+                      action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            if diagonal.line.line == 0 { diagonal.line.line = 1 }
+        } label: {
+            Canvas { context, size in
+                let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+                context.stroke(Path(box), with: .color(.secondary.opacity(0.6)), lineWidth: 1)
+                for (x1, y1, x2, y2) in lines {
+                    context.stroke(Path {
+                        $0.move(to: CGPoint(x: box.minX + x1 * box.width, y: box.minY + y1 * box.height))
+                        $0.addLine(to: CGPoint(x: box.minX + x2 * box.width, y: box.minY + y2 * box.height))
+                    }, with: .color(.primary), lineWidth: 1.5)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .padding(3)
+        }
+        .buttonStyle(ToolButtonStyle(on: on))
+        .help(title)
+        .accessibilityLabel(title)
     }
 }

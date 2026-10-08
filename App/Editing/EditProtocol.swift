@@ -138,6 +138,9 @@ enum EditCommand: Encodable, Sendable {
     case setPage(section: UInt32, PageSetup, whole: Bool = false)
     /// 쪽 테두리/배경; with `whole`, of every section.
     case setPageBorder(section: UInt32, PageBorder, whole: Bool)
+    /// 셀 테두리/배경 of the cells the selection covers, or of every cell (`all`); each for
+    /// itself, or as one cell (`one`).
+    case setCellBorder(EditSelection, all: Bool, one: Bool, CellBorder)
     /// 각주 모양 (`footnote`) or 미주 모양; with `whole`, of every section.
     case setNoteShape(section: UInt32, footnote: Bool, NoteShape, whole: Bool)
     /// 구역 설정; with `whole`, of every section.
@@ -164,7 +167,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -247,6 +250,12 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .setCellBorder(selection, all, one, border):
+            try c.encode("setCellBorder", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(all, forKey: .all)
+            try c.encode(one, forKey: .one)
+            try c.encode(border, forKey: .border)
         case let .setNoteShape(section, footnote, shape, whole):
             try c.encode("setNoteShape", forKey: .kind)
             try c.encode(section, forKey: .section)
@@ -640,6 +649,20 @@ struct BorderSide: Codable, Hashable, Sendable {
     var line: UInt8
     var width: UInt8
     var color: String
+}
+/// 셀 테두리/배경: 왼쪽, 오른쪽, 위쪽, 아래쪽, then the 가로 and 세로 lines inside a block;
+/// 배경 (nil while a 그러데이션 or 그림 stays); 대각선. Nil stays as it is.
+struct CellBorder: Codable, Hashable, Sendable {
+    var sides: [BorderSide?] = Array(repeating: nil, count: 6)
+    var fill: PageFill?
+    var diagonal: Diagonal?
+}
+/// 대각선: its line, ＼ and ／, and 중심선 (0 none, 1 가로, 2 세로, 3 both).
+struct Diagonal: Codable, Hashable, Sendable {
+    var line: BorderSide
+    var slash: Bool
+    var backSlash: Bool
+    var center: UInt8
 }
 /// 면 색 (`#rrggbb`, or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6).
 struct PageFill: Codable, Hashable, Sendable {
@@ -1062,6 +1085,7 @@ enum EngineRequest: Encodable, Sendable {
     /// 삽입 그림 저장하기: the picture's image file.
     case pictureFile(ObjectRef)
     case cellProps(EditTarget)
+    case cellBorder(EditTarget)
     case equationPreview(script: String, fontSize: UInt32, color: UInt32)
     /// An equation script as LaTeX, or with `fromLatex`, LaTeX as a script.
     case convertEquation(String, fromLatex: Bool)
@@ -1187,6 +1211,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(object, forKey: .object)
         case let .cellProps(cell):
             try c.encode("cellProps", forKey: .op)
+            try c.encode(cell, forKey: .cell)
+        case let .cellBorder(cell):
+            try c.encode("cellBorder", forKey: .op)
             try c.encode(cell, forKey: .cell)
         case let .equationPreview(script, fontSize, color):
             try c.encode("equationPreview", forKey: .op)

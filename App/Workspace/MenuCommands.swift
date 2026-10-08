@@ -159,6 +159,10 @@ struct MenuItems {
             items += [
                 nil,
                 Choice(title: "표/셀 속성…", symbol: Icon.objectProps, key: "p", modifiers: []) { viewer.showObjectProperties() },
+                Choice(title: "셀 테두리/배경", symbol: Icon.cellBorder, enabled: !context.locked, submenu: [
+                    Choice(title: "각 셀마다 적용…", key: "l", modifiers: []) { viewer.showCellBorder(one: false) },
+                    Choice(title: "하나의 셀처럼 적용…") { viewer.showCellBorder(one: true) },
+                ]),
                 Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
                     viewer.editCells { .equalizeCells($0, height: true) }
                 },
@@ -460,6 +464,11 @@ struct MenuItems {
             .disabled(!context.inBody)
         item("표/셀 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(!context.inTable)
+        Menu {
+            Button("각 셀마다 적용…") { viewer?.showCellBorder(one: false) }
+            Button("하나의 셀처럼 적용…") { viewer?.showCellBorder(one: true) }
+        } label: { Label("셀 테두리/배경", systemImage: Icon.cellBorder) }
+        .disabled(!context.inTable || context.locked)
         Divider()
         Group {
             item("표 나누기", Icon.splitTable) { viewer?.editTable(.split) }

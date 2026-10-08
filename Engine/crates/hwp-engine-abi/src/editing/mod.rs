@@ -1,3 +1,4 @@
+mod borders;
 mod cells;
 mod clipboard;
 mod codes;
@@ -297,6 +298,14 @@ impl EditSession {
             | EditCommand::InsertNote { position, .. } => Some(position.clone()),
             EditCommand::EditTable { cell, .. }
             | EditCommand::FlipTable { cell, .. }
+            | EditCommand::SetCellBorder {
+                selection:
+                    EditSelection {
+                        anchor: EditPosition { target: cell, .. },
+                        ..
+                    },
+                ..
+            }
             | EditCommand::SetCell { cell, .. } => Some(EditPosition {
                 target: cell.clone(),
                 scalar: 0,

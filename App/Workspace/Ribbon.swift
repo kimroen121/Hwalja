@@ -256,6 +256,11 @@ struct ToolRow: View {
             ToolTile("셀 나누기", Icon.splitCells) { viewer.splittingCells = true }
         }
         .disabled(context.locked)
+        ToolTile("셀 테두리/배경", Icon.cellBorder, choices: {
+            [Choice(title: "각 셀마다 적용…") { viewer.showCellBorder(one: false) },
+             Choice(title: "하나의 셀처럼 적용…") { viewer.showCellBorder(one: true) }]
+        })
+        .disabled(context.locked)
         Group {
             ToolTile("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
             ToolTile("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
@@ -594,6 +599,7 @@ enum Icon {
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static let replacePicture = "photo.badge.arrow.down"
+    static let cellBorder = "square.grid.3x3"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

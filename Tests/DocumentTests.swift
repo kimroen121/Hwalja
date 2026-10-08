@@ -1188,6 +1188,13 @@ struct DocumentTests {
         await document.settle()
         #expect(document.context.cellBlock && !document.context.hasRange)
         #expect(document.presentation.highlight.count == 4 && document.presentation.caret != nil)
+        let red = BorderSide(line: 1, width: 5, color: "#ff0000")
+        var cellBorder = CellBorder(fill: PageFill(color: "#ccddee", patternColor: "#000000", pattern: 0))
+        cellBorder.sides[0] = red
+        viewer.setCellBorder(cellBorder, all: false, one: false)
+        await document.settle()
+        let drawn = try await document.cellBorder(corner.target)
+        #expect(drawn.sides[0] == red && drawn.fill == cellBorder.fill && document.context.cellBlock)
         viewer.editCells { .mergeCells($0) }
         await document.settle()
         #expect(document.context.inTable && !document.context.cellBlock)
@@ -1590,6 +1597,14 @@ struct DocumentTests {
                                                    document: document, viewer: viewer, tab: "글꼴 정보"))),
             ("pictureInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
                                                       document: document, viewer: viewer, tab: "그림 정보"))),
+            ("cellBorder", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
+                sides: [BorderSide(line: 1, width: 1, color: "#000000"), nil, nil, nil, nil, nil],
+                fill: PageFill(color: "#ccddee", patternColor: "#000000", pattern: 0),
+                diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: false, backSlash: true, center: 0)),
+                tab: "테두리"), viewer: viewer))),
+            ("cellDiagonal", AnyView(CellBorderSheet(editing: CellBorderEditing(one: true, block: true, border: CellBorder(
+                diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: true, backSlash: false, center: 0)),
+                tab: "대각선"), viewer: viewer))),
             ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                                                                      props: ObjectProps(pageBreak: 2, repeatHeader: true)),
                                              viewer: viewer, tab: "표"))),

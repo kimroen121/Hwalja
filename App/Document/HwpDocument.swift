@@ -542,6 +542,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func cellProps(_ cell: EditTarget) async throws -> CellProps {
         try await session.cellProps(cell)
     }
+    func cellBorder(_ cell: EditTarget) async throws -> CellBorder {
+        try await session.cellBorder(cell)
+    }
     func equationPreview(_ script: String, fontSize: UInt32, color: UInt32) async throws -> PageDisplay {
         try await session.equationPreview(script, fontSize: fontSize, color: color)
     }

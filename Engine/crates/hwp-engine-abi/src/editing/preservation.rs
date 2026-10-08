@@ -297,9 +297,15 @@ pub(super) fn check(
         | EditCommand::ResizeTable { table: object, .. } => {
             return check_host(before, after, object.section, object.paragraph)
         }
-        EditCommand::SetCell { cell, .. } => {
-            return check_host(before, after, cell.section, cell.paragraph)
-        }
+        EditCommand::SetCell { cell, .. }
+        | EditCommand::SetCellBorder {
+            selection:
+                EditSelection {
+                    anchor: EditPosition { target: cell, .. },
+                    ..
+                },
+            ..
+        } => return check_host(before, after, cell.section, cell.paragraph),
         EditCommand::Order { object, .. } => return check_order(before, after, object.section),
         EditCommand::HeaderFooter {
             section, footer, ..

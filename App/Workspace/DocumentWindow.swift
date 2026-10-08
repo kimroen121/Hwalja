@@ -92,6 +92,7 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageBorder != nil }, set: { if !$0 { viewer.pageBorder = nil } })) {
             if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
         }
+        .sheet(item: $viewer.cellBorder) { CellBorderSheet(editing: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
         .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
         .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
@@ -285,6 +286,7 @@ final class Viewer: ObservableObject {
     /// The section and paper 편집 용지 is showing.
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
     @Published var pageBorder: (section: UInt32, border: PageBorder)?
+    @Published var cellBorder: CellBorderEditing?
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
     @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
     /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.
@@ -331,7 +333,7 @@ final class Viewer: ObservableObject {
                 return true
             }
             // The letter typed, or while typing 한글 the letter of the key's place.
-            let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g", 17: "t"]
+            let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g", 17: "t", 37: "l", 8: "c"]
             let typed = event.charactersIgnoringModifiers?.lowercased().first.flatMap { $0.isASCII ? $0 : nil }
             guard modifiers.isEmpty, let key = typed ?? letters[event.keyCode] else { return false }
             if context.cellBlock {
@@ -342,6 +344,8 @@ final class Viewer: ObservableObject {
                 case "w": editCells { .equalizeCells($0, height: false) }
                 case "t": flippingTable = true
                 case "p": showObjectProperties()
+                case "l": showCellBorder(one: false)
+                case "c": showCellBorder(one: false, tab: "배경")
                 default: return false
                 }
             } else if context.object != nil, !context.locked {
