@@ -817,6 +817,35 @@ fn hit_test_and_caret_round_trip() {
         EditError::StaleRevision
     );
 }
+/// A click just right of a 머리말 caret position lands on that position, as in the body.
+#[test]
+fn header_hit_test_and_caret_round_trip() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    run(
+        &mut s,
+        EditCommand::HeaderFooter {
+            section: 0,
+            footer: false,
+            page_number: None,
+        },
+    )
+    .unwrap();
+    let header = header_footer_target(false, 0, 0);
+    replace(&mut s, header.clone(), 0, 0, "학교 머리말").unwrap();
+    for scalar in 0..=6 {
+        let caret = s.caret(s.revision, &point(header.clone(), scalar)).unwrap();
+        let hit = s
+            .hit_test(
+                s.revision,
+                caret.page,
+                caret.x + 1.0,
+                caret.y + caret.height / 2.0,
+                true,
+            )
+            .unwrap();
+        assert_eq!(hit.scalar, scalar);
+    }
+}
 #[test]
 fn ffi_round_trip_owns_results() {
     use super::ffi::*;
