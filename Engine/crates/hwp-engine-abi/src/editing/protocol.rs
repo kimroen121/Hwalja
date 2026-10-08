@@ -511,6 +511,23 @@ pub struct ObjectProps {
     /// 0x00bbggrr.
     pub color: Option<u32>,
     pub baseline: Option<i32>,
+    /// Drawing objects' 선: color (0x00bbggrr), width (HWPUNIT), 종류 (0 none, 1 solid …
+    /// 11), 끝 모양 (0 round, 1 flat), and 화살표 shapes (0–6) and sizes (0–8).
+    pub border_color: Option<u32>,
+    pub border_width: Option<i32>,
+    pub line_type: Option<u32>,
+    pub line_end_shape: Option<u32>,
+    pub arrow_start: Option<u32>,
+    pub arrow_end: Option<u32>,
+    pub arrow_start_size: Option<u32>,
+    pub arrow_end_size: Option<u32>,
+    /// Drawing objects' 채우기: none or solid, 면 색 and 무늬 색 (0x00bbggrr), 무늬 모양
+    /// (0 or −1 none, 1–6), and 투명도 (0 opaque – 255).
+    pub fill_type: Option<String>,
+    pub fill_bg_color: Option<u32>,
+    pub fill_pat_color: Option<u32>,
+    pub fill_pat_type: Option<i32>,
+    pub fill_alpha: Option<u32>,
 }
 /// Cell properties in rhwp's names (lengths in HWPUNIT); unset fields stay.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

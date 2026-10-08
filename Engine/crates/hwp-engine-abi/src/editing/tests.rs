@@ -3022,10 +3022,23 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
         .unwrap();
     assert_eq!(hit.map(|o| o.object), Some(first.object.clone()));
 
+    // 선 and 채우기 too, with the 무늬 kept through HWP's 0-based numbering.
     let wider = ObjectProps {
         width: Some(20_000),
+        border_color: Some(0x0000ff),
+        border_width: Some(34),
+        line_type: Some(2),
+        fill_type: Some("solid".into()),
+        fill_bg_color: Some(0x00ff00),
+        fill_pat_type: Some(1),
+        fill_alpha: Some(128),
         ..Default::default()
     };
+    let bad = ObjectProps {
+        line_type: Some(12),
+        ..Default::default()
+    };
+    assert!(s.validate_object(&first.object, &bad).is_err());
     let shape = first.object.clone();
     run(
         &mut s,
@@ -3035,12 +3048,34 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
         },
     )
     .unwrap();
-    assert_eq!(s.object_props(&shape).unwrap().width, Some(20_000));
+    let kept = |p: ObjectProps| {
+        (
+            p.width,
+            p.border_color,
+            p.border_width,
+            p.line_type,
+            p.fill_type,
+            p.fill_bg_color,
+            p.fill_pat_type,
+            p.fill_alpha,
+        )
+    };
+    let expected = (
+        Some(20_000),
+        Some(0x0000ff),
+        Some(34),
+        Some(2),
+        Some("solid".to_string()),
+        Some(0x00ff00),
+        Some(1),
+        Some(128),
+    );
+    assert_eq!(kept(s.object_props(&shape).unwrap()), expected);
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         assert_eq!(
-            reopened.object_props(&shape).unwrap().width,
-            Some(20_000),
+            kept(reopened.object_props(&shape).unwrap()),
+            expected,
             "{format:?}"
         );
     }

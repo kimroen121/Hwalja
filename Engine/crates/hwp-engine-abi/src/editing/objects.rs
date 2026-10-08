@@ -511,6 +511,41 @@ impl EditSession {
             && props.font_size.is_none_or(|v| (100..=12_700).contains(&v))
             && props.color.is_none_or(|v| v <= 0x00ff_ffff)
             && props.baseline.is_none_or(|v| i16::try_from(v).is_ok())
+            && [
+                props.border_color,
+                props.fill_bg_color,
+                props.fill_pat_color,
+            ]
+            .into_iter()
+            .all(|v| v.is_none_or(|v| v <= 0x00ff_ffff))
+            && props
+                .border_width
+                .is_none_or(|v| (0..=100_000).contains(&v))
+            && props.line_type.is_none_or(|v| v <= 11)
+            && props.line_end_shape.is_none_or(|v| v <= 1)
+            && [props.arrow_start, props.arrow_end]
+                .into_iter()
+                .all(|v| v.is_none_or(|v| v <= 6))
+            && [props.arrow_start_size, props.arrow_end_size]
+                .into_iter()
+                .all(|v| v.is_none_or(|v| v <= 8))
+            && one_of(&props.fill_type, &["none", "solid"])
+            && props.fill_pat_type.is_none_or(|v| (-1..=6).contains(&v))
+            && props.fill_alpha.is_none_or(|v| v <= 255)
+            && (o.kind == ObjectKind::Shape
+                || (props.border_color.is_none()
+                    && props.border_width.is_none()
+                    && props.line_type.is_none()
+                    && props.line_end_shape.is_none()
+                    && props.arrow_start.is_none()
+                    && props.arrow_end.is_none()
+                    && props.arrow_start_size.is_none()
+                    && props.arrow_end_size.is_none()
+                    && props.fill_type.is_none()
+                    && props.fill_bg_color.is_none()
+                    && props.fill_pat_color.is_none()
+                    && props.fill_pat_type.is_none()
+                    && props.fill_alpha.is_none()))
             && props.original_width.is_none()
             && props.original_height.is_none();
         if valid {

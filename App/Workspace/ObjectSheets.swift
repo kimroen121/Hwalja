@@ -18,6 +18,8 @@ struct ObjectSheetState: Identifiable {
     let object: ObjectRef
     let props: ObjectProps
     var cell: (target: EditTarget, props: CellProps)?
+    /// A 직선, the one drawing object with 화살표.
+    var line = false
 }
 
 extension Viewer {
@@ -28,7 +30,7 @@ extension Viewer {
         Task {
             if let placed = document.object {
                 guard let props = try? await document.objectProps(placed.object) else { return NSSound.beep() }
-                objectSheet = ObjectSheetState(object: placed.object, props: props)
+                objectSheet = ObjectSheetState(object: placed.object, props: props, line: placed.ends != nil)
             } else if let target = document.selection?.focus.target, let cell = target.cell {
                 let table = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
                 guard let props = try? await document.objectProps(table),
@@ -125,8 +127,10 @@ struct ObjectSheet: View {
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성") {
             DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
-                       + (kind == .table ? ["표", "셀"] : [])) { tab in
+                       + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])) { tab in
                 switch tab {
+                case "선": line
+                case "채우기": fill
                 case "여백/캡션": margins
                 case "그림": picture
                 case "표": table
@@ -267,6 +271,84 @@ struct ObjectSheet: View {
         .padding(16)
     }
 
+    private var line: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("선")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("색")
+                    ColorWell(hex: color(\.borderColor))
+                    FieldLabel("종류")
+                    ChoiceField(index(\.lineType), Swatches.lineKinds.indices.prefix(12).map { ($0, "") },
+                                images: Array(Swatches.lineKinds.prefix(12)), minWidth: 100)
+                }
+                GridRow {
+                    FieldLabel("끝 모양")
+                    ChoiceField(index(\.lineEndShape), Swatches.lineEnds.indices.map { ($0, "") }, images: Swatches.lineEnds, minWidth: 100)
+                    FieldLabel("굵기")
+                    SpinField(value: Binding { (Double(props.borderWidth ?? 0) / Units.perMillimeter * 100).rounded() / 100 }
+                                  set: { props.borderWidth = Units.units($0) },
+                              unit: "mm", range: 0...20, step: 0.1, digits: 2)
+                }
+            }
+            .padding(.leading, 12)
+            GroupTitle("화살표")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow { arrow("시작 모양", \.arrowStart, start: true); arrow("끝 모양", \.arrowEnd, start: false) }
+                GridRow { arrowSize("시작 크기", \.arrowStartSize, start: true); arrowSize("끝 크기", \.arrowEndSize, start: false) }
+            }
+            .padding(.leading, 12)
+            .disabled(!state.line)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+
+    private var fill: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            GroupTitle("채우기")
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("채우기", selection: Binding { props.fillType == "solid" ? "solid" : "none" } set: { kind in
+                    props.fillType = kind
+                    if kind == "solid", props.fillBgColor == nil { props.fillBgColor = 0xffffff }
+                }) {
+                    Text("색 채우기 없음").tag("none")
+                    Text("색").tag("solid")
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("면 색")
+                        ColorWell(hex: color(\.fillBgColor, "#ffffff"))
+                    }
+                    GridRow {
+                        FieldLabel("무늬 색")
+                        ColorWell(hex: color(\.fillPatColor))
+                        FieldLabel("무늬 모양")
+                        ChoiceField(Binding { max(0, Int(props.fillPatType ?? 0)) } set: { props.fillPatType = Int32($0) },
+                                    Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+                    }
+                }
+                .padding(.leading, 20)
+                .disabled(props.fillType != "solid")
+            }
+            .padding(.leading, 12)
+            GroupTitle("투명도 설정")
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("투명도")
+                    SpinField(value: Binding { (Double(props.fillAlpha ?? 0) * 100 / 255).rounded() }
+                                  set: { props.fillAlpha = UInt32(($0 * 255 / 100).rounded()) },
+                              unit: "%", range: 0...100)
+                }
+            }
+            .padding(.leading, 12)
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+    }
+
     private var cellTab: some View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("셀 크기")
@@ -312,6 +394,22 @@ struct ObjectSheet: View {
 
     private func flag(_ key: WritableKeyPath<ObjectProps, Bool?>) -> Binding<Bool> {
         Binding { props[keyPath: key] ?? false } set: { props[keyPath: key] = $0 }
+    }
+    private func index(_ key: WritableKeyPath<ObjectProps, UInt32?>) -> Binding<Int> {
+        Binding { Int(props[keyPath: key] ?? 0) } set: { props[keyPath: key] = UInt32($0) }
+    }
+    private func color(_ key: WritableKeyPath<ObjectProps, UInt32?>, _ fallback: String = "#000000") -> Binding<String> {
+        Binding { props[keyPath: key].map { HexColor.hex(bgr: $0) } ?? fallback } set: { props[keyPath: key] = HexColor.bgr($0) }
+    }
+    @ViewBuilder private func arrow(_ title: String, _ key: WritableKeyPath<ObjectProps, UInt32?>, start: Bool) -> some View {
+        let images = start ? Swatches.arrowStarts : Swatches.arrowEnds
+        FieldLabel(title)
+        ChoiceField(index(key), images.indices.map { ($0, "") }, images: images, minWidth: 100)
+    }
+    @ViewBuilder private func arrowSize(_ title: String, _ key: WritableKeyPath<ObjectProps, UInt32?>, start: Bool) -> some View {
+        let images = start ? Swatches.arrowStartSizes : Swatches.arrowEndSizes
+        FieldLabel(title)
+        ChoiceField(index(key), images.indices.map { ($0, "") }, images: images, minWidth: 100)
     }
     private func text(_ key: WritableKeyPath<ObjectProps, String?>, _ fallback: String) -> Binding<String> {
         Binding { props[keyPath: key] ?? fallback } set: { props[keyPath: key] = $0 }

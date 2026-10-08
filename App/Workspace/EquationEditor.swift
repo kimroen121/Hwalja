@@ -344,18 +344,13 @@ struct EquationEditor: View {
                 RowDivider()
                 SpinField(value: $edit.fontSize, unit: "pt", range: 1...127)
                     .accessibilityLabel("글자 크기")
-                ColorWell(hex: Binding { Self.hex(edit.color) } set: { edit.color = Self.color($0) })
+                ColorWell(hex: Binding { HexColor.hex(bgr: edit.color) } set: { edit.color = HexColor.bgr($0) })
                     .accessibilityLabel("글자 색")
                     .fixedSize()
                     .padding(.leading, 8)
                 Spacer(minLength: 0)
-                Picker("", selection: $latex) {
-                    Text("한글").tag(false)
-                    Text("LaTeX").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                DialogChoice(selection: Binding { latex ? 1 : 0 } set: { latex = $0 == 1 }, titles: ["한글", "LaTeX"])
+                    .fixedSize()
             }
             .padding(.bottom, 8)
             VStack(spacing: 0) {
@@ -375,15 +370,6 @@ struct EquationEditor: View {
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
         }
         .frame(width: 860)
-    }
-
-    /// 0x00bbggrr and `#rrggbb`.
-    private static func hex(_ color: UInt32) -> String {
-        String(format: "#%02x%02x%02x", color & 255, color >> 8 & 255, color >> 16 & 255)
-    }
-    private static func color(_ hex: String) -> UInt32 {
-        let rgb = UInt32(hex.dropFirst(), radix: 16) ?? 0
-        return (rgb >> 16 & 255) | (rgb & 0xff00) | (rgb & 255) << 16
     }
 }
 

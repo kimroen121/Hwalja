@@ -77,6 +77,43 @@ struct DialogTabs<Content: View>: NSViewRepresentable {
     }
 }
 
+/// One of a few choices, in AppKit's segmented control, set up like `DialogTabs`'s bar.
+struct DialogChoice: NSViewRepresentable {
+    @Binding var selection: Int
+    let titles: [String]
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = SheetSegments(labels: titles, trackingMode: .selectOne,
+                                    target: context.coordinator, action: #selector(Coordinator.choose(_:)))
+        control.setContentHuggingPriority(.required, for: .horizontal)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        if control.selectedSegment != selection { control.selectedSegment = selection }
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<Int>?
+        @objc func choose(_ control: NSSegmentedControl) { selection?.wrappedValue = control.selectedSegment }
+    }
+}
+
+/// Segments in a sheet, laid out again before they first draw, as `SheetTabView`.
+private final class SheetSegments: NSSegmentedControl {
+    private var settled = false
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        guard !settled, window != nil else { return }
+        settled = true
+        for index in 0..<segmentCount { setWidth(0, forSegment: index) }
+        invalidateIntrinsicContentSize()
+    }
+}
+
 /// A tab view in a sheet lays its tab names over one another until its tab bar is set up
 /// again once the sheet is up, so that is done before it first draws.
 private final class SheetTabView: NSTabView {
@@ -127,17 +164,19 @@ struct SpinField: View {
     @Binding var value: Double
     let unit: String
     let range: ClosedRange<Double>
+    var step = 1.0
+    var digits = 1
     var body: some View {
         HStack(spacing: 2) {
             TextField("", value: Binding { value } set: { value = min(max($0, range.lowerBound), range.upperBound) },
-                      format: .number.precision(.fractionLength(0...1)))
+                      format: .number.precision(.fractionLength(0...digits)))
                 .textFieldStyle(.plain)
                 .monospacedDigit()
                 .frame(width: 56)
             Text(unit).foregroundStyle(.secondary).frame(minWidth: 18, alignment: .leading).fixedSize()
             VStack(spacing: 0) {
-                StepArrow(symbol: "chevron.up") { value = min(value + 1, range.upperBound) }
-                StepArrow(symbol: "chevron.down") { value = max(value - 1, range.lowerBound) }
+                StepArrow(symbol: "chevron.up") { value = min(value + step, range.upperBound) }
+                StepArrow(symbol: "chevron.down") { value = max(value - step, range.lowerBound) }
             }
         }
         .padding(.leading, 6)
@@ -230,6 +269,74 @@ enum Swatches {
         }
         return image
     }
+    /// 선 끝 모양 0 (round) and 1 (flat), on a thick line.
+    static let lineEnds: [NSImage] = [NSBezierPath.LineCapStyle.round, .butt].map { cap in
+        NSImage(size: NSSize(width: 64, height: 12), flipped: true) { rect in
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: 8, y: rect.midY))
+            path.line(to: NSPoint(x: rect.maxX - 8, y: rect.midY))
+            path.lineWidth = 6
+            path.lineCapStyle = cap
+            NSColor.labelColor.setStroke()
+            path.stroke()
+            return true
+        }
+    }
+    /// 화살표 모양 0 (none) to 6 (arrow, lined arrow, concave arrow, diamond, circle, square),
+    /// at the start or end of a line, and the nine 화살표 크기 (width by length, small to large).
+    static let arrowStarts = (0...6).map { arrow($0, size: 4, start: true) }
+    static let arrowEnds = (0...6).map { arrow($0, size: 4, start: false) }
+    static let arrowStartSizes = (0...8).map { arrow(1, size: $0, start: true) }
+    static let arrowEndSizes = (0...8).map { arrow(1, size: $0, start: false) }
+    private static func arrow(_ kind: Int, size: Int, start: Bool) -> NSImage {
+        NSImage(size: NSSize(width: 64, height: 14), flipped: true) { rect in
+            let y = rect.midY, length = CGFloat(5 + 2 * (size % 3)), half = CGFloat(2 + 1.5 * Double(size / 3))
+            // Drawn pointing right at the end, mirrored for the start.
+            if start {
+                let flip = NSAffineTransform()
+                flip.translateX(by: rect.maxX, yBy: 0)
+                flip.scaleX(by: -1, yBy: 1)
+                flip.concat()
+            }
+            let tip = rect.maxX - 4
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: 4, y: y))
+            line.line(to: NSPoint(x: kind == 0 || kind == 2 ? tip : tip - length / 2, y: y))
+            line.lineWidth = 1
+            NSColor.labelColor.set()
+            line.stroke()
+            let head = NSBezierPath()
+            switch kind {
+            case 1, 3:
+                head.move(to: NSPoint(x: tip, y: y))
+                head.line(to: NSPoint(x: tip - length, y: y - half))
+                if kind == 3 { head.line(to: NSPoint(x: tip - length * 0.6, y: y)) }
+                head.line(to: NSPoint(x: tip - length, y: y + half))
+                head.close()
+                head.fill()
+            case 2:
+                head.move(to: NSPoint(x: tip - length, y: y - half))
+                head.line(to: NSPoint(x: tip, y: y))
+                head.line(to: NSPoint(x: tip - length, y: y + half))
+                head.stroke()
+            case 4:
+                head.move(to: NSPoint(x: tip, y: y))
+                head.line(to: NSPoint(x: tip - length / 2, y: y - half))
+                head.line(to: NSPoint(x: tip - length, y: y))
+                head.line(to: NSPoint(x: tip - length / 2, y: y + half))
+                head.close()
+                head.stroke()
+            case 5:
+                head.appendOval(in: NSRect(x: tip - length, y: y - half, width: length, height: 2 * half))
+                head.stroke()
+            case 6:
+                head.appendRect(NSRect(x: tip - length, y: y - half, width: length, height: 2 * half))
+                head.stroke()
+            default: break
+            }
+            return true
+        }
+    }
     /// 무늬 모양 0 (none) to 6: horizontal, vertical, back slant, slant, cross and slant cross.
     static let patterns: [NSImage] = (0...6).map { kind in
         NSImage(size: NSSize(width: 56, height: 12), flipped: true) { rect in
@@ -273,6 +380,14 @@ enum Swatches {
 
 /// Converts between `#rrggbb` and SwiftUI colors.
 enum HexColor {
+    /// The engine's 0x00bbggrr as `#rrggbb`, and back.
+    static func hex(bgr color: UInt32) -> String {
+        String(format: "#%02x%02x%02x", color & 255, color >> 8 & 255, color >> 16 & 255)
+    }
+    static func bgr(_ hex: String) -> UInt32 {
+        let rgb = UInt32(hex.dropFirst(), radix: 16) ?? 0
+        return (rgb >> 16 & 255) | (rgb & 0xff00) | (rgb & 255) << 16
+    }
     static func color(_ hex: String?) -> Color {
         let value = Int((hex ?? "#000000").dropFirst(), radix: 16) ?? 0
         return Color(.sRGB, red: Double(value >> 16 & 255) / 255, green: Double(value >> 8 & 255) / 255,

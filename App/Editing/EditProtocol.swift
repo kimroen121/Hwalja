@@ -436,6 +436,23 @@ struct ObjectProps: PartialFormat {
     /// 0x00bbggrr.
     var color: UInt32?
     var baseline: Int32?
+    /// Drawing objects' 선: color (0x00bbggrr), width (HWPUNIT), 종류 (0 none, 1 solid … 11),
+    /// 끝 모양 (0 round, 1 flat), and 화살표 shapes (0–6) and sizes (0–8).
+    var borderColor: UInt32?
+    var borderWidth: Int32?
+    var lineType: UInt32?
+    var lineEndShape: UInt32?
+    var arrowStart: UInt32?
+    var arrowEnd: UInt32?
+    var arrowStartSize: UInt32?
+    var arrowEndSize: UInt32?
+    /// Drawing objects' 채우기: none or solid (also gradient or image as read), 면 색 and 무늬 색,
+    /// 무늬 모양 (0 or −1 none, 1–6) and 투명도 (0 opaque – 255).
+    var fillType: String?
+    var fillBgColor: UInt32?
+    var fillPatColor: UInt32?
+    var fillPatType: Int32?
+    var fillAlpha: UInt32?
 }
 
 /// Cell properties (lengths in HWPUNIT); nil fields stay.

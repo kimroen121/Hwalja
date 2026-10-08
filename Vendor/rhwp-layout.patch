@@ -1,8 +1,7 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index 1d6474f..3317b8d 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -8,7 +8,7 @@ repository = "https://github.com/edwardkim/rhwp"
+@@ -8,7 +8,7 @@
  autotests = false
  
  [workspace]
@@ -12,10 +11,9 @@ index 1d6474f..3317b8d 100644
  resolver = "2"
  
 diff --git a/src/document_core/commands/document.rs b/src/document_core/commands/document.rs
-index 3aef940..3bf0e64 100644
 --- a/src/document_core/commands/document.rs
 +++ b/src/document_core/commands/document.rs
-@@ -269,6 +269,7 @@ impl DocumentCore {
+@@ -269,6 +269,7 @@
              hidden_header_footer: std::collections::HashSet::new(),
              file_name: String::new(),
              active_field: None,
@@ -23,7 +21,7 @@ index 3aef940..3bf0e64 100644
              para_offset: Vec::new(),
              source_format,
              hml_metadata,
-@@ -1232,7 +1233,14 @@ impl DocumentCore {
+@@ -1232,7 +1233,14 @@
      ///
      /// 이 함수는 `reflow_linesegs_on_demand` 에서만 사용되며, 자동 파싱 경로에는 영향 없음.
      fn needs_reflow_broadly(para: &crate::model::paragraph::Paragraph) -> bool {
@@ -40,7 +38,6 @@ index 3aef940..3bf0e64 100644
          }
          if Self::needs_line_seg_reflow(para, false) {
 diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
-index 763b020..a48ff3d 100644
 --- a/src/document_core/commands/footnote_ops.rs
 +++ b/src/document_core/commands/footnote_ops.rs
 @@ -1,9 +1,10 @@
@@ -56,10 +53,16 @@ index 763b020..a48ff3d 100644
  use crate::document_core::DocumentCore;
  use crate::error::HwpError;
  use crate::model::control::Control;
-@@ -452,6 +453,70 @@ impl DocumentCore {
-         Ok("{\"ok\":true}".to_string())
-     }
- 
+@@ -446,8 +447,72 @@
+         self.document.sections[section_idx].raw_stream = None;
+         self.rebuild_section(section_idx);
+         self.event_log.push(DocumentEvent::ParaFormatChanged {
++            section: section_idx,
++            para: para_idx,
++        });
++        Ok("{\"ok\":true}".to_string())
++    }
++
 +    /// 각주/미주 내부 문단의 글자 속성 조회.
 +    pub fn get_char_properties_in_footnote_native(
 +        &self,
@@ -116,18 +119,14 @@ index 763b020..a48ff3d 100644
 +        self.document.sections[section_idx].raw_stream = None;
 +        self.rebuild_section(section_idx);
 +        self.event_log.push(DocumentEvent::CharFormatChanged {
-+            section: section_idx,
-+            para: para_idx,
+             section: section_idx,
+             para: para_idx,
 +            start: start_offset,
 +            end: end_offset,
-+        });
-+        Ok("{\"ok\":true}".to_string())
-+    }
-+
-     /// 각주 문단 정보를 반환한다.
-     /// JSON: `{"ok":true,"paraCount":N,"textLen":N,"text":"..."}`
-     pub fn get_footnote_info_native(
-@@ -521,9 +586,10 @@ impl DocumentCore {
+         });
+         Ok("{\"ok\":true}".to_string())
+     }
+@@ -521,9 +586,10 @@
          text: &str,
      ) -> Result<String, HwpError> {
          let new_chars_count = text.chars().count();
@@ -140,13 +139,17 @@ index 763b020..a48ff3d 100644
          self.reflow_footnote_paragraph(section_idx, para_idx, control_idx, fn_para_idx);
  
 diff --git a/src/document_core/commands/object_ops/common.rs b/src/document_core/commands/object_ops/common.rs
-index e386e2a..2197b58 100644
 --- a/src/document_core/commands/object_ops/common.rs
 +++ b/src/document_core/commands/object_ops/common.rs
-@@ -362,9 +362,27 @@ impl crate::document_core::DocumentCore {
-         para_idx: usize,
-         char_offset: usize,
-         start_num: u16,
+@@ -357,14 +357,32 @@
+ 
+ impl crate::document_core::DocumentCore {
+     pub fn insert_new_number_native(
++        &mut self,
++        section_idx: usize,
++        para_idx: usize,
++        char_offset: usize,
++        start_num: u16,
 +    ) -> Result<String, crate::error::HwpError> {
 +        self.insert_new_number_of_native(
 +            section_idx,
@@ -159,12 +162,12 @@ index e386e2a..2197b58 100644
 +
 +    /// 새 번호로 시작 of any 번호 종류 (쪽·그림·표·수식·각주·미주).
 +    pub fn insert_new_number_of_native(
-+        &mut self,
-+        section_idx: usize,
-+        para_idx: usize,
-+        char_offset: usize,
+         &mut self,
+         section_idx: usize,
+         para_idx: usize,
+         char_offset: usize,
 +        number_type: crate::model::control::AutoNumberType,
-+        start_num: u16,
+         start_num: u16,
      ) -> Result<String, crate::error::HwpError> {
          use crate::error::HwpError;
 -        use crate::model::control::{AutoNumberType, Control, NewNumber};
@@ -172,7 +175,7 @@ index e386e2a..2197b58 100644
  
          if section_idx >= self.document.sections.len() {
              return Err(HwpError::RenderError(format!(
-@@ -380,7 +398,7 @@ impl crate::document_core::DocumentCore {
+@@ -380,7 +398,7 @@
          }
  
          let new_number = NewNumber {
@@ -182,10 +185,9 @@ index e386e2a..2197b58 100644
          };
  
 diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_core/commands/object_ops/equation.rs
-index a52e940..789974c 100644
 --- a/src/document_core/commands/object_ops/equation.rs
 +++ b/src/document_core/commands/object_ops/equation.rs
-@@ -259,7 +259,9 @@ impl DocumentCore {
+@@ -259,7 +259,9 @@
      ) -> Result<String, HwpError> {
          use crate::renderer::equation::layout::EqLayout;
          use crate::renderer::equation::parser::EqParser;
@@ -196,7 +198,7 @@ index a52e940..789974c 100644
          use crate::renderer::equation::tokenizer::tokenize;
  
          let font_size_px = crate::renderer::hwpunit_to_px(font_size_hwpunit as i32, self.dpi);
-@@ -272,8 +274,8 @@ impl DocumentCore {
+@@ -272,8 +274,8 @@
          let w = layout_box.width;
          let h = layout_box.height;
          let svg = format!(
@@ -207,24 +209,23 @@ index a52e940..789974c 100644
          );
          Ok(svg)
      }
-@@ -355,6 +357,12 @@ impl DocumentCore {
+@@ -353,6 +355,12 @@
+             for offset in para.char_offsets.iter_mut() {
+                 if *offset >= threshold {
                      *offset -= 8;
-                 }
-             }
++                }
++            }
 +            // HwpStudio: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
-+                }
-+            }
+                 }
+             }
          }
- 
-         para.controls.remove(control_idx);
 diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_core/commands/object_ops/picture.rs
-index 7209499..081d20a 100644
 --- a/src/document_core/commands/object_ops/picture.rs
 +++ b/src/document_core/commands/object_ops/picture.rs
-@@ -1236,16 +1236,22 @@ impl DocumentCore {
+@@ -1236,16 +1236,22 @@
                          number_type: crate::model::control::AutoNumberType::Picture,
                          ..Default::default()
                      };
@@ -253,7 +254,7 @@ index 7209499..081d20a 100644
                      // attr bit 29: 캡션 존재 플래그 (한컴 호환성)
                      pic.common.attr |= 1 << 29;
                  }
-@@ -1366,6 +1372,12 @@ impl DocumentCore {
+@@ -1366,6 +1372,12 @@
                      *offset -= 8;
                  }
              }
@@ -267,40 +268,38 @@ index 7209499..081d20a 100644
  
          // 컨트롤 및 ctrl_data_record 제거
 diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/commands/object_ops/shape.rs
-index 354a416..6ef3628 100644
 --- a/src/document_core/commands/object_ops/shape.rs
 +++ b/src/document_core/commands/object_ops/shape.rs
-@@ -1063,6 +1063,12 @@ impl DocumentCore {
+@@ -1061,6 +1061,12 @@
+             for offset in para.char_offsets.iter_mut() {
+                 if *offset >= threshold {
                      *offset -= 8;
-                 }
-             }
++                }
++            }
 +            // HwpStudio: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
-+                }
-+            }
-         }
- 
-         para.controls.remove(control_idx);
-@@ -2184,6 +2190,12 @@ impl DocumentCore {
-                         *offset -= 8;
-                     }
                  }
+             }
+         }
+@@ -2182,6 +2188,12 @@
+                 for offset in para.char_offsets.iter_mut() {
+                     if *offset >= threshold {
+                         *offset -= 8;
++                    }
++                }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
-+                    }
-+                }
+                     }
+                 }
              }
- 
-             para.controls.remove(ci);
 diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/commands/object_ops/table.rs
-index ba59acd..2df1ff2 100644
 --- a/src/document_core/commands/object_ops/table.rs
 +++ b/src/document_core/commands/object_ops/table.rs
-@@ -1431,7 +1431,11 @@ impl DocumentCore {
+@@ -1431,7 +1431,11 @@
                      inner_control_idx
                  )));
              }
@@ -313,7 +312,7 @@ index ba59acd..2df1ff2 100644
                  return Err(HwpError::RenderError(
                      "지정된 셀 내 컨트롤이 그림이 아닙니다".to_string(),
                  ));
-@@ -1482,6 +1486,12 @@ impl DocumentCore {
+@@ -1482,6 +1486,12 @@
                          *offset -= 8;
                      }
                  }
@@ -327,10 +326,9 @@ index ba59acd..2df1ff2 100644
  
              para.controls.remove(inner_control_idx);
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
-index 53228b1..242d8cf 100644
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
-@@ -1259,7 +1259,7 @@ impl DocumentCore {
+@@ -1259,7 +1259,7 @@
          Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
      }
  
@@ -339,7 +337,7 @@ index 53228b1..242d8cf 100644
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2783,7 +2783,7 @@ impl DocumentCore {
+@@ -2783,7 +2783,7 @@
      }
  
      /// 표 속성을 조회한다 (네이티브).
@@ -348,7 +346,7 @@ index 53228b1..242d8cf 100644
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2823,34 +2823,34 @@ impl DocumentCore {
+@@ -2823,34 +2823,34 @@
          let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
              u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
          } else {
@@ -389,7 +387,7 @@ index 53228b1..242d8cf 100644
          };
  
          // 캡션 정보
-@@ -2911,12 +2911,12 @@ impl DocumentCore {
+@@ -2911,12 +2911,12 @@
          let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
              i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
          } else {
@@ -404,7 +402,7 @@ index 53228b1..242d8cf 100644
          };
          let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
          let allow_overlap = (table.attr >> 14) & 0x01 != 0;
-@@ -3155,6 +3155,16 @@ impl DocumentCore {
+@@ -3155,6 +3155,16 @@
          }
  
          // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
@@ -421,24 +419,23 @@ index 53228b1..242d8cf 100644
          if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
              if let Some(v) = json_i16(json, "outerLeft") {
                  table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
-@@ -3666,6 +3676,12 @@ impl DocumentCore {
+@@ -3664,6 +3674,12 @@
+                 for offset in para.char_offsets.iter_mut() {
+                     if *offset >= threshold {
                          *offset -= 8;
-                     }
-                 }
++                    }
++                }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
-+                    }
-+                }
+                     }
+                 }
              }
- 
-             // 컨트롤 및 대응하는 ctrl_data_record 제거
 diff --git a/src/document_core/commands/text_editing.rs b/src/document_core/commands/text_editing.rs
-index 0f61fa9..891d1e3 100644
 --- a/src/document_core/commands/text_editing.rs
 +++ b/src/document_core/commands/text_editing.rs
-@@ -1424,8 +1424,9 @@ impl DocumentCore {
+@@ -1424,8 +1424,9 @@
              None,
              char_offset,
          );
@@ -449,7 +446,7 @@ index 0f61fa9..891d1e3 100644
              keep_inactive_field_start_outside(para, &before_insertions, new_chars_count);
              keep_inactive_field_end_outside(para, &outside_insertions, new_chars_count);
              if has_clickhere_field_range(para) {
-@@ -1801,6 +1802,7 @@ impl DocumentCore {
+@@ -1801,6 +1802,7 @@
          paginate_immediately: bool,
      ) -> Result<String, HwpError> {
          let new_chars_count = text.chars().count();
@@ -457,7 +454,7 @@ index 0f61fa9..891d1e3 100644
          let focused_target_is_table_cell = !paginate_immediately
              && is_focused_table_cell_target(
                  &self.document,
-@@ -1868,7 +1870,7 @@ impl DocumentCore {
+@@ -1868,7 +1870,7 @@
              char_offset,
          );
          if new_chars_count > 0 {
@@ -467,10 +464,9 @@ index 0f61fa9..891d1e3 100644
              keep_inactive_field_end_outside(cell_para, &outside_insertions, new_chars_count);
              if has_clickhere_field_range(cell_para) {
 diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
-index 0639884..0bb19eb 100644
 --- a/src/document_core/mod.rs
 +++ b/src/document_core/mod.rs
-@@ -169,13 +169,13 @@ pub struct DocumentCore {
+@@ -169,13 +169,13 @@
      /// 새 컨트롤 복사 시 0 으로 리셋, 붙여넣기마다 +1 하여 위치 오프셋 누적(한컴 정합).
      pub(crate) paste_cascade_count: u32,
      /// 문단부호(¶) 표시 여부
@@ -487,7 +483,7 @@ index 0639884..0bb19eb 100644
      /// 잘림 보기 (body/셀 클리핑 활성화 여부)
      pub(crate) clip_enabled: bool,
      /// 디버그 오버레이 표시 여부 (문단/표 경계 + pi/ci 라벨)
-@@ -256,6 +256,8 @@ pub struct DocumentCore {
+@@ -256,6 +256,8 @@
      /// 현재 활성 필드 위치 (커서가 진입한 누름틀 — 안내문 렌더링 스킵용)
      /// (section_idx, para_idx, field_control_idx)
      pub(crate) active_field: Option<ActiveFieldInfo>,
@@ -496,7 +492,7 @@ index 0639884..0bb19eb 100644
      /// 구역별 문단 인덱스 오프셋 (삽입=+N, 삭제=-N, 페이지네이션 수렴 감지용)
      /// paginate() 후 리셋.
      pub(crate) para_offset: Vec<i32>,
-@@ -447,6 +449,12 @@ impl DocumentCore {
+@@ -447,6 +449,12 @@
      }
  
      /// 빈 문서를 생성한다 (테스트/미리보기용).
@@ -509,7 +505,7 @@ index 0639884..0bb19eb 100644
      pub fn new_empty() -> Self {
          DocumentCore {
              document: Document::default(),
-@@ -493,6 +501,7 @@ impl DocumentCore {
+@@ -493,6 +501,7 @@
              hidden_header_footer: std::collections::HashSet::new(),
              file_name: String::new(),
              active_field: None,
@@ -518,10 +514,9 @@ index 0639884..0bb19eb 100644
              source_format: crate::parser::FileFormat::Hwp,
              hml_metadata: None,
 diff --git a/src/document_core/queries/bookmark_query.rs b/src/document_core/queries/bookmark_query.rs
-index a23e5b7..1384577 100644
 --- a/src/document_core/queries/bookmark_query.rs
 +++ b/src/document_core/queries/bookmark_query.rs
-@@ -88,11 +88,10 @@ impl DocumentCore {
+@@ -88,11 +88,10 @@
                  .insert(insert_idx, Some(ctrl_data));
          }
  
@@ -537,7 +532,7 @@ index a23e5b7..1384577 100644
  
          // 원본 스트림 무효화 — serialize_section 은 raw_stream 이 있으면 IR 을 무시하고
          // 원본 바이트를 그대로 반환하므로(serializer/body_text.rs), 비우지 않으면 방금
-@@ -316,30 +315,6 @@ fn find_control_insert_index(
+@@ -316,30 +315,6 @@
      para.controls.len()
  }
  
@@ -569,10 +564,9 @@ index a23e5b7..1384577 100644
  ///
  /// 구조: ps_id(2) + count(2) + dummy(2) + item_id(2) + item_type(2) + name_len(2) + name(UTF-16LE)
 diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries/cursor_nav.rs
-index 9352fff..0df9b4d 100644
 --- a/src/document_core/queries/cursor_nav.rs
 +++ b/src/document_core/queries/cursor_nav.rs
-@@ -127,7 +127,7 @@ pub(crate) fn plan_selection_pages(
+@@ -127,7 +127,7 @@
  }
  
  impl DocumentCore {
@@ -581,7 +575,7 @@ index 9352fff..0df9b4d 100644
          &self,
          section_idx: usize,
          para_idx: usize,
-@@ -177,7 +177,7 @@ impl DocumentCore {
+@@ -177,7 +177,7 @@
      }
  
      /// 셀 내 문단의 줄 정보를 반환한다 (네이티브).
@@ -590,7 +584,7 @@ index 9352fff..0df9b4d 100644
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -367,7 +367,7 @@ impl DocumentCore {
+@@ -367,7 +367,7 @@
      }
  
      /// 표의 행/열/셀 수를 반환한다 (네이티브).
@@ -599,7 +593,7 @@ index 9352fff..0df9b4d 100644
          &self,
          sec: usize,
          para: usize,
-@@ -1753,7 +1753,7 @@ impl DocumentCore {
+@@ -1753,7 +1753,7 @@
      ///
      /// cell_ctx: Some((ppi, ci, cei)) 면 셀 내부, None 이면 본문.
      /// start/end_para_idx: 셀 내부일 때는 cellParaIndex.
@@ -609,10 +603,9 @@ index 9352fff..0df9b4d 100644
          section_idx: usize,
          start_para_idx: usize,
 diff --git a/src/document_core/queries/cursor_rect.rs b/src/document_core/queries/cursor_rect.rs
-index 912aa12..83d0fc0 100644
 --- a/src/document_core/queries/cursor_rect.rs
 +++ b/src/document_core/queries/cursor_rect.rs
-@@ -216,6 +216,7 @@ fn note_number_format_from_hwp_code(code: u8) -> crate::renderer::NumberFormat {
+@@ -216,6 +216,7 @@
          4 => crate::renderer::NumberFormat::LatinUpper,
          5 => crate::renderer::NumberFormat::LatinLower,
          8 => crate::renderer::NumberFormat::HangulGaNaDa,
@@ -621,10 +614,9 @@ index 912aa12..83d0fc0 100644
          13 => crate::renderer::NumberFormat::HanjaNumber,
          _ => crate::renderer::NumberFormat::Digit,
 diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queries/hwpctrl_sets.rs
-index db57b8f..26fb6f9 100644
 --- a/src/document_core/queries/hwpctrl_sets.rs
 +++ b/src/document_core/queries/hwpctrl_sets.rs
-@@ -15,7 +15,7 @@ use crate::document_core::DocumentCore;
+@@ -15,7 +15,7 @@
  use crate::error::HwpError;
  use crate::model::control::{AutoNumber, AutoNumberType, Control};
  use crate::model::page::ColumnDef;
@@ -633,7 +625,7 @@ index db57b8f..26fb6f9 100644
  use crate::model::shape::{Caption, ShapeObject, TextBox};
  use crate::model::style::{Alignment, HeadType, LineSpacingType, UnderlineType};
  
-@@ -1646,9 +1646,13 @@ impl DocumentCore {
+@@ -1646,9 +1646,13 @@
              .paragraphs
              .get_mut(para_idx)
              .ok_or_else(|| HwpError::InvalidField(format!("문단 {} 없음", para_idx)))?;
@@ -647,7 +639,7 @@ index db57b8f..26fb6f9 100644
          let Some(drawing) = shape.drawing_mut() else {
              return Ok(r#"{"ok":false,"reason":"글상자를 담을 수 없는 개체다"}"#.to_string());
          };
-@@ -1656,9 +1660,41 @@ impl DocumentCore {
+@@ -1656,9 +1660,41 @@
              if drawing.text_box.is_some() {
                  false
              } else {
@@ -691,7 +683,7 @@ index db57b8f..26fb6f9 100644
                  });
                  true
              }
-@@ -1667,6 +1703,7 @@ impl DocumentCore {
+@@ -1667,6 +1703,7 @@
          };
          if changed {
              section.raw_stream = None;
@@ -700,10 +692,9 @@ index db57b8f..26fb6f9 100644
          Ok(format!("{{\"ok\":{}}}", changed))
      }
 diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
-index 7bfcef5..e71604d 100644
 --- a/src/model/paragraph.rs
 +++ b/src/model/paragraph.rs
-@@ -848,6 +848,17 @@ impl Paragraph {
+@@ -848,6 +848,17 @@
      /// 다를 수 있으므로, 삽입 뒤 위치를 알려야 하는 호출부는 요청 값이 아니라 이 값을
      /// 기준으로 삼는다 (Task #3216).
      pub fn insert_text_at(&mut self, char_offset: usize, new_text: &str) -> usize {
@@ -721,7 +712,7 @@ index 7bfcef5..e71604d 100644
          if new_text.is_empty() {
              return char_offset.min(self.text.chars().count());
          }
-@@ -863,7 +874,8 @@ impl Paragraph {
+@@ -863,7 +874,8 @@
          // 마지막 문자 + 후행 컨트롤 갭을 포함한 값으로 계산
          let effective_char_offset = char_offset.min(text_len);
          let control_positions = self.control_text_positions();
@@ -731,7 +722,7 @@ index 7bfcef5..e71604d 100644
              && self
                  .controls
                  .iter()
-@@ -897,6 +909,14 @@ impl Paragraph {
+@@ -897,6 +909,14 @@
              // 후행 컨트롤 수 = char_offset - text_len
              let trailing_ctrl_count = (char_offset - text_len) as u32;
              last_char_end + trailing_ctrl_count * 8
@@ -747,10 +738,9 @@ index 7bfcef5..e71604d 100644
              if effective_char_offset == 0 {
                  0
 diff --git a/src/renderer/composer.rs b/src/renderer/composer.rs
-index c455a55..aa4e690 100644
 --- a/src/renderer/composer.rs
 +++ b/src/renderer/composer.rs
-@@ -2490,6 +2490,17 @@ pub fn recompose_cell_lines_in_frame(
+@@ -2490,6 +2490,17 @@
          // is not a source record to reproduce, so clear it on an isolated copy.
          let mut rebuild_input = para.clone();
          rebuild_input.line_segs.clear();
@@ -769,13 +759,14 @@ index c455a55..aa4e690 100644
              composed,
              &rebuild_input,
 diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
-index 4b1109c..4472819 100644
 --- a/src/renderer/composer/line_breaking.rs
 +++ b/src/renderer/composer/line_breaking.rs
-@@ -2481,6 +2481,39 @@ fn apply_inline_control_line_height(seg: &mut LineSeg, height_hwp: i32) {
+@@ -2479,8 +2479,41 @@
+         seg.text_height = height_hwp;
+         seg.baseline_distance = baseline_distance_hwp(height_hwp);
      }
- }
- 
++}
++
 +/// HwpStudio: grows a reflowed line for an object in it. An equation stands on its own
 +/// baseline (`baseline` percent of its height down), so the line takes the larger of the
 +/// text's and the equation's parts above and below the baseline; other objects keep
@@ -789,8 +780,8 @@ index 4b1109c..4472819 100644
 +    seg.line_height = ascent + descent;
 +    seg.text_height = ascent + descent;
 +    seg.baseline_distance = ascent;
-+}
-+
+ }
+ 
 +/// HwpStudio: each object in the line of a paragraph with its height and, for an equation,
 +/// its baseline from the top.
 +fn inline_control_metrics_hwp(para: &Paragraph) -> Vec<(i32, Option<i32>)> {
@@ -812,7 +803,7 @@ index 4b1109c..4472819 100644
  fn apply_inline_control_frame_height(metrics: &mut FrameRowMetrics, height_hwp: i32) {
      if height_hwp > metrics.line_height {
          metrics.line_height = height_hwp;
-@@ -3469,30 +3502,38 @@ fn reflow_line_segs_impl(
+@@ -3469,30 +3502,38 @@
                  }
                  Some((start, ctrl))
              })
@@ -860,7 +851,7 @@ index 4b1109c..4472819 100644
                  line_specs.into_iter().enumerate()
              {
                  let mut seg = make_line_seg(start_pos, 0.0);
-@@ -3512,7 +3553,9 @@ fn reflow_line_segs_impl(
+@@ -3512,7 +3553,9 @@
                          seg.tag
                      };
                  }
@@ -871,7 +862,7 @@ index 4b1109c..4472819 100644
                  new_line_segs.push(seg);
              }
  
-@@ -3535,8 +3578,8 @@ fn reflow_line_segs_impl(
+@@ -3535,8 +3578,8 @@
              if let Some(template) = orig.as_ref() {
                  seg.vertical_pos = template.vertical_pos;
              }
@@ -882,7 +873,37 @@ index 4b1109c..4472819 100644
              }
              para.replace_line_segs(vec![seg]);
          }
-@@ -3754,16 +3797,15 @@ fn reflow_line_segs_impl(
+@@ -3738,6 +3781,22 @@
+         .flatten();
+     let preserved_prefix_len = preserved_prefix.len();
+     let mut new_line_segs: Vec<LineSeg> = preserved_prefix;
++    let apply_reflow_indent_tag = |seg: &mut LineSeg, visual_line_idx: usize| {
++        // `make_line_seg` deliberately starts from the closest stored row, but
++        // indentation is a property of the freshly projected physical row.
++        // Keeping the stored bit after paragraph formatting makes the renderer
++        // treat that stale row as authoritative and suppress the new indent.
++        seg.tag &= !LineSeg::TAG_INDENTATION;
++        if crate::renderer::equation_tac_flow::paragraph_line_indent(
++            indent_px,
++            visual_line_idx,
++        )
++        .abs()
++            > f64::EPSILON
++        {
++            seg.tag |= LineSeg::TAG_INDENTATION;
++        }
++    };
+     for (line_idx, lb) in line_breaks.iter().enumerate() {
+         let utf16_start = if new_line_segs.is_empty() {
+             0 // 첫 번째 줄의 text_start는 항상 0 (문단 시작)
+@@ -3749,21 +3808,22 @@
+         } else {
+             12.0
+         };
++        let visual_line_idx = new_line_segs.len();
+         let mut text_seg = make_line_seg(utf16_start, fs);
++        apply_reflow_indent_tag(&mut text_seg, visual_line_idx);
+         if forced_inline_line.is_some_and(|(position, _)| position == lb.start_idx) {
              let (_, height_hwp) = forced_inline_line.expect("checked inline control");
              apply_inline_control_line_height(&mut text_seg, height_hwp);
          }
@@ -908,7 +929,15 @@ index 4b1109c..4472819 100644
          }
          new_line_segs.push(text_seg);
  
-@@ -3788,10 +3830,37 @@ fn reflow_line_segs_impl(
+@@ -3778,6 +3838,7 @@
+         if control_after_text {
+             let (position, height_hwp) = forced_inline_line.expect("checked inline control");
+             let mut control_seg = make_line_seg(char_index_to_utf16_offset(para, position), fs);
++            apply_reflow_indent_tag(&mut control_seg, new_line_segs.len());
+             apply_inline_control_line_height(&mut control_seg, height_hwp);
+             new_line_segs.push(control_seg);
+         }
+@@ -3788,12 +3849,39 @@
      }
  
      if forced_inline_line.is_none() && inline_controls.is_empty() {
@@ -921,8 +950,8 @@ index 4b1109c..4472819 100644
 +                for (height_hwp, baseline_hwp) in inline_control_metrics_hwp(para) {
 +                    apply_inline_control_line_metrics(seg, height_hwp, baseline_hwp);
 +                }
-+            }
-+        }
+             }
+         }
 +    } else if forced_inline_line.is_none() {
 +        // HwpStudio: 마지막 글자 뒤에 놓인 개체(`, ` 뒤 수식 등)는 `FlowInlineControl` 에
 +        // 들지 않지만 마지막 줄에 서므로 그 줄을 키운다.
@@ -945,14 +974,15 @@ index 4b1109c..4472819 100644
 +        if let Some(seg) = new_line_segs.last_mut() {
 +            for (height_hwp, baseline_hwp) in trailing {
 +                apply_inline_control_line_metrics(seg, height_hwp, baseline_hwp);
-             }
-         }
++            }
++        }
      }
+ 
+     // vertical_pos 누적 계산 (각 줄의 문단 내 Y 오프셋)
 diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
-index 8bcc337..0972cdf 100644
 --- a/src/renderer/equation/ast.rs
 +++ b/src/renderer/equation/ast.rs
-@@ -80,6 +80,13 @@ pub enum EqNode {
+@@ -80,6 +80,13 @@
          sup: Option<Box<EqNode>>,
      },
  
@@ -967,10 +997,9 @@ index 8bcc337..0972cdf 100644
      Limit {
          is_upper: bool, // Lim vs lim
 diff --git a/src/renderer/equation/dispatch.rs b/src/renderer/equation/dispatch.rs
-index 648ce9f..a5b0cbc 100644
 --- a/src/renderer/equation/dispatch.rs
 +++ b/src/renderer/equation/dispatch.rs
-@@ -38,6 +38,8 @@ pub(crate) enum EqCommandClass {
+@@ -38,6 +38,8 @@
      BigOperator,
      /// `lim`/`Lim`. 원문 대소문자를 구분한다.
      Limit,
@@ -979,7 +1008,7 @@ index 648ce9f..a5b0cbc 100644
      /// `MATRIX`/`PMATRIX`/`BMATRIX`/`DMATRIX`. `VMATRIX` 는 여기 넣지 않는다.
      Matrix,
      /// 조건식.
-@@ -94,6 +96,7 @@ pub(crate) fn classify_command(cmd: &str) -> EqCommandClass {
+@@ -94,6 +96,7 @@
          }
          "OVERSET" | "STACKREL" => return EqCommandClass::Overset,
          "UNDERSET" => return EqCommandClass::Underset,
@@ -988,10 +1017,9 @@ index 648ce9f..a5b0cbc 100644
          "END" => return EqCommandClass::EndEnv,
          "SQRT" | "ROOT" => return EqCommandClass::Sqrt,
 diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
-index d8ecae2..1662689 100644
 --- a/src/renderer/equation/layout.rs
 +++ b/src/renderer/equation/layout.rs
-@@ -165,12 +165,12 @@ pub(crate) struct IntegralGeom {
+@@ -165,12 +165,12 @@
  pub(crate) fn integral_geom(fs: f64) -> IntegralGeom {
      let h = fs * INTEGRAL_SCALE;
      IntegralGeom {
@@ -1010,10 +1038,11 @@ index d8ecae2..1662689 100644
      }
  }
  
-@@ -193,6 +193,31 @@ pub(crate) const AXIS_HEIGHT: f64 = 0.25;
+@@ -192,7 +192,32 @@
+ pub(crate) const AXIS_HEIGHT: f64 = 0.25;
  /// 텍스트 기본 baseline 비율 (상단에서 baseline까지)
  const TEXT_BASELINE: f64 = 0.8;
- 
++
 +/// HwpStudio: 아래첨자 기준선이 밑글자 기준선보다 내려가는 거리 (글자 크기 배수).
 +const SUB_DROP: f64 = 0.25;
 +/// HwpStudio: 관계 기호 둘레 (글자 크기 배수, 한쪽).
@@ -1026,7 +1055,7 @@ index d8ecae2..1662689 100644
 +    Relation,
 +    Binary,
 +}
-+
+ 
 +/// HwpStudio: 둘레를 띄우는 기호의 갈래.
 +fn operator_class(text: &str) -> Option<OperatorClass> {
 +    match text {
@@ -1042,7 +1071,7 @@ index d8ecae2..1662689 100644
  impl EqLayout {
      pub fn new(font_size: f64) -> Self {
          Self { font_size }
-@@ -220,6 +245,7 @@ impl EqLayout {
+@@ -220,6 +245,7 @@
              EqNode::SubSup { base, sub, sup } => self.layout_subsup(base, sub, sup, fs),
              EqNode::BigOp { symbol, sub, sup } => self.layout_big_op(symbol, sub, sup, fs),
              EqNode::Limit { is_upper, sub } => self.layout_limit(*is_upper, sub, fs),
@@ -1050,7 +1079,7 @@ index d8ecae2..1662689 100644
              EqNode::Matrix { rows, style } => self.layout_matrix(rows, *style, fs),
              EqNode::Cases { rows } => self.layout_cases(rows, fs),
              EqNode::EqAlign { rows } => self.layout_eqalign(rows, fs),
-@@ -278,6 +304,25 @@ impl EqLayout {
+@@ -278,6 +304,25 @@
              };
          }
  
@@ -1076,7 +1105,7 @@ index d8ecae2..1662689 100644
          // 기준선 정렬: 가장 높은 baseline과 가장 깊은 descent
          let max_ascent = boxes.iter().map(|b| b.baseline).fold(0.0f64, f64::max);
          let max_descent = boxes
-@@ -335,9 +380,9 @@ impl EqLayout {
+@@ -335,9 +380,9 @@
  
      fn layout_symbol(&self, text: &str, fs: f64) -> LayoutBox {
          let w = estimate_text_width(text, fs, false);
@@ -1089,7 +1118,7 @@ index d8ecae2..1662689 100644
          } else {
              fs * 0.05
          };
-@@ -361,7 +406,7 @@ impl EqLayout {
+@@ -361,7 +406,7 @@
                  x: 0.0,
                  y: 0.0,
                  // Task #1233: 첨자 없는 bare 적분도 뒤 피연산자와 trailing 간격 유지.
@@ -1098,7 +1127,7 @@ index d8ecae2..1662689 100644
                  height: op_fs,
                  baseline: op_fs * 0.7, // 적분 기호 baseline: 기호 높이의 70%
                  kind: LayoutKind::MathSymbol(text.to_string()),
-@@ -467,7 +512,8 @@ impl EqLayout {
+@@ -467,7 +512,8 @@
      fn layout_sqrt(&self, index: &Option<Box<EqNode>>, body: &EqNode, fs: f64) -> LayoutBox {
          let b = self.layout_node(body, fs);
          let pad = fs * SQRT_PAD;
@@ -1108,7 +1137,7 @@ index d8ecae2..1662689 100644
          let body_w = b.width + pad;
          let body_h = b.height + pad * 2.0;
  
-@@ -549,7 +595,8 @@ impl EqLayout {
+@@ -549,7 +595,8 @@
          let b = self.layout_node(base, fs);
          let s = self.layout_node(sub, fs * SCRIPT_SCALE);
  
@@ -1118,7 +1147,7 @@ index d8ecae2..1662689 100644
          let total_h = (b.height).max(sub_shift + s.height);
  
          let mut base_box = b;
-@@ -597,7 +644,10 @@ impl EqLayout {
+@@ -597,7 +644,10 @@
  
              let mut base_box = b;
              base_box.x = 0.0;
@@ -1130,7 +1159,7 @@ index d8ecae2..1662689 100644
  
              // 글리프 기준 첨자 세로 위치(박스 상단 원점) — 컴팩트(글리프 상·하단 근처).
              let sup_dy = geom.top_y - sp.height * 0.30; // 상한: 최상단 근처
-@@ -608,11 +658,12 @@ impl EqLayout {
+@@ -608,11 +658,12 @@
              base_box.y = head;
  
              let mut sup_box = sp;
@@ -1145,7 +1174,7 @@ index d8ecae2..1662689 100644
              sub_box.y = base_box.y + sub_dy;
  
              let right = (sup_box.x + sup_box.width)
-@@ -758,6 +809,9 @@ impl EqLayout {
+@@ -758,6 +809,9 @@
      }
  
      /// 적분 기호 레이아웃: 큰 기호 + 오른쪽 위/아래 첨자 (nolimits 스타일)
@@ -1155,7 +1184,7 @@ index d8ecae2..1662689 100644
      fn layout_integral(
          &self,
          symbol: &str,
-@@ -765,48 +819,46 @@ impl EqLayout {
+@@ -765,52 +819,109 @@
          sup: &Option<Box<EqNode>>,
          fs: f64,
      ) -> LayoutBox {
@@ -1229,10 +1258,11 @@ index d8ecae2..1662689 100644
              kind: LayoutKind::BigOp {
                  symbol: symbol.to_string(),
                  sub: sub_laid.map(Box::new),
-@@ -815,6 +867,65 @@ impl EqLayout {
-         }
-     }
- 
+                 sup: sup_laid.map(Box::new),
++            },
++        }
++    }
++
 +    /// HwpStudio: 밑글자를 가운데, 첨자를 작게 그 위·아래에 (빈 첨자는 자리를 차지하지 않는다).
 +    fn layout_under_over(
 +        &self,
@@ -1288,14 +1318,10 @@ index d8ecae2..1662689 100644
 +                arrow: Box::new(base_box),
 +                over: Box::new(over_box.unwrap_or(empty)),
 +                under: under_box.map(Box::new),
-+            },
-+        }
-+    }
-+
-     fn layout_limit(&self, is_upper: bool, sub: &Option<Box<EqNode>>, fs: f64) -> LayoutBox {
-         let name = if is_upper { "Lim" } else { "lim" };
-         let name_w = estimate_text_width(name, fs, false);
-@@ -994,30 +1105,35 @@ impl EqLayout {
+             },
+         }
+     }
+@@ -994,30 +1105,35 @@
          // 아래 내용
          let mut under_box = under.as_ref().map(|u| self.layout_node(u, small_fs));
  
@@ -1341,7 +1367,7 @@ index d8ecae2..1662689 100644
          } else {
              y -= gap; // under가 없으면 마지막 gap 제거
          }
-@@ -1025,9 +1141,9 @@ impl EqLayout {
+@@ -1025,9 +1141,9 @@
          LayoutBox {
              x: 0.0,
              y: 0.0,
@@ -1353,7 +1379,7 @@ index d8ecae2..1662689 100644
              kind: LayoutKind::Rel {
                  arrow: Box::new(arrow_box),
                  over: Box::new(over_box),
-@@ -1124,8 +1240,15 @@ impl EqLayout {
+@@ -1124,8 +1240,15 @@
              fs * 0.333
          };
  
@@ -1371,10 +1397,12 @@ index d8ecae2..1662689 100644
  
          let mut body_box = b;
          body_box.x = left_w + pad;
-@@ -1214,28 +1337,87 @@ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
+@@ -1212,30 +1335,89 @@
+ /// 적분 기호 여부 판별
+ pub(crate) fn is_integral_symbol(symbol: &str) -> bool {
      matches!(symbol, "∫" | "∬" | "∭" | "∮" | "∯" | "∰")
- }
- 
++}
++
 +/// HwpStudio: 적분 기호의 줄기 수와 고리(선적분) 여부.
 +pub(crate) fn integral_strokes(symbol: &str) -> (usize, bool) {
 +    match symbol {
@@ -1385,7 +1413,7 @@ index d8ecae2..1662689 100644
 +        "∰" => (3, true),
 +        _ => (1, false),
 +    }
-+}
+ }
 +/// HwpStudio: 겹친 줄기 사이 (글자 크기 배수).
 +pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.22;
 +/// HwpStudio: the width of the font's `delimiter` grown to `height` (as the renderers draw
@@ -1398,7 +1426,7 @@ index d8ecae2..1662689 100644
 +    let scale = fs / super::stix::units_per_em();
 +    Some(super::stix::stretched(c, true, height / scale)?.width() * scale)
 +}
-+
+ 
 +/// HwpStudio: STIX Two Math's upright display integral for `symbol`, drawn to the
 +/// integral's box (`integral_geom`).
 +pub(crate) fn integral_glyph(symbol: &str) -> Option<super::stix::Shape> {
@@ -1475,10 +1503,9 @@ index d8ecae2..1662689 100644
  }
  
 diff --git a/src/renderer/equation/mod.rs b/src/renderer/equation/mod.rs
-index f546561..546e967 100644
 --- a/src/renderer/equation/mod.rs
 +++ b/src/renderer/equation/mod.rs
-@@ -13,6 +13,7 @@ pub mod canvas_render;
+@@ -13,6 +13,7 @@
  pub(crate) mod dispatch;
  pub mod layout;
  pub mod parser;
@@ -1487,13 +1514,13 @@ index f546561..546e967 100644
  pub mod symbols;
  pub mod tokenizer;
 diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
-index 99c9ee9..767143f 100644
 --- a/src/renderer/equation/parser.rs
 +++ b/src/renderer/equation/parser.rs
-@@ -10,6 +10,24 @@ use super::symbols::{
+@@ -9,6 +9,24 @@
+     FontStyleKind, DECORATIONS, FONT_STYLES,
  };
  use super::tokenizer::{tokenize, Token, TokenType};
- 
++
 +/// HwpStudio: 두 글자 이상의 기호(`<=`, `+-`, `->` …)는 그것이 뜻하는 기호로 그린다.
 +fn symbol_node(val: String) -> EqNode {
 +    if val == "->" {
@@ -1511,11 +1538,10 @@ index 99c9ee9..767143f 100644
 +        None => EqNode::Symbol(val),
 +    }
 +}
-+
+ 
  /// 수식 중첩 깊이 상한.
  ///
- /// 적대적으로 깊게 중첩된 입력(`{{{…}}}`, `sqrt sqrt …`, `LEFT ( LEFT ( …`,
-@@ -233,12 +251,7 @@ impl EqParser {
+@@ -233,12 +251,7 @@
              }
              TokenType::Symbol => {
                  self.pos += 1;
@@ -1529,7 +1555,7 @@ index 99c9ee9..767143f 100644
              }
              TokenType::Text => {
                  self.pos += 1;
-@@ -370,6 +383,7 @@ impl EqParser {
+@@ -370,6 +383,7 @@
                  self.parse_big_op(symbol)
              }
              EqCommandClass::Limit => self.parse_limit(cmd == "Lim"),
@@ -1537,7 +1563,7 @@ index 99c9ee9..767143f 100644
              EqCommandClass::Matrix => self.parse_matrix(matrix_style(cu)),
              EqCommandClass::Cases => self.parse_cases(),
              EqCommandClass::EqAlign => self.parse_eqalign(),
-@@ -714,7 +728,7 @@ impl EqParser {
+@@ -714,7 +728,7 @@
              TokenType::Number => EqNode::Number(val),
              TokenType::Text => EqNode::Text(val),
              TokenType::Quoted => EqNode::Quoted(val),
@@ -1546,7 +1572,7 @@ index 99c9ee9..767143f 100644
              _ => EqNode::Text(val),
          }
      }
-@@ -749,12 +763,7 @@ impl EqParser {
+@@ -749,12 +763,7 @@
          while self.is_tight_relational() {
              let sym = self.current_value().to_string();
              self.pos += 1;
@@ -1560,10 +1586,12 @@ index 99c9ee9..767143f 100644
              items.push(self.parse_single_or_group());
          }
          EqNode::Row(items).simplify()
-@@ -1259,6 +1268,24 @@ impl EqParser {
-         EqNode::BigOp { symbol, sub, sup }
-     }
+@@ -1257,6 +1266,24 @@
+         }
  
+         EqNode::BigOp { symbol, sub, sup }
++    }
++
 +    /// HwpStudio: UNDEROVER 밑글자 _ 아래 ^ 위
 +    fn parse_under_over(&mut self) -> EqNode {
 +        let base = Box::new(self.parse_single_or_group());
@@ -1580,15 +1608,11 @@ index 99c9ee9..767143f 100644
 +            }
 +        }
 +        EqNode::UnderOver { base, under, over }
-+    }
-+
+     }
+ 
      /// 극한 파싱
-     fn parse_limit(&mut self, is_upper: bool) -> EqNode {
-         let mut sub = None;
 diff --git a/src/renderer/equation/stix.rs b/src/renderer/equation/stix.rs
-new file mode 100644
-index 0000000..ea53b7f
---- /dev/null
+--- a/src/renderer/equation/stix.rs
 +++ b/src/renderer/equation/stix.rs
 @@ -0,0 +1,210 @@
 +//! HwpStudio: 수식 기호(적분·근호·괄호·화살표·장식)를 STIX Two Math 글리프로 그린다.
@@ -1802,10 +1826,9 @@ index 0000000..ea53b7f
 +    Some(shape)
 +}
 diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_render.rs
-index 7fc0b71..dd55e77 100644
 --- a/src/renderer/equation/svg_render.rs
 +++ b/src/renderer/equation/svg_render.rs
-@@ -12,7 +12,8 @@ use super::symbols::{DecoKind, FontStyleKind};
+@@ -12,7 +12,8 @@
  /// Cambria Math 는 Windows 에서 "볼드 인상" 을 유발해 제외. Pretendard 는 산세리프라 수식 부적합으로 제외. (Task #280)
  pub const DEFAULT_EQUATION_FONT_FAMILY_ATTR: &str =
      "font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
@@ -1815,7 +1838,7 @@ index 7fc0b71..dd55e77 100644
  
  /// 수식을 SVG 조각 문자열로 렌더링
  ///
-@@ -64,7 +65,13 @@ fn render_box(
+@@ -64,7 +65,13 @@
                      '\u{3000}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{AC00}'..='\u{D7AF}'
                  )
              });
@@ -1830,7 +1853,7 @@ index 7fc0b71..dd55e77 100644
                  " font-style=\"italic\""
              } else {
                  ""
-@@ -101,14 +108,25 @@ fn render_box(
+@@ -101,14 +108,25 @@
              // 폰트 미임베딩 SVG 에서 뷰어 대체 폰트의 글리프 bbox 편차로 상·하한이
              // 어긋나던 문제를, 폰트 독립·결정적 path 로 해소한다(geom SSOT).
              if super::layout::is_integral_symbol(text) {
@@ -1860,7 +1883,7 @@ index 7fc0b71..dd55e77 100644
                  ));
              }
          }
-@@ -146,6 +164,19 @@ fn render_box(
+@@ -146,6 +164,19 @@
              let sign_h = lb.height;
              let body_left = x + body.x - fs * 0.1;
              let sign_x = x;
@@ -1880,7 +1903,7 @@ index 7fc0b71..dd55e77 100644
              // V 모양 경로
              let v_top = y;
              let v_mid_x = body_left - fs * 0.15;
-@@ -164,6 +195,7 @@ fn render_box(
+@@ -164,6 +195,7 @@
                  x + lb.width, v_top,
                  color, fs * 0.04,
              ));
@@ -1888,7 +1911,7 @@ index 7fc0b71..dd55e77 100644
  
              // 인덱스 (있으면)
              if let Some(idx) = index {
-@@ -245,7 +277,9 @@ fn render_box(
+@@ -245,7 +277,9 @@
              if is_integral {
                  // 적분: 기호는 왼쪽, 첨자는 오른쪽 위/아래 (nolimits).
                  // Task #1317: 폰트 `<text>` 대신 stroke path 로 렌더(geom SSOT).
@@ -1899,7 +1922,7 @@ index 7fc0b71..dd55e77 100644
              } else {
                  // ∑, ∏ 등: 기호는 중앙, 첨자는 위/아래 (limits)
                  let sup_h = sup.as_ref().map(|b| b.height + fs * 0.05).unwrap_or(0.0);
-@@ -344,7 +378,13 @@ fn render_box(
+@@ -344,7 +378,13 @@
          }
          LayoutKind::Rel { arrow, over, under } => {
              render_box(svg, over, x, y, color, fs, italic, bold);
@@ -1914,7 +1937,7 @@ index 7fc0b71..dd55e77 100644
              if let Some(u) = under {
                  render_box(svg, u, x, y, color, fs, italic, bold);
              }
-@@ -359,6 +399,18 @@ fn render_box(
+@@ -359,6 +399,18 @@
              // 텍스트 높이 파렌(`(`, `)`)은 폰트 글리프로 렌더, 그 외는 path. (Task #283)
              let use_glyph = lb.height <= fs * 1.2;
              let paren_w = if use_glyph { fs * 0.333 } else { fs * 0.27 };
@@ -1933,7 +1956,7 @@ index 7fc0b71..dd55e77 100644
              // 왼쪽 괄호
              if !left.is_empty() {
                  if use_glyph && (left == "(" || left == ")") {
-@@ -413,19 +465,47 @@ fn render_box(
+@@ -413,19 +465,47 @@
  /// S-곡선(bottom-left → top-right, 양끝 갈고리)을 그린다. 폰트에 의존하지 않으므로
  /// SVG 뷰어/환경에 무관하게 동일한 visual bbox 를 보장하며, layout 의 상·하한
  /// attach point(동일 geom)와 정합한다.
@@ -1988,7 +2011,7 @@ index 7fc0b71..dd55e77 100644
      format!(
          "<path d=\"M{:.2},{:.2} C{:.2},{:.2} {:.2},{:.2} {:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"/>\n",
          p0x, p0y, c1x, c1y, c2x, c2y, p3x, p3y, color, g.stroke_w,
-@@ -441,6 +521,66 @@ fn font_size_from_box(lb: &LayoutBox, base_fs: f64) -> f64 {
+@@ -441,6 +521,66 @@
      }
  }
  
@@ -2055,7 +2078,7 @@ index 7fc0b71..dd55e77 100644
  /// 늘림 괄호 렌더링
  fn draw_stretch_bracket(
      svg: &mut String,
-@@ -452,6 +592,20 @@ fn draw_stretch_bracket(
+@@ -452,6 +592,20 @@
      color: &str,
      fs: f64,
  ) {
@@ -2076,7 +2099,7 @@ index 7fc0b71..dd55e77 100644
      let mid_x = x + w / 2.0;
      let stroke_w = if matches!(bracket, "(" | ")") {
          (fs * 0.042).max(0.48)
-@@ -559,6 +713,34 @@ fn draw_decoration(
+@@ -559,6 +713,34 @@
      color: &str,
      fs: f64,
  ) {
@@ -2111,7 +2134,7 @@ index 7fc0b71..dd55e77 100644
      let stroke_w = fs * 0.03;
      let half_w = width / 2.0;
  
-@@ -644,12 +826,55 @@ fn draw_decoration(
+@@ -644,15 +826,58 @@
                  mid_x - half_w, uy, mid_x + half_w, uy, color, stroke_w,
              ));
          }
@@ -2119,7 +2142,7 @@ index 7fc0b71..dd55e77 100644
 -            // Check, Acute, Grave, Dyad, Arch, StrikeThrough 등 간략 처리
 +        // HwpStudio: 남은 장식도 제 모양으로 (종전에는 모두 짧은 가로선이었다).
 +        DecoKind::Check => {
-+            svg.push_str(&format!(
+             svg.push_str(&format!(
 +                "<path d=\"M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
 +                mid_x - half_w * 0.6, y,
 +                mid_x, y + fs * 0.15,
@@ -2129,7 +2152,7 @@ index 7fc0b71..dd55e77 100644
 +        }
 +        DecoKind::Acute | DecoKind::Grave => {
 +            let lean = if kind == DecoKind::Acute { 1.0 } else { -1.0 };
-             svg.push_str(&format!(
++            svg.push_str(&format!(
                  "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
 -                mid_x - half_w * 0.5, y + fs * 0.1,
 -                mid_x + half_w * 0.5, y + fs * 0.1,
@@ -2160,18 +2183,21 @@ index 7fc0b71..dd55e77 100644
 +                mid_x - half_w, y + fs * 0.14,
 +                mid_x, y - fs * 0.06,
 +                mid_x + half_w, y + fs * 0.14,
-+                color, stroke_w,
-+            ));
-+        }
+                 color, stroke_w,
+             ));
+         }
 +        DecoKind::StrikeThrough => {
 +            svg.push_str(&format!(
 +                "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
 +                mid_x - half_w * 0.7, y + fs * 1.05,
 +                mid_x + half_w * 0.7, y + fs * 0.2,
-                 color, stroke_w,
-             ));
-         }
-@@ -678,6 +903,20 @@ fn escape_xml(text: &str) -> String {
++                color, stroke_w,
++            ));
++        }
+     }
+ }
+ 
+@@ -678,6 +903,20 @@
      result
  }
  
@@ -2193,10 +2219,9 @@ index 7fc0b71..dd55e77 100644
  pub fn eq_color_to_svg(color: u32) -> String {
      let r = color & 0xFF;
 diff --git a/src/renderer/equation/symbols.rs b/src/renderer/equation/symbols.rs
-index 595ea2a..485611e 100644
 --- a/src/renderer/equation/symbols.rs
 +++ b/src/renderer/equation/symbols.rs
-@@ -134,6 +134,8 @@ static OPERATORS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(
+@@ -134,6 +134,8 @@
          ("DIV", "÷"),
          ("DIVDE", "÷"),
          ("PLUSMINUS", "±"),
@@ -2206,10 +2231,9 @@ index 595ea2a..485611e 100644
          ("MINUSPLUS", "∓"),
          ("MP", "∓"),
 diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenizer.rs
-index 0e273b2..40aac1b 100644
 --- a/src/renderer/equation/tokenizer.rs
 +++ b/src/renderer/equation/tokenizer.rs
-@@ -169,10 +169,16 @@ impl Tokenizer {
+@@ -169,10 +169,16 @@
              }
          }
  
@@ -2227,7 +2251,7 @@ index 0e273b2..40aac1b 100644
                  let after = self.peek(kw.len());
                  if matches!(after, Some(c) if c.is_ascii_alphanumeric()) {
                      self.pos += kw.len();
-@@ -306,6 +312,19 @@ impl Tokenizer {
+@@ -306,6 +312,19 @@
              return Some(Token::new(TokenType::Symbol, s, start));
          }
  
@@ -2247,7 +2271,7 @@ index 0e273b2..40aac1b 100644
          // -> (화살표 축약)
          if ch == '-' && next == '>' {
              self.pos += 2;
-@@ -487,6 +506,18 @@ impl Tokenizer {
+@@ -487,6 +506,18 @@
          loop {
              let mut token = self.next_token();
              token.space_before = self.last_had_space;
@@ -2267,10 +2291,9 @@ index 0e273b2..40aac1b 100644
              tokens.push(token);
              if is_eof {
 diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
-index 6f91926..2d89d75 100644
 --- a/src/renderer/layout/paragraph_layout.rs
 +++ b/src/renderer/layout/paragraph_layout.rs
-@@ -936,11 +936,14 @@ fn tac_offsets_for_line(
+@@ -936,11 +936,14 @@
      };
      let start = line.char_start;
      let end = composed_line_char_end(comp, line_idx);
@@ -2286,7 +2309,7 @@ index 6f91926..2d89d75 100644
                  // [#5727] 앞선 빈 줄(개체 자기 줄)이 소유한 경계 TAC 는 제외
                  && !tac_owned_by_prior_empty_line(comp, line_idx, *pos)
          })
-@@ -3278,7 +3281,9 @@ impl LayoutEngine {
+@@ -3278,7 +3281,9 @@
          // (3252633 국가유산수리 감리대가 기준 2·3쪽: 저장 cs=0 sw=48188 인데 수식 x=75.6 =
          // 본문 좌측, 가운데라면 269.6). `column_start > 0` 인 줄은 한컴이 흐름 x 를 적어 둔
          // 경우이므로 #1256/#1308 계약대로 그 값을 존중한다.
@@ -2297,7 +2320,7 @@ index 6f91926..2d89d75 100644
              match alignment {
                  Alignment::Center | Alignment::Distribute => {
                      (available_width - line_tac_width).max(0.0) / 2.0
-@@ -3939,8 +3944,57 @@ impl LayoutEngine {
+@@ -3939,8 +3944,57 @@
          // 올라가, 테두리가 글자를 가로지른다(3143955 제목: 줄 상자 아래 171.6px, 전진 y
          // 162.0px, 실제로 그려진 선 159.7/163.7).
          let mut last_line_box_bottom: Option<f64> = None;
@@ -2355,7 +2378,7 @@ index 6f91926..2d89d75 100644
              let mut current_line_reserved_tac_picture_height: Option<f64> = None;
              let mut endnote_used_auto_wrap_y = false;
              // [#6545] 감긴 첫 걸음을 지난 지점에서 기준을 늦게 잡는다 — 이 줄의 흐름 y 가
-@@ -5693,7 +5747,9 @@ impl LayoutEngine {
+@@ -5693,7 +5747,9 @@
              y += spacing_after;
          }
  
@@ -2367,10 +2390,9 @@ index 6f91926..2d89d75 100644
  
      /// [#2003 추출] 줄의 run 방출 루프 — TextRun/글리프/탭/밑줄/인라인 개체 방출.
 diff --git a/src/renderer/layout/shape_layout.rs b/src/renderer/layout/shape_layout.rs
-index f2bbec4..5ba58fc 100644
 --- a/src/renderer/layout/shape_layout.rs
 +++ b/src/renderer/layout/shape_layout.rs
-@@ -672,6 +672,19 @@ impl LayoutEngine {
+@@ -672,6 +672,19 @@
              if inline_pos.is_some() {
                  return;
              }
@@ -2391,13 +2413,15 @@ index f2bbec4..5ba58fc 100644
              // 인라인 좌표 없으면 기존 방식 (정렬 기반 단독 배치)
              let eq_w = hwpunit_to_px(eq.common.width as i32, self.dpi);
 diff --git a/src/renderer/layout/table_layout.rs b/src/renderer/layout/table_layout.rs
-index 775b47e..29a6351 100644
 --- a/src/renderer/layout/table_layout.rs
 +++ b/src/renderer/layout/table_layout.rs
-@@ -2072,6 +2072,46 @@ impl LayoutEngine {
-         }
-     }
- 
+@@ -2069,7 +2069,47 @@
+             }
+         } else {
+             object_height
++        }
++    }
++
 +    // In a missing-line cell, a paragraph-relative picture offset already
 +    // contains the text above it. Do not append that prefix a second time.
 +    // Keep mixed controls and stored geometry on their existing ownership path.
@@ -2428,7 +2452,7 @@ index 775b47e..29a6351 100644
 +            } else {
 +                return 0.0;
 +            }
-+        }
+         }
 +        // Side-by-side pictures share one exclusion band and one text prefix.
 +        // Separate vertical bands remain on the existing layout path.
 +        if latest_top < earliest_bottom {
@@ -2436,12 +2460,10 @@ index 775b47e..29a6351 100644
 +        } else {
 +            0.0
 +        }
-+    }
-+
+     }
+ 
      pub(crate) fn cell_non_inline_control_flow_height(&self, common: &CommonObjAttr) -> f64 {
-         let top_and_bottom_height = self.non_inline_control_flow_height(common);
-         if top_and_bottom_height > 0.0 || common.treat_as_char {
-@@ -9672,7 +9712,16 @@ impl LayoutEngine {
+@@ -9672,7 +9712,16 @@
              let para_non_inline_extra_h = if p.text.trim().is_empty() && line_count > 0 {
                  (para_non_inline_h - line_core_height).max(0.0)
              } else {
@@ -2459,7 +2481,7 @@ index 775b47e..29a6351 100644
              };
              let para_top_and_bottom_flow_unit =
                  para_has_top_and_bottom_non_inline_control && !para_has_visible_text;
-@@ -10471,8 +10520,33 @@ impl LayoutEngine {
+@@ -10471,8 +10520,33 @@
                  let para_h = if collapse_empty_rowbreak_spacer {
                      0.0
                  } else if line_count == 0 {
@@ -2493,7 +2515,7 @@ index 775b47e..29a6351 100644
                      } else if crate::renderer::para_has_no_stored_line_segs(p)
                          && p.controls.is_empty()
                      {
-@@ -13363,6 +13437,18 @@ impl LayoutEngine {
+@@ -13363,6 +13437,18 @@
              if u.para_idx >= ranges.len() {
                  continue;
              }
@@ -2513,10 +2535,9 @@ index 775b47e..29a6351 100644
                  ranges[u.para_idx] = (u.vis_start, u.vis_end);
                  seen[u.para_idx] = true;
 diff --git a/src/renderer/layout/table_partial.rs b/src/renderer/layout/table_partial.rs
-index 0d7d79a..9f19203 100644
 --- a/src/renderer/layout/table_partial.rs
 +++ b/src/renderer/layout/table_partial.rs
-@@ -2266,7 +2266,19 @@ impl LayoutEngine {
+@@ -2266,7 +2266,19 @@
                                              .flatten()
                                              .filter(|seg| seg.vertical_pos > 0)
                                              .map(|seg| hwpunit_to_px(seg.vertical_pos, self.dpi));
@@ -2537,7 +2558,7 @@ index 0d7d79a..9f19203 100644
                                              content_top + vpos_px + v_off
                                          } else {
                                              match effective_align {
-@@ -2819,8 +2831,14 @@ impl LayoutEngine {
+@@ -2819,8 +2831,14 @@
                          }
                      }
                      if rendered_top_and_bottom_non_inline {
@@ -2555,10 +2576,9 @@ index 0d7d79a..9f19203 100644
                      // [#6122] 폭 초과로 내린 개체는 composed 줄 높이에 없다 — 그 아래로
                      // 흐름을 밀지 않으면 다음 문단(캡션)이 그림 위에 겹쳐 그려진다.
 diff --git a/src/renderer/layout/utils.rs b/src/renderer/layout/utils.rs
-index 7ae0e89..b809400 100644
 --- a/src/renderer/layout/utils.rs
 +++ b/src/renderer/layout/utils.rs
-@@ -241,6 +241,7 @@ pub(crate) fn numbering_format_to_number_format(code: u8) -> NumFmt {
+@@ -241,6 +241,7 @@
          4 => NumFmt::LatinUpper,    // A, B, C
          5 => NumFmt::LatinLower,    // a, b, c
          8 => NumFmt::HangulGaNaDa,  // 가, 나, 다
@@ -2567,10 +2587,9 @@ index 7ae0e89..b809400 100644
          13 => NumFmt::HanjaNumber,  // 一, 二, 三
          _ => NumFmt::Digit,
 diff --git a/src/renderer/mod.rs b/src/renderer/mod.rs
-index 9d37742..fdc5d6a 100644
 --- a/src/renderer/mod.rs
 +++ b/src/renderer/mod.rs
-@@ -1501,6 +1501,9 @@ pub fn base_family_without_weight_suffix(font_family: &str) -> Option<String> {
+@@ -1501,6 +1501,9 @@
  /// face 가 있다. 아래 중고딕 arm 의 주석을 볼 것.
  fn installed_render_font_aliases(font_family: &str) -> &'static [&'static str] {
      match font_family {
@@ -2580,7 +2599,7 @@ index 9d37742..fdc5d6a 100644
          // [#6171] 이름 셋 중 `HYGothic` 만 Windows 에서 해석된다. headless Chrome
          // 통제 실측(`'X',serif` 를 없는 글꼴 기준선과 픽셀 차분):
          // `HY중고딕` 0px · `HYGothic-Medium` 0px · **`HYGothic` 3,287px**.
-@@ -1944,6 +1947,8 @@ pub enum NumberFormat {
+@@ -1944,6 +1947,8 @@
      LatinLower,
      /// 한글 가나다: 가, 나, 다
      HangulGaNaDa,
@@ -2589,7 +2608,7 @@ index 9d37742..fdc5d6a 100644
      /// 한글 일이삼: 일, 이, 삼
      HangulNumber,
      /// 한자 一二三: 一, 二, 三
-@@ -1978,6 +1983,7 @@ pub fn format_number(number: u16, format: NumberFormat) -> String {
+@@ -1978,6 +1983,7 @@
          NumberFormat::LatinUpper => format_latin(number, true),
          NumberFormat::LatinLower => format_latin(number, false),
          NumberFormat::HangulGaNaDa => format_hangul_ganada(number),
@@ -2597,7 +2616,7 @@ index 9d37742..fdc5d6a 100644
          NumberFormat::HangulNumber => format_hangul_number(number),
          NumberFormat::HanjaNumber => format_hanja_number(number),
      }
-@@ -2059,6 +2065,17 @@ fn format_hangul_ganada(n: u16) -> String {
+@@ -2059,6 +2065,17 @@
          .unwrap_or_else(|| n.to_string())
  }
  
@@ -2616,10 +2635,9 @@ index 9d37742..fdc5d6a 100644
  fn format_hangul_number(n: u16) -> String {
      const HANGUL_DIGITS: [&str; 10] = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
 diff --git a/src/renderer/pdf.rs b/src/renderer/pdf.rs
-index 3989968..e268160 100644
 --- a/src/renderer/pdf.rs
 +++ b/src/renderer/pdf.rs
-@@ -509,6 +509,56 @@ fn default_mono_family() -> &'static str {
+@@ -509,6 +509,56 @@
      "Noto Sans Mono CJK KR"
  }
  
@@ -2676,7 +2694,7 @@ index 3989968..e268160 100644
  /// 폰트 데이터베이스를 초기화 (시스템 폰트 + 프로젝트 폰트 로드)
  #[cfg(not(target_arch = "wasm32"))]
  fn create_fontdb(options: &PdfExportOptions) -> usvg::fontdb::Database {
-@@ -993,9 +1043,16 @@ where
+@@ -993,9 +1043,16 @@
      use pdf_writer::{Finish, Pdf, Ref};
      use std::collections::HashMap;
  
@@ -2696,10 +2714,9 @@ index 3989968..e268160 100644
      let mut alloc = Ref::new(1);
      let catalog_ref = alloc.bump();
 diff --git a/src/renderer/svg.rs b/src/renderer/svg.rs
-index 3e52ea0..5738bec 100644
 --- a/src/renderer/svg.rs
 +++ b/src/renderer/svg.rs
-@@ -583,14 +583,20 @@ impl SvgRenderer {
+@@ -583,14 +583,20 @@
                  };
                  let scale_y = 1.0_f64;
                  let needs_scale = (scale_x - 1.0).abs() > 0.01 || (scale_y - 1.0).abs() > 0.01;
@@ -2722,7 +2739,41 @@ index 3e52ea0..5738bec 100644
                          node.bbox.x, node.bbox.y,
                      ));
                  }
-@@ -3582,9 +3588,13 @@ fn color_to_svg(color: u32) -> String {
+@@ -1027,25 +1033,25 @@
+         let fg = color_to_svg(info.pattern_color);
+         let sz = 6; // 패턴 타일 크기 (px)
+ 
+-        // HWP 패턴 종류 (0-based, 표 31 참조): 0=가로줄, 1=세로줄, 2=역대각선, 3=대각선, 4=십자, 5=격자
++        // 무늬 종류 (rhwp 1-based, parse_hatch_style): 1=가로줄, 2=세로줄, 3=역대각선(\\), 4=대각선(/), 5=십자, 6=격자
+         let lines = match info.pattern_type {
+-            0 => // 가로줄 (- - - -)
++            1 => // 가로줄 (- - - -)
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                          <line x1=\"0\" y1=\"3\" x2=\"{sz}\" y2=\"3\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+-            1 => // 세로줄 (|||||)
++            2 => // 세로줄 (|||||)
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                          <line x1=\"3\" y1=\"0\" x2=\"3\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+-            2 => // 대각선 (/////)
+-                format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+-                         <line x1=\"{sz}\" y1=\"0\" x2=\"0\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+             3 => // 역대각선 (\\\\\)
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                          <line x1=\"0\" y1=\"0\" x2=\"{sz}\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+-            4 => // 십자 (+++++)
++            4 => // 대각선 (/////)
++                format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
++                         <line x1=\"{sz}\" y1=\"0\" x2=\"0\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
++            5 => // 십자 (+++++)
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                          <line x1=\"3\" y1=\"0\" x2=\"3\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>\
+                          <line x1=\"0\" y1=\"3\" x2=\"{sz}\" y2=\"3\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+-            5 => // 격자 (xxxxx)
++            6 => // 격자 (xxxxx)
+                 format!("<rect width=\"{sz}\" height=\"{sz}\" fill=\"{bg}\"/>\
+                          <line x1=\"0\" y1=\"0\" x2=\"{sz}\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>\
+                          <line x1=\"{sz}\" y1=\"0\" x2=\"0\" y2=\"{sz}\" stroke=\"{fg}\" stroke-width=\"1\"/>"),
+@@ -3582,9 +3588,13 @@
  }
  
  fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64) -> String {
@@ -2736,7 +2787,7 @@ index 3e52ea0..5738bec 100644
      {
          return String::new();
      }
-@@ -3596,7 +3606,10 @@ fn svg_text_length_attrs(cluster_str: &str, cluster_advance: f64, scale_x: f64)
+@@ -3596,7 +3606,10 @@
      } else {
          1.0
      };
@@ -2748,30 +2799,40 @@ index 3e52ea0..5738bec 100644
      format!(
          " textLength=\"{:.4}\" lengthAdjust=\"spacingAndGlyphs\"",
          text_length
-diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
-index 4472819..4c574b9 100644
---- a/src/renderer/composer/line_breaking.rs
-+++ b/src/renderer/composer/line_breaking.rs
-@@ -3783,0 +3784,16 @@ fn reflow_line_segs_impl(
-+    let apply_reflow_indent_tag = |seg: &mut LineSeg, visual_line_idx: usize| {
-+        // `make_line_seg` deliberately starts from the closest stored row, but
-+        // indentation is a property of the freshly projected physical row.
-+        // Keeping the stored bit after paragraph formatting makes the renderer
-+        // treat that stale row as authoritative and suppress the new indent.
-+        seg.tag &= !LineSeg::TAG_INDENTATION;
-+        if crate::renderer::equation_tac_flow::paragraph_line_indent(
-+            indent_px,
-+            visual_line_idx,
-+        )
-+        .abs()
-+            > f64::EPSILON
-+        {
-+            seg.tag |= LineSeg::TAG_INDENTATION;
-+        }
-+    };
-@@ -3794,0 +3811 @@ fn reflow_line_segs_impl(
-+        let visual_line_idx = new_line_segs.len();
-@@ -3795,0 +3813 @@ fn reflow_line_segs_impl(
-+        apply_reflow_indent_tag(&mut text_seg, visual_line_idx);
-@@ -3822,0 +3841 @@ fn reflow_line_segs_impl(
-+            apply_reflow_indent_tag(&mut control_seg, new_line_segs.len());
+diff --git a/src/parser/doc_info.rs b/src/parser/doc_info.rs
+--- a/src/parser/doc_info.rs
++++ b/src/parser/doc_info.rs
+@@ -419,7 +419,8 @@
+         fill.solid = Some(SolidFill {
+             background_color: r.read_color_ref().unwrap_or(0xFFFFFF),
+             pattern_color: r.read_color_ref().unwrap_or(0),
+-            pattern_type: r.read_i32().unwrap_or(-1),
++            // HWP 5.0 counts 무늬 from 0 (−1 none); in memory they are 1–6, as in HWPX.
++            pattern_type: r.read_i32().map_or(-1, |t| if t >= 0 { t + 1 } else { -1 }),
+         });
+     }
+ 
+diff --git a/src/serializer/control.rs b/src/serializer/control.rs
+--- a/src/serializer/control.rs
++++ b/src/serializer/control.rs
+@@ -2736,7 +2736,7 @@
+         if let Some(ref solid) = fill.solid {
+             w.write_color_ref(solid.background_color).unwrap();
+             w.write_color_ref(solid.pattern_color).unwrap();
+-            w.write_i32(solid.pattern_type).unwrap();
++            w.write_i32(if solid.pattern_type > 0 { solid.pattern_type - 1 } else { -1 }).unwrap();
+         }
+     }
+ 
+diff --git a/src/serializer/doc_info.rs b/src/serializer/doc_info.rs
+--- a/src/serializer/doc_info.rs
++++ b/src/serializer/doc_info.rs
+@@ -597,7 +597,7 @@
+             if let Some(ref solid) = fill.solid {
+                 w.write_color_ref(solid.background_color).unwrap();
+                 w.write_color_ref(solid.pattern_color).unwrap();
+-                w.write_i32(solid.pattern_type).unwrap();
++                w.write_i32(if solid.pattern_type > 0 { solid.pattern_type - 1 } else { -1 }).unwrap();
+             }
+             // 추가 채우기 속성: size(u32) = 0, 이어서 미확인 바이트로 alpha(u8).
+             // hwplib 및 parse_fill(additional_size 만큼 skip 후 종류별 1바이트를
