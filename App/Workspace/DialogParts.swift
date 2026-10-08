@@ -35,29 +35,58 @@ struct DialogFrame<Content: View>: View {
     }
 }
 
-/// A dialog's tabs: a segmented control on the top edge of a box holding the chosen tab.
-/// (TabView's own tab bar draws its names over one another in a fitted sheet.)
-struct DialogTabs<Content: View>: View {
+/// A dialog's tabs, in AppKit's own tab view.
+struct DialogTabs<Content: View>: NSViewRepresentable {
     @Binding var selection: String
     let titles: [String]
     @ViewBuilder let content: (String) -> Content
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $selection) {
-                ForEach(titles, id: \.self) { Text($0).tag($0) }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSTabView {
+        let view = SheetTabView()
+        view.delegate = context.coordinator
+        return view
+    }
+
+    func updateNSView(_ view: NSTabView, context: Context) {
+        context.coordinator.selection = $selection
+        if view.tabViewItems.map(\.label) != titles {
+            view.tabViewItems.forEach(view.removeTabViewItem)
+            for title in titles {
+                let item = NSTabViewItem(identifier: title)
+                item.label = title
+                item.view = NSHostingView(rootView: AnyView(EmptyView()))
+                view.addTabViewItem(item)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .zIndex(1)
-            content(selection)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.top, 12)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .quaternarySystemFill)))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
-                .padding(.top, -11)
         }
+        for item in view.tabViewItems {
+            (item.view as? NSHostingView<AnyView>)?.rootView =
+                AnyView(content(item.label).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
+        }
+        if view.selectedTabViewItem?.label != selection, let index = titles.firstIndex(of: selection) {
+            view.selectTabViewItem(at: index)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTabViewDelegate {
+        var selection: Binding<String>?
+        func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
+            if let label = item?.label, selection?.wrappedValue != label { selection?.wrappedValue = label }
+        }
+    }
+}
+
+/// A tab view in a sheet lays its tab names over one another until its tab bar is set up
+/// again once the sheet is up, so that is done before it first draws.
+private final class SheetTabView: NSTabView {
+    private var settled = false
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        guard !settled, window != nil else { return }
+        settled = true
+        tabViewType = .noTabsNoBorder
+        tabViewType = .topTabsBezelBorder
     }
 }
 
