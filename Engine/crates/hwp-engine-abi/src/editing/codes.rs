@@ -304,10 +304,33 @@ impl EditSession {
         let mut plain = 0;
         fn walk(paragraphs: &[Paragraph], boxed: bool, n: &mut Statistics, plain: &mut u32) {
             for p in paragraphs {
+                // An inline page number occupies one whitespace character in HWP's
+                // paragraph text, but Hancom reports the displayed number as a layout
+                // field rather than a document character.  Drop at most one whitespace
+                // placeholder per page-number control while retaining any real text.
+                let mut page_number_placeholders = p
+                    .controls
+                    .iter()
+                    .filter(|control| {
+                        matches!(
+                            control,
+                            Control::AutoNumber(number)
+                                if number.number_type == AutoNumberType::Page
+                        )
+                    })
+                    .count();
                 let text: Vec<char> = p
                     .text
                     .chars()
                     .filter(|c| !c.is_control() || *c == '\t')
+                    .filter(|c| {
+                        if page_number_placeholders > 0 && c.is_whitespace() {
+                            page_number_placeholders -= 1;
+                            false
+                        } else {
+                            true
+                        }
+                    })
                     .collect();
                 let spaces = text.iter().filter(|c| c.is_whitespace()).count() as u32;
                 n.characters += text.len() as u32;

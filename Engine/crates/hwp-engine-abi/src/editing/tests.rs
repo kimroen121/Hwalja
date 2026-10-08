@@ -3,7 +3,7 @@ use rhwp::{
     model::{
         control::Control,
         header_footer::{Footer, Header, HeaderFooterApply},
-        paragraph::Paragraph,
+        paragraph::{LineSeg, Paragraph},
     },
     DocumentCore,
 };
@@ -500,6 +500,55 @@ fn header_footer_text_and_format_round_trip_hwp_and_hwpx() {
             "홀수 👋"
         );
     }
+}
+
+#[test]
+fn editing_imported_header_marks_reflowed_lines_as_synthetic() {
+    let mut s = EditSession::blank().unwrap();
+    s.core.create_header_footer_native(0, true, 0).unwrap();
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 0, "학교 ")
+        .unwrap();
+
+    // Reproduce an imported header whose LINE_SEG rows are stored evidence.
+    // Once its text changes, those rows no longer describe the file and the
+    // reflow must publish synthetic provenance.
+    let mut document = s.core.document().clone();
+    let imported_header = document.sections[0].paragraphs[0]
+        .controls
+        .iter_mut()
+        .find_map(|control| match control {
+            Control::Header(header) if header.apply_to == HeaderFooterApply::Both => {
+                header.paragraphs.first_mut()
+            }
+            _ => None,
+        })
+        .unwrap();
+    for line in &mut imported_header.line_segs {
+        line.tag &= !LineSeg::TAG_IMPLEMENTATION_PROPERTY;
+    }
+    s.core.set_document(document);
+    s.core
+        .insert_text_in_header_footer_native(0, true, 0, 0, 3, "머리말")
+        .unwrap();
+
+    let para = s.core.document().sections[0].paragraphs[0]
+        .controls
+        .iter()
+        .find_map(|control| match control {
+            Control::Header(header) if header.apply_to == HeaderFooterApply::Both => {
+                header.paragraphs.first()
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        para
+            .line_segs
+            .iter()
+            .all(|line| line.tag & LineSeg::TAG_IMPLEMENTATION_PROPERTY != 0),
+        "edited header/footer rows must not retain imported LINE_SEG provenance"
+    );
 }
 fn point(target: EditTarget, scalar: u32) -> EditPosition {
     EditPosition {
@@ -2720,6 +2769,24 @@ fn header_and_footer_number_pages_and_save() {
         run(&mut s, EditCommand::Undo).unwrap();
         assert_eq!(count(&s), 0, "{format}");
     }
+}
+
+#[test]
+fn page_number_placeholder_is_not_a_document_character() {
+    let mut s = EditSession::blank().unwrap();
+    let before = s.statistics();
+    run(
+        &mut s,
+        EditCommand::HeaderFooter {
+            section: 0,
+            footer: true,
+            page_number: Some(Placement::Center),
+        },
+    )
+    .unwrap();
+    let after = s.statistics();
+    assert_eq!(after.characters, before.characters);
+    assert_eq!(after.characters_without_spaces, before.characters_without_spaces);
 }
 #[test]
 fn notes_are_inserted_and_edited() {

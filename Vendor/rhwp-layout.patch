@@ -3178,3 +3178,21 @@ index 8f42c61..d2be5d3 100644
 +                layout_drift_safety_px
 +            };
 +            let avail_for_lines = (page_avail - sp_b - fragment_safety).max(0.0);
+diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core/commands/header_footer_ops.rs
+--- a/src/document_core/commands/header_footer_ops.rs
++++ b/src/document_core/commands/header_footer_ops.rs
+@@ -1137,6 +1137,14 @@
+                     &styles,
+                     self.dpi,
+                 );
++                // A header/footer edit invalidates imported LINE_SEG evidence.  The
++                // generic reflow intentionally inherits provenance for body/cell
++                // compatibility, but retaining it here makes a short, edited,
++                // justified last line use Hancom's stored-header distribution rule
++                // and stretch its words to both edges of the printable area.
++                for line in &mut para.line_segs {
++                    line.tag |= crate::model::paragraph::LineSeg::TAG_IMPLEMENTATION_PROPERTY;
++                }
+             }
+         }
+     }
