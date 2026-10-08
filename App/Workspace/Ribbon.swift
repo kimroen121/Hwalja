@@ -46,7 +46,6 @@ struct ToolRow: View {
                 if let span = spans[tab] {
                     let grow: CGFloat = hovered == tab ? 4 : 0
                     Capsule()
-                        .fill(extra.contains(tab) ? Color.accentColor : Color.primary)
                         .frame(width: span.width + grow * 2, height: 3)
                         .offset(x: span.minX - grow, y: span.maxY - 1.5)
                         .allowsHitTesting(false)
@@ -72,7 +71,14 @@ struct ToolRow: View {
         }
     }
 
-    private func tabButton(_ name: String, selected: Bool, object: Bool) -> some View {
+    @ViewBuilder private func tabButton(_ name: String, selected: Bool, object: Bool) -> some View {
+        HStack(spacing: 0) {
+            tabName(name, selected: selected, object: object)
+            // 펼침 단추: the menu of the same name from the menu bar, under the tab.
+            if !object { MenuOpener(title: name) }
+        }
+    }
+    private func tabName(_ name: String, selected: Bool, object: Bool) -> some View {
         Button {
             if object { contextTab = name } else { (menuTab, contextTab) = (name, nil) }
         } label: {
@@ -84,12 +90,12 @@ struct ToolRow: View {
                 .overlay {
                     Text(name)
                         .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                        .foregroundStyle(object ? AnyShapeStyle(Color.accentColor) : selected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 }
                 .padding(.vertical, 4)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("tabs")) } action: { spans[name] = $0 }
                 // The gap between tabs is part of them, so a click beside a name still lands.
-                .padding(.horizontal, 9)
+                .padding(.leading, 9)
+                .padding(.trailing, object ? 9 : 1)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -367,6 +373,24 @@ struct ToolRow: View {
             Captions.all.map { caption in Choice(title: caption.title) { viewer.insertCaption(caption.value) } }
         })
         .disabled(!context.canCaption)
+    }
+}
+
+/// A tab's 펼침 단추: opens the menu bar's menu of the same name below it.
+private struct MenuOpener: View {
+    let title: String
+    @State private var anchor = Anchor()
+    var body: some View {
+        Button {
+            guard let menu = NSApp.mainMenu?.item(withTitle: title)?.submenu, let view = anchor.view else { return }
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 2 : -2), in: view)
+        } label: {
+            Chevron().frame(width: 14, height: 20).contentShape(Rectangle())
+        }
+        .buttonStyle(ToolButtonStyle())
+        .background(AnchorView(anchor: anchor))
+        .padding(.trailing, 6)
+        .accessibilityLabel(title)
     }
 }
 
