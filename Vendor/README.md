@@ -35,6 +35,7 @@
 - keeps the line of a white box with a thin black line inside a group (the default 직사각형, drawn by 한글); only a text-only box's line is still dropped.
 - charges the layout-drift safety margin only once when a paragraph is split across pages, including documents whose line records must be rebuilt.
 - marks edited header/footer line records as synthetic, so a short justified last line no longer inherits the imported-only rule that stretches its words to both edges.
+- persists 문단 번호의 `새 번호 목록 시작` as a cloned numbering definition and matching paragraph-shape references, so its start value survives both HWP and HWPX save/reopen.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

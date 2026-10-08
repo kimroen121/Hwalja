@@ -1,7 +1,6 @@
 //! Character and paragraph formats: the caret query and the rhwp property JSON for changes.
 use super::commands::{get, index};
 use super::*;
-use rhwp::model::paragraph::NumberingRestart;
 use serde_json::{json, Map, Value};
 
 pub(super) fn validate_char(style: &CharStyle) -> Result<(), EditError> {
@@ -907,7 +906,6 @@ impl EditSession {
         let first = |key: &str| text.get(key).and_then(|a| a.get(0)).and_then(Value::as_f64);
         let on = |key: &str| text.get(key).and_then(Value::as_i64).map(|v| v != 0);
         let shape = self.paragraph_shape(t)?;
-        let restart = get(self.core.document(), t)?.numbering_restart;
         let head = para
             .get("headType")
             .and_then(Value::as_str)
@@ -1027,15 +1025,14 @@ impl EditSession {
                 pattern_color: p_pattern_color,
                 pattern: p_pattern,
                 border_connect: para_flag("borderConnect"),
-                restart: Some(match restart {
-                    None => 0,
-                    Some(NumberingRestart::ContinuePrevious) => 1,
-                    Some(NumberingRestart::NewStart(_)) => 2,
-                }),
-                start_number: match restart {
-                    Some(NumberingRestart::NewStart(n)) => Some(n),
-                    _ => None,
-                },
+                restart: para
+                    .get("numberingRestartMode")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as u8),
+                start_number: para
+                    .get("numberingStartNum")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as u32),
             },
             fonts,
         })

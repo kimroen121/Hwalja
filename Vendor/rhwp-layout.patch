@@ -3196,3 +3196,221 @@ diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core
              }
          }
      }
+
+diff --git a/src/document_core/commands/formatting.rs b/src/document_core/commands/formatting.rs
+--- a/src/document_core/commands/formatting.rs
++++ b/src/document_core/commands/formatting.rs
+@@ -154,7 +154,9 @@
+         let head_type = ps.map(|s| s.head_type).unwrap_or(HeadType::None);
+         if head_type != HeadType::None {
+             let cur_nid = ps.map(|s| s.numbering_id).unwrap_or(0);
+-            // NewNumber 컨트롤 체크
++            // NewNumber 컨트롤은 쪽/그림/표 등의 번호 용도이지만,
++            // 예전 파일과의 호환을 위해 우선 처리한다. 문단 목록의 실제
++            // 재시작 정보는 numbering 정의의 시작값과 numbering_id 경계에 있다.
+             let new_number = para.controls.iter().find_map(|c| {
+                 if let Control::NewNumber(nn) = c {
+                     Some(nn.number)
+@@ -168,26 +170,40 @@
+                 // 이전 번호 문단의 numbering_id를 역순 스캔
+                 let mut prev_nid: Option<u16> = None;
+                 let mut seen_before = false;
+-                for pi in (0..para_idx).rev() {
+-                    let pp = &section.paragraphs[pi];
+-                    let pps = self.styles.para_styles.get(pp.para_shape_id as usize);
+-                    let pht = pps.map(|s| s.head_type).unwrap_or(HeadType::None);
+-                    if pht == HeadType::None {
+-                        continue;
++                'sections: for si in (0..=sec_idx).rev() {
++                    let previous = &self.document.sections[si];
++                    let end = if si == sec_idx {
++                        para_idx
++                    } else {
++                        previous.paragraphs.len()
++                    };
++                    for pi in (0..end).rev() {
++                        let pp = &previous.paragraphs[pi];
++                        let pps = self.styles.para_styles.get(pp.para_shape_id as usize);
++                        let pht = pps.map(|s| s.head_type).unwrap_or(HeadType::None);
++                        if pht == HeadType::None {
++                            continue;
++                        }
++                        let pnid = pps.map(|s| s.numbering_id).unwrap_or(0);
++                        if prev_nid.is_none() {
++                            prev_nid = Some(pnid);
++                        }
++                        if pnid == cur_nid {
++                            seen_before = true;
++                            break 'sections;
++                        }
+                     }
+-                    let pnid = pps.map(|s| s.numbering_id).unwrap_or(0);
+-                    if prev_nid.is_none() {
+-                        prev_nid = Some(pnid);
+-                    }
+-                    if pnid == cur_nid {
+-                        seen_before = true;
+-                        break;
+-                    }
+                 }
++                let level = ps.map(|s| s.para_level as usize).unwrap_or(0).min(6);
++                let definition_start = cur_nid
++                    .checked_sub(1)
++                    .and_then(|id| self.document.doc_info.numberings.get(id as usize))
++                    .map(|n| n.level_start_numbers[level])
++                    .unwrap_or(1);
+                 match (prev_nid, seen_before) {
+                     (Some(pid), _) if pid == cur_nid => (0, 1), // 앞 번호 이어
+                     (_, true) => (1, 1),                        // 이전 번호 이어
+-                    _ => (2, 1),                                // 새 번호 시작
++                    _ => (2, definition_start),                 // 새 번호 시작
+                 }
+             };
+             json.pop(); // 마지막 '}' 제거
+@@ -2161,6 +2177,7 @@
+         start_num: u32,
+     ) -> Result<String, crate::error::HwpError> {
+         use crate::model::paragraph::NumberingRestart;
++        use crate::model::style::{HeadType, ParaShapeMods};
+
+         if section_idx >= self.document.sections.len() {
+             return Err(crate::error::HwpError::RenderError(
+@@ -2173,18 +2190,130 @@
+             ));
+         }
+
+-        let restart = match mode {
+-            0 => None,
+-            1 => Some(NumberingRestart::ContinuePrevious),
+-            2 => Some(NumberingRestart::NewStart(start_num)),
+-            _ => None,
++        if mode > 2 {
++            return Err(crate::error::HwpError::RenderError(
++                "번호 시작 방식은 0..=2여야 함".to_string(),
++            ));
++        }
++
++        let para_shape_id = self.document.sections[section_idx].paragraphs[para_idx].para_shape_id;
++        let para_shape = self
++            .document
++            .doc_info
++            .para_shapes
++            .get(para_shape_id as usize)
++            .cloned()
++            .ok_or_else(|| {
++                crate::error::HwpError::RenderError("문단 모양을 찾을 수 없음".to_string())
++            })?;
++        if para_shape.head_type == HeadType::None || para_shape.numbering_id == 0 {
++            return Err(crate::error::HwpError::RenderError(
++                "번호 문단에서만 번호 시작 방식을 바꿀 수 있음".to_string(),
++            ));
++        }
++
++        let old_numbering_id = para_shape.numbering_id;
++        let target_numbering_id = match mode {
++            0 => old_numbering_id,
++            1 => {
++                let mut previous = None;
++                'outer: for si in (0..=section_idx).rev() {
++                    let section = &self.document.sections[si];
++                    let end = if si == section_idx {
++                        para_idx
++                    } else {
++                        section.paragraphs.len()
++                    };
++                    for pi in (0..end).rev() {
++                        let p = &section.paragraphs[pi];
++                        let Some(ps) = self
++                            .document
++                            .doc_info
++                            .para_shapes
++                            .get(p.para_shape_id as usize)
++                        else {
++                            continue;
++                        };
++                        if ps.head_type != HeadType::None && ps.numbering_id != old_numbering_id {
++                            previous = Some(ps.numbering_id);
++                            break 'outer;
++                        }
++                    }
++                }
++                previous.unwrap_or(old_numbering_id)
++            }
++            2 => {
++                let source = self
++                    .document
++                    .doc_info
++                    .numberings
++                    .get((old_numbering_id - 1) as usize)
++                    .cloned()
++                    .ok_or_else(|| {
++                        crate::error::HwpError::RenderError(
++                            "문단 번호 정의를 찾을 수 없음".to_string(),
++                        )
++                    })?;
++                let start = start_num.clamp(1, u16::MAX as u32);
++                let mut definition = source;
++                definition.raw_data = None;
++                definition.raw_para_heads = None;
++                definition.start_number = start as u16;
++                definition.level_start_numbers[para_shape.para_level.min(6) as usize] = start;
++                self.document.doc_info.numberings.push(definition);
++                self.document.doc_info.raw_stream_dirty = true;
++                self.document.doc_info.numberings.len() as u16
++            }
++            _ => unreachable!(),
+         };
+
+-        self.document.sections[section_idx].paragraphs[para_idx].numbering_restart = restart;
++        if target_numbering_id != old_numbering_id {
++            // 재시작 문단 뒤에 연속되는 같은 목록은 새 정의를 함께
++            // 가리켜야 5, 6, 7…로 이어진다. 본문 문단은 목록을 끊지
++            // 않지만, 다른 번호 정의가 나오면 그 목록의 경계로 본다.
++            let mut replacements = Vec::new();
++            for pi in para_idx..self.document.sections[section_idx].paragraphs.len() {
++                let p = &self.document.sections[section_idx].paragraphs[pi];
++                let Some(ps) = self
++                    .document
++                    .doc_info
++                    .para_shapes
++                    .get(p.para_shape_id as usize)
++                else {
++                    continue;
++                };
++                if ps.head_type == HeadType::None {
++                    continue;
++                }
++                if ps.numbering_id != old_numbering_id {
++                    break;
++                }
++                let new_shape = self.document.find_or_create_para_shape(
++                    p.para_shape_id,
++                    &ParaShapeMods {
++                        numbering_id: Some(target_numbering_id),
++                        ..Default::default()
++                    },
++                );
++                replacements.push((pi, new_shape));
++            }
++            for (pi, shape) in replacements {
++                let paragraph = &mut self.document.sections[section_idx].paragraphs[pi];
++                paragraph.para_shape_id = shape;
++                paragraph.numbering_restart = None;
++            }
++        } else {
++            self.document.sections[section_idx].paragraphs[para_idx].numbering_restart = match mode
++            {
++                0 => None,
++                1 => Some(NumberingRestart::ContinuePrevious),
++                2 => Some(NumberingRestart::NewStart(start_num)),
++                _ => None,
++            };
++        }
+         self.document.sections[section_idx].raw_stream = None;
+
+-        self.recompose_section(section_idx);
+-        self.paginate_if_needed();
++        self.rebuild_section(section_idx);
+
+         Ok(crate::document_core::helpers::json_ok())
+     }

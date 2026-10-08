@@ -3284,6 +3284,27 @@ fn numbering_and_bullets_head_paragraphs() {
         .unwrap()
         .paragraph;
     assert_eq!((now.restart, now.start_number), (Some(2), Some(5)));
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let properties = reopened
+            .format(0, &point(body(), 0), None)
+            .unwrap()
+            .paragraph;
+        assert_eq!(
+            (properties.restart, properties.start_number),
+            (Some(2), Some(5)),
+            "{format:?}"
+        );
+        let svg = reopened.core.render_page_svg_native(0).unwrap();
+        let text = svg
+            .split("</text>")
+            .filter_map(|t| t.rsplit('>').next())
+            .collect::<String>();
+        assert!(
+            text.starts_with("⑤가") && text.contains("⑥보존"),
+            "numbering restart was not preserved in {format:?}: {text}"
+        );
+    }
     let bullet = ParaStyle {
         head: Some("Bullet".into()),
         bullet: Some("■".into()),
