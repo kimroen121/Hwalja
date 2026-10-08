@@ -2187,6 +2187,49 @@ fn inserts_tables_where_the_caret_is() {
         }
     }
 }
+/// After an object in the paragraph, the text before the caret stays above the table.
+#[test]
+fn a_table_after_an_object_splits_where_the_caret_is() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let all = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, all, "가나다라").unwrap();
+    run(
+        &mut s,
+        EditCommand::InsertEquation {
+            position: point(body(), 1),
+            script: "x".into(),
+            font_size: 1000,
+            color: 0,
+        },
+    )
+    .unwrap();
+    for (scalar, before, after) in [(5, "가\u{FFFC}나다라", ""), (3, "가\u{FFFC}나", "다라")]
+    {
+        let mut s = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+        let reply = run(
+            &mut s,
+            EditCommand::InsertTable {
+                position: point(body(), scalar),
+                rows: 1,
+                columns: 1,
+                width: None,
+                height: None,
+                treat_as_char: false,
+            },
+        )
+        .unwrap();
+        let table = reply.selection.unwrap().focus.target.paragraph;
+        assert_eq!(s.paragraph(&body()).unwrap().text, before, "{scalar}");
+        let rest = (table + 1..table + 3)
+            .map(|i| {
+                s.paragraph(&commands::at_index(&body(), i as usize))
+                    .unwrap()
+                    .text
+            })
+            .collect::<String>();
+        assert_eq!(rest, after, "{scalar}");
+    }
+}
 #[test]
 fn edits_table_rows_and_columns() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();

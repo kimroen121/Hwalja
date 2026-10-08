@@ -1144,10 +1144,12 @@ impl EditSession {
                 treat_as_char,
             } => {
                 let t = &position.target;
+                // rhwp splits the paragraph there, counting objects as it moves them.
+                let at = self.spot(position)?.split(get(self.core.document(), t)?);
                 let json = self.core.create_table_native(
                     t.section as usize,
                     t.paragraph as usize,
-                    self.spot(position)?.text,
+                    at,
                     *rows,
                     *columns,
                 )?;
