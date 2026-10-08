@@ -781,6 +781,15 @@ struct Statistics: Decodable, Hashable, Sendable {
     var tables, pictures, textBoxes: UInt32
 }
 
+/// 상황 선 for the caret, 1-based as 한글 shows it.
+struct CaretStatus: Decodable, Hashable, Sendable {
+    var page, column, line, character, section, sections: UInt32
+    /// The cell's address, as A1.
+    var cell: String?
+    /// 글자 수 of the document.
+    var characters: UInt32
+}
+
 /// 96 dpi, top-left origin within `page`.
 struct PageRect: Decodable, Hashable, Sendable {
     var page: UInt32
@@ -824,6 +833,7 @@ enum EngineRequest: Encodable, Sendable {
     case pageHide(EditTarget)
     case bookmarks
     case statistics
+    case status(revision: UInt64, EditPosition)
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
@@ -901,6 +911,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("bookmarks", forKey: .op)
         case .statistics:
             try c.encode("statistics", forKey: .op)
+        case let .status(revision, position):
+            try c.encode("status", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(position, forKey: .position)
         case let .objectAt(revision, page, x, y):
             try c.encode("objectAt", forKey: .op)
             try c.encode(revision, forKey: .revision)

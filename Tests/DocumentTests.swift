@@ -1027,6 +1027,26 @@ struct DocumentTests {
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
     }
 
+    /// The 상황 선 follows the caret: 줄, 칸 and 글자 수 once typing pauses, and a cell's address.
+    @Test func statusBarFollowsTheCaret() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        document.type("가나다", nil)
+        await document.settle()
+        func caret() async throws -> CaretStatus {
+            for _ in 0..<100 where viewer.status.caret?.characters != 3 { try await Task.sleep(for: .milliseconds(10)) }
+            return try #require(viewer.status.caret)
+        }
+        let typed = try await caret()
+        #expect((typed.page, typed.column, typed.character, typed.characters, typed.cell) == (1, 1, 4, 3, nil))
+        viewer.insertTable(rows: 1, columns: 2)
+        await document.settle()
+        for _ in 0..<100 where viewer.status.caret?.cell == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(viewer.status.caret?.cell == "A1")
+    }
+
     /// 개체 탭 and 상황 탭 follow the selection, as in 한/글 2024.
     @Test func objectAndStateTabsFollowTheSelection() {
         #expect(ToolRow.contextTabs(EditingContext()) == [])

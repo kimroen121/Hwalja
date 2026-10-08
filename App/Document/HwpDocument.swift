@@ -458,6 +458,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func statistics() async throws -> Statistics {
         try await session.statistics()
     }
+    /// 상황 선 for `position` in the current revision.
+    func status(at position: EditPosition) async throws -> CaretStatus {
+        try await session.status(revision: revision, at: position)
+    }
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }

@@ -45,7 +45,7 @@ struct DocumentWindow: View {
                     .frame(minWidth: 480, minHeight: 400)
             }
             Divider()
-            StatusBar(document: document, viewer: viewer, position: viewer.position)
+            StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
         }
         .alert("찾아가기", isPresented: $viewer.goingToPage) {
             TextField("쪽", text: $pageField)
@@ -106,25 +106,49 @@ private struct StatusBar: View {
     @ObservedObject var document: HwpDocument
     @ObservedObject var viewer: Viewer
     @ObservedObject var position: ViewPosition
+    @ObservedObject var status: StatusModel
 
     var body: some View {
-        HStack(spacing: 4) {
-            Text("\(position.page + 1) / \(document.context.pageCount)쪽")
-                .monospacedDigit()
+        let caret = status.caret, context = document.context
+        // 한/글 2024's order: 쪽, 단, 줄, 칸, 글자 수, 편집 상태, 구역, 삽입.
+        HStack(spacing: 14) {
+            Button("\(caret?.page ?? UInt32(position.page + 1))/\(context.pageCount)쪽") { viewer.goingToPage = true }
+                .buttonStyle(.plain)
+            if let caret {
+                Text("\(caret.column)단")
+                Text("\(caret.line)줄")
+                Text("\(caret.character)칸")
+                Text("\(caret.characters)글자")
+                Text(Self.state(context, cell: caret.cell))
+                Text("\(caret.section)/\(caret.sections) 구역")
+                Text("삽입")
+            }
             Spacer()
-            ToolIcon("쪽 윤곽", symbol: "doc", on: viewer.showsOutline) { viewer.showsOutline.toggle() }
-            ToolIcon("축소", symbol: "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
-            Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
-                .menuStyle(.borderlessButton)
-                .monospacedDigit()
-                .fixedSize()
-            ToolIcon("확대", symbol: "plus.magnifyingglass") { viewer.canvas.zoomIn(nil) }
+            HStack(spacing: 4) {
+                ToolIcon("쪽 윤곽", symbol: "doc", on: viewer.showsOutline) { viewer.showsOutline.toggle() }
+                ToolIcon("축소", symbol: "minus.magnifyingglass") { viewer.canvas.zoomOut(nil) }
+                Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                ToolIcon("확대", symbol: "plus.magnifyingglass") { viewer.canvas.zoomIn(nil) }
+            }
         }
         .font(.callout)
+        .monospacedDigit()
         .foregroundStyle(.secondary)
         .controlSize(.small)
         .padding(.horizontal, 12)
         .frame(height: 26)
+    }
+
+    /// 현재 편집 상태: the selected object's kind, the cell's address, or 문자 입력.
+    static func state(_ context: EditingContext, cell: String?) -> String {
+        switch context.object {
+        case .picture: "그림"
+        case .equation: "수식"
+        case .shape: "도형"
+        case .table, nil: cell ?? "문자 입력"
+        }
     }
 }
 
@@ -144,6 +168,12 @@ struct ZoomItems: View {
     }
 }
 
+/// 상황 선's caret status. Kept apart from `Viewer` because it changes with every caret move.
+@MainActor
+final class StatusModel: ObservableObject {
+    @Published fileprivate(set) var caret: CaretStatus?
+}
+
 /// Page in view and zoom. Kept apart from `Viewer` because they change on every scroll.
 @MainActor
 final class ViewPosition: ObservableObject {
@@ -157,6 +187,8 @@ final class ViewPosition: ObservableObject {
 final class Viewer: ObservableObject {
     let canvas = DocumentCanvas(frame: .zero)
     let position = ViewPosition()
+    let status = StatusModel()
+    private var statusTask: Task<Void, Never>?
     /// Pages side by side.
     /// Pages side by side; more than one turns 쪽 윤곽 on, as 한글's 여러 쪽 보기 does.
     @Published var columns = 1 {
@@ -276,6 +308,14 @@ final class Viewer: ObservableObject {
     /// Keeps the find bar's matches and count current as the document changes.
     private func documentPresented() {
         if showsRuler { canvas.needsRulers() }
+        // The 상황 선 follows once typing pauses, off the keystroke's way.
+        statusTask?.cancel()
+        statusTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, let self, let document, let focus = document.selection?.focus else { return }
+            let caret = try? await document.status(at: focus)
+            if !Task.isCancelled, caret != status.caret { status.caret = caret }
+        }
         guard finding, let document else { return }
         if document.revision != searchedRevision {
             Task { await search() }

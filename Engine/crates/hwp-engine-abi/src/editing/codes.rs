@@ -222,6 +222,63 @@ impl EditSession {
         Ok(())
     }
 
+    /// 상황 선: 쪽, 단, 줄, 칸, 구역 and the cell's address for the caret, and the 글자 수.
+    pub fn status(&self, revision: u64, p: &EditPosition) -> Result<CaretStatus, EditError> {
+        let rect = self.caret(revision, p)?;
+        let t = &p.target;
+        let doc = self.core.document();
+        let para = get(doc, t)?;
+        let spot = logical::spot(para, p.scalar);
+        let raw = para.char_offsets.get(spot.text).copied().unwrap_or(u32::MAX);
+        let mut line = para.line_segs.iter().rposition(|s| s.text_start <= raw).unwrap_or(0);
+        // At a wrapped line's end the caret shows after the line before.
+        if p.upstream && line > 0 && para.line_segs[line].text_start == raw {
+            line -= 1;
+        }
+        let start = para.line_segs.get(line).map_or(0, |s| s.text_start);
+        let start = para.char_offsets.iter().position(|&o| o >= start).unwrap_or(0);
+        let mut status = CaretStatus {
+            page: rect.page + 1,
+            column: 1,
+            line: line as u32 + 1,
+            character: p.scalar.saturating_sub(logical::position(para, start, false)) + 1,
+            section: t.section + 1,
+            sections: doc.sections.len() as u32,
+            cell: None,
+            characters: self.statistics().characters,
+        };
+        let body = t.cell.is_none() && t.note.is_none() && t.header_footer.is_none();
+        let host_line = if body { line } else { 0 };
+        if let Some((_, column, in_page)) =
+            self.core.line_place_native(t.section as usize, t.paragraph as usize, host_line)
+        {
+            status.column = column as u32 + 1;
+            if body {
+                status.line = in_page;
+            }
+        }
+        if !body {
+            // In a cell, note or 머리말/꼬리말: the lines of the paragraphs before it in its text.
+            let before: usize = commands::paragraphs(doc, t)?
+                .iter()
+                .take(commands::index(t))
+                .map(|p| p.line_segs.len().max(1))
+                .sum();
+            status.line += before as u32;
+        }
+        if let (Some(c), Some(table)) = (&t.cell, commands::table(doc, t)) {
+            status.cell = table.cells.get(c.cell as usize).map(|cell| {
+                let mut column = String::new();
+                let mut n = cell.col as u32 + 1;
+                while n > 0 {
+                    column.insert(0, char::from(b'A' + ((n - 1) % 26) as u8));
+                    n = (n - 1) / 26;
+                }
+                format!("{column}{}", cell.row + 1)
+            });
+        }
+        Ok(status)
+    }
     pub fn statistics(&self) -> Statistics {
         let mut n = Statistics {
             pages: self.core.page_count(),

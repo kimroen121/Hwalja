@@ -383,6 +383,24 @@ pub struct Statistics {
     pub pictures: u32,
     pub text_boxes: u32,
 }
+/// 상황 선: where the caret is, 1-based as 한글 shows it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaretStatus {
+    pub page: u32,
+    /// 단 of the body, 1 elsewhere.
+    pub column: u32,
+    /// 줄 on the page's column for the body; in a cell, note or 머리말/꼬리말, in its text.
+    pub line: u32,
+    /// 칸: the position in the line, objects in the line counted.
+    pub character: u32,
+    pub section: u32,
+    pub sections: u32,
+    /// The cell's address, as A1.
+    pub cell: Option<String>,
+    /// 글자 수 of the document (공백 포함).
+    pub characters: u32,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Placement {

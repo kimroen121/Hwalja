@@ -637,7 +637,45 @@ diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries
          &self,
          section_idx: usize,
          para_idx: usize,
-@@ -177,7 +177,7 @@
+@@ -138,6 +138,37 @@
+         Self::compute_line_info(para, char_offset)
+     }
+ 
++    /// 상황 선의 쪽·단·줄: the page (counted across sections), column and 1-based line in
++    /// that column showing line `line` of body paragraph `para_idx`. Tables and other
++    /// objects placed between paragraphs take no line.
++    pub fn line_place_native(&self, section_idx: usize, para_idx: usize, line: usize) -> Option<(u32, u16, u32)> {
++        use crate::renderer::pagination::PageItem;
++        let base: usize = self.pagination.iter().take(section_idx).map(|pr| pr.pages.len()).sum();
++        let pr = self.pagination.get(section_idx)?;
++        let paragraphs = self.section_render_paragraphs(section_idx);
++        for (i, page) in pr.pages.iter().enumerate() {
++            for column in &page.column_contents {
++                let mut before = 0u32;
++                for item in &column.items {
++                    let (p, lines) = match item {
++                        PageItem::FullParagraph { para_index } => {
++                            (*para_index, 0..paragraphs.get(*para_index).map_or(1, |p| p.line_segs.len().max(1)))
++                        }
++                        PageItem::PartialParagraph { para_index, start_line, end_line } => {
++                            (*para_index, *start_line..*end_line)
++                        }
++                        _ => continue,
++                    };
++                    if p == para_idx && lines.contains(&line) {
++                        return Some(((base + i) as u32, column.column_index, before + (line - lines.start) as u32 + 1));
++                    }
++                    before += lines.len() as u32;
++                }
++            }
++        }
++        None
++    }
++
+     pub(crate) fn get_render_paragraph_ref(
+         &self,
+         section_idx: usize,
+@@ -177,7 +208,7 @@
      }
  
      /// 셀 내 문단의 줄 정보를 반환한다 (네이티브).
@@ -646,7 +684,7 @@ diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -367,7 +367,7 @@
+@@ -367,7 +398,7 @@
      }
  
      /// 표의 행/열/셀 수를 반환한다 (네이티브).
@@ -655,7 +693,7 @@ diff --git a/src/document_core/queries/cursor_nav.rs b/src/document_core/queries
          &self,
          sec: usize,
          para: usize,
-@@ -1753,7 +1753,7 @@
+@@ -1753,7 +1784,7 @@
      ///
      /// cell_ctx: Some((ppi, ci, cei)) 면 셀 내부, None 이면 본문.
      /// start/end_para_idx: 셀 내부일 때는 cellParaIndex.

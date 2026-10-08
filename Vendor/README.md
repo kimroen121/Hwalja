@@ -28,6 +28,7 @@
 - tags each equation group, on the page and in the preview, with its script, layout box, size and color, so the app can set it with SwiftMath;
 - fits fallback color emoji glyphs to their HWP layout advances so consecutive emoji do not paint over one another or the caret.
 - refreshes the per-line indentation flag after paragraph reflow, so a section-leading paragraph applies new first-line and hanging indents instead of inheriting stale stored geometry.
+- adds `line_place_native`: the page, column and line in that column showing a line of a body paragraph, for the 상황 선.
 - pastes inline HTML with no block (part of a paragraph, as browsers copy it) as one paragraph with its formats, and reads `<b>`, `<i>` and `<u>` with attributes (`<b style=…>`, as Safari copies).
 - puts a click in a 머리말 or 꼬리말 at the nearest character boundary (it landed one character to the right).
 

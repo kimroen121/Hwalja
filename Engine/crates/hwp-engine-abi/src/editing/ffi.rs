@@ -109,6 +109,11 @@ enum Request {
     Bookmarks,
     /// 문서 정보's 문서 통계.
     Statistics,
+    /// 상황 선 for the caret at `position`.
+    Status {
+        revision: u64,
+        position: EditPosition,
+    },
     /// Every match of `query`, as selections in document order.
     #[serde(rename_all = "camelCase")]
     Find {
@@ -262,6 +267,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::PageHide { target } => HwpEditResult::ok(session.page_hide(&target)?, Vec::new()),
         Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
+        Request::Status { revision, position } => {
+            HwpEditResult::ok(session.status(revision, &position)?, Vec::new())
+        }
         Request::Find {
             query,
             case_sensitive,

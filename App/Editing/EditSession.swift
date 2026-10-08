@@ -106,6 +106,9 @@ final class EditSession: @unchecked Sendable {
     func statistics() async throws -> Statistics {
         try await decode(send(.statistics))
     }
+    func status(revision: UInt64, at position: EditPosition) async throws -> CaretStatus {
+        try await decode(send(.status(revision: revision, position)))
+    }
 
     func styles() async throws -> [StyleInfo] {
         try await decode(send(.styles))
