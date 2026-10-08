@@ -470,6 +470,13 @@ impl EditSession {
                     Ok(())
                 }
             }
+            EditCommand::FlipTable { cell, .. } => {
+                let doc = self.core.document();
+                paragraphs(doc, cell)?;
+                table(doc, cell)
+                    .map(|_| ())
+                    .ok_or(EditError::UnsupportedTarget)
+            }
             EditCommand::EditTable { cell, change } => {
                 let doc = self.core.document();
                 paragraphs(doc, cell)?;
@@ -733,6 +740,34 @@ impl EditSession {
                 self.core.merge_table_with_next_native(s, host, control)?;
             }
         }
+        self.caret_in_cell(target, row, col)
+    }
+    /// 표 뒤집기, the caret staying in its cell.
+    fn flip_table(
+        &mut self,
+        target: &EditTarget,
+        turn: TableTurn,
+        margins: bool,
+    ) -> Result<EditSelection, EditError> {
+        let c = target.cell.as_ref().ok_or(EditError::UnsupportedTarget)?;
+        let t = table(self.core.document(), target).ok_or(EditError::InvalidInput)?;
+        let cell = t
+            .cells
+            .get(c.cell as usize)
+            .ok_or(EditError::InvalidInput)?;
+        let (row, col) = turn.place(
+            (cell.row, cell.col),
+            (cell.row_span, cell.col_span),
+            (t.row_count, t.col_count),
+        );
+        // rhwp numbers them in the order they are declared.
+        self.core.flip_table_native(
+            target.section as usize,
+            target.paragraph as usize,
+            c.control as usize,
+            turn as u8,
+            margins,
+        )?;
         self.caret_in_cell(target, row, col)
     }
     fn length(&self, t: &EditTarget) -> Result<u32, EditError> {
@@ -1331,6 +1366,11 @@ impl EditSession {
                 }))
             }
             EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
+            EditCommand::FlipTable {
+                cell,
+                turn,
+                margins,
+            } => self.flip_table(cell, *turn, *margins),
             EditCommand::SetPage {
                 section,
                 page,

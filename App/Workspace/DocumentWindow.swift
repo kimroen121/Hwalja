@@ -60,6 +60,7 @@ struct DocumentWindow: View {
         }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.flippingTable) { TableFlipSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.startingNumber) { NewNumberSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.bookmarking) { BookmarkSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.insertingSymbols) { SymbolSheet(viewer: viewer) }
@@ -253,6 +254,7 @@ final class Viewer: ObservableObject {
     @Published var documentInfo: DocumentInfo?
     @Published var insertingTable = false
     @Published var splittingCells = false
+    @Published var flippingTable = false
     /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
     @Published var equation: EquationEdit?
     @Published var objectSheet: ObjectSheetState?
@@ -302,7 +304,7 @@ final class Viewer: ObservableObject {
                 return true
             }
             // By the key's place, so they work while typing 한글 as well.
-            let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g"]
+            let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g", 17: "t"]
             guard modifiers.isEmpty, let key = letters[event.keyCode] else { return false }
             if context.cellBlock {
                 switch key {
@@ -310,6 +312,7 @@ final class Viewer: ObservableObject {
                 case "s": splittingCells = true
                 case "h": editCells { .equalizeCells($0, height: true) }
                 case "w": editCells { .equalizeCells($0, height: false) }
+                case "t": flippingTable = true
                 case "p": showObjectProperties()
                 default: return false
                 }

@@ -1075,6 +1075,21 @@ struct DocumentTests {
         #expect(viewer.status.caret?.cell == "A1")
     }
 
+    /// 표 뒤집기 turns the table with the caret's cell: 시계 방향 90도 takes A1 of a 2×3 table to B1.
+    @Test func tablesTurn() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        viewer.insertTable(rows: 2, columns: 3)
+        await document.settle()
+        viewer.flipTable(.right, margins: false)
+        await document.settle()
+        let caret = try #require(document.selection?.focus)
+        #expect(try await document.status(at: caret).cell == "B1")
+    }
+
     /// 개체 탭 and 상황 탭 follow the selection, as in 한/글 2024.
     @Test func objectAndStateTabsFollowTheSelection() {
         #expect(ToolRow.contextTabs(EditingContext()) == [])

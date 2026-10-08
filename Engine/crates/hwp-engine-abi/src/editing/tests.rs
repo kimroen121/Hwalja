@@ -2336,6 +2336,120 @@ fn splits_and_attaches_tables() {
     s.export(SaveFormat::Hwpx).unwrap();
 }
 #[test]
+fn flips_and_turns_tables() {
+    for (turn, rows) in [
+        (TableTurn::Rows, vec!["def", "abc"]),
+        (TableTurn::Columns, vec!["cba", "fed"]),
+        (TableTurn::Diagonal, vec!["ad", "be", "cf"]),
+        (TableTurn::Left, vec!["cf", "be", "ad"]),
+        (TableTurn::Half, vec!["fed", "cba"]),
+        (TableTurn::Right, vec!["da", "eb", "fc"]),
+    ] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 2,
+            columns: 3,
+            width: None,
+            height: None,
+            treat_as_char: false,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let at = |i: usize| {
+            let mut target = caret.target.clone();
+            target.cell.as_mut().unwrap().cell = i as u32;
+            target
+        };
+        for (i, text) in ["a", "b", "c", "d", "e", "f"].iter().enumerate() {
+            let cell = at(i);
+            replace(&mut s, cell, 0, 0, text).unwrap();
+        }
+        let size = |s: &EditSession| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            (
+                t.get_column_widths().iter().sum::<u32>(),
+                t.get_row_heights().iter().sum::<u32>(),
+            )
+        };
+        let (width, height) = size(&s);
+        // The caret in "b" stays in it.
+        let reply = run(
+            &mut s,
+            EditCommand::FlipTable {
+                cell: at(1),
+                turn,
+                margins: true,
+            },
+        )
+        .unwrap_or_else(|e| panic!("{turn:?}: {e:?}"));
+        let read = |s: &EditSession| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            (0..t.row_count)
+                .map(|r| {
+                    (0..t.col_count)
+                        .map(|c| t.cell_at(r, c).unwrap().paragraphs[0].text.clone())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(read(&s), rows, "{turn:?}");
+        let focus = reply.selection.unwrap().focus.target;
+        assert_eq!(s.paragraph(&focus).unwrap().text, "b", "{turn:?}");
+        let turned = matches!(
+            turn,
+            TableTurn::Diagonal | TableTurn::Left | TableTurn::Right
+        );
+        // The width stays; with rows and columns swapped, every row is as tall as the tallest.
+        let (new_width, new_height) = size(&s);
+        assert_eq!(new_width, width, "{turn:?}");
+        if turned {
+            assert_eq!(new_height, height / 2 * 3, "{turn:?}");
+        } else {
+            assert_eq!(new_height, height, "{turn:?}");
+        }
+        let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+        assert_eq!(read(&reopened), rows, "{turn:?}");
+    }
+    // A merged cell turns with its span: "ab" across the top goes down the right.
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertTable {
+        position: point(body(), 0),
+        rows: 2,
+        columns: 3,
+        width: None,
+        height: None,
+        treat_as_char: false,
+    };
+    let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+    let mut second = caret.clone();
+    second.target.cell.as_mut().unwrap().cell = 1;
+    run(
+        &mut s,
+        EditCommand::MergeCells {
+            selection: EditSelection {
+                anchor: caret.clone(),
+                focus: second,
+            },
+        },
+    )
+    .unwrap();
+    run(
+        &mut s,
+        EditCommand::FlipTable {
+            cell: caret.target.clone(),
+            turn: TableTurn::Right,
+            margins: false,
+        },
+    )
+    .unwrap();
+    let t = commands::table(s.core.document(), &caret.target).unwrap();
+    let merged = t.cell_at(0, 1).unwrap();
+    assert_eq!(
+        (t.row_count, t.col_count, merged.row_span, merged.col_span),
+        (3, 2, 2, 1)
+    );
+}
+#[test]
 fn sets_paper_and_margins() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, true)).unwrap();

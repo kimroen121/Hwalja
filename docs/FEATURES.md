@@ -250,7 +250,7 @@
 | 셀 너비를 같게 | ● | `table/table(eqwidth).htm` |  |
 | 표 테두리/배경 | ○ | `table/tableborder/tableborder.htm` | 앱에 없음. 셀 테두리/배경과 같은 경로 |
 | 표마당 | △ | `table/tablemadang/tablemadang.htm` | 표 스타일 자료 필요 |
-| 표 뒤집기 | ○ | `table/table(transform).htm` | `transpose_table_cells_in_place_native` |
+| 표 뒤집기 | ● | `table/table(transform).htm` | 대칭 3가지, 회전 3가지, 여백 뒤집기. 합친 셀 포함. 줄/칸이 바뀌면 표 너비를 지키고 칸을 고르게 나눈다(rhwp 방식). 크기 고정·개체 보호 표를 막는 것은 아직 없다 |
 | 블록 계산식 | ◐ | `table/blockcal/blockcal.htm` | 값으로 넣음. 계산식 필드로 넣어 자동 다시 계산 △ |
 | 쉬운 계산식 | △ | `table/easycal/easycal.htm` |  |
 | 계산식 | ○ | `table/calculation/calculation.htm` | `evaluate_table_formula`. 계산식 필드 넣기 △ |

@@ -465,6 +465,11 @@ struct MenuItems {
             item("셀 합치기", Icon.mergeCells) { viewer?.editCells { .mergeCells($0) } }
             Button("셀 높이를 같게") { viewer?.editCells { .equalizeCells($0, height: true) } }
             Button("셀 너비를 같게") { viewer?.editCells { .equalizeCells($0, height: false) } }
+        }
+        .disabled(!context.cellBlock)
+        item("표 뒤집기…", Icon.flipTable) { viewer?.flippingTable = true }
+            .disabled(!context.inTable || context.locked)
+        Group {
             Menu {
                 ForEach(Self.blockFunctions, id: \.title) { function in
                     Button(function.title) { viewer?.editCells { .calculateBlock($0, function.function) } }

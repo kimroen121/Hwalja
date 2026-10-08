@@ -38,6 +38,14 @@ extension Viewer {
         }
     }
 
+    /// 표 뒤집기 of the table holding the caret.
+    func flipTable(_ turn: TableTurn, margins: Bool) {
+        document?.edit(undoManager) { selection in
+            guard let target = selection?.focus.target, target.cell != nil else { return nil }
+            return .flipTable(target, turn, margins: margins)
+        }
+    }
+
     /// Runs a cell command over the cells the selection covers.
     func editCells(_ make: @escaping (EditSelection) -> EditCommand) {
         document?.edit(undoManager) { selection in
@@ -187,6 +195,38 @@ struct SplitCellSheet: View {
         } confirm: {
             let (rows, columns, equalHeight, mergeFirst) = (Int(rows), Int(columns), equalHeight, mergeFirst)
             viewer.editCells { .splitCells($0, rows: rows, columns: columns, equalHeight: equalHeight, mergeFirst: mergeFirst) }
+            dismiss()
+        }
+    }
+}
+
+/// 표 뒤집기, as in 한/글: one of 대칭 or 회전, and 여백 뒤집기.
+struct TableFlipSheet: View {
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var turn = TableTurn.diagonal
+    @State private var margins = false
+
+    private func choices(_ options: [(TableTurn, String)]) -> some View {
+        Picker("", selection: $turn) {
+            ForEach(options, id: \.0) { Text($0.1).tag($0.0) }
+        }
+        .pickerStyle(.radioGroup)
+        .labelsHidden()
+    }
+
+    var body: some View {
+        DialogFrame("표 뒤집기", confirmTitle: "뒤집기") {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("대칭")
+                choices([(.rows, "줄 기준 뒤집기"), (.columns, "칸 기준 뒤집기"), (.diagonal, "줄/칸 뒤집기")])
+                GroupTitle("회전").padding(.top, 4)
+                choices([(.left, "반시계 방향 90도"), (.half, "180도"), (.right, "시계 방향 90도")])
+                GroupTitle("선택 사항").padding(.top, 4)
+                Toggle("여백 뒤집기", isOn: $margins)
+            }
+        } confirm: {
+            viewer.flipTable(turn, margins: margins)
             dismiss()
         }
     }

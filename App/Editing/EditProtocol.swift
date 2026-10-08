@@ -114,6 +114,8 @@ enum EditCommand: Encodable, Sendable {
     case resizeTable(ObjectRef, row: Bool, line: UInt16, size: UInt32)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
+    /// 표 뒤집기; with `margins` the cells' 안 여백 turn too.
+    case flipTable(EditTarget, TableTurn, margins: Bool)
     /// 셀 합치기, 셀 나누기, and 셀 높이를 같게 or 셀 너비를 같게, over the cells the
     /// selection covers (its cell, or the block between cells of one table).
     case mergeCells(EditSelection)
@@ -143,7 +145,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -211,6 +213,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("editTable", forKey: .kind)
             try c.encode(cell, forKey: .cell)
             try c.encode(change, forKey: .change)
+        case let .flipTable(cell, turn, margins):
+            try c.encode("flipTable", forKey: .kind)
+            try c.encode(cell, forKey: .cell)
+            try c.encode(turn, forKey: .turn)
+            try c.encode(margins, forKey: .margins)
         case let .setPage(section, page, whole):
             try c.encode("setPage", forKey: .kind)
             try c.encode(section, forKey: .section)
@@ -485,6 +492,12 @@ enum TableChange: String, Encodable, Sendable {
     case insertRowAbove, insertRowBelow, insertColumnLeft, insertColumnRight, deleteRow, deleteColumn
     /// 표 나누기 and 표 붙이기.
     case split, attach
+}
+
+/// 표 뒤집기: 줄 기준 뒤집기, 칸 기준 뒤집기, 줄/칸 뒤집기, and 반시계 방향 90도, 180도,
+/// 시계 방향 90도.
+enum TableTurn: String, Encodable, Sendable, CaseIterable {
+    case rows, columns, diagonal, left, half, right
 }
 
 /// A section's paper in HWPUNIT (1/7200 inch); `width` and `height` describe it upright.

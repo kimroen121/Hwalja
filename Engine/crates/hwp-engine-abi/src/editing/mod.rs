@@ -294,13 +294,13 @@ impl EditSession {
             | EditCommand::InsertEquation { position, .. }
             | EditCommand::InsertShape { position, .. }
             | EditCommand::InsertNote { position, .. } => Some(position.clone()),
-            EditCommand::EditTable { cell, .. } | EditCommand::SetCell { cell, .. } => {
-                Some(EditPosition {
-                    target: cell.clone(),
-                    scalar: 0,
-                    upstream: false,
-                })
-            }
+            EditCommand::EditTable { cell, .. }
+            | EditCommand::FlipTable { cell, .. }
+            | EditCommand::SetCell { cell, .. } => Some(EditPosition {
+                target: cell.clone(),
+                scalar: 0,
+                upstream: false,
+            }),
             EditCommand::SetObject { object, .. }
             | EditCommand::MoveObject { object, .. }
             | EditCommand::DeleteObject { object }

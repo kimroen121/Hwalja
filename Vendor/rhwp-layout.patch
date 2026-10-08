@@ -390,7 +390,68 @@ diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/
 diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/commands/table_ops.rs
 --- a/src/document_core/commands/table_ops.rs
 +++ b/src/document_core/commands/table_ops.rs
-@@ -1259,7 +1259,7 @@
+@@ -1024,7 +1024,60 @@
+             source_rows, source_cols, source_cols, source_rows
+         )))
+     }
++
++    /// HwpStudio: 표 뒤집기 (table(transform).htm); `turn` and `margins` as `Table::flip`
++    /// takes them. A line moving to another side takes a border fill with it there.
++    pub fn flip_table_native(
++        &mut self,
++        section_idx: usize,
++        parent_para_idx: usize,
++        control_idx: usize,
++        turn: u8,
++        margins: bool,
++    ) -> Result<String, HwpError> {
++        use crate::model::style::BorderFill;
++        fn turned(fills: &mut Vec<BorderFill>, id: u16, sides: [usize; 4]) -> u16 {
++            let Some(old) = id.checked_sub(1).and_then(|i| fills.get(usize::from(i))) else {
++                return id;
++            };
++            let mut new = old.clone();
++            new.borders = sides.map(|i| old.borders[i]);
++            if super::super::helpers::border_fills_equal(old, &new) {
++                return id;
++            }
++            new.raw_data = None;
++            if let Some(i) = fills.iter().position(|f| super::super::helpers::border_fills_equal(f, &new)) {
++                return i as u16 + 1;
++            }
++            fills.push(new);
++            fills.len() as u16
++        }
++        let mut fills = std::mem::take(&mut self.document.doc_info.border_fills);
++        let count = fills.len();
++        let flipped = self
++            .get_table_mut(section_idx, parent_para_idx, control_idx)
++            .map(|table| table.flip(turn, margins, &mut |id, sides| turned(&mut fills, id, sides)));
++        let added = fills.len() != count;
++        self.document.doc_info.border_fills = fills;
++        let cells = flipped?.map_err(HwpError::RenderError)?;
++        if added {
++            self.document.doc_info.raw_stream_dirty = true;
++            self.rebuild_resolved_styles();
++        }
+ 
++        self.document.sections[section_idx].raw_stream = None;
++        self.reflow_table_cell_paragraphs(section_idx, parent_para_idx, control_idx, &cells);
++        self.recompose_section(section_idx);
++        self.paginate_if_needed();
++
++        self.event_log.push(DocumentEvent::TableCellsTransposed {
++            section: section_idx,
++            para: parent_para_idx,
++            ctrl: control_idx,
++        });
++        Ok(super::super::helpers::json_ok())
++    }
++
+     /// 행/열 바꿈 복사 버퍼를 커서 위치에 새 표로 생성해 붙여넣는다.
+     pub fn paste_table_cells_transposed_as_new_table_native(
+         &mut self,
+@@ -1259,7 +1312,7 @@
          Some(zone_border_fill_id.unwrap_or(cell.border_fill_id))
      }
  
@@ -399,7 +460,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2783,7 +2783,7 @@
+@@ -2783,7 +2836,7 @@
      }
  
      /// 표 속성을 조회한다 (네이티브).
@@ -408,7 +469,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          &self,
          section_idx: usize,
          parent_para_idx: usize,
-@@ -2823,34 +2823,34 @@
+@@ -2823,34 +2876,34 @@
          let table_width = if rd.len() >= common_obj_offsets::WIDTH.end {
              u32::from_le_bytes(rd[common_obj_offsets::WIDTH].try_into().unwrap())
          } else {
@@ -449,7 +510,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          };
  
          // 캡션 정보
-@@ -2911,12 +2911,12 @@
+@@ -2911,12 +2964,12 @@
          let vert_offset = if rd.len() >= common_obj_offsets::V_OFFSET.end {
              i32::from_le_bytes(rd[common_obj_offsets::V_OFFSET].try_into().unwrap())
          } else {
@@ -464,7 +525,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          };
          let restrict_in_page = (table.attr >> 13) & 0x01 != 0;
          let allow_overlap = (table.attr >> 14) & 0x01 != 0;
-@@ -3155,6 +3155,16 @@
+@@ -3155,6 +3208,16 @@
          }
  
          // 바깥 여백 (CommonObjAttr margin ranges, parse_common_obj_attr 정합)
@@ -481,7 +542,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          if table.raw_ctrl_data.len() >= common_obj_offsets::MARGIN_BOTTOM.end {
              if let Some(v) = json_i16(json, "outerLeft") {
                  table.raw_ctrl_data[common_obj_offsets::MARGIN_LEFT]
-@@ -3664,6 +3674,12 @@
+@@ -3664,6 +3727,12 @@
                  for offset in para.char_offsets.iter_mut() {
                      if *offset >= threshold {
                          *offset -= 8;
@@ -862,6 +923,121 @@ diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
          } else if inserts_before_inline_control {
              if effective_char_offset == 0 {
                  0
+diff --git a/src/model/table.rs b/src/model/table.rs
+--- a/src/model/table.rs
++++ b/src/model/table.rs
+@@ -1191,6 +1191,111 @@
+             .collect())
+     }
+ 
++    /// HwpStudio: 표 뒤집기 (table(transform).htm). `turn`: 0 줄 기준 뒤집기, 1 칸 기준
++    /// 뒤집기, 2 줄/칸 뒤집기, 3 반시계 방향 90도, 4 180도, 5 시계 방향 90도. Cells keep
++    /// their spans and turn with the table; mirrored, they keep their sizes, and with rows
++    /// and columns swapped the table keeps its width, shared evenly, and every row takes
++    /// the tallest row's height, as `transpose_unmerged_table_in_place` does. Each line goes with its side through
++    /// `turned_fill(id, sides)`, the border fill whose `borders[i]` is `id`'s
++    /// `borders[sides[i]]`. With `margins` the 안 여백 turn too. Returns the cells and
++    /// their paragraph counts, to lay out again.
++    pub fn flip(
++        &mut self,
++        turn: u8,
++        margins: bool,
++        turned_fill: &mut dyn FnMut(u16, [usize; 4]) -> u16,
++    ) -> Result<Vec<(usize, usize)>, String> {
++        let steps: &[u8] = match turn {
++            0 => &[0],
++            1 => &[1],
++            2 => &[2],
++            3 => &[2, 0],
++            4 => &[0, 1],
++            5 => &[2, 1],
++            _ => return Err(format!("표 뒤집기 방식 {} 이 없습니다", turn)),
++        };
++        let fits = |start: u16, span: u16, count: u16| u32::from(start) + u32::from(span.max(1)) <= u32::from(count);
++        if self.row_count == 0
++            || self.col_count == 0
++            || self.cells.iter().any(|c| !fits(c.row, c.row_span, self.row_count) || !fits(c.col, c.col_span, self.col_count)) {
++            return Err("손상된 표 셀 범위".to_string());
++        }
++        let (width, height) = (
++            self.get_column_widths().iter().sum::<HwpUnit>().max(1800),
++            Some(self.get_raw_row_heights().into_iter().max().unwrap_or(0)).filter(|&h| h > 0).unwrap_or(400),
++        );
++        for &step in steps {
++            self.flip_step(step, margins, turned_fill);
++        }
++        if steps.contains(&2) {
++            let widths = distribute_hwp_units(width, self.col_count);
++            for cell in &mut self.cells {
++                let (c, span) = (usize::from(cell.col), usize::from(cell.col_span.max(1)));
++                let new_width: HwpUnit = widths[c..c + span].iter().sum();
++                cell.shift_text_area_width(i64::from(new_width) - i64::from(cell.width));
++                cell.width = new_width;
++                cell.height = height * HwpUnit::from(cell.row_span.max(1));
++            }
++        }
++        self.cells.sort_by_key(|c| (c.row, c.col));
++        self.rebuild_row_sizes();
++        self.local_resize_rows.clear();
++        self.local_resize_cols.clear();
++        self.local_resize_cell_widths.clear();
++        self.local_resize_cell_heights.clear();
++        self.update_ctrl_dimensions();
++        self.rebuild_grid();
++        self.dirty = true;
++        Ok(self.cells.iter().enumerate().map(|(i, c)| (i, c.paragraphs.len())).collect())
++    }
++
++    /// One mirror of `flip`: 0 across the rows, 1 across the columns, 2 over the diagonal.
++    fn flip_step(&mut self, step: u8, margins: bool, turned_fill: &mut dyn FnMut(u16, [usize; 4]) -> u16) {
++        // Sides are left, right, top, bottom.
++        let sides = match step {
++            0 => [0, 1, 3, 2],
++            1 => [1, 0, 2, 3],
++            _ => [2, 3, 0, 1],
++        };
++        let turn_padding = |p: &mut crate::model::Padding| {
++            let old = [p.left, p.right, p.top, p.bottom];
++            [p.left, p.right, p.top, p.bottom] = sides.map(|i| old[i]);
++        };
++        let (rows, cols) = (self.row_count, self.col_count);
++        for cell in &mut self.cells {
++            match step {
++                0 => cell.row = rows - cell.row - cell.row_span.max(1),
++                1 => cell.col = cols - cell.col - cell.col_span.max(1),
++                _ => {
++                    (cell.row, cell.col) = (cell.col, cell.row);
++                    (cell.row_span, cell.col_span) = (cell.col_span, cell.row_span);
++                }
++            }
++            if margins {
++                turn_padding(&mut cell.padding);
++            }
++            cell.border_fill_id = turned_fill(cell.border_fill_id, sides);
++        }
++        for zone in &mut self.zones {
++            match step {
++                0 => (zone.start_row, zone.end_row) = (rows - 1 - zone.end_row.min(rows - 1), rows - 1 - zone.start_row.min(rows - 1)),
++                1 => (zone.start_col, zone.end_col) = (cols - 1 - zone.end_col.min(cols - 1), cols - 1 - zone.start_col.min(cols - 1)),
++                _ => {
++                    (zone.start_row, zone.start_col) = (zone.start_col, zone.start_row);
++                    (zone.end_row, zone.end_col) = (zone.end_col, zone.end_row);
++                }
++            }
++            zone.border_fill_id = turned_fill(zone.border_fill_id, sides);
++        }
++        self.border_fill_id = turned_fill(self.border_fill_id, sides);
++        if margins {
++            turn_padding(&mut self.padding);
++        }
++        if step == 2 {
++            (self.row_count, self.col_count) = (cols, rows);
++        }
++    }
++
+     /// raw_ctrl_data 내 CommonObjAttr의 width/height를 재계산하여 갱신한다 (의도된 dual).
+     ///
+     /// **Dual maintenance 의 이유** (Picture/Shape 와 다른 점):
 diff --git a/src/parser/doc_info.rs b/src/parser/doc_info.rs
 --- a/src/parser/doc_info.rs
 +++ b/src/parser/doc_info.rs

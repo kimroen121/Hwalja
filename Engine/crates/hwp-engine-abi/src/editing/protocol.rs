@@ -224,6 +224,12 @@ pub enum EditCommand {
         cell: EditTarget,
         change: TableChange,
     },
+    /// 표 뒤집기 of the table holding `cell`; with `margins` the cells' 안 여백 turn too.
+    FlipTable {
+        cell: EditTarget,
+        turn: TableTurn,
+        margins: bool,
+    },
     /// 셀 합치기: one cell from the block `selection` covers.
     MergeCells {
         selection: EditSelection,
@@ -591,6 +597,41 @@ pub enum TableChange {
     Split,
     /// 표 붙이기: the next table, with only empty paragraphs between, joins this one.
     Attach,
+}
+/// 표 뒤집기: 줄 기준 뒤집기, 칸 기준 뒤집기, 줄/칸 뒤집기, and turns of 반시계 방향 90도,
+/// 180도 and 시계 방향 90도.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TableTurn {
+    Rows,
+    Columns,
+    Diagonal,
+    Left,
+    Half,
+    Right,
+}
+impl TableTurn {
+    /// Where the cell at `row`, `col` spanning `spans` goes in a `size` table, as the
+    /// mirrors `Table::flip` makes.
+    pub fn place(self, (row, col): (u16, u16), spans: (u16, u16), size: (u16, u16)) -> (u16, u16) {
+        let mirrors: &[u8] = match self {
+            Self::Rows => &[0],
+            Self::Columns => &[1],
+            Self::Diagonal => &[2],
+            Self::Left => &[2, 0],
+            Self::Half => &[0, 1],
+            Self::Right => &[2, 1],
+        };
+        let (mut at, mut spans, mut size) = ((row, col), spans, size);
+        for m in mirrors {
+            match m {
+                0 => at.0 = size.0 - at.0 - spans.0.max(1),
+                1 => at.1 = size.1 - at.1 - spans.1.max(1),
+                _ => (at, spans, size) = ((at.1, at.0), (spans.1, spans.0), (size.1, size.0)),
+            }
+        }
+        at
+    }
 }
 /// A section's paper in HWPUNIT (1/7200 inch). `width` and `height` describe the paper
 /// upright; `landscape` turns it.

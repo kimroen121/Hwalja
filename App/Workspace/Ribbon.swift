@@ -97,8 +97,10 @@ struct ToolRow: View {
                 .fixedSize()
                 .hidden()
                 .overlay {
+                    // Never cut short, where a regular face runs a little wider than the bold.
                     Text(name)
                         .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                        .fixedSize()
                 }
                 .padding(.vertical, 4)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("tabs")) } action: { spans[name] = $0 }
@@ -249,6 +251,7 @@ struct ToolRow: View {
         .disabled(!context.cellBlock || context.locked)
         RowDivider()
         Group {
+            ToolTile("표 뒤집기", Icon.flipTable) { viewer.flippingTable = true }
             ToolTile("표 나누기", Icon.splitTable) { viewer.editTable(.split) }
             ToolTile("표 붙이기", Icon.attachTable) { viewer.editTable(.attach) }
         }
@@ -572,6 +575,7 @@ enum Icon {
     static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
+    static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"
         static let levelUp = "increase.indent", levelDown = "decrease.indent"

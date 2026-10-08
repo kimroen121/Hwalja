@@ -198,6 +198,7 @@ pub(super) fn check(
         EditCommand::EditTable { cell, change } => {
             return check_table(before, after, cell, Some(*change))
         }
+        EditCommand::FlipTable { cell, .. } => return check_table(before, after, cell, None),
         EditCommand::MergeCells { selection }
         | EditCommand::SplitCells { selection, .. }
         | EditCommand::EqualizeCells { selection, .. }
