@@ -67,17 +67,20 @@ extension Viewer {
             setObject(placed.object, changed.changes(from: props))
         }
     }
+    /// The selected object, or the table holding the caret: what 캡션 and 배치 change.
+    var arrangedObject: ObjectRef? {
+        if let placed = document?.object { return placed.object }
+        guard let target = document?.selection?.focus.target, let cell = target.cell else { return nil }
+        return ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
+    }
+    /// 배치 (글자처럼 취급, 어울림 …) of the selected object or the table holding the caret.
+    func arrange(_ change: ObjectProps) {
+        guard let object = arrangedObject else { return }
+        setObject(object, change)
+    }
     /// 캡션 넣기: for the selected object, or the table holding the caret.
     func insertCaption(_ position: String) {
-        guard let document else { return }
-        let object: ObjectRef
-        if let placed = document.object {
-            object = placed.object
-        } else if let target = document.selection?.focus.target, let cell = target.cell {
-            object = ObjectRef(kind: .table, section: target.section, paragraph: target.paragraph, control: cell.control)
-        } else {
-            return
-        }
+        guard let document, let object = arrangedObject else { return }
         setObject(object, ObjectProps(caption: position))
         // As in Hancom, the caret goes to the end of the caption, to write it.
         guard position != "None", object.cell == nil, [.picture, .table].contains(object.kind) else { return }

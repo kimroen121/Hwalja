@@ -65,10 +65,10 @@ struct MenuItems {
         }]
     }
     static func brightness(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 효과 없음")
+        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 없음")
     }
     static func contrast(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 효과 없음")
+        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 없음")
     }
     private static func steps(_ viewer: Viewer, _ key: WritableKeyPath<ObjectProps, Int32?>,
                               more: String, less: String, none: String) -> [Choice?] {
@@ -79,7 +79,7 @@ struct MenuItems {
             Choice(title: none) { viewer.adjustPicture { $0[keyPath: key] = 0 } },
         ]
     }
-    /// 원래 그림으로: no effect, crop or turn, at the size it was put in.
+    /// 원본 그림으로: no effect, crop or turn, at the size it was put in.
     static func restorePicture(_ viewer: Viewer) {
         viewer.adjustPicture { props in
             (props.effect, props.brightness, props.contrast, props.rotationAngle) = ("RealPic", 0, 0, 0)
@@ -132,19 +132,13 @@ struct MenuItems {
         }
         if viewer.document?.selection?.focus.target.isHeaderFooter == true {
             let document = viewer.document
-            let go = { (motion: Motion) in
-                document?.select { document in
-                    guard let focus = document.selection?.focus else { return nil }
-                    return try await .caret(document.navigate(from: focus, motion).position)
-                }
-            }
             items += [
                 nil,
                 Choice(title: "머리말/꼬리말 지우기", enabled: !context.locked) {
                     document?.deleteHeaderFooter(viewer.undoManager)
                 },
-                Choice(title: "다음 머리말/꼬리말") { go(.nextHeaderFooter) },
-                Choice(title: "이전 머리말/꼬리말") { go(.previousHeaderFooter) },
+                Choice(title: "다음 머리말/꼬리말") { viewer.goToHeaderFooter(.nextHeaderFooter) },
+                Choice(title: "이전 머리말/꼬리말") { viewer.goToHeaderFooter(.previousHeaderFooter) },
                 Choice(title: "닫기") { document?.closeHeaderFooter() },
             ]
         }
@@ -191,7 +185,7 @@ struct MenuItems {
                 Choice(title: "색조 조정", symbol: Icon.pictureEffect, enabled: !context.locked, submenu: pictureEffects(viewer)),
                 Choice(title: "밝기", symbol: Icon.brightness, enabled: !context.locked, submenu: brightness(viewer)),
                 Choice(title: "대비", symbol: Icon.contrast, enabled: !context.locked, submenu: contrast(viewer)),
-                Choice(title: "원래 그림으로", symbol: Icon.originalPicture, enabled: !context.locked) { restorePicture(viewer) },
+                Choice(title: "원본 그림으로", symbol: Icon.originalPicture, enabled: !context.locked) { restorePicture(viewer) },
             ]
         }
         if context.object != nil {
@@ -385,7 +379,7 @@ struct MenuItems {
         .disabled(viewer == nil || context.locked)
         Group {
             item("새 번호로 시작…", Icon.newNumber) { viewer?.startingNumber = true }
-            item("감추기…", Icon.pageHide) { viewer?.showPageHide() }
+            item("현재 쪽만 감추기…", Icon.pageHide) { viewer?.showPageHide() }
         }
         .disabled(!context.inBody)
         Divider()

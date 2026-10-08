@@ -163,7 +163,7 @@ struct FormatRow: View {
     }
 
     /// Every installed family, built only when the menu opens.
-    private static func styles(_ document: HwpDocument, _ editor: PageEditor) -> [Choice?] {
+    static func styles(_ document: HwpDocument, _ editor: PageEditor) -> [Choice?] {
         document.styles.map { style in
             Choice(title: style.name, on: style.id == document.format?.style) {
                 document.applyStyle(style.id, editor.undoManager)

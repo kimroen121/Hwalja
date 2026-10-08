@@ -58,6 +58,24 @@ extension Viewer {
     func setPage(_ page: PageSetup, section: UInt32, whole: Bool = false) {
         document?.edit(undoManager) { _ in .setPage(section: section, page, whole: whole) }
     }
+    /// 세로 or 가로 for the section holding the caret.
+    func setOrientation(landscape: Bool) {
+        guard let document else { return }
+        let section = document.selection?.focus.target.section ?? 0
+        Task {
+            guard var page = try? await document.pageSetup(section: section) else { return NSSound.beep() }
+            guard page.landscape != landscape else { return }
+            page.landscape = landscape
+            setPage(page, section: section)
+        }
+    }
+    /// 이전 or 다음 머리말/꼬리말 from the one holding the caret.
+    func goToHeaderFooter(_ motion: Motion) {
+        document?.select { document in
+            guard let focus = document.selection?.focus else { return nil }
+            return try await .caret(document.navigate(from: focus, motion).position)
+        }
+    }
     /// Replaces the section's 머리말 (or 꼬리말) for every page, turning 쪽 윤곽 on to show it.
     func headerFooter(footer: Bool, pageNumber: Placement?) {
         showsOutline = true

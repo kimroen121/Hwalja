@@ -228,7 +228,7 @@ struct DocumentTests {
         #expect(text.starts(with: ["오려 두기", "복사하기", "붙이기", "지우기"]) && text.contains("글자 모양…"))
         #expect(!text.contains("개체 속성…"))
         let picture = titles(EditingContext(hasSelection: true, object: .picture))
-        #expect(picture.contains("원래 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))
+        #expect(picture.contains("원본 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))
         #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
     }
 
@@ -1025,6 +1025,16 @@ struct DocumentTests {
         #expect(try await document.pageHide(body) == PageHide())
         let statistics = try await document.statistics()
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
+    }
+
+    /// 개체 탭 and 상황 탭 follow the selection, as in 한/글 2024.
+    @Test func objectAndStateTabsFollowTheSelection() {
+        #expect(ToolRow.contextTabs(EditingContext()) == [])
+        #expect(ToolRow.contextTabs(EditingContext(inTable: true)) == ["표 디자인", "표 레이아웃"])
+        #expect(ToolRow.contextTabs(EditingContext(inTable: true, object: .picture)) == ["그림"])
+        #expect(ToolRow.contextTabs(EditingContext(object: .shape)) == ["도형"])
+        #expect(ToolRow.contextTabs(EditingContext(object: .equation)) == [])
+        #expect(ToolRow.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
     }
 
     /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
