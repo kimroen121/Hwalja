@@ -9,7 +9,7 @@ struct ToolRow: View {
     let viewer: Viewer
     @AppStorage("toolTab") private var tab = "기본"
     @State private var hovered: String?
-    @Namespace private var underline
+    @State private var spans: [String: CGRect] = [:]
     static let tabs = ["기본", "편집", "보기", "입력", "서식", "쪽", "표"]
 
     var body: some View {
@@ -17,18 +17,18 @@ struct ToolRow: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(Self.tabs, id: \.self) { name in
-                    Button { withAnimation(.snappy(duration: 0.25)) { tab = name } } label: {
+                    Button { tab = name } label: {
+                        // Laid out bold either way, so choosing a tab moves nothing and the line slides undisturbed.
                         Text(name)
-                            .font(.system(size: 13, weight: tab == name ? .semibold : .regular))
-                            .foregroundStyle(tab == name ? .primary : .secondary)
-                            .padding(.vertical, 4)
-                            .background(alignment: .bottom) {
-                                // As in Word: a line under the selected tab, a little longer under the pointer.
-                                Color.clear
-                                    .frame(height: 3)
-                                    .padding(.horizontal, hovered == name ? -4 : 0)
-                                    .matchedGeometryEffect(id: name, in: underline)
+                            .font(.system(size: 13, weight: .semibold))
+                            .hidden()
+                            .overlay {
+                                Text(name)
+                                    .font(.system(size: 13, weight: tab == name ? .semibold : .regular))
+                                    .foregroundStyle(tab == name ? .primary : .secondary)
                             }
+                            .padding(.vertical, 4)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("tabs")) } action: { spans[name] = $0 }
                             // The gap between tabs is part of them, so a click beside a name still lands.
                             .padding(.horizontal, 9)
                             .contentShape(Rectangle())
@@ -37,13 +37,19 @@ struct ToolRow: View {
                     .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
                 }
             }
-            .overlay {
-                // One line, moved from tab to tab.
-                Capsule()
-                    .matchedGeometryEffect(id: tab, in: underline, isSource: false)
-                    .offset(y: 1.5)
-                    .allowsHitTesting(false)
+            .coordinateSpace(.named("tabs"))
+            .overlay(alignment: .topLeading) {
+                // As in Word: one line under the selected tab, moved from tab to tab, a little longer under the pointer.
+                if let span = spans[tab] {
+                    let grow: CGFloat = hovered == tab ? 4 : 0
+                    Capsule()
+                        .frame(width: span.width + grow * 2, height: 3)
+                        .offset(x: span.minX - grow, y: span.maxY - 1.5)
+                        .allowsHitTesting(false)
+                }
             }
+            // A change to stored settings comes without the click's animation.
+            .animation(.snappy(duration: 0.25), value: tab)
             .animation(.easeOut(duration: 0.15), value: hovered)
             .padding(.horizontal, 7)
             .padding(.top, 5)
