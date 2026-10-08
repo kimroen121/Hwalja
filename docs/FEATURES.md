@@ -9,7 +9,7 @@
   - ○ rhwp에 있음: 엔진(rhwp)에 함수가 있어 앱에 연결하면 된다.
   - △ 엔진 작업: rhwp에 없거나 고쳐야 한다. 앱만으로 되는 일이면 메모에 적었다.
   - — 범위 밖: Windows 전용, 한컴 서비스, macOS 기능으로 대신하는 것. 메모에 이유를 적었다.
-- 상태는 2026-10-08에 코드와 지난 점검 기록으로 매긴 것이다. 1단계에서 앱을 직접 써 보며 다시 확인한다.
+- 상태는 2026-10-08에 코드, 지난 화면 점검 기록, 2022 대화 상자 탭 구성과 대조해 매겼다.
 - 기능을 끝내면 상태를 바꾸고, 메모에서 끝난 내용을 지운다.
 
 ## 한컴오피스 2022 한/글 소개
@@ -134,8 +134,8 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 글자 모양 | ◐ | `format/font/fonts.htm` | 기본·확장·테두리/배경 탭 ●. 2022 대화 상자와 항목 대조 필요 |
-| 문단 모양 | ◐ | `format/paragraph/paragraph.htm` | 기본·확장·테두리/배경 ●. 탭 설정 탭 △, 최소 공백 △ |
+| 글자 모양 | ◐ | `format/font/fonts.htm` | 2022 탭은 기본·확장·테두리/배경. 앱은 기본·확장이고 테두리/배경을 확장 안에 둔다. 5단계에서 탭을 나누고 항목(강조점 등)을 대조 |
+| 문단 모양 | ◐ | `format/paragraph/paragraph.htm` | 2022 탭은 기본·확장·탭 설정·테두리/배경. 앱은 기본·테두리/배경. 확장(문단 보호·외톨이줄 보호·다음 문단과 함께 등)과 탭 설정이 없다. 최소 공백 △ |
 | 문단 첫 글자 장식 | △ | `format/drop_cap/drop_cap.htm` |  |
 | 문단 번호 모양 | ◐ | `format/numberbullet/numberbullet(main).htm` | 문단 번호·글머리표 ●, 새 번호 목록 시작은 저장 안 됨(BUG_HANDOFF P1). 그림 글머리표 △. 표 칸·주석 안 시작 번호 방식 ○ 확장 필요 |
 | 문단 번호 적용/해제 | ● | `format/numberbullet/number(attributes_cancel).htm` |  |
@@ -145,7 +145,7 @@
 | 한 수준 증가/감소 | ● | `format/outline/outline_numbering(depth).htm` |  |
 | 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(추가·편집·지우기) ○ wasm `get_style_list`·`update_style`·`create_style`·`delete_style` |
 | 스타일마당 | △ | `format/style_templates/style_templates.htm` | 서식 파일 자료 필요 |
-| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 기본·여백/캡션·그림·채우기 일부 ●. 선 탭 ○, 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
+| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 2022 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 그림 탭, 도형의 선·채우기 탭. 글상자·그림자 탭과 그림의 선 탭 없음. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
 
 ## 쪽
 
@@ -158,7 +158,7 @@
 | 쪽 테두리/배경 | ○ | `format/pageborder/page_border.htm` | `get/set_page_border_fill_native` |
 | 바탕쪽 | △ | `format/masterpages/master_pages.htm` | rhwp에 바탕쪽 편집 없음(그리기는 됨) |
 | 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
-| 쪽 번호 매기기 | ◐ | `format/pagenumber.htm` | 머리말·꼬리말의 쪽 번호 ●. 쪽 번호 매기기 대화 상자(번호 위치·모양) △ 확인 필요 |
+| 쪽 번호 매기기 | △ | `format/pagenumber.htm` | 앱에는 머리말·꼬리말 모양 목록의 쪽 번호만 있다. [쪽 번호 매기기] 대화 상자(번호 위치 10가지·번호 모양)는 없음. rhwp에 쪽 번호 위치(`PageNumberPos`) 모델과 그리기는 있고 넣기 명령이 없다(새 번호로 시작처럼 패치) |
 | 새 번호로 시작 | ● | `format/new_number.htm` |  |
 | 감추기 | ● | `format/hide.htm` |  |
 | 줄 번호 | △ | `view/line_number.htm` |  |
@@ -237,8 +237,8 @@
 |---|---|---|---|
 | 표 | ◐ | `table/table(table).htm#bc-1` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
 | 차트 만들기 | △ | `table/chart/chart(createchart).htm#bc-1` | 차트와 같음 |
-| 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 표·셀 탭 ●. 2022 대화 상자와 항목 대조 필요 |
-| 셀 테두리/배경 | ◐ | `table/cellborder/cellborder.htm` | 셀 테두리/배경 ●. 각 셀마다 적용·하나의 셀처럼 적용 ○ `apply_cell_border_fill_ids_native` |
+| 표/셀 속성 | ◐ | `table/tableattribute/tableattribute.htm` | 2022 탭은 기본·여백/캡션·테두리·배경·표·셀. 앱은 기본·여백/캡션·표·셀. 테두리·배경 탭 ○ |
+| 셀 테두리/배경 | ○ | `table/cellborder/cellborder.htm` | 앱에 없음. 각 셀마다 적용(테두리·배경·대각선)·하나의 셀처럼 적용: `apply_cell_border_fill_ids_native`, `set_cell_zone_properties` |
 | 표 나누기 | ○ | `table/table(dividing).htm` | `split_table_native` |
 | 표 붙이기 | ○ | `table/table(attach).htm` | `merge_table_with_next_native` |
 | 줄/칸 추가하기 | ◐ | `table/table(ins).htm` | 위쪽·아래쪽·왼쪽·오른쪽 ●. 대화 상자(줄/칸 수) △ |
@@ -247,7 +247,7 @@
 | 셀 합치기 | ● | `table/table(merge).htm` |  |
 | 셀 높이를 같게 | ● | `table/table(eqheight).htm` |  |
 | 셀 너비를 같게 | ● | `table/table(eqwidth).htm` |  |
-| 표 테두리/배경 | ◐ | `table/tableborder/tableborder.htm` | 표/셀 속성의 테두리 ●. 2022 대화 상자 대조 필요 |
+| 표 테두리/배경 | ○ | `table/tableborder/tableborder.htm` | 앱에 없음. 셀 테두리/배경과 같은 경로 |
 | 표마당 | △ | `table/tablemadang/tablemadang.htm` | 표 스타일 자료 필요 |
 | 표 뒤집기 | ○ | `table/table(transform).htm` | `transpose_table_cells_in_place_native` |
 | 블록 계산식 | ◐ | `table/blockcal/blockcal.htm` | 값으로 넣음. 계산식 필드로 넣어 자동 다시 계산 △ |

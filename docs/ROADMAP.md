@@ -89,7 +89,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
   - 보기의 「쪽 모양」(한 쪽·두 쪽·세 쪽): 2022는 확대/축소 대화 상자의 「여러 쪽」(가로×세로) → 5단계.
   - 서식 도구 상자의 「글머리표」·「문단 번호」·「형광펜」: 2022 서식 도구 상자에는 없고 서식 탭에 있다 → 2단계.
   - 도움말에 이름이 없는 값(선 종류 「실선」·「긴 파선」 등, 문자표의 문자 영역 이름, 그림 탭 밝기·대비의 단계 이름)은 웹 한글 이름을 그대로 둔다.
-- [ ] `FEATURES.md`의 ●·◐를 앱에서 하나씩 써 보며 다시 매긴다. 도움말과 동작이 다른 것은 ◐로 내리고 메모에 적는다.
 
 ### 2. 창 구성
 
@@ -127,8 +126,8 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 - [ ] 책갈피 작업 창(`view/workwindow/bookmark/bookmark.htm`): 책갈피 명령은 이미 있음.
 - [ ] 문서 정보의 글꼴 정보·그림 정보 탭: `get_document_info`, 그림 목록.
 - [ ] 문서 암호 설정·변경/해제(`file/password/password.htm`): `export_hwp_with_adapter_with_password`, `export_hwpx_native_with_password`.
-- [ ] 셀 테두리/배경 › 각 셀마다 적용·하나의 셀처럼 적용(`table/cellborder/cellborder.htm`): `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.
-- [ ] 개체 속성 › 선 탭과 도형 채우기(`insert/objectattribute/*`): `set_shape_properties_native`, `set_picture_properties_native`.
+- [ ] 셀 테두리/배경 › 각 셀마다 적용·하나의 셀처럼 적용, 표 테두리/배경(`table/cellborder/cellborder.htm`, `table/tableborder/tableborder.htm`): `apply_cell_border_fill_ids_native`, `set_cell_zone_properties`.
+- [ ] 개체 속성의 없는 탭(글상자·그림자, 그림의 선)과 표/셀 속성의 테두리·배경 탭(`insert/objectattribute/*`, `table/tableattribute/*`): `set_shape_properties_native`, `set_picture_properties_native`, `apply_cell_border_fill_ids_native`.
 - [ ] 필드 입력…·누름틀(`insert/madanginfo/madanginfo.htm`): wasm `insert_click_here_field_at`, `update_click_here_props`, `remove_field_at`, `get_field_info_at`, `set_field_value`. 필드가 든 문단은 읽기 전용이므로 보존 검사를 먼저 만든다.
 - [ ] 양식 개체 값 바꾸기(`view/toolbar/toolbar(form_object).htm`): `get_form_object_at_native`, `set_form_value_native`.
 - [ ] 차트 데이터 편집(`table/chart/*`): `list_charts_native`, `get/set_chart_data_native`. 차트가 든 한컴 문서(`~/Downloads/차트.hwpx`)로 확인한다.
