@@ -481,6 +481,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func bookmarks() async throws -> [Bookmark] {
         try await session.bookmarks()
     }
+    func clickHere(at position: EditPosition) async throws -> ClickHere? {
+        try await session.clickHere(at: position)
+    }
     func fonts() async throws -> [[UsedFont]] {
         try await session.fonts()
     }

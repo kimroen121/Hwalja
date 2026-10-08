@@ -45,6 +45,7 @@
 - lets `set_table_properties_native` take the table's own 테두리/배경 (표 테두리/배경), laid over the border fill it has.
 - 개체 속성: drawing objects take 그림자 투명도; pictures read and write their 선 종류, and HWPX keeps a picture's `<hp:lineShape>`; SVG draws a drawing object's 그림자 as the shape moved by its offset, under it.
 - 셀·표 배경: border fills take a 그러데이션 or 그림 from JSON and give them back, are reused only when their whole fill matches, keep a 그림's 밝기 and 대비 the right way round in HWPX, and a table's own 테두리/배경 no longer overwrites every cell's; `register_embedded_bin_data` is public.
+- adds `update_click_here_native` to `DocumentCore` (the wasm `update_click_here_props`, laid out again) for 누름틀 고치기.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

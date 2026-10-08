@@ -47,6 +47,21 @@ extension Viewer {
             return .eraseCodes(range, kinds: kinds)
         }
     }
+    func editClickHere(guide: String, memo: String, name: String, formEditable: Bool) {
+        document?.edit(undoManager) { selection in
+            selection.map { .editClickHere($0.focus, guide: guide, memo: memo, name: name, formEditable: formEditable) }
+        }
+    }
+    /// 고치기: the selected object's properties, or the 누름틀 at the caret.
+    func modify() {
+        guard let document else { return }
+        if document.object != nil { return showObjectProperties() }
+        guard let caret = document.selection?.focus else { return NSSound.beep() }
+        Task {
+            guard let found = try? await document.clickHere(at: caret) else { return NSSound.beep() }
+            fieldSheet = FieldEditing(existing: found)
+        }
+    }
     func insertClickHere(guide: String, memo: String, name: String, formEditable: Bool) {
         document?.edit(undoManager) { selection in
             selection.map { .insertClickHere($0.ordered.start, guide: guide, memo: memo, name: name, formEditable: formEditable) }
@@ -296,16 +311,32 @@ struct PageHideSheet: View {
     }
 }
 
+/// 필드 입력 as opened: to put a 누름틀 in, or (`existing`) to 고치기 one.
+struct FieldEditing: Identifiable {
+    let id = UUID()
+    var existing: ClickHere?
+}
+
 /// [필드 입력] › 누름틀: 입력할 내용의 안내문, 메모 내용, 필드 이름, 양식 모드에서 편집 가능.
 struct FieldSheet: View {
     let viewer: Viewer
+    /// 고치기 of this 누름틀, at the caret; nil puts a new one in.
+    let editing: ClickHere?
     @Environment(\.dismiss) private var dismiss
-    @State private var guide = "이곳을 마우스로 누르고 내용을 입력하세요."
-    @State private var memo = ""
-    @State private var name = ""
-    @State private var formEditable = false
+    @State private var guide: String
+    @State private var memo: String
+    @State private var name: String
+    @State private var formEditable: Bool
+    init(viewer: Viewer, editing: ClickHere? = nil) {
+        (self.viewer, self.editing) = (viewer, editing)
+        _guide = State(initialValue: editing?.guide ?? "이곳을 마우스로 누르고 내용을 입력하세요.")
+        _memo = State(initialValue: editing?.memo ?? "")
+        _name = State(initialValue: editing?.name ?? "")
+        _formEditable = State(initialValue: editing?.formEditable ?? false)
+    }
     var body: some View {
-        DialogFrame("필드 입력", confirmTitle: "넣기", canConfirm: !guide.trimmingCharacters(in: .whitespaces).isEmpty) {
+        DialogFrame("필드 입력", confirmTitle: editing == nil ? "넣기" : "설정",
+                    canConfirm: !guide.trimmingCharacters(in: .whitespaces).isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
                 GroupTitle("누름틀")
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -325,7 +356,11 @@ struct FieldSheet: View {
                 Toggle("양식 모드에서 편집 가능", isOn: $formEditable)
             }
         } confirm: {
-            viewer.insertClickHere(guide: guide, memo: memo, name: name, formEditable: formEditable)
+            if editing == nil {
+                viewer.insertClickHere(guide: guide, memo: memo, name: name, formEditable: formEditable)
+            } else {
+                viewer.editClickHere(guide: guide, memo: memo, name: name, formEditable: formEditable)
+            }
             dismiss()
         }
     }

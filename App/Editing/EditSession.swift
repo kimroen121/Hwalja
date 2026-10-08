@@ -116,6 +116,9 @@ final class EditSession: @unchecked Sendable {
     func bookmarks() async throws -> [Bookmark] {
         try await decode(send(.bookmarks))
     }
+    func clickHere(at position: EditPosition) async throws -> ClickHere? {
+        try await decode(send(.clickHereAt(position)))
+    }
     func fonts() async throws -> [[UsedFont]] {
         try await decode(send(.fonts))
     }

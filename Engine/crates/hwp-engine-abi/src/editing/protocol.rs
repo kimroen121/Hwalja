@@ -278,6 +278,16 @@ pub enum EditCommand {
         position: EditPosition,
         endnote: bool,
     },
+    /// 고치기 of the 누름틀 at `position`: its 안내문, 메모 내용, 필드 이름 and 양식 모드에서 편집
+    /// 가능.
+    EditClickHere {
+        position: EditPosition,
+        guide: String,
+        memo: String,
+        name: String,
+        #[serde(default, rename = "formEditable")]
+        form_editable: bool,
+    },
     /// 필드 입력 › 누름틀: an empty field at `position` showing `guide` (입력할 내용의
     /// 안내문), with its 메모 내용 and 필드 이름; what is typed there goes in it.
     InsertClickHere {
@@ -479,6 +489,15 @@ pub struct PictureInfo {
     pub page: u32,
     pub path: String,
     pub object: ObjectRef,
+}
+/// A 누름틀 as 필드 입력 shows it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClickHere {
+    pub guide: String,
+    pub memo: String,
+    pub name: String,
+    pub form_editable: bool,
 }
 /// A 개요 문단 of 개요 보기: its 수준 (1–7), its number as drawn, and its text.
 #[derive(Debug, Clone, PartialEq, Serialize)]

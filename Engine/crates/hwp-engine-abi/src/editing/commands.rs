@@ -421,6 +421,27 @@ impl EditSession {
                 body_only(&position.target)?;
                 self.validate_position(position)
             }
+            EditCommand::EditClickHere {
+                position,
+                guide,
+                memo,
+                name,
+                ..
+            } => {
+                self.click_here_at(position)?
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let fits = |s: &String, n: usize| {
+                    s.chars().count() <= n && !s.chars().any(char::is_control)
+                };
+                if guide.trim().is_empty()
+                    || !fits(guide, 1_000)
+                    || !fits(memo, 1_000)
+                    || !fits(name, 255)
+                {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
             EditCommand::InsertClickHere {
                 position,
                 guide,
@@ -1472,6 +1493,24 @@ impl EditSession {
                         *form_editable,
                     )?,
                 };
+                Ok(EditSelection::caret(position.clone()))
+            }
+            EditCommand::EditClickHere {
+                position,
+                guide,
+                memo,
+                name,
+                form_editable,
+            } => {
+                let (id, _) = self
+                    .click_here_at(position)?
+                    .ok_or(EditError::UnsupportedTarget)?;
+                if !self
+                    .core
+                    .update_click_here_native(id, guide, memo, name, *form_editable)
+                {
+                    return Err(EditError::UnsupportedTarget);
+                }
                 Ok(EditSelection::caret(position.clone()))
             }
             EditCommand::InsertNote { position, endnote } => {

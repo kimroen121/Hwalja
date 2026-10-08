@@ -107,7 +107,7 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
-- [ ] 필드 입력의 나머지(`insert/madanginfo/*`): 누름틀 고치기(wasm `update_click_here_props`를 `DocumentCore`로)·지우기(`remove_field_at`), 사용자 정보·작성한 날짜·문서 요약·파일 이름/경로 탭.
+- [ ] 필드 입력의 나머지(`insert/madanginfo/*`): 누름틀 지우기(`remove_field_at`; 한/글의 지우는 방법을 먼저 확인), 사용자 정보·작성한 날짜·문서 요약·파일 이름/경로 탭.
 - [ ] 양식 개체 값 바꾸기(`view/toolbar/toolbar(form_object).htm`): `get_form_object_at_native`, `set_form_value_native`.
 - [ ] 차트 데이터 편집(`table/chart/*`): `list_charts_native`, `get/set_chart_data_native`. 차트가 든 한컴 문서(`~/Downloads/차트.hwpx`)로 확인한다.
 

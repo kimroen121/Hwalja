@@ -5857,6 +5857,31 @@ fn click_here_fields_show_their_guide_and_take_typing() {
             text.contains("이름을넣으세요") || text.contains("이름을 넣으세요"),
             "{text}"
         );
+        let info = s.click_here_at(&caret).unwrap().unwrap().1;
+        assert_eq!(
+            (info.guide.as_str(), info.memo.as_str(), info.name.as_str()),
+            ("이름을 넣으세요", "메모", "이름")
+        );
+        // 고치기.
+        let edit = EditCommand::EditClickHere {
+            position: caret.clone(),
+            guide: "성명".into(),
+            memo: "메모".into(),
+            name: "이름".into(),
+            form_editable: true,
+        };
+        run(&mut s, edit).unwrap();
+        let info = s.click_here_at(&caret).unwrap().unwrap().1;
+        assert!(info.guide == "성명" && info.form_editable, "{info:?}");
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        assert!(svg.contains(">성<") && svg.contains(">명<"), "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(
+            reopened.click_here_at(&caret).unwrap().unwrap().1.guide,
+            "성명",
+            "{format}"
+        );
+        run(&mut s, EditCommand::Undo).unwrap();
         // What is typed at the caret goes in the field.
         replace(
             &mut s,

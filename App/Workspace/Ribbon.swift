@@ -603,7 +603,7 @@ enum Icon {
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static let replacePicture = "photo.badge.arrow.down"
     static let cellBorder = "square.grid.3x3"
-    static let field = "character.cursor.ibeam"
+    static let field = "character.cursor.ibeam", modify = "square.and.pencil"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

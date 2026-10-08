@@ -144,6 +144,10 @@ enum Request {
     Outline,
     /// 글꼴 정보: the fonts of 대표, then of each 언어.
     Fonts,
+    /// The 누름틀 the caret at `position` is in, if any.
+    ClickHereAt {
+        position: EditPosition,
+    },
     /// 그림 정보's 그림 목록.
     Pictures,
     /// 문서 정보's 문서 통계.
@@ -337,6 +341,10 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),
         Request::Outline => HwpEditResult::ok(session.outline()?, Vec::new()),
         Request::Fonts => HwpEditResult::ok(session.fonts(), Vec::new()),
+        Request::ClickHereAt { position } => HwpEditResult::ok(
+            session.click_here_at(&position)?.map(|(_, c)| c),
+            Vec::new(),
+        ),
         Request::Pictures => HwpEditResult::ok(session.pictures(), Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
         Request::HasPassword => HwpEditResult::ok(session.has_password(), Vec::new()),

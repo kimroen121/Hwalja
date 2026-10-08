@@ -243,6 +243,8 @@ struct MenuItems {
             .disabled(!context.canFormat)
         item("조판 부호 지우기…", Icon.eraseCodes) { viewer?.erasingCodes = true }
             .disabled(viewer == nil || context.locked)
+        item("고치기…", Icon.modify) { viewer?.modify() }
+            .disabled(viewer == nil || context.locked)
     }
     @ViewBuilder var find: some View {
         Group {
@@ -326,7 +328,7 @@ struct MenuItems {
         item("수식…", Icon.equation) { viewer?.newEquation() }
             .disabled(!context.canPicture)
         Menu {
-            item("필드 입력…", Icon.field) { viewer?.insertingField = true }
+            item("필드 입력…", Icon.field) { viewer?.fieldSheet = FieldEditing() }
         } label: { Label("개체", systemImage: Icon.field) }
             .disabled(!context.hasSelection || context.locked || context.inNote || context.inHeaderFooter)
         Group {

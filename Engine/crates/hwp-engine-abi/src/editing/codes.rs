@@ -451,6 +451,29 @@ impl EditSession {
             _ => Err(EditError::UnsupportedTarget),
         }
     }
+    /// The 누름틀 (its field id, and as 필드 입력 shows it) whose text holds the caret at `p`,
+    /// its ends included.
+    pub fn click_here_at(&self, p: &EditPosition) -> Result<Option<(u32, ClickHere)>, EditError> {
+        use rhwp::model::control::FieldType;
+        let para = get(self.core.document(), &p.target)?;
+        let at = logical::spot(para, p.scalar).text;
+        Ok(para.field_ranges.iter().find_map(|fr| {
+            let Some(Control::Field(f)) = para.controls.get(fr.control_idx) else {
+                return None;
+            };
+            (f.field_type == FieldType::ClickHere
+                && (fr.start_char_idx..=fr.end_char_idx).contains(&at))
+            .then(|| {
+                let info = ClickHere {
+                    guide: f.guide_text().unwrap_or("").into(),
+                    memo: f.memo_text().unwrap_or("").into(),
+                    name: f.ctrl_data_name.clone().unwrap_or_default(),
+                    form_editable: f.is_editable_in_form(),
+                };
+                (f.field_id, info)
+            })
+        }))
+    }
     pub(super) fn validate_replace_font(
         &self,
         language: Option<u8>,

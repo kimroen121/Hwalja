@@ -4715,3 +4715,119 @@ diff --git a/src/serializer/hwpx/header.rs b/src/serializer/hwpx/header.rs
  
      end_tag(w, "hh:borderFill")?;
      Ok(())
+diff --git a/src/document_core/queries/field_query.rs b/src/document_core/queries/field_query.rs
+--- a/src/document_core/queries/field_query.rs
++++ b/src/document_core/queries/field_query.rs
+@@ -1061,7 +1061,112 @@
+ 
+         Ok(para)
+     }
++
++    /// 누름틀 고치기: 안내문, 메모, 필드 이름 and 양식 모드에서 편집 가능 of 누름틀 `field_id`
++    /// (the wasm `update_click_here_props`), laid out again; false when there is none.
++    pub fn update_click_here_native(
++        &mut self,
++        field_id: u32,
++        guide: &str,
++        memo: &str,
++        name: &str,
++        editable: bool,
++    ) -> bool {
++        use crate::model::control::{Control, Field, FieldType};
++
++        let new_props_bit = if editable { 1u32 } else { 0u32 };
++
++        // 필드를 찾아 수정하고, ctrl_data_records 바이너리도 갱신
++        fn update_field_in_para(
++            para: &mut crate::model::paragraph::Paragraph,
++            field_id: u32,
++            guide: &str,
++            memo: &str,
++            new_props_bit: u32,
++            new_name: &str,
++        ) -> bool {
++            for (ci, ctrl) in para.controls.iter_mut().enumerate() {
++                if let Control::Field(f) = ctrl {
++                    if f.field_id == field_id && f.field_type == FieldType::ClickHere {
++                        // guide/memo가 원본과 동일하면 command 문자열을 보존한다.
++                        // 원본 command에는 trailing space 등이 포함될 수 있으므로
++                        // 불필요한 재구축을 피해야 한컴 호환성이 유지된다.
++                        let orig_guide = f.guide_text().unwrap_or("").to_string();
++                        let orig_memo = f.memo_text().unwrap_or("").to_string();
++                        if guide != orig_guide || memo != orig_memo {
++                            // guide 또는 memo가 변경되었으므로 command 재구축
++                            let new_command = Field::build_clickhere_command(guide, memo);
++                            f.command = new_command;
++                        }
++                        // command가 변경되지 않았으면 원본 보존
+ 
++                        f.properties = (f.properties & !1) | new_props_bit;
++                        f.ctrl_data_name = if new_name.is_empty() {
++                            None
++                        } else {
++                            Some(new_name.to_string())
++                        };
++                        // ctrl_data_records 바이너리 갱신
++                        crate::document_core::queries::field_query::write_ctrl_data_name(
++                            &mut para.ctrl_data_records,
++                            ci,
++                            new_name,
++                        );
++                        return true;
++                    }
++                }
++            }
++            false
++        }
++
++        let mut found_any = false;
++        'search: for sec in &mut self.document.sections {
++            sec.raw_stream = None;
++            for para in &mut sec.paragraphs {
++                if update_field_in_para(para, field_id, guide, memo, new_props_bit, name) {
++                    found_any = true;
++                    break 'search;
++                }
++                // 표/글상자 내부
++                for ctrl in &mut para.controls {
++                    let found = match ctrl {
++                        Control::Table(t) => t.cells.iter_mut().any(|c| {
++                            c.paragraphs.iter_mut().any(|p| {
++                                update_field_in_para(p, field_id, guide, memo, new_props_bit, name)
++                            })
++                        }),
++                        Control::Shape(s) => {
++                            if let Some(tb) = s.drawing_mut().and_then(|d| d.text_box.as_mut()) {
++                                tb.paragraphs.iter_mut().any(|p| {
++                                    update_field_in_para(
++                                        p,
++                                        field_id,
++                                        guide,
++                                        memo,
++                                        new_props_bit,
++                                        name,
++                                    )
++                                })
++                            } else {
++                                false
++                            }
++                        }
++                        _ => false,
++                    };
++                    if found {
++                        found_any = true;
++                        break 'search;
++                    }
++                }
++            }
++        }
++        if found_any {
++            self.recompose_and_paginate();
++            self.invalidate_page_tree_cache();
++        }
++        found_any
++    }
++
+     /// 본문 문단의 커서 위치에서 필드를 제거한다 (필드 내용과 컨트롤 삭제).
+     ///
+     /// 성공 시 `{"ok":true}`, 필드가 없으면 에러를 반환한다.

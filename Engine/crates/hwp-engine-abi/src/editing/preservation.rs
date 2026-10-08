@@ -248,7 +248,8 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
-        EditCommand::InsertClickHere { position, .. } => {
+        EditCommand::InsertClickHere { position, .. }
+        | EditCommand::EditClickHere { position, .. } => {
             return check_host(
                 before,
                 after,

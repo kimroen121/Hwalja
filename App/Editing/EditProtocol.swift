@@ -101,6 +101,8 @@ enum EditCommand: Encodable, Sendable {
     case insertNote(EditPosition, endnote: Bool)
     /// 필드 입력 › 누름틀: 안내문, 메모 내용, 필드 이름 and 양식 모드에서 편집 가능.
     case insertClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
+    /// 고치기 of the 누름틀 at the position.
+    case editClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
     /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
     /// from the paper's corner in HWPUNIT. A line runs corner to corner, `flip` turning it.
     case insertShape(EditPosition, shape: String, x: Int32, y: Int32, width: UInt32, height: UInt32, flip: Bool)
@@ -254,6 +256,13 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .editClickHere(position, guide, memo, name, formEditable):
+            try c.encode("editClickHere", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(guide, forKey: .guide)
+            try c.encode(memo, forKey: .memo)
+            try c.encode(name, forKey: .name)
+            try c.encode(formEditable, forKey: .formEditable)
         case let .insertClickHere(position, guide, memo, name, formEditable):
             try c.encode("insertClickHere", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -1058,6 +1067,14 @@ struct PictureInfo: Decodable, Hashable, Sendable, Identifiable {
     var object: ObjectRef
 }
 
+/// A 누름틀 as 필드 입력 shows it.
+struct ClickHere: Decodable, Hashable, Sendable {
+    var guide: String
+    var memo: String
+    var name: String
+    var formEditable: Bool
+}
+
 /// 개요 보기's 개요 문단: its 수준 (1–7), its number as drawn, and its text.
 struct OutlineItem: Decodable, Hashable, Sendable {
     var level: UInt8
@@ -1130,6 +1147,7 @@ enum EngineRequest: Encodable, Sendable {
     case bookmarks
     case outline
     case fonts
+    case clickHereAt(EditPosition)
     case pictures
     case statistics
     case hasPassword
@@ -1233,6 +1251,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("outline", forKey: .op)
         case .fonts:
             try c.encode("fonts", forKey: .op)
+        case let .clickHereAt(position):
+            try c.encode("clickHereAt", forKey: .op)
+            try c.encode(position, forKey: .position)
         case .pictures:
             try c.encode("pictures", forKey: .op)
         case .statistics:
