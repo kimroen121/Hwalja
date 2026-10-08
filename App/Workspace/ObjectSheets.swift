@@ -106,9 +106,10 @@ extension Viewer {
         guard let object = document?.object?.object else { return }
         document?.edit(undoManager) { _ in command(object) }
     }
-    /// 개체 묶기: the chosen objects into one.
+    /// 개체 묶기: the chosen objects into one; as in 한/글, not across pages.
     func groupObjects() {
         guard let document, let object = document.object, !document.others.isEmpty else { return }
+        guard document.others.allSatisfy({ $0.rect.page == object.rect.page }) else { return NSSound.beep() }
         let objects = document.others.map(\.object) + [object.object]
         document.edit(undoManager) { _ in .group(objects) }
     }

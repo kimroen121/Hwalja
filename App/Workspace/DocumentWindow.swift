@@ -303,9 +303,10 @@ final class Viewer: ObservableObject {
                 editTable(.insertRowBelow)
                 return true
             }
-            // By the key's place, so they work while typing 한글 as well.
+            // The letter typed, or while typing 한글 the letter of the key's place.
             let letters: [UInt16: Character] = [46: "m", 1: "s", 4: "h", 13: "w", 35: "p", 32: "u", 5: "g", 17: "t"]
-            guard modifiers.isEmpty, let key = letters[event.keyCode] else { return false }
+            let typed = event.charactersIgnoringModifiers?.lowercased().first.flatMap { $0.isASCII ? $0 : nil }
+            guard modifiers.isEmpty, let key = typed ?? letters[event.keyCode] else { return false }
             if context.cellBlock {
                 switch key {
                 case "m": editCells { .mergeCells($0) }

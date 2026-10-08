@@ -2356,6 +2356,16 @@ fn edits_table_rows_and_columns() {
         assert_eq!(table_shape(&s, 2), shape, "{change:?}");
         assert!(reply.selection.unwrap().focus.target.cell.is_some());
     }
+    // A cell named in a 머리말 is never taken for the body table at the same place, which
+    // rhwp's table functions would change instead.
+    let mut in_header = cell(0);
+    in_header.header_footer = Some(HeaderFooterTarget {
+        footer: false,
+        apply_to: 0,
+        page: 0,
+    });
+    assert!(commands::table(s.core.document(), &cell(0)).is_some());
+    assert!(commands::table(s.core.document(), &in_header).is_none());
     let one = EditSession::open(&plain_document("hwpx", true)).unwrap();
     let mut one = one;
     assert!(run(

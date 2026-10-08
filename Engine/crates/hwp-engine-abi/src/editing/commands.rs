@@ -186,8 +186,10 @@ pub(super) fn header_footer_at(doc: &Document, s: usize, footer: bool) -> Option
             Some((p, c))
         })
 }
-/// The table holding `t`'s cell.
+/// The table holding `t`'s cell, in the body. rhwp's table functions reach only the
+/// body's, so a cell in a note, 머리말 or 꼬리말 has none here.
 pub(super) fn table<'a>(doc: &'a Document, t: &EditTarget) -> Option<&'a Table> {
+    body_or_cell(t).ok()?;
     let c = t.cell.as_ref()?;
     match doc
         .sections
