@@ -317,29 +317,30 @@ struct SymbolSheet: View {
     @State private var text = ""
     @AppStorage("recentSymbols") private var recent = ""
 
-    /// 문자 영역 in the web editor's names and order. 일반 문장 부호 is the web editor's set;
-    /// ponytail: the others are the matching Unicode blocks, not Hancom's own tables.
+    /// 문자 영역 in the web editor's names and order. 일반 문장 부호 is the web editor's set,
+    /// 기호1 and 기호2 are KS X 1001's first two rows.
+    /// ponytail: the others are their Unicode blocks narrowed to KS X 1001 and Windows-1252,
+    /// which gives the web editor's 일반 문장 부호 and 상자 그리기; Hancom's own tables may differ.
     static let areas: [(name: String, characters: [String])] = [
-        ("일반 문장 부호", "–—―‘’‚“”„†‡•‥…‰′″‹›※‧".map(String.init)),
-        ("기호1", scalars(0x2600...0x26FF)),
-        ("기호2", scalars(0x2700...0x27BF)),
-        ("통화 기호", "$¢£¥₩".map(String.init) + scalars(0x20A0...0x20C0)),
-        ("글자 모양 기호", scalars(0x2100...0x214F)),
-        ("숫자 형식", scalars(0x2150...0x218B)),
-        ("화살표", scalars(0x2190...0x21FF)),
-        ("괄호", "()[]{}".map(String.init) + scalars(0x3008...0x301B)),
-        ("수학 연산자", scalars(0x2200...0x22FF)),
-        ("그리스어", scalars(0x0391...0x03A9) + scalars(0x03B1...0x03C9)),
-        ("단위기호", scalars(0x3380...0x33DF)),
-        ("원문자", scalars(0x2460...0x2473) + scalars(0x3251...0x325F) + scalars(0x32B1...0x32BF)
-            + scalars(0x24B6...0x24E9) + scalars(0x3260...0x327B)),
-        ("괄호문자", scalars(0x2474...0x2487) + scalars(0x249C...0x24B5) + scalars(0x3200...0x321C)),
-        ("상자 그리기", scalars(0x2500...0x257F)),
-        ("도형", scalars(0x25A0...0x25FF)),
-    ]
-    private static func scalars(_ range: ClosedRange<UInt32>) -> [String] {
-        range.compactMap(Unicode.Scalar.init).filter { $0.properties.generalCategory != .unassigned }.map { String($0) }
-    }
+        ("일반 문장 부호", "–—―‘’‚“”„†‡•‥…‰′″‹›※‧"),
+        ("기호1", "、。·‥…¨〃―∥＼∼‘’“”〔〕〈〉《》「」『』【】±×÷≠≤≥∞∴°′″℃Å￠￡￥♂♀∠⊥⌒∂∇≡≒§※☆★○●◎◇◆□■△▲▽▼→←↑↓↔〓≪≫√∽∝∵∫∬∈∋⊆⊇⊂⊃∪∩∧∨￢"),
+        ("기호2", "⇒⇔∀∃´～ˇ˘˝˚˙¸˛¡¿ː∮∑∏¤℉‰◁◀▷▶♤♠♡♥♧♣⊙◈▣◐◑▒▤▥▨▧▦▩♨☏☎☜☞¶†‡↕↗↙↖↘♭♩♪♬㉿㈜№㏇™㏂㏘℡€®"),
+        ("통화 기호", "€"),
+        ("글자 모양 기호", "℃℉ℓ№℡™ΩÅ"),
+        ("숫자 형식", "⅓⅔⅛⅜⅝⅞ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹ"),
+        ("화살표", "←↑→↓↔↕↖↗↘↙⇒⇔"),
+        ("괄호", "()[]{}〈〉《》「」『』【】〔〕"),
+        ("수학 연산자", "∀∂∃∇∈∋∏∑√∝∞∠∥∧∨∩∪∫∬∮∴∵∼∽≒≠≡≤≥≪≫⊂⊃⊆⊇⊙⊥"),
+        ("그리스어", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"),
+        ("단위기호", "㎀㎁㎂㎃㎄㎈㎉㎊㎋㎌㎍㎎㎏㎐㎑㎒㎓㎔㎕㎖㎗㎘㎙㎚㎛㎜㎝㎞㎟㎠㎡㎢㎣㎤㎥㎦㎧㎨㎩㎪㎫㎬㎭㎮㎯㎰㎱㎲㎳㎴㎵㎶㎷㎸㎹㎺㎻㎼㎽㎾㎿㏀㏁㏂㏃㏄㏅㏆㏇㏈㏉㏊㏏㏐㏓㏖㏘㏛㏜㏝"),
+        ("원문자", "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ㉠㉡㉢㉣㉤㉥㉦㉧㉨㉩㉪㉫㉬㉭㉮㉯㉰㉱㉲㉳㉴㉵㉶㉷㉸㉹㉺㉻㉿"),
+        ("괄호문자", "⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒜⒝⒞⒟⒠⒡⒢⒣⒤⒥⒦⒧⒨⒩⒪⒫⒬⒭⒮⒯⒰⒱⒲⒳⒴⒵㈀㈁㈂㈃㈄㈅㈆㈇㈈㈉㈊㈋㈌㈍㈎㈏㈐㈑㈒㈓㈔㈕㈖㈗㈘㈙㈚㈛㈜"),
+        ("상자 그리기", "─━│┃┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋"),
+        ("도형", "■□▣▤▥▦▧▨▩▲△▶▷▼▽◀◁◆◇◈○◎●◐◑"),
+        ("기타 기호", "★☆☎☏☜☞♀♂♠♡♣♤♥♧♨♩♪♬♭"),
+        ("한중일 기호 및 구두점", "、。〃〈〉《》「」『』【】〓〔〕"),
+        ("호환용 한글 자모", "ㄱㄲㄳㄴㄵㄶㄷㄸㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅃㅄㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣㅥㅦㅧㅨㅩㅪㅫㅬㅭㅮㅯㅰㅱㅲㅳㅴㅵㅶㅷㅸㅹㅺㅻㅼㅽㅾㅿㆀㆁㆂㆃㆄㆅㆆㆇㆈㆉㆊㆋㆌㆍㆎ"),
+    ].map { ($0.0, $0.1.map(String.init)) }
     private static let columns = Array(repeating: GridItem(.fixed(30), spacing: 0), count: 11)
 
     var body: some View {
