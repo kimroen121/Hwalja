@@ -125,6 +125,8 @@ enum EditCommand: Encodable, Sendable {
     case equalizeCells(EditSelection, height: Bool)
     /// With `whole`, every section (적용 범위 문서 전체).
     case setPage(section: UInt32, PageSetup, whole: Bool = false)
+    /// 쪽 테두리/배경; with `whole`, of every section.
+    case setPageBorder(section: UInt32, PageBorder, whole: Bool)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
     case headerFooter(section: UInt32, footer: Bool, pageNumber: Placement?)
     /// 머리말/꼬리말 지우기: the definition `target` is in.
@@ -147,7 +149,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -224,6 +226,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setPage", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(page, forKey: .page)
+            try c.encode(whole, forKey: .whole)
+        case let .setPageBorder(section, border, whole):
+            try c.encode("setPageBorder", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
         case let .headerFooter(section, footer, pageNumber):
             try c.encode("headerFooter", forKey: .kind)
@@ -523,6 +530,42 @@ struct PageSetup: Codable, Hashable, Sendable {
     var landscape: Bool
     /// 제본: 0 한쪽, 1 맞쪽, 2 위로.
     var binding: UInt8
+}
+
+/// A section's 쪽 테두리/배경. `sides` and `spacing` run 왼쪽, 오른쪽, 위쪽, 아래쪽, spacings
+/// in HWPUNIT.
+struct PageBorder: Codable, Hashable, Sendable {
+    var sides: [BorderSide]
+    /// 위치: 종이 기준, else 쪽 기준.
+    var paper: Bool
+    var spacing: [UInt32]
+    var headerInside: Bool
+    var footerInside: Bool
+    var borderPages: ApplyPages
+    var fillPages: ApplyPages
+    /// 배경 by color; nil when it is a 그러데이션 or 그림, which then stays.
+    var fill: PageFill?
+    var fillArea: FillArea
+}
+/// Line kind (0 none, 1 solid, …), width (an index into `Swatches.widths`) and `#rrggbb`.
+struct BorderSide: Codable, Hashable, Sendable {
+    var line: UInt8
+    var width: UInt8
+    var color: String
+}
+/// 면 색 (`#rrggbb`, or `none`), 무늬 색 and 무늬 모양 (0 none, 1–6).
+struct PageFill: Codable, Hashable, Sendable {
+    var color: String
+    var patternColor: String
+    var pattern: UInt8
+}
+/// 적용 쪽: 모두, 첫 쪽 제외, 첫 쪽만.
+enum ApplyPages: String, Codable, Sendable {
+    case all, exceptFirst, firstOnly
+}
+/// 채울 영역: 종이, 쪽, 테두리.
+enum FillArea: String, Codable, Sendable {
+    case paper, page, border
 }
 
 struct EditReply: Decodable, Sendable {
@@ -859,6 +902,7 @@ enum EngineRequest: Encodable, Sendable {
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, caseSensitive: Bool)
     case pageSetup(section: UInt32)
+    case pageBorder(section: UInt32)
     case pageHide(EditTarget)
     case bookmarks
     case statistics
@@ -934,6 +978,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(caseSensitive, forKey: .caseSensitive)
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
+            try c.encode(section, forKey: .section)
+        case let .pageBorder(section):
+            try c.encode("pageBorder", forKey: .op)
             try c.encode(section, forKey: .section)
         case let .pageHide(target):
             try c.encode("pageHide", forKey: .op)

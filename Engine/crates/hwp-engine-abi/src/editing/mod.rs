@@ -11,6 +11,7 @@ mod latex;
 mod logical;
 mod navigation;
 mod objects;
+mod page_border;
 #[cfg(test)]
 mod preservation;
 mod protocol;
@@ -341,6 +342,7 @@ impl EditSession {
                 upstream: false,
             }),
             EditCommand::SetPage { .. }
+            | EditCommand::SetPageBorder { .. }
             | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }

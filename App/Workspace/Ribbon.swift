@@ -204,6 +204,8 @@ struct ToolRow: View {
         orientation(context)
         RowDivider()
         headers(context)
+        ToolTile("쪽 테두리/배경", Icon.pageBorder) { viewer.showPageBorder() }
+            .disabled(context.locked)
         Group {
             ToolTile("새 번호로 시작", Icon.newNumber) { viewer.startingNumber = true }
             ToolTile("현재 쪽만 감추기", Icon.pageHide) { viewer.showPageHide() }
@@ -572,6 +574,7 @@ enum Icon {
     static let objectProps = "slider.horizontal.3", pictureEffect = "camera.filters"
     static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
+    static let pageBorder = "square.dashed.inset.filled"
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"

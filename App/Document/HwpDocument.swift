@@ -490,6 +490,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }
+    func pageBorder(section: UInt32) async throws -> PageBorder {
+        try await session.pageBorder(section: section)
+    }
     func objectAt(page: Int, x: Double, y: Double) async throws -> PlacedObject? {
         try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
     }

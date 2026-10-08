@@ -1,5 +1,9 @@
 use super::*;
-use rhwp::model::{control::Control, document::Document, paragraph::Paragraph};
+use rhwp::model::{
+    control::Control,
+    document::{Document, SectionDef},
+    paragraph::Paragraph,
+};
 
 // Only derived line layout is excluded. Table dimensions, merges, controls,
 // character styles, source streams and binary payloads remain in the comparison.
@@ -222,6 +226,9 @@ pub(super) fn check(
         }
         EditCommand::SetPage { section, whole, .. } => {
             return check_page(before, after, *section, *whole)
+        }
+        EditCommand::SetPageBorder { section, whole, .. } => {
+            return check_page_border(before, after, *section, *whole)
         }
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
@@ -748,6 +755,39 @@ fn check_page(
             for (c, d) in p.controls.iter_mut().zip(&q.controls) {
                 if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
                     c.page_def = d.page_def.clone();
+                }
+            }
+        }
+        (x.raw_stream, y.raw_stream) = (None, None);
+    }
+    same_rest(&mut a, &mut b, section)
+}
+/// 쪽 테두리/배경 changed only the sections' border, its flags and DocInfo's appended
+/// border fills.
+fn check_page_border(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    whole: bool,
+) -> Result<(), EditError> {
+    fn take(x: &mut SectionDef, y: &SectionDef) {
+        x.page_border_fill = y.page_border_fill.clone();
+        (x.hide_border, x.hide_fill) = (y.hide_border, y.hide_fill);
+        (x.first_page_border, x.first_page_fill) = (y.first_page_border, y.first_page_fill);
+        x.flags = y.flags;
+    }
+    let mut a = before.clone();
+    let mut b = after.clone();
+    if !trim_appended(&mut a, &mut b) {
+        return Err(EditError::PreservationFailed);
+    }
+    for s in commands::page_sections(before, section, whole) {
+        let (x, y) = (&mut a.sections[s], &mut b.sections[s]);
+        take(&mut x.section_def, &y.section_def);
+        for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
+            for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+                if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
+                    take(c, d);
                 }
             }
         }

@@ -1185,6 +1185,13 @@ struct DocumentTests {
         await document.settle()
         #expect(try await document.pageSetup(section: 0) == page)
         #expect(document.pages[0].size.width > document.pages[0].size.height)
+        var border = try await document.pageBorder(section: 0)
+        border.sides = Array(repeating: BorderSide(line: 1, width: 3, color: "#336699"), count: 4)
+        border.fill = PageFill(color: "#ffeecc", patternColor: "#000000", pattern: 0)
+        border.borderPages = .exceptFirst
+        viewer.setPageBorder(border, section: 0, whole: true)
+        await document.settle()
+        #expect(try await document.pageBorder(section: 0) == border)
         let revision = document.reply.revision
         viewer.headerFooter(footer: false, pageNumber: .center)
         viewer.headerFooter(footer: true, pageNumber: nil)
@@ -1493,6 +1500,9 @@ struct DocumentTests {
             ("list", AnyView(ListSheet(style: format.paragraph, body: true, tab: "문단 번호", viewer: viewer))),
             ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
+            ("pageBorder", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer))),
+            ("pageBackground", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer,
+                                                       tab: "배경"))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),
             ("symbols", AnyView(VStack(alignment: .leading) {

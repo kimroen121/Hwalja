@@ -156,7 +156,7 @@
 |---|---|---|---|
 | 편집 용지 | ◐ | `format/setting_paper/setting_paper.htm#bc-1` | 기본(용지 종류·방향·여백·제본) ●. 줄 격자·글자 격자 △ |
 | 글자 방향 | △ | `format/vertical.htm` | 세로쓰기 |
-| 쪽 테두리/배경 | ○ | `format/pageborder/page_border.htm` | `get/set_page_border_fill_native` |
+| 쪽 테두리/배경 | ● | `format/pageborder/page_border.htm` | 테두리(선 종류 바로 적용, 위치, 머리말·꼬리말 포함, 적용 쪽)와 배경의 색 채우기·채울 영역. 홀수/짝수 쪽, 그러데이션·그림 채우기, 적용 범위 「새 구역으로」는 △ (rhwp가 홀짝 쪽 테두리를 그리지 않음) |
 | 바탕쪽 | △ | `format/masterpages/master_pages.htm` | rhwp에 바탕쪽 편집 없음(그리기는 됨) |
 | 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
 | 쪽 번호 매기기 | △ | `format/pagenumber.htm` | 앱에는 머리말·꼬리말 모양 목록의 쪽 번호만 있다. [쪽 번호 매기기] 대화 상자(번호 위치 10가지·번호 모양)는 없음. rhwp에 쪽 번호 위치(`PageNumberPos`) 모델과 그리기는 있고 넣기 명령이 없다(새 번호로 시작처럼 패치) |

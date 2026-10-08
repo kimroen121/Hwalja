@@ -2553,6 +2553,60 @@ fn sets_paper_and_margins() {
         .is_err());
     }
 }
+#[test]
+fn page_borders_and_backgrounds_go_on_their_pages() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let new_page = EditCommand::Break {
+            position: point(body(), 1),
+            column: false,
+        };
+        run(&mut s, new_page).unwrap();
+        let mut border = s.page_border(0).unwrap();
+        for side in &mut border.sides {
+            *side = BorderSide {
+                line: 1,
+                width: 7,
+                color: "#123456".into(),
+            };
+        }
+        border.spacing = [1417; 4];
+        border.border_pages = ApplyPages::ExceptFirst;
+        border.fill = Some(PageFill {
+            color: "#abcdef".into(),
+            pattern_color: "#000000".into(),
+            pattern: 0,
+        });
+        border.fill_pages = ApplyPages::FirstOnly;
+        let set = |border: PageBorder| EditCommand::SetPageBorder {
+            section: 0,
+            border,
+            whole: false,
+        };
+        run(&mut s, set(border.clone())).unwrap();
+        assert_eq!(s.page_border(0).unwrap(), border, "{format}");
+        let drawn = |s: &EditSession, page| {
+            let svg = s.core.render_page_svg_native(page).unwrap();
+            (svg.contains("#123456"), svg.contains("#abcdef"))
+        };
+        assert_eq!(drawn(&s, 0), (false, true), "{format}");
+        assert_eq!(drawn(&s, 1), (true, false), "{format}");
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        let reopened = EditSession::open(&saved).unwrap();
+        assert_eq!(reopened.page_border(0).unwrap(), border, "{format}");
+        assert_eq!(drawn(&reopened, 1), (true, false), "{format}");
+        border.spacing[0] = 7088;
+        assert!(run(&mut s, set(border)).is_err());
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(drawn(&s, 1), (false, false), "{format}");
+    }
+}
 /// Opt-in: `HWP_CORPUS=<folder> cargo test --release structure_edits_on_corpus -- --ignored --nocapture`.
 /// Runs each structure command once on every document and reports refusals.
 #[test]

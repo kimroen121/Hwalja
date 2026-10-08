@@ -503,6 +503,16 @@ impl EditSession {
                 self.section_exists(*section)?;
                 validate_page(page)
             }
+            EditCommand::SetPageBorder {
+                section, border, ..
+            } => {
+                self.section_exists(*section)?;
+                if super::page_border::valid(border) {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
             EditCommand::HeaderFooter { section, .. } => self.section_exists(*section),
             EditCommand::NewNumber { position, .. } => {
                 codes::body(&position.target)?;
@@ -1405,6 +1415,14 @@ impl EditSession {
                 for s in page_sections(self.core.document(), *section, *whole) {
                     self.core.set_page_def_native(s, &json)?;
                 }
+                Ok(self.kept(*section))
+            }
+            EditCommand::SetPageBorder {
+                section,
+                border,
+                whole,
+            } => {
+                self.set_page_border(*section, border, *whole)?;
                 Ok(self.kept(*section))
             }
             EditCommand::DeleteHeaderFooter { target } => {

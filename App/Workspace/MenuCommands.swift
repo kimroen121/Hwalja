@@ -399,8 +399,11 @@ struct MenuItems {
     }
 
     @ViewBuilder var page: some View {
-        item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
-            .disabled(viewer == nil || context.locked)
+        Group {
+            item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
+            item("쪽 테두리/배경…", Icon.pageBorder) { viewer?.showPageBorder() }
+        }
+        .disabled(viewer == nil || context.locked)
         Divider()
         Group {
             Menu { headerItems(footer: false) } label: { Label("머리말", systemImage: Icon.header) }

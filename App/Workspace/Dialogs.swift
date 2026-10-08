@@ -92,6 +92,18 @@ extension Viewer {
     func setPage(_ page: PageSetup, section: UInt32, whole: Bool = false) {
         document?.edit(undoManager) { _ in .setPage(section: section, page, whole: whole) }
     }
+    /// Opens 쪽 테두리/배경 for the section holding the caret.
+    func showPageBorder() {
+        guard let document else { return }
+        let section = document.selection?.focus.target.section ?? 0
+        Task {
+            guard let border = try? await document.pageBorder(section: section) else { return NSSound.beep() }
+            pageBorder = (section, border)
+        }
+    }
+    func setPageBorder(_ border: PageBorder, section: UInt32, whole: Bool) {
+        document?.edit(undoManager) { _ in .setPageBorder(section: section, border, whole: whole) }
+    }
     /// 세로 or 가로 for the section holding the caret.
     func setOrientation(landscape: Bool) {
         guard let document else { return }
@@ -349,6 +361,249 @@ struct PageSetupSheet: View {
         FieldLabel(title)
         SpinField(value: Binding { Units.millimeters(page[keyPath: key]) } set: { page[keyPath: key] = Units.units($0) },
                   unit: "mm", range: 0...1000)
+    }
+}
+
+/// 쪽 테두리/배경: 테두리 and 배경 tabs over the section's pages, and 적용 범위.
+struct PageBorderSheet: View {
+    let section: UInt32
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var border: PageBorder
+    @State private var tab: String
+    @State private var whole = true
+    /// The 종류, 굵기 and 색 the side buttons put on.
+    @State private var line: BorderSide
+    /// 선 종류 바로 적용: changing the line changes the sides whose button is down.
+    @State private var instant = true
+    @State private var pressed: Set<Int>
+    /// Each side's line before its button last put one on.
+    @State private var previous: [BorderSide]
+
+    private static let none = BorderSide(line: 0, width: 0, color: "#000000")
+    private static let pages: [(ApplyPages, String)] = [(.all, "모두"), (.exceptFirst, "첫 쪽 제외"), (.firstOnly, "첫 쪽만")]
+
+    init(section: UInt32, border: PageBorder, viewer: Viewer, tab: String = "테두리") {
+        self.section = section
+        self.viewer = viewer
+        _tab = State(initialValue: tab)
+        _border = State(initialValue: border)
+        _line = State(initialValue: border.sides.first { $0.line != 0 } ?? BorderSide(line: 1, width: 1, color: "#000000"))
+        _pressed = State(initialValue: Set(border.sides.indices.filter { border.sides[$0].line != 0 }))
+        _previous = State(initialValue: Array(repeating: Self.none, count: 4))
+    }
+
+    var body: some View {
+        DialogFrame("쪽 테두리/배경", confirmTitle: "설정") {
+            DialogTabs(selection: $tab, titles: ["테두리", "배경"]) { tab in
+                Group { if tab == "배경" { background } else { lines } }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 22)
+            }
+            .frame(width: 520, height: 418)
+            HStack(spacing: 10) {
+                Text("적용 범위")
+                ChoiceField($whole, [(true, "문서 전체"), (false, "현재 구역")], minWidth: 100).fixedSize()
+            }
+        } confirm: {
+            viewer.setPageBorder(border, section: section, whole: whole)
+            dismiss()
+        }
+        .onChange(of: line) { _, line in
+            guard instant else { return }
+            for side in pressed { border.sides[side] = line }
+        }
+    }
+
+    private var lines: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("테두리")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            FieldLabel("종류")
+                            ChoiceField(Binding { Int(line.line) } set: { line.line = UInt8($0) },
+                                        Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
+                        }
+                        GridRow {
+                            FieldLabel("굵기")
+                            ChoiceField(Binding { Int(line.width) } set: { line.width = UInt8($0) },
+                                        Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, minWidth: 100)
+                        }
+                        GridRow {
+                            FieldLabel("색")
+                            ColorWell(hex: $line.color)
+                        }
+                    }
+                    .padding(.leading, 12)
+                    Toggle("선 종류 바로 적용", isOn: $instant).padding(.leading, 12)
+                    Button("테두리 사용 안 함") {
+                        line.line = 0
+                        border.sides = Array(repeating: Self.none, count: 4)
+                        pressed = []
+                    }
+                    .padding(.leading, 12)
+                }
+                preview
+            }
+            GroupTitle("위치")
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("", selection: $border.paper) {
+                    Text("종이 기준").tag(true)
+                    Text("쪽 기준").tag(false)
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                HStack(alignment: .top, spacing: 20) {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow { gap("왼쪽", 0); gap("오른쪽", 1) }
+                        GridRow { gap("위쪽", 2); gap("아래쪽", 3) }
+                    }
+                    .fixedSize()
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("머리말 포함", isOn: $border.headerInside)
+                        Toggle("꼬리말 포함", isOn: $border.footerInside)
+                    }
+                    .disabled(border.paper)
+                }
+            }
+            .padding(.leading, 12)
+            LabeledField("적용 쪽") { ChoiceField($border.borderPages, Self.pages, minWidth: 90) }
+        }
+    }
+
+    /// 미리 보기 with the side buttons around it: 위쪽 above, 왼쪽 and 오른쪽 beside, 아래쪽
+    /// and 모두 below.
+    private var preview: some View {
+        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+            GridRow {
+                Color.clear.frame(width: 1, height: 1)
+                sideButton("위쪽", [2])
+            }
+            GridRow {
+                sideButton("왼쪽", [0])
+                Canvas { context, size in
+                    let page = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
+                    context.fill(Path(page), with: .color(.white))
+                    if let fill = border.fill, fill.color != "none" {
+                        context.fill(Path(page.insetBy(dx: 8, dy: 8)), with: .color(HexColor.color(fill.color)))
+                    }
+                    context.stroke(Path(page), with: .color(Color(nsColor: .separatorColor)))
+                    let box = page.insetBy(dx: 8, dy: 8)
+                    let ends = [(CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.minX, y: box.maxY)),
+                                (CGPoint(x: box.maxX, y: box.minY), CGPoint(x: box.maxX, y: box.maxY)),
+                                (CGPoint(x: box.minX, y: box.minY), CGPoint(x: box.maxX, y: box.minY)),
+                                (CGPoint(x: box.minX, y: box.maxY), CGPoint(x: box.maxX, y: box.maxY))]
+                    for (side, (from, to)) in zip(border.sides, ends) where side.line != 0 {
+                        let width = Swatches.widths[min(Int(side.width), Swatches.widths.count - 1)]
+                        let dash: [CGFloat] = switch side.line { case 2: [5, 3]; case 3: [1.5, 2]; case 4, 5: [7, 2, 1.5, 2]; case 6: [12, 5]; default: [] }
+                        context.stroke(Path { $0.move(to: from); $0.addLine(to: to) }, with: .color(HexColor.color(side.color)),
+                                       style: StrokeStyle(lineWidth: max(1, width * 2), dash: dash))
+                    }
+                }
+                .frame(width: 110, height: 140)
+                sideButton("오른쪽", [1])
+            }
+            GridRow {
+                sideButton("모두", [0, 1, 2, 3])
+                sideButton("아래쪽", [3])
+            }
+        }
+    }
+    /// A side button: puts the line on its sides, or takes it back off.
+    private func sideButton(_ title: String, _ sides: [Int]) -> some View {
+        let down = sides.allSatisfy(pressed.contains)
+        return Button {
+            for side in sides {
+                if down {
+                    border.sides[side] = previous[side]
+                    pressed.remove(side)
+                } else if !pressed.contains(side) {
+                    previous[side] = border.sides[side]
+                    border.sides[side] = line
+                    pressed.insert(side)
+                }
+            }
+        } label: {
+            Canvas { context, size in
+                let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+                context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                let path = Path { path in
+                    for side in sides {
+                        switch side {
+                        case 0: path.move(to: CGPoint(x: box.minX, y: box.minY)); path.addLine(to: CGPoint(x: box.minX, y: box.maxY))
+                        case 1: path.move(to: CGPoint(x: box.maxX, y: box.minY)); path.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
+                        case 2: path.move(to: CGPoint(x: box.minX, y: box.minY)); path.addLine(to: CGPoint(x: box.maxX, y: box.minY))
+                        default: path.move(to: CGPoint(x: box.minX, y: box.maxY)); path.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
+                        }
+                    }
+                }
+                context.stroke(path, with: .color(.primary), lineWidth: 2)
+            }
+            .frame(width: 22, height: 22)
+            .padding(3)
+        }
+        .buttonStyle(ToolButtonStyle(on: down))
+        .help(title)
+        .accessibilityLabel(title)
+    }
+    @ViewBuilder private func gap(_ title: String, _ side: Int) -> some View {
+        FieldLabel(title)
+        SpinField(value: Binding { Units.millimeters(border.spacing[side]) } set: { border.spacing[side] = Units.units($0) },
+                  unit: "mm", range: 0...25)
+    }
+
+    private var background: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GroupTitle("채우기")
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("", selection: Binding { border.fill.map { $0.color == "none" && $0.pattern == 0 ? 0 : 1 } ?? -1 } set: {
+                    var fill = border.fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0)
+                    if $0 == 0 {
+                        (fill.color, fill.pattern) = ("none", 0)
+                    } else if fill.color == "none" {
+                        fill.color = "#ffffff"
+                    }
+                    border.fill = fill
+                }) {
+                    Text("색 채우기 없음").tag(0)
+                    Text("색").tag(1)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    GridRow {
+                        FieldLabel("면 색")
+                        ColorWell(hex: fill(\.color, "#ffffff"))
+                    }
+                    GridRow {
+                        FieldLabel("무늬 색")
+                        ColorWell(hex: fill(\.patternColor, "#000000"))
+                    }
+                    GridRow {
+                        FieldLabel("무늬 모양")
+                        ChoiceField(Binding { Int(border.fill?.pattern ?? 0) } set: { border.fill?.pattern = UInt8($0) },
+                                    Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns, minWidth: 100)
+                    }
+                }
+                .padding(.leading, 20)
+                .disabled(border.fill.map { $0.color == "none" && $0.pattern == 0 } ?? true)
+            }
+            .padding(.leading, 12)
+            HStack(spacing: 28) {
+                LabeledField("적용 쪽") { ChoiceField($border.fillPages, Self.pages, minWidth: 90) }
+                LabeledField("채울 영역") {
+                    ChoiceField($border.fillArea, [(.paper, "종이"), (.page, "쪽"), (.border, "테두리")], minWidth: 70)
+                }
+            }
+        }
+    }
+    private func fill(_ key: WritableKeyPath<PageFill, String>, _ fallback: String) -> Binding<String> {
+        Binding { border.fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
+            border.fill?[keyPath: key] = $0
+        }
     }
 }
 

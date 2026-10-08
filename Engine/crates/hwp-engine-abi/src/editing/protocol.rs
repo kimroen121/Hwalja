@@ -274,6 +274,13 @@ pub enum EditCommand {
         #[serde(default)]
         whole: bool,
     },
+    /// 쪽 테두리/배경 of one section, or with `whole` of every section.
+    SetPageBorder {
+        section: u32,
+        border: PageBorder,
+        #[serde(default)]
+        whole: bool,
+    },
     /// 머리말/꼬리말 지우기: the definition `target` (a 머리말 or 꼬리말 paragraph) is in.
     DeleteHeaderFooter {
         target: EditTarget,
@@ -661,6 +668,57 @@ pub struct PageSetup {
     pub landscape: bool,
     /// 제본: 0 한쪽, 1 맞쪽, 2 위로.
     pub binding: u8,
+}
+/// A section's 쪽 테두리/배경. `sides` and `spacing` run 왼쪽, 오른쪽, 위쪽, 아래쪽;
+/// spacings are in HWPUNIT.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageBorder {
+    pub sides: [BorderSide; 4],
+    /// 위치: 종이 기준, else 쪽 기준.
+    pub paper: bool,
+    pub spacing: [u32; 4],
+    /// 머리말 포함 and 꼬리말 포함.
+    pub header_inside: bool,
+    pub footer_inside: bool,
+    /// 적용 쪽 of the border and of the background.
+    pub border_pages: ApplyPages,
+    pub fill_pages: ApplyPages,
+    /// 배경 by color; unset when it is a 그러데이션 or 그림, which then stays.
+    pub fill: Option<PageFill>,
+    pub fill_area: FillArea,
+}
+/// A border line: kind (0 none, 1 solid, 2 dash, …), width (an index as in
+/// `CharStyle::border_width`) and `#rrggbb`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BorderSide {
+    pub line: u8,
+    pub width: u8,
+    pub color: String,
+}
+/// 면 색 (`#rrggbb`, or `none` for 색 채우기 없음), 무늬 색 and 무늬 모양 (0 none, 1–6).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageFill {
+    pub color: String,
+    pub pattern_color: String,
+    pub pattern: u8,
+}
+/// 적용 쪽: 모두, 첫 쪽 제외, 첫 쪽만.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ApplyPages {
+    All,
+    ExceptFirst,
+    FirstOnly,
+}
+/// 채울 영역: 종이, 쪽, 테두리.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FillArea {
+    Paper,
+    Page,
+    Border,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -85,6 +85,9 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
             if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
         }
+        .sheet(isPresented: Binding(get: { viewer.pageBorder != nil }, set: { if !$0 { viewer.pageBorder = nil } })) {
+            if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
+        }
         .background(ClearTitleBar())
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
@@ -264,6 +267,7 @@ final class Viewer: ObservableObject {
     @Published var editingList: String?
     /// The section and paper 편집 용지 is showing.
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
+    @Published var pageBorder: (section: UInt32, border: PageBorder)?
 
     // Find and replace.
     @Published var finding = false
