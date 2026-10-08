@@ -1072,6 +1072,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
            let key = event.charactersIgnoringModifiers?.lowercased().first, onCellBlockKey?(key) == true {
             return
         }
+        // Home and End go to the line's ends, as in 한글, where macOS would scroll.
+        if event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+           let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }),
+           key == NSHomeFunctionKey || key == NSEndFunctionKey {
+            commitComposition()
+            return model?.move(key == NSHomeFunctionKey ? .lineStart : .lineEnd, extend: event.modifierFlags.contains(.shift)) ?? ()
+        }
         interpretKeyEvents([event])
     }
 

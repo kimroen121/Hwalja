@@ -672,6 +672,32 @@ struct DocumentTests {
         #expect(document.selection == .caret(EditPosition(target: body, scalar: 0)))
     }
 
+    /// End and Shift+End stop at the end of the wrapped line, as in 한글; Home goes back.
+    @Test func homeAndEndKeysGoToTheLineEnds() async throws {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type(String(repeating: "가나다라마바사 아자차카 ", count: 12), nil)
+        await document.settle()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        await document.settle()
+        func key(_ key: Int, _ flags: NSEvent.ModifierFlags = []) async {
+            let characters = String(UnicodeScalar(UInt16(key))!)
+            canvas.editor.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags.union(.function),
+                                                         timestamp: 0, windowNumber: 0, context: nil, characters: characters,
+                                                         charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 0)!)
+            await document.settle()
+        }
+        await key(NSEndFunctionKey)
+        let end = try #require(document.selection?.focus)
+        #expect(end.upstream && end.scalar > 10 && end.scalar < 100)
+        await key(NSHomeFunctionKey)
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 0)))
+        await key(NSEndFunctionKey, .shift)
+        #expect(document.selection == EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: end))
+    }
+
     @Test func formattingUpdatesTheCaretFormat() async throws {
         let document = try HwpDocument(data: fixture("hwp"))
         let undo = UndoManager()
