@@ -503,6 +503,19 @@ impl EditSession {
                 self.section_exists(*section)?;
                 validate_page(page)
             }
+            EditCommand::SetNoteShape {
+                section,
+                footnote,
+                shape,
+                ..
+            } => {
+                self.section_exists(*section)?;
+                if super::sections::valid_note(shape, *footnote) {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
             EditCommand::SetSection { section, setup, .. } => {
                 self.section_exists(*section)?;
                 if super::sections::valid_setup(setup) {
@@ -1423,6 +1436,15 @@ impl EditSession {
                 for s in page_sections(self.core.document(), *section, *whole) {
                     self.core.set_page_def_native(s, &json)?;
                 }
+                Ok(self.kept(*section))
+            }
+            EditCommand::SetNoteShape {
+                section,
+                footnote,
+                shape,
+                whole,
+            } => {
+                self.set_note_shape(*section, *footnote, shape, *whole)?;
                 Ok(self.kept(*section))
             }
             EditCommand::SetSection {

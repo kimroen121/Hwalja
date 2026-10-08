@@ -2,7 +2,12 @@
 //! go on) and 구역 설정.
 use super::commands::page_sections;
 use super::*;
-use rhwp::model::{control::Control, document::SectionDef};
+use rhwp::model::{
+    control::Control,
+    document::{Document, SectionDef},
+    footnote::FootnoteNumbering,
+    paragraph::Paragraph,
+};
 use serde_json::{json, Value};
 
 /// The largest 간격: 25 mm.
@@ -16,6 +21,107 @@ fn color(text: &str) -> bool {
 /// 기본 탭 간격 and 단 사이 간격 up to 100 mm.
 const MAX_GAP: u32 = 28346;
 
+/// 번호 모양 a 각주 takes; a 미주 takes all but the symbols. 기호 (`userChar`) is left out:
+/// the mark in the body has no way to its character.
+const NOTE_FORMATS: [&str; 18] = [
+    "digit",
+    "circledDigit",
+    "upperRoman",
+    "lowerRoman",
+    "upperAlpha",
+    "lowerAlpha",
+    "circledUpperAlpha",
+    "circledLowerAlpha",
+    "hangulSyllable",
+    "circledHangulSyllable",
+    "hangulJamo",
+    "circledHangulJamo",
+    "hangulDigit",
+    "hanjaDigit",
+    "circledHanjaDigit",
+    "hanjaGapEul",
+    "hanjaGapEulHanja",
+    "fourSymbol",
+];
+pub(super) fn valid_note(shape: &NoteShape, footnote: bool) -> bool {
+    let formats = if footnote {
+        &NOTE_FORMATS[..]
+    } else {
+        &NOTE_FORMATS[..17]
+    };
+    let one = |s: &str| s.chars().count() <= 1;
+    let margin = |m: i32| (0..=MAX_SPACING as i32).contains(&m);
+    formats.contains(&shape.number_format.as_str())
+        && one(&shape.user_char)
+        && one(&shape.prefix_char)
+        && one(&shape.suffix_char)
+        && (-4..=MAX_GAP as i32).contains(&shape.separator_length)
+        && shape.separator_line_type <= 17
+        && shape.separator_line_width <= 15
+        && color(&shape.separator_color)
+        && margin(shape.separator_margin_top)
+        && margin(shape.separator_margin_bottom)
+        && margin(shape.note_spacing)
+        && match shape.numbering.as_str() {
+            "continue" | "restartSection" => true,
+            "restartPage" => footnote,
+            _ => false,
+        }
+}
+/// Numbers the notes through the document as each section's 번호 매기기 says: on from the
+/// section before, or anew from its start number. Sections that start anew on each page keep
+/// their 각주 numbers.
+fn number_notes(doc: &mut Document) {
+    fn walk(paragraphs: &mut [Paragraph], footnotes: Option<&mut u16>, endnotes: &mut u16) {
+        let mut footnotes = footnotes;
+        for p in paragraphs {
+            for c in &mut p.controls {
+                match c {
+                    Control::Footnote(n) => {
+                        if let Some(f) = footnotes.as_deref_mut() {
+                            *f = f.saturating_add(1);
+                            n.number = *f;
+                        }
+                    }
+                    Control::Endnote(n) => {
+                        *endnotes = endnotes.saturating_add(1);
+                        n.number = *endnotes;
+                    }
+                    Control::Table(t) => {
+                        for cell in &mut t.cells {
+                            walk(&mut cell.paragraphs, footnotes.as_deref_mut(), endnotes);
+                        }
+                    }
+                    Control::Shape(s) => {
+                        if let Some(b) = s.drawing_mut().and_then(|d| d.text_box.as_mut()) {
+                            walk(&mut b.paragraphs, footnotes.as_deref_mut(), endnotes);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    let (mut footnotes, mut endnotes) = (0u16, 0u16);
+    for (i, section) in doc.sections.iter_mut().enumerate() {
+        let (f, e) = (
+            &section.section_def.footnote_shape,
+            &section.section_def.endnote_shape,
+        );
+        if i == 0 || f.numbering == FootnoteNumbering::RestartSection {
+            footnotes = f.start_number.max(1) - 1;
+        }
+        if i == 0 || e.numbering == FootnoteNumbering::RestartSection {
+            endnotes = e.start_number.max(1) - 1;
+        }
+        let by_page = f.numbering == FootnoteNumbering::RestartPage;
+        walk(
+            &mut section.paragraphs,
+            (!by_page).then_some(&mut footnotes),
+            &mut endnotes,
+        );
+    }
+}
 pub(super) fn valid_setup(setup: &SectionSetup) -> bool {
     setup.page_num_type <= 2
         && (1..=MAX_GAP).contains(&setup.default_tab_spacing)
@@ -203,6 +309,35 @@ impl EditSession {
             self.core.set_section_def_all_native(&json)?;
         } else {
             self.core.set_section_def_native(section as usize, &json)?;
+        }
+        Ok(())
+    }
+    /// 각주 모양 (`footnote`) or 미주 모양 of a section.
+    pub fn note_shape(&self, section: u32, footnote: bool) -> Result<NoteShape, EditError> {
+        serde_json::from_str(
+            &self
+                .core
+                .get_note_shape_native(section as usize, footnote)?,
+        )
+        .map_err(|_| EditError::RenderFailed)
+    }
+    pub(super) fn set_note_shape(
+        &mut self,
+        section: u32,
+        footnote: bool,
+        shape: &NoteShape,
+        whole: bool,
+    ) -> Result<(), EditError> {
+        let json = serde_json::to_string(shape).map_err(|_| EditError::InvalidInput)?;
+        for s in page_sections(self.core.document(), section, whole) {
+            self.core
+                .apply_note_shape_native(s, footnote, false, &json)?;
+        }
+        number_notes(self.core.document_mut());
+        // Lays out every section again with its new numbers, each in its own shape.
+        for s in 0..self.core.document().sections.len() {
+            self.core.apply_note_shape_native(s, true, false, "{}")?;
+            self.core.apply_note_shape_native(s, false, false, "{}")?;
         }
         Ok(())
     }

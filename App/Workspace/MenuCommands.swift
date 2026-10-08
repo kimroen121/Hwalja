@@ -324,10 +324,15 @@ struct MenuItems {
                 .disabled(!context.canCaption)
             Divider()
             Menu {
-                item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
-                item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
-            } label: { Label("주석", systemImage: Icon.footnote) }
+                Group {
+                    item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
+                    item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
+                }
                 .disabled(!context.inBody)
+                item("각주/미주 모양…", Icon.noteShape) { viewer?.showNoteShapes() }
+                    .disabled(context.locked)
+            } label: { Label("주석", systemImage: Icon.footnote) }
+                .disabled(viewer == nil)
             Divider()
             item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF10FunctionKey)!)))

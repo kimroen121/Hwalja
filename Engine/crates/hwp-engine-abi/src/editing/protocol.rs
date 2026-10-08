@@ -281,6 +281,14 @@ pub enum EditCommand {
         #[serde(default)]
         whole: bool,
     },
+    /// 각주 모양 (`footnote`) or 미주 모양 of one section, or with `whole` of every section.
+    SetNoteShape {
+        section: u32,
+        footnote: bool,
+        shape: NoteShape,
+        #[serde(default)]
+        whole: bool,
+    },
     /// 구역 설정 of one section, or with `whole` of every section.
     SetSection {
         section: u32,
@@ -714,6 +722,27 @@ pub struct SectionSetup {
     pub hide_border: bool,
     pub hide_fill: bool,
     pub hide_empty_line: bool,
+}
+/// 각주 모양 or 미주 모양, in rhwp's names: 번호 모양 (`digit`, `circledDigit`, …,
+/// `fourSymbol`, `userChar`), 기호 모양 and 앞/뒤 장식 문자 (one character or empty), 구분선
+/// (길이 in HWPUNIT, or −1 5 cm, −2 2 cm, −3 a third and −4 all of the column; 종류, 굵기,
+/// `#rrggbb`), 여백 in HWPUNIT, and 번호 매기기 (`continue`, `restartSection`, `restartPage`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteShape {
+    pub number_format: String,
+    pub user_char: String,
+    pub prefix_char: String,
+    pub suffix_char: String,
+    pub separator_enabled: bool,
+    pub separator_length: i32,
+    pub separator_line_type: u8,
+    pub separator_line_width: u8,
+    pub separator_color: String,
+    pub separator_margin_top: i32,
+    pub separator_margin_bottom: i32,
+    pub note_spacing: i32,
+    pub numbering: String,
 }
 /// A border line: kind (0 none, 1 solid, 2 dash, …), width (an index as in
 /// `CharStyle::border_width`) and `#rrggbb`.

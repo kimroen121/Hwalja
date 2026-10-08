@@ -103,6 +103,9 @@ final class EditSession: @unchecked Sendable {
     func sectionSetup(section: UInt32) async throws -> SectionSetup {
         try await decode(send(.sectionSetup(section: section)))
     }
+    func noteShape(section: UInt32, footnote: Bool) async throws -> NoteShape {
+        try await decode(send(.noteShape(section: section, footnote: footnote)))
+    }
     func pageHide(_ target: EditTarget) async throws -> PageHide {
         try await decode(send(.pageHide(target)))
     }

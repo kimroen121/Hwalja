@@ -38,6 +38,7 @@
 - persists 문단 번호의 `새 번호 목록 시작` as a cloned numbering definition and matching paragraph-shape references, so its start value survives both HWP and HWPX save/reopen.
 - reads and writes 쪽 테두리/배경's 첫 쪽 제외 as HWPX `HIDE_FIRST` (it took `HIDE_ALL`), and leaves the border or background off a section's first page when it is set.
 - numbers a section's pages from its 구역 설정 시작 쪽 번호 (사용자, or the next odd or even number), hides the 머리말 and 꼬리말 on a section's first page when it says so, renumbers 그림, 표 and 수식 after a section definition changes, and makes `assign_auto_numbers` public.
+- adds `get/apply_note_shape_native` for 각주 모양 as well as 미주 모양 (leaving the numbers to the caller, and taking 구분선 길이's 5 cm, 2 cm, ⅓ and full-column values), and draws every 번호 모양 (circled letters and 자모, 갑을병, 甲乙丙, *†‡§ and the rest) in the body's mark and the note's own number alike.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

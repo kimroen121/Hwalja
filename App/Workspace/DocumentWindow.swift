@@ -88,6 +88,11 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageBorder != nil }, set: { if !$0 { viewer.pageBorder = nil } })) {
             if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
         }
+        .sheet(isPresented: Binding(get: { viewer.noteShapes != nil }, set: { if !$0 { viewer.noteShapes = nil } })) {
+            if let shapes = viewer.noteShapes {
+                NoteShapeSheet(section: shapes.section, footnote: shapes.footnote, endnote: shapes.endnote, viewer: viewer)
+            }
+        }
         .sheet(isPresented: Binding(get: { viewer.sectionSetup != nil }, set: { if !$0 { viewer.sectionSetup = nil } })) {
             if let setup = viewer.sectionSetup { SectionSheet(section: setup.section, setup: setup.setup, viewer: viewer) }
         }
@@ -272,6 +277,7 @@ final class Viewer: ObservableObject {
     @Published var pageSetup: (section: UInt32, page: PageSetup)?
     @Published var pageBorder: (section: UInt32, border: PageBorder)?
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
+    @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
 
     // Find and replace.
     @Published var finding = false

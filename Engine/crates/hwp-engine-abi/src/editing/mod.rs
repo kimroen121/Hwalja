@@ -344,6 +344,7 @@ impl EditSession {
             EditCommand::SetPage { .. }
             | EditCommand::SetPageBorder { .. }
             | EditCommand::SetSection { .. }
+            | EditCommand::SetNoteShape { .. }
             | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }

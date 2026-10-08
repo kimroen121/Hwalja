@@ -108,7 +108,6 @@ rhwp 함수 이름은 `DocumentCore`(대부분 `*_native`) 기준이다. 「wasm
 엔진에 함수가 있어 앱 연결과 대화 상자만 만들면 되는 것. 자주 쓰는 순서다.
 
 - [ ] 개체 선택 아이콘(`draw/drawing(select).htm`): 끌어서 여러 개체 고르기, Alt+클릭으로 겹친 개체 돌아가며 고르기, Tab으로 쪽의 개체 차례로 고르기. Shift+클릭과 개체 묶기는 됨.
-- [ ] 각주/미주 모양…(`insert/annotations/annotations(format).htm`): `get/apply_endnote_shape_native`, `get_footnote_info_native`.
 - [ ] 스타일…(F6)과 스타일 작업 창(`format/style/style.htm`, `view/workwindow/workwindow(style).htm`): wasm `get_style_list`, `get_style_detail`, `update_style`, `update_style_shapes`, `create_style`, `delete_style`.
 - [ ] 개요 보기 작업 창(`view/workwindow/workwindow(outlinenumbering).htm`): `get_outline_navigation_native`.
 - [ ] 책갈피 작업 창(`view/workwindow/bookmark/bookmark.htm`): 책갈피 명령은 이미 있음.

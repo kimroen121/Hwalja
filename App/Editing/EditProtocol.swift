@@ -127,6 +127,8 @@ enum EditCommand: Encodable, Sendable {
     case setPage(section: UInt32, PageSetup, whole: Bool = false)
     /// 쪽 테두리/배경; with `whole`, of every section.
     case setPageBorder(section: UInt32, PageBorder, whole: Bool)
+    /// 각주 모양 (`footnote`) or 미주 모양; with `whole`, of every section.
+    case setNoteShape(section: UInt32, footnote: Bool, NoteShape, whole: Bool)
     /// 구역 설정; with `whole`, of every section.
     case setSection(section: UInt32, SectionSetup, whole: Bool)
     /// 머리말 or 꼬리말 for every page of a section: empty, or holding the page number.
@@ -151,7 +153,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -233,6 +235,12 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("setPageBorder", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
+            try c.encode(whole, forKey: .whole)
+        case let .setNoteShape(section, footnote, shape, whole):
+            try c.encode("setNoteShape", forKey: .kind)
+            try c.encode(section, forKey: .section)
+            try c.encode(footnote, forKey: .footnote)
+            try c.encode(shape, forKey: .shape)
             try c.encode(whole, forKey: .whole)
         case let .setSection(section, setup, whole):
             try c.encode("setSection", forKey: .kind)
@@ -553,6 +561,25 @@ struct PageBorder: Codable, Hashable, Sendable {
     /// 배경 by color; nil when it is a 그러데이션 or 그림, which then stays.
     var fill: PageFill?
     var fillArea: FillArea
+}
+/// 각주 모양 or 미주 모양, in rhwp's names: 번호 모양 (`digit`, …, `fourSymbol`, `userChar`),
+/// 기호 모양 and 앞/뒤 장식 문자 (one character or empty), 구분선 (길이 in HWPUNIT, or −1
+/// 5 cm, −2 2 cm, −3 a third and −4 all of the column), 여백 in HWPUNIT, and 번호 매기기
+/// (`continue`, `restartSection`, `restartPage`).
+struct NoteShape: Codable, Hashable, Sendable {
+    var numberFormat: String
+    var userChar: String
+    var prefixChar: String
+    var suffixChar: String
+    var separatorEnabled: Bool
+    var separatorLength: Int32
+    var separatorLineType: UInt8
+    var separatorLineWidth: UInt8
+    var separatorColor: String
+    var separatorMarginTop: Int32
+    var separatorMarginBottom: Int32
+    var noteSpacing: Int32
+    var numbering: String
 }
 /// 구역 설정: 시작 쪽 번호 (`pageNum`, 0 continuing; `pageNumType` 0 이어서, 1 홀수, 2 짝수),
 /// 개체 시작 번호 (0 continuing), the 첫 쪽에만 감추기 flags, 빈 줄 감추기, and 단 사이 간격
@@ -929,6 +956,7 @@ enum EngineRequest: Encodable, Sendable {
     case pageSetup(section: UInt32)
     case pageBorder(section: UInt32)
     case sectionSetup(section: UInt32)
+    case noteShape(section: UInt32, footnote: Bool)
     case pageHide(EditTarget)
     case bookmarks
     case statistics
@@ -955,7 +983,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -1011,6 +1039,10 @@ enum EngineRequest: Encodable, Sendable {
         case let .sectionSetup(section):
             try c.encode("sectionSetup", forKey: .op)
             try c.encode(section, forKey: .section)
+        case let .noteShape(section, footnote):
+            try c.encode("noteShape", forKey: .op)
+            try c.encode(section, forKey: .section)
+            try c.encode(footnote, forKey: .footnote)
         case let .pageHide(target):
             try c.encode("pageHide", forKey: .op)
             try c.encode(target, forKey: .target)

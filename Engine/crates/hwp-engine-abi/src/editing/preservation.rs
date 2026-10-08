@@ -233,6 +233,9 @@ pub(super) fn check(
         EditCommand::SetSection { section, whole, .. } => {
             return check_section(before, after, *section, *whole)
         }
+        EditCommand::SetNoteShape { section, whole, .. } => {
+            return check_note_shape(before, after, *section, *whole)
+        }
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
             position: EditPosition { target, .. },
@@ -795,6 +798,73 @@ fn check_page_border(
             }
         }
         (x.raw_stream, y.raw_stream) = (None, None);
+    }
+    same_rest(&mut a, &mut b, section)
+}
+/// 각주/미주 모양 changed only the sections' definitions and the notes' numbers and
+/// number shapes.
+fn check_note_shape(
+    before: &Document,
+    after: &Document,
+    section: u32,
+    whole: bool,
+) -> Result<(), EditError> {
+    /// Takes out what a note shows of its number.
+    fn unnumber(paragraphs: &mut [Paragraph]) {
+        for p in paragraphs {
+            for c in &mut p.controls {
+                let notes = match c {
+                    Control::Footnote(n) => {
+                        (n.number, n.number_shape) = (0, 0);
+                        (n.before_decoration_letter, n.after_decoration_letter) = (0, 0);
+                        &mut n.paragraphs
+                    }
+                    Control::Endnote(n) => {
+                        (n.number, n.number_shape) = (0, 0);
+                        (n.before_decoration_letter, n.after_decoration_letter) = (0, 0);
+                        &mut n.paragraphs
+                    }
+                    Control::AutoNumber(n) => {
+                        (n.format, n.number, n.assigned_number) = (0, 0, 0);
+                        (n.prefix_char, n.suffix_char) = ('\0', '\0');
+                        continue;
+                    }
+                    Control::Table(t) => {
+                        for cell in &mut t.cells {
+                            unnumber(&mut cell.paragraphs);
+                        }
+                        continue;
+                    }
+                    Control::Shape(s) => {
+                        if let Some(b) = s.drawing_mut().and_then(|d| d.text_box.as_mut()) {
+                            unnumber(&mut b.paragraphs);
+                        }
+                        continue;
+                    }
+                    _ => continue,
+                };
+                unnumber(notes);
+            }
+        }
+    }
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        for s in &mut doc.sections {
+            unnumber(&mut s.paragraphs);
+            s.raw_stream = None;
+        }
+    }
+    for s in commands::page_sections(before, section, whole) {
+        let (x, y) = (&mut a.sections[s], &mut b.sections[s]);
+        x.section_def = y.section_def.clone();
+        for (p, q) in x.paragraphs.iter_mut().zip(&y.paragraphs) {
+            for (c, d) in p.controls.iter_mut().zip(&q.controls) {
+                if let (Control::SectionDef(c), Control::SectionDef(d)) = (c, d) {
+                    *c = d.clone();
+                }
+            }
+        }
     }
     same_rest(&mut a, &mut b, section)
 }

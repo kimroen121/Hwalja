@@ -2554,6 +2554,80 @@ fn sets_paper_and_margins() {
     }
 }
 #[test]
+fn note_shapes_number_and_mark_notes() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        for _ in 0..2 {
+            let note = EditCommand::InsertNote {
+                position: point(body(), 1),
+                endnote: false,
+            };
+            run(&mut s, note).unwrap();
+        }
+        // Each note's number, number shape and decorations.
+        let marks = |s: &EditSession| -> Vec<(u16, u32, u16, u16)> {
+            s.core.document().sections[0].paragraphs[1]
+                .controls
+                .iter()
+                .filter_map(|c| match c {
+                    Control::Footnote(n) => Some((
+                        n.number,
+                        n.number_shape,
+                        n.before_decoration_letter,
+                        n.after_decoration_letter,
+                    )),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mut shape = s.note_shape(0, true).unwrap();
+        shape.number_format = "circledDigit".into();
+        shape.prefix_char = "[".into();
+        shape.suffix_char = "]".into();
+        shape.separator_line_type = 2;
+        let set = |shape: NoteShape| EditCommand::SetNoteShape {
+            section: 0,
+            footnote: true,
+            shape,
+            whole: true,
+        };
+        run(&mut s, set(shape.clone())).unwrap();
+        assert_eq!(s.note_shape(0, true).unwrap(), shape, "{format}");
+        let circled = (1, '[' as u16, ']' as u16);
+        assert_eq!(
+            marks(&s),
+            [
+                (1, circled.0, circled.1, circled.2),
+                (2, circled.0, circled.1, circled.2)
+            ],
+            "{format}"
+        );
+        let saved = s
+            .export(if format == "hwp" {
+                SaveFormat::Hwp
+            } else {
+                SaveFormat::Hwpx
+            })
+            .unwrap();
+        let reopened = EditSession::open(&saved).unwrap();
+        assert_eq!(reopened.note_shape(0, true).unwrap(), shape, "{format}");
+        assert_eq!(marks(&reopened), marks(&s), "{format}");
+        shape.number_format = "fourSymbol".into();
+        assert!(run(
+            &mut s,
+            EditCommand::SetNoteShape {
+                section: 0,
+                footnote: false,
+                shape,
+                whole: false,
+            }
+        )
+        .is_err());
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(marks(&s)[1].1, 0, "{format}");
+    }
+}
+#[test]
 fn section_setup_numbers_pages_and_hides_the_first_footer() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();
@@ -5121,4 +5195,42 @@ fn status_counts_lines_on_the_page_and_names_cells() {
         ..body()
     };
     assert_eq!(status(&s, point(cell, 0)).cell.as_deref(), Some("B1"));
+}
+#[test]
+fn footnote_numbers_are_drawn_in_their_shape() {
+    let bytes = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../Tests/Fixtures/generated.hwpx"),
+    )
+    .unwrap();
+    let mut s = EditSession::open(&bytes).unwrap();
+    let mut first = body();
+    first.paragraph = 0;
+    let note = EditCommand::InsertNote {
+        position: point(first, 3),
+        endnote: false,
+    };
+    run(&mut s, note).unwrap();
+    // The body's mark, and the note's own number drawn a glyph at a time.
+    let drawn = |s: &EditSession, number: &str| {
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        svg.contains(&format!(">{number})<")) && svg.contains(&format!(">{number}<"))
+    };
+    assert!(drawn(&s, "1"));
+    for (format, number) in [
+        ("upperRoman", "I"),
+        ("hanjaGapEul", "갑"),
+        ("fourSymbol", "*"),
+    ] {
+        let mut shape = s.note_shape(0, true).unwrap();
+        shape.number_format = format.into();
+        let set = EditCommand::SetNoteShape {
+            section: 0,
+            footnote: true,
+            shape,
+            whole: false,
+        };
+        run(&mut s, set).unwrap();
+        assert!(drawn(&s, number) && !drawn(&s, "1"), "{format}");
+    }
 }

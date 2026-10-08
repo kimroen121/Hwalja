@@ -104,6 +104,20 @@ extension Viewer {
     func setPageBorder(_ border: PageBorder, section: UInt32, whole: Bool) {
         document?.edit(undoManager) { _ in .setPageBorder(section: section, border, whole: whole) }
     }
+    /// Opens 주석 모양 for the section holding the caret.
+    func showNoteShapes() {
+        guard let document else { return }
+        let section = document.selection?.focus.target.section ?? 0
+        Task {
+            guard let footnote = try? await document.noteShape(section: section, footnote: true),
+                  let endnote = try? await document.noteShape(section: section, footnote: false)
+            else { return NSSound.beep() }
+            noteShapes = (section, footnote, endnote)
+        }
+    }
+    func setNoteShape(_ shape: NoteShape, footnote: Bool, section: UInt32, whole: Bool) {
+        document?.edit(undoManager) { _ in .setNoteShape(section: section, footnote: footnote, shape, whole: whole) }
+    }
     /// Opens 구역 설정 for the section holding the caret.
     func showSectionSetup() {
         guard let document else { return }
@@ -616,6 +630,148 @@ struct PageBorderSheet: View {
         Binding { border.fill.map { $0[keyPath: key] }.flatMap { $0 == "none" ? nil : $0 } ?? fallback } set: {
             border.fill?[keyPath: key] = $0
         }
+    }
+}
+
+/// 주석 모양: 각주 모양 and 미주 모양 tabs, and 적용 범위.
+struct NoteShapeSheet: View {
+    let section: UInt32
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    private let original: [NoteShape]
+    /// 각주 모양 then 미주 모양.
+    @State private var shapes: [NoteShape]
+    @State private var tab: String
+    @State private var whole = true
+
+    /// 번호 모양, in the dialog's order; 미주 takes all but the last.
+    private static let formats: [(String, String)] = [
+        ("digit", "1,2,3"), ("circledDigit", "①,②,③"), ("upperRoman", "I,II,III"), ("lowerRoman", "i,ii,iii"),
+        ("upperAlpha", "A,B,C"), ("lowerAlpha", "a,b,c"), ("circledUpperAlpha", "Ⓐ,Ⓑ,Ⓒ"), ("circledLowerAlpha", "ⓐ,ⓑ,ⓒ"),
+        ("hangulSyllable", "가,나,다"), ("circledHangulSyllable", "㉮,㉯,㉰"), ("hangulJamo", "ㄱ,ㄴ,ㄷ"),
+        ("circledHangulJamo", "㉠,㉡,㉢"), ("hangulDigit", "일,이,삼"), ("hanjaDigit", "一,二,三"),
+        ("circledHanjaDigit", "㊀,㊁,㊂"), ("hanjaGapEul", "갑,을,병"), ("hanjaGapEulHanja", "甲,乙,丙"),
+        ("fourSymbol", "*,†,‡,§"),
+    ]
+
+    init(section: UInt32, footnote: NoteShape, endnote: NoteShape, viewer: Viewer, tab: String = "각주 모양") {
+        self.section = section
+        self.viewer = viewer
+        original = [footnote, endnote]
+        _shapes = State(initialValue: [footnote, endnote])
+        _tab = State(initialValue: tab)
+    }
+
+    var body: some View {
+        DialogFrame("주석 모양", confirmTitle: "설정") {
+            DialogTabs(selection: $tab, titles: ["각주 모양", "미주 모양"]) { tab in
+                page(tab == "각주 모양" ? 0 : 1)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 22)
+            }
+            .frame(width: 520, height: 372)
+            HStack(spacing: 10) {
+                Text("적용 범위")
+                ChoiceField($whole, [(true, "문서 전체"), (false, "현재 구역")], minWidth: 100).fixedSize()
+            }
+        } confirm: {
+            for kind in 0..<2 where shapes[kind] != original[kind] {
+                viewer.setNoteShape(shapes[kind], footnote: kind == 0, section: section, whole: whole)
+            }
+            dismiss()
+        }
+    }
+
+    private func page(_ kind: Int) -> some View {
+        let name = kind == 0 ? "각주" : "미주"
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("번호 서식")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow {
+                            FieldLabel("번호 모양")
+                            ChoiceField($shapes[kind].numberFormat, Array(Self.formats.prefix(kind == 0 ? 18 : 17)), minWidth: 90)
+                        }
+                        GridRow {
+                            FieldLabel("앞 장식 문자")
+                            character($shapes[kind].prefixChar)
+                        }
+                        GridRow {
+                            FieldLabel("뒤 장식 문자")
+                            character($shapes[kind].suffixChar)
+                        }
+                    }
+                    .padding(.leading, 12)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("여백")
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow { margin("구분선 위", $shapes[kind].separatorMarginTop) }
+                        GridRow { margin("구분선 아래", $shapes[kind].separatorMarginBottom) }
+                        GridRow { margin("\(name) 사이", $shapes[kind].noteSpacing) }
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+            Toggle("구분선 넣기", isOn: Binding { shapes[kind].separatorEnabled } set: { on in
+                shapes[kind].separatorEnabled = on
+                if on && shapes[kind].separatorLineType == 0 {
+                    (shapes[kind].separatorLength, shapes[kind].separatorLineType, shapes[kind].separatorLineWidth) = (-1, 1, 1)
+                }
+            })
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("길이")
+                    SpinField(value: length(kind), unit: "mm", range: 0...100)
+                    FieldLabel("종류")
+                    ChoiceField(Binding { Int(shapes[kind].separatorLineType) } set: { shapes[kind].separatorLineType = UInt8($0) },
+                                Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, minWidth: 100)
+                }
+                GridRow {
+                    FieldLabel("굵기")
+                    ChoiceField(Binding { Int(shapes[kind].separatorLineWidth) } set: { shapes[kind].separatorLineWidth = UInt8($0) },
+                                Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, minWidth: 100)
+                    FieldLabel("색")
+                    ColorWell(hex: $shapes[kind].separatorColor)
+                }
+            }
+            .fixedSize()
+            .padding(.leading, 12)
+            .disabled(!shapes[kind].separatorEnabled)
+            GroupTitle("번호 매기기")
+            Picker("", selection: $shapes[kind].numbering) {
+                Text("앞 구역에 이어서").tag("continue")
+                Text("현재 구역부터 새로 시작").tag("restartSection")
+            }
+            .pickerStyle(.radioGroup)
+            .horizontalRadioGroupLayout()
+            .labelsHidden()
+            .padding(.leading, 12)
+        }
+    }
+    /// One character, as 기호 모양 and the 장식 문자 take.
+    private func character(_ text: Binding<String>) -> some View {
+        TextField("", text: Binding { text.wrappedValue } set: { text.wrappedValue = String($0.suffix(1)) })
+            .textFieldStyle(.plain)
+            .padding(.leading, 6)
+            .frame(width: 44)
+            .fieldBox()
+    }
+    @ViewBuilder private func margin(_ title: String, _ value: Binding<Int32>) -> some View {
+        FieldLabel(title)
+        SpinField(value: Binding { Units.millimeters(value.wrappedValue) } set: { value.wrappedValue = Units.units($0) },
+                  unit: "mm", range: 0...25)
+    }
+    /// 구분선 길이 in millimeters; 5 cm and 2 cm are stored as their own values.
+    private func length(_ kind: Int) -> Binding<Double> {
+        Binding {
+            switch shapes[kind].separatorLength {
+            case -1: 50
+            case -2: 20
+            case let raw: Units.millimeters(max(raw, 0))
+            }
+        } set: { shapes[kind].separatorLength = Units.units($0) }
     }
 }
 

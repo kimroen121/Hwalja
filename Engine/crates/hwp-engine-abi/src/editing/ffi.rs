@@ -113,6 +113,11 @@ enum Request {
     SectionSetup {
         section: u32,
     },
+    /// 각주 모양 (`footnote`) or 미주 모양 of a section.
+    NoteShape {
+        section: u32,
+        footnote: bool,
+    },
     /// 현재 쪽만 감추기 of a body paragraph.
     PageHide {
         target: EditTarget,
@@ -285,6 +290,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         }
         Request::SectionSetup { section } => {
             HwpEditResult::ok(session.section_setup(section)?, Vec::new())
+        }
+        Request::NoteShape { section, footnote } => {
+            HwpEditResult::ok(session.note_shape(section, footnote)?, Vec::new())
         }
         Request::PageHide { target } => HwpEditResult::ok(session.page_hide(&target)?, Vec::new()),
         Request::Bookmarks => HwpEditResult::ok(session.bookmarks(), Vec::new()),

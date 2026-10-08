@@ -1192,6 +1192,12 @@ struct DocumentTests {
         viewer.setPageBorder(border, section: 0, whole: true)
         await document.settle()
         #expect(try await document.pageBorder(section: 0) == border)
+        var note = try await document.noteShape(section: 0, footnote: false)
+        note.numberFormat = "upperRoman"
+        note.numbering = "restartSection"
+        viewer.setNoteShape(note, footnote: false, section: 0, whole: false)
+        await document.settle()
+        #expect(try await document.noteShape(section: 0, footnote: false) == note)
         var setup = try await document.sectionSetup(section: 0)
         setup.pageNum = 3
         setup.hideEmptyLine.toggle()
@@ -1507,6 +1513,8 @@ struct DocumentTests {
             ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
             ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
             ("pageBorder", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer))),
+            ("notes", AnyView(NoteShapeSheet(section: 0, footnote: try await document.noteShape(section: 0, footnote: true),
+                                             endnote: try await document.noteShape(section: 0, footnote: false), viewer: viewer))),
             ("section", AnyView(SectionSheet(section: 0, setup: try await document.sectionSetup(section: 0), viewer: viewer))),
             ("pageBackground", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer,
                                                        tab: "배경"))),

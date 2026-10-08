@@ -345,19 +345,188 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
                  }
              }
          }
-@@ -2182,6 +2188,12 @@
-                 for offset in para.char_offsets.iter_mut() {
-                     if *offset >= threshold {
+@@ -2184,6 +2190,12 @@
                          *offset -= 8;
-+                    }
-+                }
+                     }
+                 }
 +                // HwpStudio: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
++                    }
++                }
+             }
+ 
+             para.controls.remove(ci);
+@@ -2526,7 +2538,73 @@
+                         auto_num.suffix_char = suffix_char;
+                         auto_num.number = endnote.number;
+                         auto_num.assigned_number = endnote.number;
++                    }
++                }
++            }
++        }
++    }
++    /// 구역 문단의 각주 또는 미주에 번호는 그대로 두고 번호 모양과 장식 문자를 맞춘다.
++    fn sync_paragraph_notes_with_shape(
++        paragraphs: &mut [crate::model::paragraph::Paragraph],
++        footnote: bool,
++        number_format_code: u8,
++        prefix_char: char,
++        suffix_char: char,
++    ) {
++        for para in paragraphs {
++            for ctrl in &mut para.controls {
++                match ctrl {
++                    Control::Endnote(endnote) if !footnote => Self::sync_endnote_control_with_shape(
++                        endnote,
++                        number_format_code,
++                        prefix_char,
++                        suffix_char,
++                    ),
++                    Control::Footnote(note) if footnote => {
++                        use crate::model::control::AutoNumberType;
++                        let letter = |c: char| if c == '\0' { 0 } else { c as u16 };
++                        note.before_decoration_letter = letter(prefix_char);
++                        note.after_decoration_letter = letter(suffix_char);
++                        note.number_shape = number_format_code as u32;
++                        for para in &mut note.paragraphs {
++                            for ctrl in &mut para.controls {
++                                if let Control::AutoNumber(n) = ctrl {
++                                    if n.number_type == AutoNumberType::Footnote {
++                                        n.format = number_format_code;
++                                        n.prefix_char = prefix_char;
++                                        n.suffix_char = suffix_char;
++                                        n.number = note.number;
++                                        n.assigned_number = note.number;
++                                    }
++                                }
++                            }
++                        }
++                    }
++                    Control::Table(table) => {
++                        for cell in &mut table.cells {
++                            Self::sync_paragraph_notes_with_shape(
++                                &mut cell.paragraphs,
++                                footnote,
++                                number_format_code,
++                                prefix_char,
++                                suffix_char,
++                            );
++                        }
++                    }
++                    Control::Shape(shape) => {
++                        if let Some(text_box) =
++                            shape.drawing_mut().and_then(|d| d.text_box.as_mut())
++                        {
++                            Self::sync_paragraph_notes_with_shape(
++                                &mut text_box.paragraphs,
++                                footnote,
++                                number_format_code,
++                                prefix_char,
++                                suffix_char,
++                            );
++                        }
                      }
++                    _ => {}
                  }
              }
+         }
+@@ -2597,10 +2675,22 @@
+ 
+     /// 현재 구역의 미주 모양을 조회한다.
+     pub fn get_endnote_shape_native(&self, section_idx: usize) -> Result<String, HwpError> {
++        self.get_note_shape_native(section_idx, false)
++    }
++    /// 현재 구역의 각주(`footnote`) 또는 미주 모양을 조회한다.
++    pub fn get_note_shape_native(
++        &self,
++        section_idx: usize,
++        footnote: bool,
++    ) -> Result<String, HwpError> {
+         let section = self.document.sections.get(section_idx).ok_or_else(|| {
+             HwpError::RenderError(format!("구역 인덱스 {} 범위 초과", section_idx))
+         })?;
+-        let shape = &section.section_def.endnote_shape;
++        let shape = if footnote {
++            &section.section_def.footnote_shape
++        } else {
++            &section.section_def.endnote_shape
++        };
+         let separator_enabled = shape.separator_length != 0
+             || shape.separator_line_type != 0
+             || shape.separator_line_width != 0;
+@@ -2662,11 +2752,26 @@
+         section_idx: usize,
+         props_json: &str,
+     ) -> Result<String, HwpError> {
++        self.apply_note_shape_native(section_idx, false, true, props_json)
++    }
++    /// 현재 구역의 각주(`footnote`) 또는 미주 모양을 적용한다. `renumber` 이면 미주를
++    /// 구역 안에서 시작 번호부터 다시 매기고, 아니면 번호는 두고 모양만 맞춘다.
++    pub fn apply_note_shape_native(
++        &mut self,
++        section_idx: usize,
++        footnote: bool,
++        renumber: bool,
++        props_json: &str,
++    ) -> Result<String, HwpError> {
+         {
+             let section = self.document.sections.get_mut(section_idx).ok_or_else(|| {
+                 HwpError::RenderError(format!("구역 인덱스 {} 범위 초과", section_idx))
+             })?;
+-            let shape = &mut section.section_def.endnote_shape;
++            let shape = if footnote {
++                &mut section.section_def.footnote_shape
++            } else {
++                &mut section.section_def.endnote_shape
++            };
+ 
+             if let Some(v) = crate::document_core::helpers::json_str(props_json, "numberFormat") {
+                 shape.number_format =
+@@ -2684,8 +2789,9 @@
+             if let Some(v) = crate::document_core::helpers::json_u16(props_json, "startNumber") {
+                 shape.start_number = v.max(1);
+             }
+-            if let Some(v) = Self::hwpunit16_from_json(props_json, "separatorLength") {
+-                shape.separator_length = i32::from(v.max(0));
++            // 음수는 한컴 길이 값(-1 5cm, -2 2cm, -3 단의 1/3, -4 단 너비)이다.
++            if let Some(v) = crate::document_core::helpers::json_i32(props_json, "separatorLength") {
++                shape.separator_length = v.max(-4);
+             }
+             if let Some(v) = Self::hwpunit16_from_json(props_json, "separatorMarginTop") {
+                 let above = v.max(0);
+@@ -2741,13 +2847,23 @@
+             let prefix_char = shape.prefix_char;
+             let suffix_char = shape.suffix_char;
+             let mut next_number = start_number;
+-            Self::renumber_paragraph_endnotes_with_shape(
+-                &mut section.paragraphs,
+-                &mut next_number,
+-                number_format_code,
+-                prefix_char,
+-                suffix_char,
+-            );
++            if renumber {
++                Self::renumber_paragraph_endnotes_with_shape(
++                    &mut section.paragraphs,
++                    &mut next_number,
++                    number_format_code,
++                    prefix_char,
++                    suffix_char,
++                );
++            } else {
++                Self::sync_paragraph_notes_with_shape(
++                    &mut section.paragraphs,
++                    footnote,
++                    number_format_code,
++                    prefix_char,
++                    suffix_char,
++                );
++            }
+             section.raw_stream = None;
+         }
+         self.sync_section_def_controls_from_section(section_idx);
 diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/commands/object_ops/table.rs
 --- a/src/document_core/commands/object_ops/table.rs
 +++ b/src/document_core/commands/object_ops/table.rs
@@ -2623,6 +2792,15 @@ diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/parag
                  // [#5727] 앞선 빈 줄(개체 자기 줄)이 소유한 경계 TAC 는 제외
                  && !tac_owned_by_prior_empty_line(comp, line_idx, *pos)
          })
+@@ -1128,7 +1131,7 @@
+     before_decoration_letter: u16,
+     after_decoration_letter: u16,
+ ) -> String {
+-    let number = format_number(number, note_number_format_from_hwp_code(number_shape as u8));
++    let number = super::picture_footnote::note_number_text(number, number_shape);
+     let prefix = note_decoration_char(before_decoration_letter)
+         .map(|ch| ch.to_string())
+         .unwrap_or_default();
 @@ -3278,7 +3281,9 @@
          // (3252633 국가유산수리 감리대가 기준 2·3쪽: 저장 cs=0 sw=48188 인데 수식 x=75.6 =
          // 본문 좌측, 가운데라면 269.6). `column_start > 0` 인 줄은 한컴이 흐름 x 를 적어 둔
@@ -3603,3 +3781,96 @@ diff --git a/src/parser/mod.rs b/src/parser/mod.rs
      use crate::model::control::AutoNumberType;
  
      // 번호 종류별 카운터 — DocProperties 시작번호로 초기화
+diff --git a/src/renderer/layout/picture_footnote.rs b/src/renderer/layout/picture_footnote.rs
+--- a/src/renderer/layout/picture_footnote.rs
++++ b/src/renderer/layout/picture_footnote.rs
+@@ -1654,6 +1654,37 @@
+     } else {
+         char::from_u32(value as u32).filter(|ch| *ch != '\0')
+     }
++}
++
++/// 각주/미주 번호를 번호 모양 코드(`FootnoteShape::number_format_attr_code`)대로 쓴다.
++pub(crate) fn note_number_text(number: u16, code: u32) -> String {
++    const JAMO: [char; 14] = [
++        'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ',
++    ];
++    const GAPEUL: [char; 10] = ['갑', '을', '병', '정', '무', '기', '경', '신', '임', '계'];
++    const GAPEUL_HANJA: [char; 10] = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
++    const SYMBOLS: [char; 4] = ['*', '†', '‡', '§'];
++    let n = number.max(1) as usize;
++    let from = |first: u32, count: usize| {
++        (n <= count)
++            .then(|| char::from_u32(first + n as u32 - 1))
++            .flatten()
++            .map(String::from)
++    };
++    let cycle = |chars: &[char]| chars[(n - 1) % chars.len()].to_string();
++    let text = match code {
++        6 => from(0x24B6, 26),
++        7 => from(0x24D0, 26),
++        9 => from(0x326E, 14),
++        10 => Some(cycle(&JAMO)),
++        11 => from(0x3260, 14),
++        14 => from(0x3280, 10),
++        15 => Some(cycle(&GAPEUL)),
++        16 => Some(cycle(&GAPEUL_HANJA)),
++        0x80 => Some(SYMBOLS[(n - 1) % 4].to_string().repeat((n - 1) / 4 + 1)),
++        _ => None,
++    };
++    text.unwrap_or_else(|| format_number(number, note_number_format_from_hwp_code(code as u8)))
+ }
+ 
+ fn format_control_note_marker(
+@@ -1662,7 +1693,7 @@
+     before_decoration_letter: u16,
+     after_decoration_letter: u16,
+ ) -> String {
+-    let number = format_number(number, note_number_format_from_hwp_code(number_shape as u8));
++    let number = note_number_text(number, number_shape);
+     let prefix = note_decoration_char(before_decoration_letter)
+         .map(|ch| ch.to_string())
+         .unwrap_or_default();
+@@ -1679,38 +1710,10 @@
+     prefix: char,
+     suffix: char,
+ ) -> String {
+-    let num_str = match format {
+-        NumberFormat::Digit => number.to_string(),
+-        NumberFormat::CircledDigit => {
+-            // ① ~ ⑳
+-            if number >= 1 && number <= 20 {
+-                char::from_u32(0x2460 + (number - 1) as u32)
+-                    .map(|c| c.to_string())
+-                    .unwrap_or_else(|| number.to_string())
+-            } else {
+-                number.to_string()
+-            }
+-        }
+-        NumberFormat::LowerAlpha => {
+-            if number >= 1 && number <= 26 {
+-                char::from_u32(b'a' as u32 + (number - 1) as u32)
+-                    .map(|c| c.to_string())
+-                    .unwrap_or_else(|| number.to_string())
+-            } else {
+-                number.to_string()
+-            }
+-        }
+-        NumberFormat::UpperAlpha => {
+-            if number >= 1 && number <= 26 {
+-                char::from_u32(b'A' as u32 + (number - 1) as u32)
+-                    .map(|c| c.to_string())
+-                    .unwrap_or_else(|| number.to_string())
+-            } else {
+-                number.to_string()
+-            }
+-        }
+-        _ => number.to_string(), // 기타 형식은 숫자로 fallback
+-    };
++    let num_str = note_number_text(
++        number,
++        crate::model::footnote::FootnoteShape::number_format_attr_code(*format),
++    );
+ 
+     let prefix_str = if prefix != '\0' {
+         prefix.to_string()

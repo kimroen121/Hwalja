@@ -118,7 +118,7 @@
 | 문단 띠 | △ | `insert/line.htm` |  |
 | 입력 도우미 | △ | `tools/insert_doumi.htm` | 상용구·글자 겹치기·외래어 표기·로마자 |
 | 채우기 | △ | `table/autofill/table(autofill)_main.htm` | 표 자동 채우기 |
-| 주석 | ◐ | `insert/annotations/annotations.htm` | 각주·미주 넣기 ●. 각주/미주 모양 ○ `get/apply_endnote_shape_native`, 각주↔미주 △, 주석 저장하기 △, 숨은 설명 △ |
+| 주석 | ◐ | `insert/annotations/annotations.htm` | 각주·미주 넣기 ●. 각주/미주 모양 ● (번호 모양·장식 문자·구분선·여백·번호 매기기; 번호 모양 「기호」, 번호 매기기 「쪽마다 새로 시작」, 각주 내용 번호 속성, 각주 세로 위치, 단 각주 위치, 미주 위치는 △), 각주↔미주 △, 주석 저장하기 △, 숨은 설명 △ |
 | 날짜/시간/파일 이름 | △ | `insert/date/date.htm` | 문자열 넣기는 앱 쪽 작업, 코드는 필드 필요 |
 | 덧말 넣기 | △ | `insert/addsummary.htm` |  |
 | 문서 끼워 넣기 | △ | `insert/insert_file.htm` | 다른 문서의 본문을 커서 위치에. 붙이기 경로로 만들 수 있음 |
