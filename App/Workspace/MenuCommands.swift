@@ -42,7 +42,8 @@ struct MenuItems {
         ("타원", "ellipse", Icon.ellipse), ("직선", "line", Icon.line), ("호", "arc", Icon.arc),
     ]
     static func shapeChoices(_ viewer: Viewer) -> [Choice?] {
-        shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
+        [Choice(title: "그리기 개체", header: true)]
+            + shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
     }
     /// 머리말 or 꼬리말 shapes, as in Hancom Office Web.
     static let headerShapes: [(title: String, placement: Placement?)] = [
@@ -50,7 +51,7 @@ struct MenuItems {
     ]
     static func headerChoices(_ viewer: Viewer, footer: Bool) -> [Choice?] {
         headerShapes.map { shape in
-            Choice(title: shape.title, symbol: Icon.placement(shape.placement)) {
+            Choice(title: shape.title, image: Icon.pageNumber(shape.placement, footer: footer)) {
                 viewer.headerFooter(footer: footer, pageNumber: shape.placement)
             }
         }
@@ -281,8 +282,10 @@ struct MenuItems {
 
     @ViewBuilder var insert: some View {
         Menu {
-            ForEach(Self.shapes, id: \.shape) { item in
-                self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
+            Section("그리기 개체") {
+                ForEach(Self.shapes, id: \.shape) { item in
+                    self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
+                }
             }
         } label: { Label("도형", systemImage: Icon.shape) }
             .disabled(!context.inBody)
@@ -404,8 +407,8 @@ struct MenuItems {
     }
     private func headerItems(footer: Bool) -> some View {
         ForEach(Self.headerShapes, id: \.title) { shape in
-            item(shape.title, Icon.placement(shape.placement)) {
-                viewer?.headerFooter(footer: footer, pageNumber: shape.placement)
+            Button { viewer?.headerFooter(footer: footer, pageNumber: shape.placement) } label: {
+                Label { Text(shape.title) } icon: { Image(nsImage: Icon.pageNumber(shape.placement, footer: footer)) }
             }
         }
     }

@@ -294,12 +294,25 @@ enum Icon {
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
     static let columns = "rectangle.split.2x1"
-    static func placement(_ placement: Placement?) -> String {
-        switch placement {
-        case nil: "rectangle"
-        case .left: "text.alignleft"
-        case .center: "text.aligncenter"
-        case .right: "text.alignright"
+    /// 머리말 or 꼬리말 shapes as the web editor draws them: a page with the number's place
+    /// marked in red at its top or bottom; (모양 없음) only keeps the room.
+    static func pageNumber(_ placement: Placement?, footer: Bool) -> NSImage {
+        NSImage(size: NSSize(width: 16, height: 16), flipped: true) { _ in
+            guard let placement else { return true }
+            let page = NSRect(x: 2.5, y: 0.5, width: 11, height: 15)
+            NSColor.secondaryLabelColor.setStroke()
+            NSBezierPath(rect: page).stroke()
+            let x: CGFloat = switch placement {
+            case .left: page.minX + 1
+            case .center: page.midX - 2
+            case .right: page.maxX - 5
+            }
+            let mark = NSRect(x: x, y: footer ? page.maxY - 5 : page.minY + 1, width: 4, height: 4)
+            NSColor.systemRed.withAlphaComponent(0.25).setFill()
+            mark.fill()
+            NSColor.systemRed.setStroke()
+            NSBezierPath(rect: mark.insetBy(dx: 0.5, dy: 0.5)).stroke()
+            return true
         }
     }
 }
@@ -313,6 +326,8 @@ struct Choice {
     var modifiers: NSEvent.ModifierFlags = .command
     var enabled = true
     var on = false
+    /// A section's name over the choices after it, not a command.
+    var header = false
     /// Shown as a submenu instead of running `action`.
     var submenu: [Choice?] = []
     var action: () -> Void = {}
@@ -426,6 +441,10 @@ enum DropDown {
         for choice in choices {
             guard let choice else {
                 menu.addItem(.separator())
+                continue
+            }
+            if choice.header {
+                menu.addItem(.sectionHeader(title: choice.title))
                 continue
             }
             let handler = Handler(choice.action)
