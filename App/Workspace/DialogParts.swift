@@ -98,7 +98,7 @@ struct DialogChoice: NSViewRepresentable {
         if control.selectedSegment != selection { control.selectedSegment = selection }
     }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var selection: Binding<Int>?
         @objc func choose(_ control: NSSegmentedControl) { selection?.wrappedValue = control.selectedSegment }
     }
