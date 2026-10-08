@@ -97,11 +97,95 @@ extension Viewer {
             do { try text.write(to: url, atomically: true, encoding: .utf8) } catch { NSSound.beep() }
         }
     }
+    /// 문서 암호's lengths: 5–44 for HWP, 1–255 for HWPX.
+    var passwordLengths: ClosedRange<Int> {
+        canvas.window?.representedURL?.pathExtension.lowercased() == "hwp" ? 5...44 : 1...255
+    }
+    /// Sets the 문서 암호 saving locks the document with; false (with a beep) when `current`
+    /// is wrong.
+    func setPassword(current: String?, new: String?) async -> Bool {
+        guard let document, await document.setPassword(current: current, new: new, undoManager) else {
+            NSSound.beep()
+            return false
+        }
+        return true
+    }
     func showDocumentInfo() {
         guard let document else { return }
         Task {
             guard let statistics = try? await document.statistics() else { return NSSound.beep() }
             documentInfo = DocumentInfo(url: canvas.window?.representedURL, statistics: statistics)
+        }
+    }
+}
+
+/// [문서 암호 설정]: 문서 암호 and 암호 확인, kept with the document when it is saved.
+struct PasswordSheet: View {
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var again = ""
+
+    var body: some View {
+        let lengths = viewer.passwordLengths
+        DialogFrame("문서 암호 설정", confirmTitle: "설정",
+                    canConfirm: lengths.contains(password.count) && password == again) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    FieldLabel("문서 암호")
+                    SecureField("", text: $password).frame(width: 200)
+                }
+                GridRow {
+                    FieldLabel("암호 확인")
+                    SecureField("", text: $again).frame(width: 200)
+                }
+            }
+        } confirm: {
+            Task { if await viewer.setPassword(current: nil, new: password) { dismiss() } }
+        }
+    }
+}
+
+/// [문서 암호 변경/해제]: 암호 변경 to 새 암호, or 암호 해제, given the 현재 암호.
+struct PasswordChangeSheet: View {
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var change = true
+    @State private var current = ""
+    @State private var password = ""
+    @State private var again = ""
+
+    var body: some View {
+        let lengths = viewer.passwordLengths
+        DialogFrame("문서 암호 변경/해제", confirmTitle: "설정",
+                    canConfirm: !current.isEmpty && (!change || (lengths.contains(password.count) && password == again))) {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("", selection: $change) {
+                    Text("암호 변경").tag(true)
+                    Text("암호 해제").tag(false)
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                    GridRow {
+                        FieldLabel("현재 암호")
+                        SecureField("", text: $current).frame(width: 200)
+                    }
+                    GridRow {
+                        FieldLabel("새 암호")
+                        SecureField("", text: $password).frame(width: 200)
+                    }
+                    .disabled(!change)
+                    GridRow {
+                        FieldLabel("암호 확인")
+                        SecureField("", text: $again).frame(width: 200)
+                    }
+                    .disabled(!change)
+                }
+            }
+        } confirm: {
+            Task { if await viewer.setPassword(current: current, new: change ? password : nil) { dismiss() } }
         }
     }
 }

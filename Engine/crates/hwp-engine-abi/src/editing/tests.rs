@@ -1749,6 +1749,30 @@ fn a_document_locked_with_a_password_opens_with_it_and_saves_locked() {
         }
     }
 }
+/// 문서 암호 설정 locks what is saved; 변경 needs the current one, and 해제 saves it open.
+#[test]
+fn passwords_are_set_changed_and_removed() {
+    for save in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        assert!(!s.has_password());
+        assert!(s.set_password(None, Some("")).is_err());
+        s.set_password(None, Some("열쇠12345")).unwrap();
+        let saved = s.export(save).unwrap();
+        assert_eq!(
+            EditSession::open(&saved).err(),
+            Some(EditError::PasswordRequired)
+        );
+        let mut s = EditSession::open_with(&saved, Some("열쇠12345".as_bytes())).unwrap();
+        assert!(s.has_password());
+        assert!(s.set_password(Some("틀림"), Some("새 암호")).is_err());
+        assert!(s.set_password(None, None).is_err());
+        s.set_password(Some("열쇠12345"), Some("새 암호")).unwrap();
+        let saved = s.export(save).unwrap();
+        assert!(EditSession::open_with(&saved, Some("새 암호".as_bytes())).is_ok());
+        s.set_password(Some("새 암호"), None).unwrap();
+        assert!(EditSession::open(&s.export(save).unwrap()).is_ok());
+    }
+}
 /// An empty 머리말 is entered anywhere in its area, not only on its one short line; the
 /// body below stays the body.
 #[test]

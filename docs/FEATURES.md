@@ -180,8 +180,8 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 문서 암호 설정 | ○ | `file/password/password.htm` | 여는 암호 ●. 저장할 때 암호 거는 대화 상자 ○ `export_hwp_with_adapter_with_password` |
-| 문서 암호 변경/해제 | ○ | `file/password/password(change).htm` | 같은 저장 경로 |
+| 문서 암호 설정 | ◐ | `file/password/password.htm` | 여는 암호 ●, 보안 › 문서 암호 설정(문서 암호·암호 확인, HWP 5~44자·HWPX 1~255자, 저장할 때 기록) ●. 보안 종류(보통/높음)와 HWPX 쓰기 암호 △(rhwp가 한 가지 암호만 씀) |
+| 문서 암호 변경/해제 | ◐ | `file/password/password(change).htm` | 암호 변경·암호 해제(현재 암호 확인) ●. 쓰기 암호 대상 △ |
 | 배포용 문서로 저장 | △ | `file/send_to_mail/publish(save).htm` |  |
 | 배포용 문서 편집 | — | `file/send_to_mail/publish(edit).htm` | 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요) |
 | 배포용 문서 암호 변경/해제 | △ | `file/send_to_mail/publish(cancel).htm` |  |

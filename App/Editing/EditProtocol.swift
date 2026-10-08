@@ -1051,6 +1051,9 @@ enum EngineRequest: Encodable, Sendable {
     case fonts
     case pictures
     case statistics
+    case hasPassword
+    /// 문서 암호 설정 (no `current`), 변경 and 해제 (no `new`).
+    case setPassword(current: String?, new: String?)
     case status(revision: UInt64, EditPosition)
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case place(revision: UInt64, ObjectRef, page: UInt32)
@@ -1074,7 +1077,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -1151,6 +1154,12 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("pictures", forKey: .op)
         case .statistics:
             try c.encode("statistics", forKey: .op)
+        case .hasPassword:
+            try c.encode("hasPassword", forKey: .op)
+        case let .setPassword(current, new):
+            try c.encode("setPassword", forKey: .op)
+            try c.encodeIfPresent(current, forKey: .current)
+            try c.encodeIfPresent(new, forKey: .new)
         case let .status(revision, position):
             try c.encode("status", forKey: .op)
             try c.encode(revision, forKey: .revision)

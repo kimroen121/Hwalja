@@ -24,6 +24,28 @@ fn outline(doc: &Document) -> Vec<String> {
 }
 
 impl EditSession {
+    /// Whether saving locks the document with a 문서 암호.
+    pub fn has_password(&self) -> bool {
+        self.password.is_some()
+    }
+    /// 문서 암호 설정 (`current` none), 변경 and 해제 (`new` none): the 문서 암호 saving locks
+    /// the document with. `current` must be the one it has; a new one is 1–255 characters.
+    pub fn set_password(
+        &mut self,
+        current: Option<&str>,
+        new: Option<&str>,
+    ) -> Result<(), EditError> {
+        if self.locked {
+            return Err(EditError::Locked);
+        }
+        if self.password.as_deref() != current.map(str::as_bytes)
+            || new.is_some_and(|n| n.is_empty() || n.chars().count() > 255)
+        {
+            return Err(EditError::InvalidInput);
+        }
+        self.password = new.map(|n| n.as_bytes().to_vec());
+        Ok(())
+    }
     /// Serializes the current document and verifies that HWP/HWPX bytes parse back to the
     /// same text and control structure. Nothing is written to disk.
     pub fn export(&mut self, format: SaveFormat) -> Result<Vec<u8>, EditError> {

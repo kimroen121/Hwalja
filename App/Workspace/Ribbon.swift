@@ -4,7 +4,7 @@ import SwiftUI
 /// 기본 도구 상자, as in 한/글 2022: the 메뉴 탭 each switch a row of large labeled icons,
 /// and the 개체 탭 and 상황 탭 come after them while an object is selected or the caret is in
 /// a table or a 머리말/꼬리말. Commands that do not work yet are left out, and so are the
-/// tabs left with none (보안, 검토, 도구).
+/// tabs left with none (검토, 도구).
 struct ToolRow: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
@@ -13,7 +13,7 @@ struct ToolRow: View {
     @State private var contextTab: String?
     @State private var hovered: String?
     @State private var spans: [String: CGRect] = [:]
-    static let menuTabs = ["편집", "보기", "입력", "서식", "쪽"]
+    static let menuTabs = ["편집", "보기", "입력", "서식", "쪽", "보안"]
 
     /// Folded (기본 도구 상자 접기), only the tabs show.
     let expanded: Bool
@@ -121,6 +121,7 @@ struct ToolRow: View {
         case "입력": insert(context)
         case "서식": format(context)
         case "쪽": page(context)
+        case "보안": security(context)
         case "표 디자인": tableDesign(context)
         case "표 레이아웃": tableLayout(context)
         case "도형": shape(context)
@@ -222,6 +223,13 @@ struct ToolRow: View {
         RowDivider()
         ToolTile("구역 설정", Icon.section) { viewer.showSectionSetup() }
             .disabled(context.locked)
+    }
+
+    @ViewBuilder private func security(_ context: EditingContext) -> some View {
+        ToolTile("문서 암호 설정", Icon.password) { viewer.passwordSheet = false }
+            .disabled(context.locked || document.hasPassword)
+        ToolTile("문서 암호 변경/해제", Icon.passwordChange) { viewer.passwordSheet = true }
+            .disabled(context.locked || !document.hasPassword)
     }
 
     // MARK: 개체 탭과 상황 탭
@@ -581,7 +589,7 @@ enum Icon {
     static let pageBreak = "arrow.down.to.line", columnBreak = "arrow.right.to.line.compact"
     static let insertRow = "plus.rectangle", deleteRow = "minus.rectangle"
     static let controlCodes = "chevron.left.forwardslash.chevron.right", paragraphMarks = "paragraphsign"
-    static let documentInfo = "info.circle", eraseCodes = "eraser", bookmark = "bookmark", newNumber = "number", pageHide = "eye.slash"
+    static let documentInfo = "info.circle", password = "lock", passwordChange = "lock.rotation", eraseCodes = "eraser", bookmark = "bookmark", newNumber = "number", pageHide = "eye.slash"
     static let grid = "grid", caption = "text.below.photo", shape = "square.on.circle"
     static let textbox = "character.textbox", rectangle = "rectangle", ellipse = "circle", line = "line.diagonal", arc = "rainbow"
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"

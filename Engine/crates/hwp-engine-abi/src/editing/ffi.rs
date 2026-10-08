@@ -139,6 +139,15 @@ enum Request {
     Pictures,
     /// 문서 정보's 문서 통계.
     Statistics,
+    /// Whether the document has a 문서 암호.
+    HasPassword,
+    /// 문서 암호 설정, 변경 and 해제.
+    SetPassword {
+        #[serde(default)]
+        current: Option<String>,
+        #[serde(default)]
+        new: Option<String>,
+    },
     /// 상황 선 for the caret at `position`.
     Status {
         revision: u64,
@@ -317,6 +326,11 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Fonts => HwpEditResult::ok(session.fonts(), Vec::new()),
         Request::Pictures => HwpEditResult::ok(session.pictures(), Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
+        Request::HasPassword => HwpEditResult::ok(session.has_password(), Vec::new()),
+        Request::SetPassword { current, new } => {
+            session.set_password(current.as_deref(), new.as_deref())?;
+            HwpEditResult::ok(session.has_password(), Vec::new())
+        }
         Request::Status { revision, position } => {
             HwpEditResult::ok(session.status(revision, &position)?, Vec::new())
         }

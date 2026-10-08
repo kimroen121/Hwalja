@@ -134,6 +134,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         didSet { objectWillChange.send() }
     }
     private var stylesChanged = false
+    /// Whether saving locks the document with a 문서 암호.
+    @Published private(set) var hasPassword = false
     /// A character format chosen at a caret, for the next text typed there.
     private var pendingStyle: (at: EditPosition, style: CharStyle)?
     private(set) var context = EditingContext() { willSet { objectWillChange.send() } }
@@ -491,6 +493,19 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         guard styles.isEmpty || stylesChanged else { return }
         stylesChanged = false
         if let list = try? await session.styles(), list != styles { styles = list }
+    }
+    func loadPassword() async {
+        hasPassword = (try? await session.hasPassword()) ?? false
+    }
+    /// 문서 암호 설정, 변경 and 해제, one undo step; false when `current` is not the 문서 암호.
+    func setPassword(current: String?, new: String?, _ undoManager: UndoManager?) async -> Bool {
+        await settle()
+        guard let now = try? await session.setPassword(current: current, new: new) else { return false }
+        hasPassword = now
+        undoManager?.registerUndo(withTarget: self) { document in
+            Task { _ = await document.setPassword(current: new, new: current, undoManager) }
+        }
+        return true
     }
     func styleFormat(_ style: UInt32) async throws -> Format {
         try await session.styleFormat(style)

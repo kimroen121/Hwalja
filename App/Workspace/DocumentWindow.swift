@@ -68,6 +68,10 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageHide != nil }, set: { if !$0 { viewer.pageHide = nil } })) {
             if let hide = viewer.pageHide { PageHideSheet(viewer: viewer, hide: hide) }
         }
+        .sheet(isPresented: Binding { viewer.passwordSheet != nil } set: { if !$0 { viewer.passwordSheet = nil } }) {
+            if viewer.passwordSheet == true { PasswordChangeSheet(viewer: viewer) } else { PasswordSheet(viewer: viewer) }
+        }
+        .task { await document.loadPassword() }
         .sheet(item: $viewer.documentInfo) { DocumentInfoSheet(info: $0, document: document, viewer: viewer) }
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
         .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
@@ -266,6 +270,8 @@ final class Viewer: ObservableObject {
     @Published var erasingCodes = false
     @Published var pageHide: PageHide?
     @Published var documentInfo: DocumentInfo?
+    /// 문서 암호 설정 (false) or 문서 암호 변경/해제 (true) shown.
+    @Published var passwordSheet: Bool?
     @Published var insertingTable = false
     @Published var splittingCells = false
     @Published var flippingTable = false

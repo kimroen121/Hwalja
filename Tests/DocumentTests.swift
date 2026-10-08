@@ -1077,6 +1077,9 @@ struct DocumentTests {
         let statistics = try await document.statistics()
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
         #expect(try await document.outline().isEmpty)
+        #expect(await viewer.setPassword(current: nil, new: "12345") && document.hasPassword)
+        #expect(await !viewer.setPassword(current: "틀림", new: nil) && document.hasPassword)
+        #expect(await viewer.setPassword(current: "12345", new: nil) && !document.hasPassword)
         let fonts = try await document.fonts()
         let from = try #require(fonts[1].first).name
         viewer.replaceFont(language: 0, from: from, to: "Apple SD Gothic Neo")
@@ -1581,6 +1584,8 @@ struct DocumentTests {
             ("eraseCodes", AnyView(EraseCodesSheet(viewer: viewer))),
             ("documentInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
                                                        document: document, viewer: viewer))),
+            ("password", AnyView(PasswordSheet(viewer: viewer))),
+            ("passwordChange", AnyView(PasswordChangeSheet(viewer: viewer))),
             ("fontInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
                                                    document: document, viewer: viewer, tab: "글꼴 정보"))),
             ("pictureInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),

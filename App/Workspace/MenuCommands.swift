@@ -217,6 +217,13 @@ struct MenuItems {
         item("문서 정보…", Icon.documentInfo) { viewer?.showDocumentInfo() }
             .disabled(viewer == nil)
     }
+    /// 보안: 문서 암호 설정 while the document has none, 변경/해제 while it has one.
+    @ViewBuilder var security: some View {
+        item("문서 암호 설정…", Icon.password) { viewer?.passwordSheet = false }
+            .disabled(viewer == nil || context.locked || document?.hasPassword != false)
+        item("문서 암호 변경/해제…", Icon.passwordChange) { viewer?.passwordSheet = true }
+            .disabled(viewer == nil || context.locked || document?.hasPassword != true)
+    }
     @ViewBuilder var print: some View {
         item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
             .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!)), modifiers: [])
@@ -519,6 +526,7 @@ struct MenuBarCommands: Commands {
         CommandMenu("입력") { items.insert }
         CommandMenu("서식") { items.format }
         CommandMenu("쪽") { items.page }
+        CommandMenu("보안") { items.security }
         CommandMenu("표") { items.table }
     }
 }

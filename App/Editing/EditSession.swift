@@ -122,6 +122,12 @@ final class EditSession: @unchecked Sendable {
     func pictures() async throws -> [PictureInfo] {
         try await decode(send(.pictures))
     }
+    func hasPassword() async throws -> Bool {
+        try await decode(send(.hasPassword))
+    }
+    func setPassword(current: String?, new: String?) async throws -> Bool {
+        try await decode(send(.setPassword(current: current, new: new)))
+    }
     func outline() async throws -> [OutlineItem] {
         try await decode(send(.outline))
     }
