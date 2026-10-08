@@ -322,6 +322,140 @@ impl EditSession {
         }
         Ok(status)
     }
+    /// 글꼴 정보: the fonts the 글자 모양 use, for 대표 (one font for every 언어) and then
+    /// for each 언어, in the order they were added.
+    pub fn fonts(&self) -> Vec<Vec<UsedFont>> {
+        let info = &self.core.document().doc_info;
+        let db = rhwp::renderer::pdf::default_fontdb();
+        let installed = |name: &str| {
+            db.faces()
+                .any(|f| f.families.iter().any(|(family, _)| family == name))
+        };
+        let name = |l: usize, id: u16| {
+            info.font_faces
+                .get(l)
+                .and_then(|f| f.get(id as usize))
+                .map(|f| f.name.as_str())
+        };
+        let mut lists: Vec<Vec<UsedFont>> = vec![Vec::new(); 8];
+        let mut add = |list: usize, font: &str| {
+            if !lists[list].iter().any(|f| f.name == font) {
+                lists[list].push(UsedFont {
+                    name: font.into(),
+                    installed: installed(font),
+                });
+            }
+        };
+        for shape in &info.char_shapes {
+            let names: Vec<_> = (0..7).map(|l| name(l, shape.font_ids[l])).collect();
+            if let Some(Some(first)) = names.first() {
+                if names.iter().all(|n| n == &Some(*first)) {
+                    add(0, first);
+                }
+            }
+            for (l, n) in names.iter().enumerate() {
+                if let Some(n) = n {
+                    add(l + 1, n);
+                }
+            }
+        }
+        lists
+    }
+    /// 그림 정보: the pictures of the body and its table cells, in document order. A 배경
+    /// or a fill's image is not one.
+    pub fn pictures(&self) -> Vec<PictureInfo> {
+        let doc = self.core.document();
+        let mut found = Vec::new();
+        let mut add = |host: EditTarget, para: &Paragraph, c: usize, id: u16| {
+            let bin = doc
+                .doc_info
+                .bin_data_list
+                .get(usize::from(id.saturating_sub(1)));
+            let linked =
+                bin.is_some_and(|b| b.data_type == rhwp::model::bin_data::BinDataType::Link);
+            let extension = bin.and_then(|b| b.extension.clone()).unwrap_or_default();
+            let position = EditPosition {
+                target: host.clone(),
+                scalar: logical::position(para, logical::control_offset(para, c), false),
+                upstream: false,
+            };
+            found.push(PictureInfo {
+                name: if linked {
+                    String::new()
+                } else {
+                    format!("BIN{:04X}.{}", bin.map_or(id, |b| b.storage_id), extension)
+                },
+                linked,
+                page: self.page_of(&position).map_or(0, |p| p + 1),
+                path: bin.and_then(|b| b.abs_path.clone()).unwrap_or_default(),
+                object: ObjectRef {
+                    kind: ObjectKind::Picture,
+                    section: host.section,
+                    paragraph: host.paragraph,
+                    control: c as u32,
+                    cell: host.cell,
+                    note: None,
+                },
+            });
+        };
+        for (s, section) in doc.sections.iter().enumerate() {
+            for (p, para) in section.paragraphs.iter().enumerate() {
+                let body = EditTarget {
+                    section: s as u32,
+                    paragraph: p as u32,
+                    cell: None,
+                    note: None,
+                    header_footer: None,
+                };
+                for (c, control) in para.controls.iter().enumerate() {
+                    match control {
+                        Control::Picture(picture) => {
+                            add(body.clone(), para, c, picture.image_attr.bin_data_id)
+                        }
+                        Control::Table(table) => {
+                            for (i, cell) in table.cells.iter().enumerate() {
+                                for (cp, cell_para) in cell.paragraphs.iter().enumerate() {
+                                    for (cc, inner) in cell_para.controls.iter().enumerate() {
+                                        let Control::Picture(picture) = inner else {
+                                            continue;
+                                        };
+                                        let host = EditTarget {
+                                            cell: Some(CellTarget {
+                                                control: c as u32,
+                                                cell: i as u32,
+                                                paragraph: cp as u32,
+                                            }),
+                                            ..body.clone()
+                                        };
+                                        add(host, cell_para, cc, picture.image_attr.bin_data_id);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        found
+    }
+    pub(super) fn validate_replace_font(
+        &self,
+        language: Option<u8>,
+        from: &str,
+        to: &str,
+    ) -> Result<(), EditError> {
+        let lists = self.fonts();
+        let list = &lists[language.map_or(0, |l| l as usize + 1).min(7)];
+        if language.is_some_and(|l| l > 6)
+            || to.trim().is_empty()
+            || from == to
+            || !list.iter().any(|f| f.name == from)
+        {
+            return Err(EditError::InvalidInput);
+        }
+        Ok(())
+    }
     pub fn statistics(&self) -> Statistics {
         let mut n = Statistics {
             pages: self.core.page_count(),

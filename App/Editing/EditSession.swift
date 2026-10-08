@@ -116,6 +116,12 @@ final class EditSession: @unchecked Sendable {
     func bookmarks() async throws -> [Bookmark] {
         try await decode(send(.bookmarks))
     }
+    func fonts() async throws -> [[UsedFont]] {
+        try await decode(send(.fonts))
+    }
+    func pictures() async throws -> [PictureInfo] {
+        try await decode(send(.pictures))
+    }
     func outline() async throws -> [OutlineItem] {
         try await decode(send(.outline))
     }

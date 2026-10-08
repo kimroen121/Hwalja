@@ -47,6 +47,56 @@ extension Viewer {
             return .eraseCodes(range, kinds: kinds)
         }
     }
+    func replaceFont(language: UInt8?, from: String, to: String) {
+        document?.edit(undoManager) { _ in .replaceFont(language: language, from: from, to: to) }
+    }
+    /// 모든 삽입 그림 저장하기: each picture's image in a chosen folder, named the name given
+    /// and a serial number (image00001, image00002, …).
+    func savePictures(_ pictures: [PictureInfo]) {
+        guard let document else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "저장"
+        let name = NSTextField(string: "image")
+        let field = NSStackView(views: [NSTextField(labelWithString: "파일 이름"), name])
+        field.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        name.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        panel.accessoryView = field
+        panel.isAccessoryViewDisclosed = true
+        Task {
+            guard await panel.begin() == .OK, let folder = panel.url else { return }
+            let access = folder.startAccessingSecurityScopedResource()
+            defer { if access { folder.stopAccessingSecurityScopedResource() } }
+            for (i, picture) in pictures.enumerated() {
+                guard let file = try? await document.pictureFile(picture.object) else { return NSSound.beep() }
+                let url = folder.appendingPathComponent(String(format: "%@%05d.%@", name.stringValue, i + 1, file.extension))
+                do { try file.data.write(to: url) } catch { return NSSound.beep() }
+            }
+        }
+    }
+    /// 그림 목록 저장: 이름, 종류, 쪽 수 and 경로 of `pictures`, 쉼표, 탭 or 공백 구분.
+    func savePictureList(_ pictures: [PictureInfo]) {
+        let panel = NSSavePanel()
+        let kinds = [("쉼표 구분(*.csv)", ",", "csv"), ("탭 구분(*.txt)", "\t", "txt"), ("공백 구분(*.txt)", " ", "txt")]
+        let kind = NSPopUpButton(frame: .zero, pullsDown: false)
+        kind.addItems(withTitles: kinds.map(\.0))
+        let field = NSStackView(views: [NSTextField(labelWithString: "파일 형식"), kind])
+        field.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        panel.accessoryView = field
+        panel.nameFieldStringValue = "그림 목록.csv"
+        panel.allowedContentTypes = [.commaSeparatedText, .plainText]
+        panel.allowsOtherFileTypes = true
+        Task {
+            guard await panel.begin() == .OK, var url = panel.url else { return }
+            let (_, separator, ext) = kinds[kind.indexOfSelectedItem]
+            url = url.deletingPathExtension().appendingPathExtension(ext)
+            let rows = [["이름", "종류", "쪽 수", "경로"]] + pictures.map { [$0.name, $0.linked ? "연결" : "삽입", "\($0.page)", $0.path] }
+            let text = rows.map { $0.joined(separator: separator) }.joined(separator: "\n") + "\n"
+            do { try text.write(to: url, atomically: true, encoding: .utf8) } catch { NSSound.beep() }
+        }
+    }
     func showDocumentInfo() {
         guard let document else { return }
         Task {
@@ -103,6 +153,26 @@ struct PageHideSheet: View {
             }
         } confirm: {
             viewer.setPageHide(hide)
+            dismiss()
+        }
+    }
+}
+
+/// [사용된 글꼴 바꾸기] and [대체된 글꼴 바꾸기]: 적용할 글꼴, from the fonts this Mac has.
+struct FontReplaceSheet: View {
+    let title: String
+    let replace: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var font: String?
+    var body: some View {
+        DialogFrame(title, confirmTitle: "설정", canConfirm: font != nil) {
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("적용할 글꼴")
+                List(FormatChoices.families, id: \.family, selection: $font) { Text($0.name) }
+                    .frame(width: 260, height: 260)
+            }
+        } confirm: {
+            if let font { replace(font) }
             dismiss()
         }
     }
@@ -271,17 +341,125 @@ struct DocumentInfo: Identifiable {
 /// 문서 정보: 일반 (the file) and 문서 통계.
 struct DocumentInfoSheet: View {
     let info: DocumentInfo
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var tab = "일반"
+    @State private var fonts: [[UsedFont]] = []
+    /// 글꼴 정보's 언어: 0 for 대표, then 한글…사용자.
+    @State private var language = 0
+    @State private var usedFont: String?
+    @State private var lostFont: String?
+    /// The font 사용된 글꼴 바꾸기 or 대체된 글꼴 바꾸기 replaces, and which of them.
+    @State private var replacing: (from: String, title: String)?
+    /// Font changes made here, done on 확인.
+    @State private var replaced: [(language: UInt8?, from: String, to: String)] = []
+    @State private var pictures: [PictureInfo] = []
+    @State private var chosenPictures: Set<ObjectRef> = []
+
+    init(info: DocumentInfo, document: HwpDocument, viewer: Viewer, tab: String = "일반") {
+        (self.info, self.document, self.viewer) = (info, document, viewer)
+        _tab = State(initialValue: tab)
+    }
 
     var body: some View {
         DialogFrame("문서 정보") {
-            DialogTabs(selection: $tab, titles: ["일반", "문서 통계"]) { tab in
-                if tab == "일반" { general } else { statistics }
+            DialogTabs(selection: $tab, titles: ["일반", "문서 통계", "글꼴 정보", "그림 정보"]) { tab in
+                switch tab {
+                case "일반": general
+                case "문서 통계": statistics
+                case "글꼴 정보": fontInfo
+                default: pictureInfo
+                }
             }
             .dialogTabs()
-            .frame(height: 300)
-        } confirm: { dismiss() }
+            .frame(width: 520, height: 320)
+        } confirm: {
+            for r in replaced { viewer.replaceFont(language: r.language, from: r.from, to: r.to) }
+            dismiss()
+        }
+        .task(id: document.reply.revision) {
+            await document.settle()
+            fonts = (try? await document.fonts()) ?? []
+            pictures = (try? await document.pictures()) ?? []
+        }
+        .sheet(isPresented: Binding { replacing != nil } set: { if !$0 { replacing = nil } }) {
+            if let replacing {
+                FontReplaceSheet(title: replacing.title) { to in
+                    replaced.append((language == 0 ? nil : UInt8(language - 1), replacing.from, to))
+                    usedFont = nil
+                    lostFont = nil
+                }
+            }
+        }
+    }
+
+    /// 언어 `index`'s fonts, with the changes not yet done.
+    private func fontList(_ index: Int) -> [UsedFont] {
+        var list = fonts.indices.contains(index) ? fonts[index] : []
+        for r in replaced where r.language == nil || Int(r.language!) + 1 == index {
+            guard let at = list.firstIndex(where: { $0.name == r.from }) else { continue }
+            list.remove(at: at)
+            if !list.contains(where: { $0.name == r.to }) { list.insert(UsedFont(name: r.to, installed: true), at: at) }
+        }
+        return list
+    }
+    private var fontInfo: some View {
+        let list = fontList(language)
+        return VStack(alignment: .leading, spacing: 10) {
+            LabeledField("언어") {
+                ChoiceField($language, Array(zip(0..., ["대표"] + CharShapeSheet.languageNames)), minWidth: 120)
+            }
+            fontList("사용된 글꼴", list.filter(\.installed), $usedFont)
+            fontList("대체된 글꼴", list.filter { !$0.installed }, $lostFont)
+        }
+        .padding(16)
+    }
+    private func fontList(_ title: String, _ fonts: [UsedFont], _ chosen: Binding<String?>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                GroupTitle(title)
+                Spacer()
+                ToolIcon("\(title) 바꾸기", symbol: "arrow.left.arrow.right") {
+                    if let from = chosen.wrappedValue { replacing = (from, "\(title) 바꾸기") }
+                }
+                .disabled(chosen.wrappedValue.map { name in fonts.contains { $0.name == name } } != true
+                          || document.context.locked)
+            }
+            List(fonts, id: \.name, selection: chosen) { Text($0.name) }
+                .frame(height: 90)
+        }
+    }
+
+    private var pictureInfo: some View {
+        let chosen = pictures.filter { chosenPictures.contains($0.object) }
+        return VStack(alignment: .leading, spacing: 8) {
+            GroupTitle("그림 목록")
+            Table(pictures, selection: $chosenPictures) {
+                TableColumn("이름") { Text($0.name) }
+                TableColumn("종류") { Text($0.linked ? "연결" : "삽입") }.width(50)
+                TableColumn("쪽 수") { Text($0.page == 0 ? "" : "\($0.page)").monospacedDigit() }.width(40)
+                TableColumn("경로") { Text($0.path) }
+            }
+            HStack {
+                Menu("저장") {
+                    Button("삽입 그림 저장하기…") { viewer.savePicture(chosen.first?.object) }
+                        .disabled(chosen.count != 1 || chosen[0].linked)
+                    Button("모든 삽입 그림 저장하기…") { viewer.savePictures(pictures.filter { !$0.linked }) }
+                        .disabled(!pictures.contains { !$0.linked })
+                }
+                .fixedSize()
+                Button("그림 목록 저장…") { viewer.savePictureList(chosen.isEmpty ? pictures : chosen) }
+                    .disabled(pictures.isEmpty)
+                Spacer()
+                Menu("더 보기") {
+                    Button("그림 바꾸기…") { viewer.replacePicture(chosen.first?.object) }
+                        .disabled(chosen.count != 1 || document.context.locked)
+                }
+                .fixedSize()
+            }
+        }
+        .padding(16)
     }
 
     private func rows(_ rows: [(String, String)]) -> some View {

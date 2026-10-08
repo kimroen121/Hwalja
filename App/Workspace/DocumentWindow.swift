@@ -68,7 +68,7 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.pageHide != nil }, set: { if !$0 { viewer.pageHide = nil } })) {
             if let hide = viewer.pageHide { PageHideSheet(viewer: viewer, hide: hide) }
         }
-        .sheet(item: $viewer.documentInfo) { DocumentInfoSheet(info: $0) }
+        .sheet(item: $viewer.documentInfo) { DocumentInfoSheet(info: $0, document: document, viewer: viewer) }
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
         .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
         .sheet(isPresented: $viewer.editingCharShape) {

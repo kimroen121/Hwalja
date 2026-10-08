@@ -3409,6 +3409,14 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
 -                    let pht = pps.map(|s| s.head_type).unwrap_or(HeadType::None);
 -                    if pht == HeadType::None {
 -                        continue;
+-                    }
+-                    let pnid = pps.map(|s| s.numbering_id).unwrap_or(0);
+-                    if prev_nid.is_none() {
+-                        prev_nid = Some(pnid);
+-                    }
+-                    if pnid == cur_nid {
+-                        seen_before = true;
+-                        break;
 +                'sections: for si in (0..=sec_idx).rev() {
 +                    let previous = &self.document.sections[si];
 +                    let end = if si == sec_idx {
@@ -3432,14 +3440,6 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
 +                            break 'sections;
 +                        }
                      }
--                    let pnid = pps.map(|s| s.numbering_id).unwrap_or(0);
--                    if prev_nid.is_none() {
--                        prev_nid = Some(pnid);
--                    }
--                    if pnid == cur_nid {
--                        seen_before = true;
--                        break;
--                    }
                  }
 +                let level = ps.map(|s| s.para_level as usize).unwrap_or(0).min(6);
 +                let definition_start = cur_nid
@@ -3455,7 +3455,52 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
                  }
              };
              json.pop(); // 마지막 '}' 제거
-@@ -2161,6 +2177,7 @@
+@@ -995,6 +1011,44 @@
+         new_id as i32
+     }
+ 
++    /// 문서 정보의 글꼴 바꾸기: `lang`(없으면 모든 언어)에서 `from` 글꼴을 쓰는 글자
++    /// 모양을 모두 `to` 글꼴로 바꾼다. 바꾼 글자 모양이 없으면 false.
++    pub fn replace_font_native(&mut self, lang: Option<usize>, from: &str, to: &str) -> bool {
++        let langs: Vec<usize> = match lang {
++            Some(l) if l < 7 => vec![l],
++            Some(_) => return false,
++            None => (0..7).collect(),
++        };
++        let mut changed = false;
++        for l in langs {
++            let uses = |doc: &crate::model::document::Document, id: u16| {
++                doc.doc_info.font_faces.get(l).and_then(|f| f.get(id as usize)).is_some_and(|f| f.name == from)
++            };
++            if !self.document.doc_info.char_shapes.iter().any(|c| uses(&self.document, c.font_ids[l])) {
++                continue;
++            }
++            let to_id = self.find_or_create_font_id_for_lang(l, to);
++            if to_id < 0 {
++                continue;
++            }
++            let ids: Vec<bool> =
++                self.document.doc_info.char_shapes.iter().map(|c| uses(&self.document, c.font_ids[l])).collect();
++            for (shape, hit) in self.document.doc_info.char_shapes.iter_mut().zip(ids) {
++                if hit {
++                    shape.font_ids[l] = to_id as u16;
++                    shape.raw_data = None;
++                    changed = true;
++                }
++            }
++        }
++        if changed {
++            self.document.doc_info.raw_stream_dirty = true;
++            self.rebuild_resolved_styles();
++            self.recompose_and_paginate();
++        }
++        changed
++    }
++
+     /// 글자 서식 적용 (네이티브) — 본문 문단
+     pub fn apply_char_format_native(
+         &mut self,
+@@ -2161,6 +2215,7 @@
          start_num: u32,
      ) -> Result<String, crate::error::HwpError> {
          use crate::model::paragraph::NumberingRestart;
@@ -3463,7 +3508,7 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
  
          if section_idx >= self.document.sections.len() {
              return Err(crate::error::HwpError::RenderError(
-@@ -2173,18 +2190,130 @@
+@@ -2173,18 +2228,130 @@
              ));
          }
  

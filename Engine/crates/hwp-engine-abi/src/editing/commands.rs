@@ -556,6 +556,9 @@ impl EditSession {
                 }
                 Ok(())
             }
+            EditCommand::ReplaceFont { language, from, to } => {
+                self.validate_replace_font(*language, from, to)
+            }
             EditCommand::ChangeBookmark {
                 target,
                 control,
@@ -1520,6 +1523,15 @@ impl EditSession {
             }
             EditCommand::EraseCodes { selection, kinds } => {
                 self.erase_codes(selection.as_ref(), kinds)?;
+                Ok(self.kept(0))
+            }
+            EditCommand::ReplaceFont { language, from, to } => {
+                if !self
+                    .core
+                    .replace_font_native(language.map(usize::from), from, to)
+                {
+                    return Err(EditError::InvalidInput);
+                }
                 Ok(self.kept(0))
             }
             EditCommand::SetColumns { section, count } => {

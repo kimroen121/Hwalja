@@ -5342,3 +5342,47 @@ fn outline_lists_outline_paragraphs_with_text() {
     assert_eq!(got, [(1, "가👨‍👩‍👧‍👦e\u{301} 끝", 1), (2, "보존 문단", 2)]);
     assert!(items.iter().all(|i| !i.number.is_empty()), "{items:?}");
 }
+#[test]
+fn fonts_are_listed_and_replaced() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, true)).unwrap();
+        let names = |s: &EditSession, list: usize| -> Vec<String> {
+            s.fonts()[list].iter().map(|f| f.name.clone()).collect()
+        };
+        let english = names(&s, 2);
+        let from = names(&s, 1)[0].clone();
+        let to = "Apple SD Gothic Neo";
+        let replace = |language| EditCommand::ReplaceFont {
+            language,
+            from: from.clone(),
+            to: to.into(),
+        };
+        run(&mut s, replace(Some(0))).unwrap();
+        assert!(!names(&s, 1).contains(&from), "{format}");
+        assert!(s.fonts()[1].iter().any(|f| f.name == to && f.installed));
+        assert_eq!(names(&s, 2), english, "{format}");
+        let font = s
+            .format(s.revision, &point(body(), 0), None)
+            .unwrap()
+            .text
+            .font;
+        assert_eq!(font.as_deref(), Some(to), "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(names(&reopened, 1), names(&s, 1), "{format}");
+        assert!(run(&mut s, replace(Some(0))).is_err(), "{format}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert!(names(&s, 1).contains(&from), "{format}");
+    }
+}
+#[test]
+fn pictures_are_listed_with_their_pages() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    assert!(s.pictures().is_empty());
+    run(&mut s, picture_at(point(body(), 0))).unwrap();
+    let pictures = s.pictures();
+    assert_eq!(pictures.len(), 1);
+    let p = &pictures[0];
+    assert_eq!((p.linked, p.page, p.path.as_str()), (false, 1, ""));
+    assert!(p.name.ends_with(".png"), "{}", p.name);
+    assert_eq!(s.picture_file(&p.object).unwrap().0, "png");
+}

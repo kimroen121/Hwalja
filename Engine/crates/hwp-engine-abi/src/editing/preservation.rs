@@ -241,6 +241,7 @@ pub(super) fn check(
         | EditCommand::DeleteStyle { .. }
         | EditCommand::MoveStyle { .. }
         | EditCommand::RestyleFromCaret { .. } => return check_styles(before, after),
+        EditCommand::ReplaceFont { .. } => return check_fonts(before, after),
         EditCommand::SetColumns { section, .. } => return check_columns(before, after, *section),
         EditCommand::NewNumber {
             position: EditPosition { target, .. },
@@ -862,6 +863,30 @@ fn check_styles(before: &Document, after: &Document) -> Result<(), EditError> {
         info.raw_stream_dirty = false;
         for s in &mut doc.sections {
             unstyle(&mut s.paragraphs);
+            s.raw_stream = None;
+            normalize(&mut s.paragraphs);
+        }
+    }
+    if same(&mut a, &mut b) {
+        Ok(())
+    } else {
+        Err(EditError::PreservationFailed)
+    }
+}
+/// 글꼴 바꾸기 changed only the fonts the 글자 모양 use.
+fn check_fonts(before: &Document, after: &Document) -> Result<(), EditError> {
+    let mut a = before.clone();
+    let mut b = after.clone();
+    for doc in [&mut a, &mut b] {
+        let info = &mut doc.doc_info;
+        for shape in &mut info.char_shapes {
+            shape.font_ids = [0; 7];
+            shape.raw_data = None;
+        }
+        info.font_faces.clear();
+        info.raw_stream = None;
+        info.raw_stream_dirty = false;
+        for s in &mut doc.sections {
             s.raw_stream = None;
             normalize(&mut s.paragraphs);
         }

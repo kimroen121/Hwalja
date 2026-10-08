@@ -39,7 +39,7 @@
 | 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 저장 설정 △, 인터넷 문서·텍스트 파일·한/글 97·XML △, 블록 저장하기 △ |
 | PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
-| 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●. 문서 요약 △(rhwp에 요약 쓰기 없음), 글꼴 정보 ○ `get_document_info`, 그림 정보 ○, 저작권 △ |
+| 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●·글꼴 정보(언어별 사용된/대체된 글꼴, 글꼴 바꾸기) ●·그림 정보(그림 목록, 삽입 그림 저장하기, 모든 삽입 그림 저장하기, 그림 목록 저장, 그림 바꾸기) ●. 연결 그림의 그림 삽입·모두 삽입·경로 바꾸기·확장자 바꾸기·그림 경로 복사 ○, 문서 요약 △(rhwp에 요약 쓰기 없음), 저작권 △ |
 | DAISY 문서 | — | `file/daisy_document.htm` |  |
 | CCL 넣기 | △ | `file/ccl.htm` | CCL 마크 그림 자료가 필요 |
 | 공공누리 넣기 | △ | `file/kogl.htm` | 공공누리 마크 그림 자료가 필요 |

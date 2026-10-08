@@ -112,6 +112,14 @@ pub enum EditCommand {
         style: u32,
         replacement: u32,
     },
+    /// 문서 정보's 사용된 글꼴 바꾸기 and 대체된 글꼴 바꾸기: every 글자 모양 with `from` in
+    /// `language` (an index into 한글, 영문, 한자, 일어, 외국어, 기호, 사용자; none for every
+    /// 언어) takes `to`.
+    ReplaceFont {
+        language: Option<u8>,
+        from: String,
+        to: String,
+    },
     /// 한 줄 위로 이동하기 (`up`) or 한 줄 아래로 이동하기.
     MoveStyle {
         style: u32,
@@ -432,6 +440,21 @@ pub struct Bookmark {
     pub name: String,
     pub position: EditPosition,
     pub control: u32,
+}
+/// A font 글꼴 정보 lists, and whether this Mac has it; one it lacks is 대체된.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UsedFont {
+    pub name: String,
+    pub installed: bool,
+}
+/// A picture of 그림 정보: 이름, whether 연결 (or 삽입), 쪽 (from 1) and a 연결 one's 경로.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PictureInfo {
+    pub name: String,
+    pub linked: bool,
+    pub page: u32,
+    pub path: String,
+    pub object: ObjectRef,
 }
 /// A 개요 문단 of 개요 보기: its 수준 (1–7), its number as drawn, and its text.
 #[derive(Debug, Clone, PartialEq, Serialize)]

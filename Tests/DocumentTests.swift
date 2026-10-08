@@ -469,10 +469,11 @@ struct DocumentTests {
                 found = try await document.objectAt(page: 0, x: x, y: y)
             }
         }
-        document.object = try #require(found)
-        document.replacePicture(red, nil)
+        let listed = try await document.pictures()
+        #expect(listed.map(\.object) == [try #require(found).object] && listed[0].page == 1 && !listed[0].linked)
+        document.replacePicture(red, object: listed[0].object, nil)
         await document.settle()
-        let file = try await document.pictureFile(try #require(found).object)
+        let file = try await document.pictureFile(listed[0].object)
         #expect(file.data == red && file.extension == "png")
     }
 
@@ -1076,6 +1077,11 @@ struct DocumentTests {
         let statistics = try await document.statistics()
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
         #expect(try await document.outline().isEmpty)
+        let fonts = try await document.fonts()
+        let from = try #require(fonts[1].first).name
+        viewer.replaceFont(language: 0, from: from, to: "Apple SD Gothic Neo")
+        await document.settle()
+        #expect(try await document.fonts()[1].contains(UsedFont(name: "Apple SD Gothic Neo", installed: true)))
         let item = { (level: UInt8) in
             OutlineItem(level: level, number: "", title: "", position: EditPosition(target: body, scalar: 0))
         }
@@ -1573,7 +1579,12 @@ struct DocumentTests {
             ("pageHide", AnyView(PageHideSheet(viewer: viewer, hide: PageHide(header: true)))),
             ("bookmark", AnyView(BookmarkSheet(viewer: viewer))),
             ("eraseCodes", AnyView(EraseCodesSheet(viewer: viewer))),
-            ("documentInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics())))),
+            ("documentInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
+                                                       document: document, viewer: viewer))),
+            ("fontInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
+                                                   document: document, viewer: viewer, tab: "글꼴 정보"))),
+            ("pictureInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
+                                                      document: document, viewer: viewer, tab: "그림 정보"))),
             ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                                                                      props: ObjectProps(pageBreak: 2, repeatHeader: true)),
                                              viewer: viewer, tab: "표"))),

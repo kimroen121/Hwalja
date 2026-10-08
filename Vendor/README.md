@@ -40,6 +40,7 @@
 - numbers a section's pages from its 구역 설정 시작 쪽 번호 (사용자, or the next odd or even number), hides the 머리말 and 꼬리말 on a section's first page when it says so, renumbers 그림, 표 and 수식 after a section definition changes, and makes `assign_auto_numbers` public.
 - adds `get/apply_note_shape_native` for 각주 모양 as well as 미주 모양 (leaving the numbers to the caller, and taking 구분선 길이's 5 cm, 2 cm, ⅓ and full-column values), and draws every 번호 모양 (circled letters and 자모, 갑을병, 甲乙丙, *†‡§ and the rest) in the body's mark and the note's own number alike.
 - moves 스타일 추가·편집·지우기 from the wasm API into `DocumentCore` (`style_list_native`, `update_style_native`, `update_style_shapes_native`, `relink_style_native`, `create_style_native`, `delete_style_native` with a replacement style) and adds `move_style_native`; deleting and moving renumber the paragraphs in cells, text boxes, captions, notes, 머리말 and 꼬리말 too.
+- adds `replace_font_native` for 문서 정보 › 글꼴 정보's 글꼴 바꾸기: every 글자 모양 using a font in one 언어 (or all) takes another, and the document is laid out again.
 
 `svg2pdf-2caeb0a.crate`: the svg2pdf fork rhwp pins ([edwardkim/svg2pdf](https://github.com/edwardkim/svg2pdf) `2caeb0a`, MIT/Apache-2.0), packaged with `cargo package`. The script extracts it to `build/svg2pdf` and applies `svg2pdf.patch`, which resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

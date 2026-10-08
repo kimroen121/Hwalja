@@ -84,6 +84,9 @@ enum EditCommand: Encodable, Sendable {
     case deleteStyle(UInt32, replacement: UInt32)
     case moveStyle(UInt32, up: Bool)
     case restyleFromCaret(UInt32, EditPosition)
+    /// 사용된 글꼴 바꾸기 / 대체된 글꼴 바꾸기: `from` becomes `to` in `language` (an index
+    /// into 한글…사용자), or in every 언어 for 대표.
+    case replaceFont(language: UInt8?, from: String, to: String)
     case formatText(EditSelection, CharStyle)
     case formatParagraphs(EditSelection, ParaStyle)
     /// A new page (or column) from `position` in the body.
@@ -161,7 +164,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -280,6 +283,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("moveStyle", forKey: .kind)
             try c.encode(style, forKey: .style)
             try c.encode(up, forKey: .up)
+        case let .replaceFont(language, from, to):
+            try c.encode("replaceFont", forKey: .kind)
+            try c.encodeIfPresent(language, forKey: .language)
+            try c.encode(from, forKey: .from)
+            try c.encode(to, forKey: .to)
         case let .restyleFromCaret(style, position):
             try c.encode("restyleFromCaret", forKey: .kind)
             try c.encode(style, forKey: .style)
@@ -953,6 +961,22 @@ struct Bookmark: Decodable, Hashable, Sendable {
     var control: UInt32
 }
 
+/// A font of 글꼴 정보; one this Mac lacks is a 대체된 글꼴.
+struct UsedFont: Decodable, Hashable, Sendable {
+    var name: String
+    var installed: Bool
+}
+
+/// A picture of 그림 정보.
+struct PictureInfo: Decodable, Hashable, Sendable, Identifiable {
+    var id: ObjectRef { object }
+    var name: String
+    var linked: Bool
+    var page: UInt32
+    var path: String
+    var object: ObjectRef
+}
+
 /// 개요 보기's 개요 문단: its 수준 (1–7), its number as drawn, and its text.
 struct OutlineItem: Decodable, Hashable, Sendable {
     var level: UInt8
@@ -1024,6 +1048,8 @@ enum EngineRequest: Encodable, Sendable {
     case pageHide(EditTarget)
     case bookmarks
     case outline
+    case fonts
+    case pictures
     case statistics
     case status(revision: UInt64, EditPosition)
     case objectAt(revision: UInt64, page: UInt32, x: Double, y: Double)
@@ -1119,6 +1145,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("bookmarks", forKey: .op)
         case .outline:
             try c.encode("outline", forKey: .op)
+        case .fonts:
+            try c.encode("fonts", forKey: .op)
+        case .pictures:
+            try c.encode("pictures", forKey: .op)
         case .statistics:
             try c.encode("statistics", forKey: .op)
         case let .status(revision, position):

@@ -350,6 +350,7 @@ impl EditSession {
             | EditCommand::DeleteStyle { .. }
             | EditCommand::MoveStyle { .. }
             | EditCommand::RestyleFromCaret { .. }
+            | EditCommand::ReplaceFont { .. }
             | EditCommand::EraseCodes { .. }
             | EditCommand::SetColumns { .. }
             | EditCommand::DeleteHeaderFooter { .. }
