@@ -300,7 +300,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | macOS 대응표(아래 규칙)로 맞춤 |
+| 단축키 일람 | ◐ | `view/toolbar/shortcut(table).htm` | ROADMAP 「창 구성」의 규칙으로 옮겼다. macOS 표준과 겹치는 것(정렬, 지우기 Ctrl+E, 줄 지우기 Ctrl+BackSpace, 다른 이름으로 저장하기)은 macOS 단축키를 쓴다. 연속 단축키와 Insert 키 단축키는 없다. 남은 것은 그 기능을 만들 때 넣는다(스타일 F6, 개체 묶기 G, 맨 앞으로 Shift+Page Up 등). |
 
 ## 사용권
 

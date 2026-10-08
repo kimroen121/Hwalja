@@ -242,14 +242,32 @@ final class Viewer: ObservableObject {
             guard let self, let document else { return [] }
             return MenuItems.quickMenu(self, document.context)
         }
-        canvas.editor.onCellBlockKey = { [weak self] key in
-            guard let self else { return false }
-            switch key {
-            case "m": editCells { .mergeCells($0) }
-            case "s": splittingCells = true
-            case "h": editCells { .equalizeCells($0, height: true) }
-            case "w": editCells { .equalizeCells($0, height: false) }
-            default: return false
+        // 한글's keys that work on a cell block or a selected object, and Ctrl+Enter (⌘↩) in a cell.
+        canvas.editor.onKey = { [weak self] event in
+            guard let self, let context = document?.context else { return false }
+            let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            if modifiers == .command, event.keyCode == 36, context.inTable, context.object == nil {
+                editTable(.insertRowBelow)
+                return true
+            }
+            guard modifiers.isEmpty, let key = event.charactersIgnoringModifiers?.lowercased().first else { return false }
+            if context.cellBlock {
+                switch key {
+                case "m": editCells { .mergeCells($0) }
+                case "s": splittingCells = true
+                case "h": editCells { .equalizeCells($0, height: true) }
+                case "w": editCells { .equalizeCells($0, height: false) }
+                case "p": showObjectProperties()
+                default: return false
+                }
+            } else if context.object != nil, !context.locked {
+                switch key {
+                case "p": showObjectProperties()
+                case "u" where document?.object?.group == true: change { .ungroup($0) }
+                default: return false
+                }
+            } else {
+                return false
             }
             return true
         }

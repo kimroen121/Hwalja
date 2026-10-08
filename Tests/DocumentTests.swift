@@ -1027,6 +1027,34 @@ struct DocumentTests {
         #expect(statistics.characters == 6 && statistics.charactersWithoutSpaces == 5 && statistics.words == 2)
     }
 
+    /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
+    @Test func tableKeysAddRowsAndOpenProperties() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        viewer.insertTable(rows: 2, columns: 2)
+        await document.settle()
+        var cell = try #require(document.selection?.focus)
+        cell.target.cell?.cell = 0
+        func key(_ characters: String, _ flags: NSEvent.ModifierFlags = [], code: UInt16 = 0) async {
+            viewer.canvas.editor.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                                                windowNumber: 0, context: nil, characters: characters,
+                                                                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!)
+            await document.settle()
+        }
+        await key("\r", .command, code: 36)
+        var far = cell
+        far.target.cell?.cell = 5
+        document.select { _ in EditSelection(anchor: cell, focus: far) }
+        await document.settle()
+        #expect(document.context.cellBlock && document.presentation.highlight.count == 6)
+        await key("p")
+        for _ in 0..<100 where viewer.objectSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(viewer.objectSheet?.cell != nil)
+    }
+
     @Test func structureCommandsRunFromTheViewer() async throws {
         let document = HwpDocument()
         let viewer = Viewer()

@@ -300,7 +300,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     var onOpenObject: ((PlacedObject) -> Void)?
     /// Hancom's keys for a block of cells: 셀 합치기 (M), 셀 나누기 (S), and 셀 높이 (H)
     /// or 너비 (W)를 같게. Called with the key.
-    var onCellBlockKey: ((Character) -> Bool)?
+    var onKey: ((NSEvent) -> Bool)?
     /// The 빠른 메뉴 for the selection, shown on a right click.
     var onContextMenu: (() -> [Choice?])?
     /// The input method's composing text as last reported; the document already shows it.
@@ -1068,10 +1068,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     override func keyDown(with event: NSEvent) {
         guard model?.selection != nil else { return super.keyDown(with: event) }
         NSCursor.setHiddenUntilMouseMoves(true)
-        if model?.context.cellBlock == true, event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
-           let key = event.charactersIgnoringModifiers?.lowercased().first, onCellBlockKey?(key) == true {
-            return
-        }
+        if onKey?(event) == true { return }
         // Home and End go to the line's ends, as in 한글, where macOS would scroll.
         if event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
            let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }),

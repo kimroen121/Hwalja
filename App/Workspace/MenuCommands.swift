@@ -110,8 +110,8 @@ struct MenuItems {
         if context.canFormat, context.object == nil {
             items += [
                 nil,
-                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l") { viewer.editingCharShape = true },
-                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t") { viewer.editingParaShape = true },
+                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.editingCharShape = true },
+                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.editingParaShape = true },
             ]
         }
         if let shape = viewer.document?.object, shape.object.kind == .shape {
@@ -152,7 +152,7 @@ struct MenuItems {
             let block = context.cellBlock
             items += [
                 nil,
-                Choice(title: "표/셀 속성…", symbol: Icon.objectProps) { viewer.showObjectProperties() },
+                Choice(title: "표/셀 속성…", symbol: Icon.objectProps, key: "p", modifiers: []) { viewer.showObjectProperties() },
                 Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
                     viewer.editCells { .equalizeCells($0, height: true) }
                 },
@@ -298,6 +298,7 @@ struct MenuItems {
         Group {
             Divider()
             item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF10FunctionKey)!)))
                 .disabled(!context.hasSelection)
             Divider()
             Menu {
@@ -320,9 +321,9 @@ struct MenuItems {
     @ViewBuilder var format: some View {
         let text = document?.format?.text
         Group {
-            item("글자 모양…", Icon.charShape) { viewer?.editingCharShape = true }.keyboardShortcut("l")
+            item("글자 모양…", Icon.charShape) { viewer?.editingCharShape = true }.keyboardShortcut("l", modifiers: [.command, .option])
             Divider()
-            item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t")
+            item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t", modifiers: [.command, .option])
             item("글머리표 모양…", "list.bullet") { viewer?.editingList = "글머리표" }
             item("문단 번호 모양…", "list.number") { viewer?.editingList = "문단 번호" }
         }
@@ -343,8 +344,8 @@ struct MenuItems {
             toggle("취소선", text?.strikethrough == true) { editor?.toggleStrikethrough() }
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Divider()
-            Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut(".", modifiers: [.command, .shift])
-            Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut(",", modifiers: [.command, .shift])
+            Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut("]")
+            Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut("[")
         }
         .disabled(!context.canFormat)
         Divider()
