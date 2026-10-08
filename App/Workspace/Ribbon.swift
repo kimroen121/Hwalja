@@ -326,8 +326,6 @@ struct Choice {
     var modifiers: NSEvent.ModifierFlags = .command
     var enabled = true
     var on = false
-    /// A section's name over the choices after it, not a command.
-    var header = false
     /// Shown as a submenu instead of running `action`.
     var submenu: [Choice?] = []
     var action: () -> Void = {}
@@ -443,17 +441,20 @@ enum DropDown {
                 menu.addItem(.separator())
                 continue
             }
-            if choice.header {
-                menu.addItem(.sectionHeader(title: choice.title))
-                continue
-            }
             let handler = Handler(choice.action)
             let item = NSMenuItem(title: choice.title, action: #selector(Handler.run), keyEquivalent: choice.key)
             (item.target, item.representedObject) = (handler, handler)
             item.keyEquivalentModifierMask = choice.modifiers
             item.isEnabled = choice.enabled
             item.state = choice.on ? .on : .off
-            item.image = choice.image ?? choice.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            if choice.title.isEmpty, let image = choice.image {
+                // A picture alone is left out of the menu's width, so it goes in as the title.
+                let picture = NSTextAttachment()
+                picture.image = image
+                item.attributedTitle = NSAttributedString(attachment: picture)
+            } else {
+                item.image = choice.image ?? choice.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            }
             if !choice.submenu.isEmpty { item.submenu = Self.menu(choice.submenu) }
             menu.addItem(item)
         }

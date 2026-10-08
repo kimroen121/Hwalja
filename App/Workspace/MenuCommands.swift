@@ -42,8 +42,7 @@ struct MenuItems {
         ("타원", "ellipse", Icon.ellipse), ("직선", "line", Icon.line), ("호", "arc", Icon.arc),
     ]
     static func shapeChoices(_ viewer: Viewer) -> [Choice?] {
-        [Choice(title: "그리기 개체", header: true)]
-            + shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
+        shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
     }
     /// 머리말 or 꼬리말 shapes, as in Hancom Office Web.
     static let headerShapes: [(title: String, placement: Placement?)] = [
@@ -282,10 +281,8 @@ struct MenuItems {
 
     @ViewBuilder var insert: some View {
         Menu {
-            Section("그리기 개체") {
-                ForEach(Self.shapes, id: \.shape) { item in
-                    self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
-                }
+            ForEach(Self.shapes, id: \.shape) { item in
+                self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
             }
         } label: { Label("도형", systemImage: Icon.shape) }
             .disabled(!context.inBody)

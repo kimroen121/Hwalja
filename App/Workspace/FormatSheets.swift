@@ -22,7 +22,7 @@ enum LineShapes {
     /// A sample of each shape, as the web editor's menus show them.
     static let images: [NSImage] = names.indices.map { shape in
         let image = NSImage(size: NSSize(width: 64, height: 10), flipped: true) { rect in
-            NSColor.black.set()
+            NSColor.labelColor.set()
             func line(_ y: CGFloat, _ width: CGFloat, dash: [CGFloat] = [], round: Bool = false) {
                 let path = NSBezierPath()
                 path.move(to: NSPoint(x: 1, y: y))
