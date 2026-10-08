@@ -212,6 +212,11 @@ pub enum EditCommand {
         cell: EditTarget,
         props: CellProps,
     },
+    /// 그림 정보's 경로 바꾸기 and 그림 확장자 바꾸기: the file a 연결 picture shows.
+    SetPictureLink {
+        object: ObjectRef,
+        path: String,
+    },
     /// Moves an equation to another place in the text of the body.
     MoveObject {
         object: ObjectRef,

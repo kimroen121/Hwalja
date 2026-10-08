@@ -381,7 +381,8 @@ impl EditSession {
             };
             found.push(PictureInfo {
                 name: if linked {
-                    String::new()
+                    let path = bin.and_then(|b| b.abs_path.as_deref()).unwrap_or("");
+                    path.rsplit(['/', '\\']).next().unwrap_or("").to_string()
                 } else {
                     format!("BIN{:04X}.{}", bin.map_or(id, |b| b.storage_id), extension)
                 },
@@ -438,6 +439,17 @@ impl EditSession {
             }
         }
         found
+    }
+    /// The index in the 그림 목록 of the 연결 file `object` shows.
+    pub(super) fn linked_bin(&self, object: &ObjectRef) -> Result<usize, EditError> {
+        let Control::Picture(picture) = self.control(object)? else {
+            return Err(EditError::UnsupportedTarget);
+        };
+        let index = usize::from(picture.image_attr.bin_data_id.saturating_sub(1));
+        match self.core.document().doc_info.bin_data_list.get(index) {
+            Some(b) if b.data_type == rhwp::model::bin_data::BinDataType::Link => Ok(index),
+            _ => Err(EditError::UnsupportedTarget),
+        }
     }
     pub(super) fn validate_replace_font(
         &self,

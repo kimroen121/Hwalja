@@ -76,6 +76,55 @@ extension Viewer {
             }
         }
     }
+    /// 그림 삽입: each 연결 picture takes the image of the file chosen for it, into the document.
+    func embedPictures(_ pictures: [PictureInfo]) {
+        for picture in pictures {
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.image]
+            panel.directoryURL = URL(fileURLWithPath: picture.path).deletingLastPathComponent()
+            panel.nameFieldStringValue = URL(fileURLWithPath: picture.path).lastPathComponent
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
+            document?.replacePicture(data, object: picture.object, undoManager)
+        }
+    }
+    /// 모두 삽입: every 연결 picture takes its file, found by name in a chosen folder.
+    func embedAllPictures(_ pictures: [PictureInfo]) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.directoryURL = pictures.first.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent() }
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let access = folder.startAccessingSecurityScopedResource()
+        defer { if access { folder.stopAccessingSecurityScopedResource() } }
+        for picture in pictures {
+            let url = folder.appendingPathComponent(URL(fileURLWithPath: picture.path).lastPathComponent)
+            guard let data = try? Data(contentsOf: url) else { NSSound.beep(); continue }
+            document?.replacePicture(data, object: picture.object, undoManager)
+        }
+    }
+    /// 경로 바꾸기: the 연결 picture shows a chosen file.
+    func relinkPicture(_ picture: PictureInfo) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.directoryURL = URL(fileURLWithPath: picture.path).deletingLastPathComponent()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        document?.edit(undoManager) { _ in .setPictureLink(picture.object, path: url.path) }
+    }
+    /// 그림 확장자 바꾸기: the 연결 pictures show the files of the same name with `ext`.
+    func changeLinkExtension(_ pictures: [PictureInfo], to ext: String) {
+        for picture in pictures {
+            let path = (picture.path as NSString).deletingPathExtension + "." + ext
+            document?.edit(undoManager) { _ in .setPictureLink(picture.object, path: path) }
+        }
+    }
+    /// 그림 경로 복사: the 연결 pictures' paths, one a line.
+    func copyLinkPaths(_ pictures: [PictureInfo]) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(pictures.map(\.path).joined(separator: "\n"), forType: .string)
+    }
     /// 그림 목록 저장: 이름, 종류, 쪽 수 and 경로 of `pictures`, 쉼표, 탭 or 공백 구분.
     func savePictureList(_ pictures: [PictureInfo]) {
         let panel = NSSavePanel()
@@ -237,6 +286,24 @@ struct PageHideSheet: View {
             }
         } confirm: {
             viewer.setPageHide(hide)
+            dismiss()
+        }
+    }
+}
+
+/// [그림 확장자 바꾸기]: the extension the 연결 pictures' files take.
+struct LinkExtensionSheet: View {
+    let pictures: [PictureInfo]
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var ext = "png"
+    var body: some View {
+        DialogFrame("그림 확장자 바꾸기", confirmTitle: "설정") {
+            LabeledField("확장자") {
+                ChoiceField($ext, ["bmp", "gif", "jpg", "png", "tif", "wmf", "emf", "svg"].map { ($0, $0) }, minWidth: 100)
+            }
+        } confirm: {
+            viewer.changeLinkExtension(pictures, to: ext)
             dismiss()
         }
     }
@@ -440,6 +507,8 @@ struct DocumentInfoSheet: View {
     @State private var replaced: [(language: UInt8?, from: String, to: String)] = []
     @State private var pictures: [PictureInfo] = []
     @State private var chosenPictures: Set<ObjectRef> = []
+    /// The 연결 pictures 그림 확장자 바꾸기 is open for.
+    @State private var extending: [PictureInfo]?
 
     init(info: DocumentInfo, document: HwpDocument, viewer: Viewer, tab: String = "일반") {
         (self.info, self.document, self.viewer) = (info, document, viewer)
@@ -466,6 +535,9 @@ struct DocumentInfoSheet: View {
             await document.settle()
             fonts = (try? await document.fonts()) ?? []
             pictures = (try? await document.pictures()) ?? []
+        }
+        .sheet(isPresented: Binding { extending != nil } set: { if !$0 { extending = nil } }) {
+            if let extending { LinkExtensionSheet(pictures: extending, viewer: viewer) }
         }
         .sheet(isPresented: Binding { replacing != nil } set: { if !$0 { replacing = nil } }) {
             if let replacing {
@@ -526,6 +598,14 @@ struct DocumentInfoSheet: View {
                 TableColumn("경로") { Text($0.path) }
             }
             HStack {
+                Menu("그림 삽입") {
+                    Button("그림 삽입…") { viewer.embedPictures(chosen.filter(\.linked)) }
+                        .disabled(!chosen.contains { $0.linked })
+                    Button("모두 삽입…") { viewer.embedAllPictures(pictures.filter(\.linked)) }
+                        .disabled(!pictures.contains { $0.linked })
+                }
+                .fixedSize()
+                .disabled(document.context.locked)
                 Menu("저장") {
                     Button("삽입 그림 저장하기…") { viewer.savePicture(chosen.first?.object) }
                         .disabled(chosen.count != 1 || chosen[0].linked)
@@ -539,6 +619,14 @@ struct DocumentInfoSheet: View {
                 Menu("더 보기") {
                     Button("그림 바꾸기…") { viewer.replacePicture(chosen.first?.object) }
                         .disabled(chosen.count != 1 || document.context.locked)
+                    Group {
+                        Button("경로 바꾸기…") { if let picture = chosen.first { viewer.relinkPicture(picture) } }
+                            .disabled(chosen.count != 1)
+                        Button("그림 확장자 바꾸기…") { extending = chosen.filter(\.linked) }
+                    }
+                    .disabled(!chosen.allSatisfy(\.linked) || chosen.isEmpty || document.context.locked)
+                    Button("그림 경로 복사") { viewer.copyLinkPaths(chosen.filter(\.linked)) }
+                        .disabled(!chosen.contains { $0.linked })
                 }
                 .fixedSize()
             }

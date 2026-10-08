@@ -119,6 +119,8 @@ enum EditCommand: Encodable, Sendable {
     case group([ObjectRef])
     /// 그림 바꾸기: another image in the picture, which keeps its size and place.
     case replacePicture(ObjectRef, data: Data, naturalWidth: UInt32, naturalHeight: UInt32, extension: String)
+    /// 경로 바꾸기 and 그림 확장자 바꾸기 of a 연결 picture.
+    case setPictureLink(ObjectRef, path: String)
     /// 도형 안에 글자 넣기, or without `attach` 글상자 속성 없애기.
     case setTextBox(ObjectRef, attach: Bool)
     /// Moves an equation to another place in the text.
@@ -167,7 +169,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -250,6 +252,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .setPictureLink(object, path):
+            try c.encode("setPictureLink", forKey: .kind)
+            try c.encode(object, forKey: .object)
+            try c.encode(path, forKey: .path)
         case let .setCellBorder(selection, all, one, border):
             try c.encode("setCellBorder", forKey: .kind)
             try c.encode(selection, forKey: .selection)

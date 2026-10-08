@@ -196,6 +196,30 @@ pub(super) fn check(
         EditCommand::InsertPicture { position, .. } => {
             return check_inserted_picture(before, after, &position.target)
         }
+        EditCommand::SetPictureLink { .. } => {
+            // Only one 연결 entry's path changes.
+            let mut b = after.clone();
+            let changed: Vec<_> = (0..b.doc_info.bin_data_list.len())
+                .filter(|&i| {
+                    before.doc_info.bin_data_list.get(i).map(|x| &x.abs_path)
+                        != Some(&b.doc_info.bin_data_list[i].abs_path)
+                })
+                .collect();
+            if changed.len() != 1
+                || before.doc_info.bin_data_list.len() != b.doc_info.bin_data_list.len()
+            {
+                return Err(EditError::PreservationFailed);
+            }
+            b.doc_info.bin_data_list[changed[0]] =
+                before.doc_info.bin_data_list[changed[0]].clone();
+            b.doc_info.raw_stream_dirty = before.doc_info.raw_stream_dirty;
+            let mut a = before.clone();
+            return if same(&mut a, &mut b) {
+                Ok(())
+            } else {
+                Err(EditError::PreservationFailed)
+            };
+        }
         EditCommand::ReplacePicture { object, .. } => {
             // One image is added; the old one stays, as other pictures may share it.
             if !one_image_added(before, after) {

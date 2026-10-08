@@ -125,7 +125,7 @@ pub(super) fn is_script(script: &str) -> bool {
 
 impl EditSession {
     /// The control `o` names, checked to be of its kind.
-    fn control(&self, o: &ObjectRef) -> Result<&Control, EditError> {
+    pub(super) fn control(&self, o: &ObjectRef) -> Result<&Control, EditError> {
         let control = commands::get(self.core.document(), &Self::host(o))?
             .controls
             .get(o.control as usize)

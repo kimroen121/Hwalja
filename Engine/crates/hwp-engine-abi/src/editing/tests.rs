@@ -5659,3 +5659,51 @@ fn shadows_text_boxes_corners_and_picture_lines() {
         );
     }
 }
+#[test]
+fn linked_pictures_change_path_and_go_in() {
+    use base64::Engine;
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        run(&mut s, picture_at(point(body(), 0))).unwrap();
+        let object = s.pictures()[0].object.clone();
+        // As a document whose picture is 연결 to a file.
+        {
+            let info = &mut s.core.document_mut().doc_info;
+            let bin = info.bin_data_list.last_mut().unwrap();
+            bin.data_type = rhwp::model::bin_data::BinDataType::Link;
+            bin.attr &= !0x000f;
+            (bin.storage_id, bin.extension) = (0, None);
+            (bin.abs_path, bin.raw_data) = (Some("/tmp/a.png".into()), None);
+            info.raw_stream_dirty = true;
+        }
+        assert!(s.pictures()[0].linked);
+        let link = EditCommand::SetPictureLink {
+            object: object.clone(),
+            path: "/tmp/b.jpg".into(),
+        };
+        run(&mut s, link).unwrap();
+        assert_eq!(s.pictures()[0].path, "/tmp/b.jpg", "{save:?}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let p = &reopened.pictures()[0];
+        assert!(p.linked && p.path == "/tmp/b.jpg", "{save:?} {p:?}");
+        // 그림 삽입: the file's image goes into the document.
+        let png = base64::engine::general_purpose::STANDARD.decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        )
+        .unwrap();
+        let embed = EditCommand::ReplacePicture {
+            object: object.clone(),
+            data: base64::engine::general_purpose::STANDARD.encode(&png),
+            natural_width: 1,
+            natural_height: 1,
+            extension: "png".into(),
+        };
+        run(&mut s, embed).unwrap();
+        assert!(!s.pictures()[0].linked, "{save:?}");
+        let embedded = EditCommand::SetPictureLink {
+            object,
+            path: "/tmp/c.png".into(),
+        };
+        assert!(run(&mut s, embedded).is_err());
+    }
+}

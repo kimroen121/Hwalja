@@ -627,6 +627,13 @@ impl EditSession {
                 self.validate_drawing(object, |s| matches!(s, ShapeObject::Group(_)))
             }
             EditCommand::Group { objects } => self.validate_group(objects),
+            EditCommand::SetPictureLink { object, path } => {
+                self.linked_bin(object)?;
+                if path.trim().is_empty() || path.chars().count() > 1_000 {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
             EditCommand::ReplacePicture {
                 object,
                 data,
@@ -1621,6 +1628,15 @@ impl EditSession {
                     *natural_height,
                     extension,
                 )?;
+                Ok(self.kept(object.section))
+            }
+            EditCommand::SetPictureLink { object, path } => {
+                let index = self.linked_bin(object)?;
+                let info = &mut self.core.document_mut().doc_info;
+                let bin = &mut info.bin_data_list[index];
+                (bin.abs_path, bin.rel_path, bin.raw_data) =
+                    (Some(path.clone()), Some(path.clone()), None);
+                info.raw_stream_dirty = true;
                 Ok(self.kept(object.section))
             }
             EditCommand::Group { objects } => {
