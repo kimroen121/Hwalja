@@ -19,6 +19,19 @@ make dist       # 유니버설 빌드, Developer ID 서명, 공증, build/hwalja
 
 Finder 훑어보기 확장은 앱을 한 번 실행하면 등록됩니다. ad-hoc 서명은 빌드할 때마다 바뀌므로, 다시 빌드한 뒤에는 `pluginkit -a build/hwalja.app/Contents/PlugIns/HwaljaPreview.appex`로 다시 등록하십시오.
 
+### 한컴 렌더와 비교
+
+한컴에서 내보낸 PDF와 Hwalja 렌더를 같은 크기의 쪽별 PNG로 준비한 뒤 다음처럼 비교합니다. 파일 이름이 달라도 각 폴더의 자연 정렬 순서대로 쪽을 짝짓습니다.
+
+```sh
+make compare-pages \
+  REF_DIR=build/compare/hancom \
+  ACTUAL_DIR=build/compare/hwalja \
+  "COMPARE_FLAGS=--threshold 8 --max-diff-percent 0.1 --diff-dir build/compare/diff"
+```
+
+각 쪽과 전체의 다른 픽셀 비율을 출력하며, `diff/`에는 다른 픽셀만 빨갛게 보이는 투명 PNG를 만듭니다. 쪽 수·이미지 크기가 다르거나 `--max-diff-percent`를 넘으면 실패하므로 회귀 검사에도 사용할 수 있습니다. 실제 개인 문서는 `build/`처럼 Git이 추적하지 않는 경로에만 둡니다.
+
 `make dist` 준비:
 `rustup target add x86_64-apple-darwin`,
 `export SIGN_IDENTITY="Developer ID Application: …"`,
