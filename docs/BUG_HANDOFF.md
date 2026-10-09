@@ -43,8 +43,8 @@
 ## 내부 개선
 
 ### 성능
-- [ ] 남은 엔진 시간(고급물리학 보고서 실측 키 입력 약 11~15ms, 실행 취소 약 16ms): 편집 쪽과 다음 쪽의 SVG(레이아웃 포함), 표시 목록의 XML 파싱. 다음 후보는 rhwp 렌더 트리(`get_page_layer_tree_native`)에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략).
-- 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release --filter benchHostedTyping`.
+- [ ] 남은 엔진 시간(2026-10-10, 표가 많은 11쪽 공모전 요강 키 입력 약 17ms·실행 취소 약 25ms, 7쪽 보고서 약 15ms·16ms; 테스트 빌드의 보존 검사 약 4ms 제외): rhwp 쪽 나누기 약 30%(여러 쪽에 걸친 표는 나눈 행마다 임시 셀을 만들어 셀 캐시가 맞지 않음), 편집 쪽과 다음 쪽의 SVG와 표시 목록 XML 파싱 약 35%, 편집 뒤 커서 배치 약 10%. 다음 후보는 rhwp 렌더 트리(`get_page_layer_tree_native`)에서 표시 목록을 바로 만드는 것(SVG 문자열과 XML 파싱 생략), 그다음 다음 쪽이 그대로인지 SVG 대신 쪽 나누기 결과로 판단하는 것.
+- 측정: 엔진 `HWP_BENCH=<문서> cargo test --release bench_typing -- --ignored --nocapture`, 앱 `HWP_BENCH=<문서> swift test -c release -Xswiftc -enable-testing --filter benchHostedTyping`(`HWP_KEY_MS`로 키 간격). 프로파일은 `CARGO_PROFILE_RELEASE_DEBUG=true`로 만든 테스트 바이너리를 `sample`로, 표 셀 캐시 적중은 `RHWP_2424_PROFILE=1`로 본다.
 
 ### 개발 도구
 - [x] `make fmt-check`가 Git에 추적된 `Engine/**/*.rs`만 검사하므로 생성된 `build/rhwp`의 누락 테스트 target에 영향받지 않음.
