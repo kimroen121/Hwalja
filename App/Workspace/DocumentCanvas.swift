@@ -319,7 +319,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// or 너비 (W)를 같게. Called with the key.
     var onKey: ((NSEvent) -> Bool)?
     /// The 빠른 메뉴 for the selection, shown on a right click.
-    var onContextMenu: (() -> [Choice?])?
+    var onContextMenu: (() async -> [Choice?])?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// Latest drag point waiting for the hit test in flight.
@@ -749,7 +749,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         Task { [weak self] in
             await model.settle()
-            guard let self, let choices = onContextMenu?(), !choices.isEmpty else { return }
+            guard let self, let choices = await onContextMenu?(), !choices.isEmpty else { return }
             NSMenu.popUpContextMenu(DropDown.menu(choices), with: event, for: self)
         }
     }
@@ -1041,6 +1041,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
             return
         }
+        if drawingShape == nil, event.clickCount == 1, event.modifierFlags.intersection([.shift, .option, .command]).isEmpty {
+            openLink()
+        }
         guard let shape = drawingShape, let band = rubber, let model, !pageFrames.isEmpty else { return }
         drawingShape = nil
         if shape == "select" { return chooseObjects(in: band) }
@@ -1053,6 +1056,18 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             end = CGPoint(x: start.x + 113, y: start.y + (shape == "line" ? 0 : 76))
         }
         model.insertShape(shape, page: index, from: start, to: end, undoManager)
+    }
+
+    /// 하이퍼링크 이동: a click that left the caret in a link opens its web address.
+    private func openLink() {
+        guard let model else { return }
+        Task {
+            await model.settle()
+            guard model.object == nil, let selection = model.selection, selection.anchor == selection.focus,
+                  let link = try? await model.hyperlink(at: selection.focus),
+                  HyperlinkSheet.webAddress(link.uri), let url = URL(string: link.uri) else { return }
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// 개체 선택: the objects wholly inside the drag on the page where it ended, but tables

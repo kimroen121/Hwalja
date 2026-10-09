@@ -11,6 +11,7 @@ mod forms;
 mod geometry;
 mod header_footer;
 mod latex;
+mod links;
 mod logical;
 mod navigation;
 mod objects;
@@ -299,7 +300,12 @@ impl EditSession {
             | EditCommand::InsertShape { position, .. }
             | EditCommand::InsertNote { position, .. }
             | EditCommand::InsertClickHere { position, .. }
-            | EditCommand::EditClickHere { position, .. } => Some(position.clone()),
+            | EditCommand::EditClickHere { position, .. }
+            | EditCommand::EditHyperlink { position, .. }
+            | EditCommand::RemoveHyperlink { position } => Some(position.clone()),
+            EditCommand::InsertHyperlink { selection, .. } => {
+                Some(commands::ordered(selection).0.clone())
+            }
             EditCommand::EditTable { cell, .. }
             | EditCommand::FlipTable { cell, .. }
             | EditCommand::SetCellBorder {

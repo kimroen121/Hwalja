@@ -6026,3 +6026,112 @@ fn chart_data_is_edited() {
     run(&mut s, EditCommand::Undo).unwrap();
     assert_ne!(s.chart_data(chart).unwrap(), data);
 }
+#[test]
+fn hyperlinks_are_inserted_edited_and_removed() {
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let end = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+        replace(&mut s, body(), 0, end, "한컴 홈페이지 가기").unwrap();
+        let link = |s: &EditSession, at: u32| s.hyperlink_at(&point(body(), at)).unwrap();
+        // As the app sends it.
+        let insert: EditCommand = serde_json::from_value(serde_json::json!({
+            "kind": "insertHyperlink",
+            "selection": {"anchor": point(body(), 0), "focus": point(body(), 7)},
+            "text": "한컴 홈페이지", "uri": "https://www.hancom.com",
+        }))
+        .unwrap();
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        assert_eq!(caret.scalar, 7);
+        let (_, l) = link(&s, 3).unwrap();
+        assert_eq!(
+            (l.text.as_str(), l.uri.as_str()),
+            ("한컴 홈페이지", "https://www.hancom.com")
+        );
+        assert!(link(&s, 9).is_none());
+        let svg = s.core.render_page_svg_native(0).unwrap();
+        let blue = |svg: &str, ch: &str| {
+            svg.split("</text>")
+                .any(|t| t.ends_with(&format!(">{ch}")) && t.contains("#0000ff"))
+        };
+        assert!(blue(&svg, "한") && !blue(&svg, "가"), "{format}");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(
+            link(&reopened, 3).unwrap().1.uri,
+            "https://www.hancom.com",
+            "{format}"
+        );
+        // Only web addresses.
+        let bad = EditCommand::InsertHyperlink {
+            selection: EditSelection::caret(point(body(), 9)),
+            text: "x".into(),
+            uri: "ftp://example.com".into(),
+        };
+        assert_eq!(run(&mut s, bad).err(), Some(EditError::InvalidInput));
+        // 고치기.
+        let edit = EditCommand::EditHyperlink {
+            position: point(body(), 2),
+            text: "한컴".into(),
+            uri: "https://example.com/a".into(),
+        };
+        run(&mut s, edit).unwrap();
+        let (_, l) = link(&s, 1).unwrap();
+        assert_eq!(
+            (l.text.as_str(), l.uri.as_str()),
+            ("한컴", "https://example.com/a")
+        );
+        assert_eq!(s.paragraph(&body()).unwrap().text, "한컴 가기");
+        // 지우기: the text stays and takes back its color.
+        run(
+            &mut s,
+            EditCommand::RemoveHyperlink {
+                position: point(body(), 1),
+            },
+        )
+        .unwrap();
+        assert!(link(&s, 1).is_none());
+        assert_eq!(s.paragraph(&body()).unwrap().text, "한컴 가기");
+        assert!(
+            !blue(&s.core.render_page_svg_native(0).unwrap(), "한"),
+            "{format}"
+        );
+        // With no selection the text goes in at the caret.
+        let at = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+        let insert = EditCommand::InsertHyperlink {
+            selection: EditSelection::caret(point(body(), at)),
+            text: "링크".into(),
+            uri: "http://example.com".into(),
+        };
+        run(&mut s, insert).unwrap();
+        assert_eq!(s.paragraph(&body()).unwrap().text, "한컴 가기링크");
+        assert_eq!(link(&s, at + 1).unwrap().1.text, "링크");
+        for _ in 0..4 {
+            run(&mut s, EditCommand::Undo).unwrap();
+        }
+        assert_eq!(s.paragraph(&body()).unwrap().text, "한컴 홈페이지 가기");
+        assert!(link(&s, 3).is_none());
+    }
+    // In a table cell.
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = EditTarget {
+        cell: Some(CellTarget {
+            control: 0,
+            cell: 0,
+            paragraph: 0,
+        }),
+        paragraph: 2,
+        ..body()
+    };
+    let insert = EditCommand::InsertHyperlink {
+        selection: EditSelection {
+            anchor: point(cell.clone(), 0),
+            focus: point(cell.clone(), 2),
+        },
+        text: "표 내용".into(),
+        uri: "https://example.com".into(),
+    };
+    run(&mut s, insert).unwrap();
+    let l = s.hyperlink_at(&point(cell.clone(), 1)).unwrap().unwrap().1;
+    assert_eq!(l.text, "표 내용");
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
+    assert!(reopened.hyperlink_at(&point(cell, 1)).unwrap().is_some());
+}

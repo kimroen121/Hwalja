@@ -159,6 +159,10 @@ enum Request {
     ClickHereAt {
         position: EditPosition,
     },
+    /// The 하이퍼링크 the caret at `position` is in, if any.
+    HyperlinkAt {
+        position: EditPosition,
+    },
     /// 그림 정보's 그림 목록.
     Pictures,
     /// 문서 정보's 문서 통계.
@@ -363,6 +367,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             session.click_here_at(&position)?.map(|(_, c)| c),
             Vec::new(),
         ),
+        Request::HyperlinkAt { position } => {
+            HwpEditResult::ok(session.hyperlink_at(&position)?.map(|(_, l)| l), Vec::new())
+        }
         Request::Pictures => HwpEditResult::ok(session.pictures(), Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
         Request::HasPassword => HwpEditResult::ok(session.has_password(), Vec::new()),

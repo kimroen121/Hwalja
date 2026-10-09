@@ -101,7 +101,8 @@ struct MenuItems {
 
     /// 빠른 메뉴 (right click), in 한/글 2024's names, for what the selection is: text, an
     /// object, or cells. The clipboard commands keep their macOS names.
-    static func quickMenu(_ viewer: Viewer, _ context: EditingContext) -> [Choice?] {
+    /// `link`: the 하이퍼링크 at the caret.
+    static func quickMenu(_ viewer: Viewer, _ context: EditingContext, link: Hyperlink? = nil) -> [Choice?] {
         let editor = viewer.canvas.editor
         let selected = context.hasRange || context.object != nil
         var items: [Choice?] = [
@@ -124,6 +125,15 @@ struct MenuItems {
                 nil,
                 Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.editingCharShape = true },
                 Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.editingParaShape = true },
+            ]
+        }
+        if let link, context.object == nil {
+            items += [
+                nil,
+                Choice(title: "하이퍼링크 고치기…", symbol: Icon.hyperlink, enabled: !context.locked) {
+                    viewer.hyperlinkSheet = HyperlinkEditing(existing: link, text: link.text, uri: link.uri)
+                },
+                Choice(title: "하이퍼링크 지우기", enabled: !context.locked) { viewer.removeHyperlink() },
             ]
         }
         if let shape = viewer.document?.object, shape.object.kind == .shape {
@@ -360,6 +370,9 @@ struct MenuItems {
             Divider()
             item("책갈피…", Icon.bookmark) { viewer?.bookmarking = true }
                 .disabled(!context.inBody)
+            item("하이퍼링크…", Icon.hyperlink) { viewer?.showHyperlink() }
+                .keyboardShortcut("k")
+                .disabled(!context.canHyperlink)
         }
     }
 

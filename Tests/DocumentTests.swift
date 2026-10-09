@@ -232,6 +232,17 @@ struct DocumentTests {
         #expect(titles(EditingContext(hasSelection: true, inTable: true)).contains("표/셀 속성…"))
     }
 
+    /// In a 하이퍼링크 the 빠른 메뉴 offers 하이퍼링크 고치기 and 지우기; links go to web addresses.
+    @Test func quickMenuOffersLinkCommandsInALink() {
+        let link = Hyperlink(text: "한컴", uri: "https://www.hancom.com")
+        let titles = MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true), link: link).compactMap { $0?.title }
+        #expect(titles.contains("하이퍼링크 고치기…") && titles.contains("하이퍼링크 지우기"))
+        #expect(!MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true)).contains { $0?.title == "하이퍼링크 지우기" })
+        #expect(HyperlinkSheet.webAddress("https://www.hancom.com/a?b#c") && HyperlinkSheet.webAddress("HTTP://x.kr"))
+        #expect(!HyperlinkSheet.webAddress("www.hancom.com") && !HyperlinkSheet.webAddress("mailto:a@b.c")
+            && !HyperlinkSheet.webAddress("https:// a.b") && !HyperlinkSheet.webAddress("https://"))
+    }
+
     @Test func quickMenuOffersDeletionForObjects() {
         let titles = MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true, object: .shape)).compactMap { $0?.title }
         #expect(titles.contains("삭제"))
@@ -1656,6 +1667,8 @@ struct DocumentTests {
             ("pictureLine", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(borderColor: 0xff, borderWidth: 100, lineType: 2)), viewer: viewer, tab: "선"))),
+            ("hyperlink", AnyView(HyperlinkSheet(viewer: viewer, editing: HyperlinkEditing(
+                existing: nil, text: "한컴 홈페이지", uri: "https://www.hancom.com")))),
             ("chartData", AnyView(ChartDataSheet(editing: ChartEditing(chart: 0, data: ChartData(
                 labels: ["항목 1", "항목 2", "항목 3"],
                 series: [ChartSeries(name: "계열 1", values: ["4.3", "2.5", "3.5"]), ChartSeries(name: "계열 2", values: ["2.4", "4.4", "1.8"])])),

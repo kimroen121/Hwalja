@@ -71,7 +71,7 @@
 | 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기·찾아가기(쪽) ●. 대소문자 구분·표 안까지 찾기·찾은 개수 ○ `search_text_native`·`search_all_text_native`. 온전한 낱말 등 나머지 선택 사항 △(앱이 찾은 결과를 거르면 됨). 찾아가기의 책갈피 ○ `get_bookmarks_native`, 줄·구역·개체 △ |
 | 글자 바꾸기 | △ | `edit/change_characters/change_characters.htm` | 대문자/소문자·전각/반각·일어·간체/번체는 앱에서 바꿔 넣으면 됨. 한자로 바꾸기는 macOS 입력기 |
 | 정렬 | △ | `tools/sort/sort.htm` | 문단 정렬. 엔진에 문단 순서 바꾸기 명령 필요 |
-| 고치기 | ◐ | `edit/modification.htm` | 선택한 개체의 속성 열기 ● |
+| 고치기 | ◐ | `edit/modification.htm` | 선택한 개체의 속성, 커서 위치의 누름틀·하이퍼링크 ● |
 | OLE 연결 | — | `edit/objectlink.htm` | Windows OLE |
 | OLE 개체 속성 | — | `edit/objecedit.htm` | Windows OLE |
 | 블록 | ● | `edit/block.htm` | F3 블록은 macOS 관례로 Shift 선택 |
@@ -127,7 +127,7 @@
 | 메모 | △ | `insert/memo/memo.htm` | rhwp는 메모 필드를 읽고 저장하지만 넣기·그리기가 없음 |
 | 상호 참조 | △ | `insert/cross_reference/cross_reference.htm` |  |
 | 책갈피 | ● | `insert/bookmark/bookmark.htm` | 넣기·이동·이름 바꾸기·지우기 |
-| 하이퍼링크 | ○ | `insert/hyperlink/hyperlink.htm` | 넣기 `insert_hyperlink_native`, 고치기 `update_hyperlink_native`·`replace_hyperlink_text_native`, 지우기 `remove_hyperlink_native`, 목록 `hyperlinks_native`·`page_hyperlinks_native`. 웹 주소만(문서 안 책갈피로 가는 연결은 △) |
+| 하이퍼링크 | ◐ | `insert/hyperlink/hyperlink.htm` | 웹 주소로 연결(표시할 문자열, 블록 없이 넣으면 그 자리에 문자열), 하이퍼링크 고치기(편집 › 고치기, 빠른 메뉴), 하이퍼링크 지우기(빠른 메뉴, 원래 글자 모양으로), 누르면 이동(⌘K) ●. 본문·표 셀·글상자. 전자 우편·한/글 문서·파일로 연결, 설명할 문자열, 개체에 연결, 하이퍼링크 이전/다음, 자동 연결 △(rhwp가 웹 주소만 씀) |
 
 ## 서식
 

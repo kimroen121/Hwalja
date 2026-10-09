@@ -277,8 +277,24 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
+        EditCommand::InsertHyperlink { selection, .. } => {
+            // Text typed in moves the caret the file remembers.
+            let (mut a, mut b) = (before.clone(), after.clone());
+            for doc in [&mut a, &mut b] {
+                doc.doc_properties.caret_list_id = 0;
+                doc.doc_properties.caret_para_id = 0;
+                doc.doc_properties.caret_char_pos = 0;
+                if let Some(raw) = &mut doc.doc_info.raw_stream {
+                    let _ = rhwp::serializer::doc_info::surgical_update_caret(raw, 0, 0, 0);
+                }
+            }
+            let t = &selection.anchor.target;
+            return check_host(&a, &b, t.section, t.paragraph);
+        }
         EditCommand::InsertClickHere { position, .. }
-        | EditCommand::EditClickHere { position, .. } => {
+        | EditCommand::EditClickHere { position, .. }
+        | EditCommand::EditHyperlink { position, .. }
+        | EditCommand::RemoveHyperlink { position } => {
             return check_host(
                 before,
                 after,

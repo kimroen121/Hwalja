@@ -107,6 +107,13 @@ enum EditCommand: Encodable, Sendable {
     case setChartData(chart: UInt32, ChartData)
     /// 고치기 of the 누름틀 at the position.
     case editClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
+    /// 입력 › 하이퍼링크: links the selected text, which becomes `text` (표시할 문자열), to
+    /// the web address `uri`; with no selection `text` goes in at the caret.
+    case insertHyperlink(EditSelection, text: String, uri: String)
+    /// 하이퍼링크 고치기 of the link at the position.
+    case editHyperlink(EditPosition, text: String, uri: String)
+    /// 하이퍼링크 지우기: the link at the position goes; its text takes back its look.
+    case removeHyperlink(EditPosition)
     /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
     /// from the paper's corner in HWPUNIT. A line runs corner to corner, `flip` turning it.
     case insertShape(EditPosition, shape: String, x: Int32, y: Int32, width: UInt32, height: UInt32, flip: Bool)
@@ -177,7 +184,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -276,6 +283,19 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(memo, forKey: .memo)
             try c.encode(name, forKey: .name)
             try c.encode(formEditable, forKey: .formEditable)
+        case let .insertHyperlink(selection, text, uri):
+            try c.encode("insertHyperlink", forKey: .kind)
+            try c.encode(selection, forKey: .selection)
+            try c.encode(text, forKey: .text)
+            try c.encode(uri, forKey: .uri)
+        case let .editHyperlink(position, text, uri):
+            try c.encode("editHyperlink", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(text, forKey: .text)
+            try c.encode(uri, forKey: .uri)
+        case let .removeHyperlink(position):
+            try c.encode("removeHyperlink", forKey: .kind)
+            try c.encode(position, forKey: .position)
         case let .insertClickHere(position, guide, memo, name, formEditable):
             try c.encode("insertClickHere", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -1120,6 +1140,12 @@ struct ClickHere: Decodable, Hashable, Sendable {
     var formEditable: Bool
 }
 
+/// A 하이퍼링크: 표시할 문자열 and its web address.
+struct Hyperlink: Decodable, Hashable, Sendable {
+    var text: String
+    var uri: String
+}
+
 /// 개요 보기's 개요 문단: its 수준 (1–7), its number as drawn, and its text.
 struct OutlineItem: Decodable, Hashable, Sendable {
     var level: UInt8
@@ -1193,6 +1219,7 @@ enum EngineRequest: Encodable, Sendable {
     case outline
     case fonts
     case clickHereAt(EditPosition)
+    case hyperlinkAt(EditPosition)
     case pictures
     case statistics
     case hasPassword
@@ -1300,6 +1327,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("fonts", forKey: .op)
         case let .clickHereAt(position):
             try c.encode("clickHereAt", forKey: .op)
+            try c.encode(position, forKey: .position)
+        case let .hyperlinkAt(position):
+            try c.encode("hyperlinkAt", forKey: .op)
             try c.encode(position, forKey: .position)
         case .pictures:
             try c.encode("pictures", forKey: .op)

@@ -95,6 +95,7 @@ struct DocumentWindow: View {
         .sheet(item: $viewer.cellBorder) { CellBorderSheet(editing: $0, viewer: viewer) }
         .sheet(item: $viewer.chartData) { ChartDataSheet(editing: $0, viewer: viewer) }
         .sheet(item: $viewer.fieldSheet) { FieldSheet(viewer: viewer, editing: $0.existing) }
+        .sheet(item: $viewer.hyperlinkSheet) { HyperlinkSheet(viewer: viewer, editing: $0) }
         .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
         .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
         .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
@@ -290,6 +291,7 @@ final class Viewer: ObservableObject {
     @Published var pageBorder: (section: UInt32, border: PageBorder)?
     @Published var cellBorder: CellBorderEditing?
     @Published var fieldSheet: FieldEditing?
+    @Published var hyperlinkSheet: HyperlinkEditing?
     @Published var chartData: ChartEditing?
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
     @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
@@ -326,7 +328,9 @@ final class Viewer: ObservableObject {
         canvas.editor.onOpenObject = { [weak self] in self?.open($0) }
         canvas.editor.onContextMenu = { [weak self] in
             guard let self, let document else { return [] }
-            return MenuItems.quickMenu(self, document.context)
+            var link: Hyperlink?
+            if let focus = document.selection?.focus { link = try? await document.hyperlink(at: focus) }
+            return MenuItems.quickMenu(self, document.context, link: link)
         }
         // 한글's keys that work on a cell block or a selected object, and Ctrl+Enter (⌘↩) in a cell.
         canvas.editor.onKey = { [weak self] event in

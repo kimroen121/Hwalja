@@ -52,15 +52,44 @@ extension Viewer {
             selection.map { .editClickHere($0.focus, guide: guide, memo: memo, name: name, formEditable: formEditable) }
         }
     }
-    /// 고치기: the selected object's properties, or the 누름틀 at the caret.
+    /// 고치기: the selected object's properties, or the 누름틀 or 하이퍼링크 at the caret.
     func modify() {
         guard let document else { return }
         if document.object != nil { return showObjectProperties() }
         guard let caret = document.selection?.focus else { return NSSound.beep() }
         Task {
-            guard let found = try? await document.clickHere(at: caret) else { return NSSound.beep() }
-            fieldSheet = FieldEditing(existing: found)
+            if let found = try? await document.clickHere(at: caret) {
+                fieldSheet = FieldEditing(existing: found)
+            } else if let link = try? await document.hyperlink(at: caret) {
+                hyperlinkSheet = HyperlinkEditing(existing: link, text: link.text, uri: link.uri)
+            } else {
+                NSSound.beep()
+            }
         }
+    }
+    /// 입력 › 하이퍼링크: 하이퍼링크 고치기 in a link, otherwise a new one, its 표시할 문자열
+    /// the selected text.
+    func showHyperlink() {
+        guard let document, let selection = document.selection else { return NSSound.beep() }
+        Task {
+            if let link = try? await document.hyperlink(at: selection.focus) {
+                hyperlinkSheet = HyperlinkEditing(existing: link, text: link.text, uri: link.uri)
+                return
+            }
+            let text = selection.anchor == selection.focus ? "" : (try? await document.text(of: selection)) ?? ""
+            hyperlinkSheet = HyperlinkEditing(existing: nil, text: text, uri: "")
+        }
+    }
+    func setHyperlink(_ editing: HyperlinkEditing, text: String, uri: String) {
+        document?.edit(undoManager) { selection in
+            guard let selection else { return nil }
+            return editing.existing == nil
+                ? .insertHyperlink(selection, text: text, uri: uri)
+                : .editHyperlink(selection.focus, text: text, uri: uri)
+        }
+    }
+    func removeHyperlink() {
+        document?.edit(undoManager) { selection in selection.map { .removeHyperlink($0.focus) } }
     }
     func insertClickHere(guide: String, memo: String, name: String, formEditable: Bool) {
         document?.edit(undoManager) { selection in
@@ -361,6 +390,58 @@ struct FieldSheet: View {
             } else {
                 viewer.editClickHere(guide: guide, memo: memo, name: name, formEditable: formEditable)
             }
+            dismiss()
+        }
+    }
+}
+
+/// [하이퍼링크] as opened: a new link, or (`existing`) 하이퍼링크 고치기.
+struct HyperlinkEditing: Identifiable {
+    let id = UUID()
+    var existing: Hyperlink?
+    var text: String
+    var uri: String
+}
+
+/// [하이퍼링크] and [하이퍼링크 고치기]: 표시할 문자열 and the 연결 대상's 웹 주소.
+struct HyperlinkSheet: View {
+    let viewer: Viewer
+    let editing: HyperlinkEditing
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @State private var uri: String
+    @FocusState private var addressFocused: Bool
+    init(viewer: Viewer, editing: HyperlinkEditing) {
+        (self.viewer, self.editing) = (viewer, editing)
+        _text = State(initialValue: editing.text)
+        _uri = State(initialValue: editing.uri)
+    }
+    /// An http or https address with a host, as rhwp writes links.
+    static func webAddress(_ uri: String) -> Bool {
+        guard !uri.contains(where: \.isWhitespace), let url = URL(string: uri),
+              ["http", "https"].contains(url.scheme?.lowercased()), url.host?.isEmpty == false else { return false }
+        return true
+    }
+    var body: some View {
+        DialogFrame(editing.existing == nil ? "하이퍼링크" : "하이퍼링크 고치기",
+                    confirmTitle: editing.existing == nil ? "넣기" : "고치기",
+                    canConfirm: !text.trimmingCharacters(in: .whitespaces).isEmpty && !text.contains(where: \.isNewline)
+                        && Self.webAddress(uri)) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    FieldLabel("표시할 문자열")
+                    TextField("", text: $text).frame(width: 300)
+                }
+                GroupTitle("연결 대상").padding(.top, 4)
+                GridRow {
+                    FieldLabel("웹 주소")
+                    TextField("", text: $uri).frame(width: 300).focused($addressFocused)
+                }
+            }
+            // With the text already there, the address is what is left to type.
+            .onAppear { if !text.isEmpty, uri.isEmpty { addressFocused = true } }
+        } confirm: {
+            viewer.setHyperlink(editing, text: text, uri: uri)
             dismiss()
         }
     }

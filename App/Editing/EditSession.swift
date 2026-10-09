@@ -119,6 +119,9 @@ final class EditSession: @unchecked Sendable {
     func clickHere(at position: EditPosition) async throws -> ClickHere? {
         try await decode(send(.clickHereAt(position)))
     }
+    func hyperlink(at position: EditPosition) async throws -> Hyperlink? {
+        try await decode(send(.hyperlinkAt(position)))
+    }
     func fonts() async throws -> [[UsedFont]] {
         try await decode(send(.fonts))
     }

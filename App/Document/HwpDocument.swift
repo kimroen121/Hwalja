@@ -72,6 +72,8 @@ struct EditingContext: Equatable {
     var locked = false
     /// A picture or an equation can be put at the caret: in the body or in a table cell.
     var canPicture: Bool { inBody || inTable }
+    /// 하이퍼링크 goes in text of the body, a cell or a 글상자, not in notes, 머리말 or 꼬리말.
+    var canHyperlink: Bool { canApplyStyle && object == nil && !cellBlock }
     /// 캡션 넣기 applies: to a selected picture or table, or the table holding the caret.
     var canCaption: Bool {
         !locked && (object == .picture || object == .table || (inTable && object == nil))
@@ -485,6 +487,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     func clickHere(at position: EditPosition) async throws -> ClickHere? {
         try await session.clickHere(at: position)
+    }
+    func hyperlink(at position: EditPosition) async throws -> Hyperlink? {
+        try await session.hyperlink(at: position)
     }
     func fonts() async throws -> [[UsedFont]] {
         try await session.fonts()

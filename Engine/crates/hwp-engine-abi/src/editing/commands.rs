@@ -425,6 +425,9 @@ impl EditSession {
                 self.validate_form(form, *value, text.as_deref())
             }
             EditCommand::SetChartData { chart, data } => self.validate_chart_data(*chart, data),
+            EditCommand::InsertHyperlink { .. }
+            | EditCommand::EditHyperlink { .. }
+            | EditCommand::RemoveHyperlink { .. } => self.validate_hyperlink(command),
             EditCommand::EditClickHere {
                 position,
                 guide,
@@ -1059,7 +1062,7 @@ impl EditSession {
         }
         Ok(())
     }
-    fn insert(&mut self, p: &EditPosition, text: &str) -> Result<(), EditError> {
+    pub(super) fn insert(&mut self, p: &EditPosition, text: &str) -> Result<(), EditError> {
         let t = &p.target;
         let spot = self.spot(p)?;
         let at = spot.text;
@@ -1506,6 +1509,23 @@ impl EditSession {
             EditCommand::SetChartData { chart, data } => {
                 self.set_chart_data(*chart, data)?;
                 Ok(self.kept(0))
+            }
+            EditCommand::InsertHyperlink {
+                selection,
+                text,
+                uri,
+            } => self.insert_hyperlink(selection, text, uri),
+            EditCommand::EditHyperlink {
+                position,
+                text,
+                uri,
+            } => {
+                self.edit_hyperlink(position, text, uri)?;
+                Ok(EditSelection::caret(position.clone()))
+            }
+            EditCommand::RemoveHyperlink { position } => {
+                self.remove_hyperlink(position)?;
+                Ok(EditSelection::caret(position.clone()))
             }
             EditCommand::EditClickHere {
                 position,

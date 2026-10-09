@@ -313,6 +313,23 @@ pub enum EditCommand {
         #[serde(default, rename = "formEditable")]
         form_editable: bool,
     },
+    /// 입력 › 하이퍼링크: links the text `selection` holds to the web address `uri`, the
+    /// text becoming `text` (표시할 문자열); with no selection `text` goes in at the caret.
+    InsertHyperlink {
+        selection: EditSelection,
+        text: String,
+        uri: String,
+    },
+    /// 하이퍼링크 고치기 of the link holding the caret at `position`.
+    EditHyperlink {
+        position: EditPosition,
+        text: String,
+        uri: String,
+    },
+    /// 하이퍼링크 지우기: the link holding `position` goes; its text takes back its look.
+    RemoveHyperlink {
+        position: EditPosition,
+    },
     /// Adds or removes a row or column of the table holding `cell`.
     EditTable {
         cell: EditTarget,
@@ -537,6 +554,12 @@ pub struct ClickHere {
     pub memo: String,
     pub name: String,
     pub form_editable: bool,
+}
+/// A 하이퍼링크 as its dialog shows it: 표시할 문자열 and the web address.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Hyperlink {
+    pub text: String,
+    pub uri: String,
 }
 /// A 개요 문단 of 개요 보기: its 수준 (1–7), its number as drawn, and its text.
 #[derive(Debug, Clone, PartialEq, Serialize)]
