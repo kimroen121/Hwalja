@@ -7,6 +7,7 @@ struct Options {
     let actual: URL
     let channelThreshold: Int
     let maximumDifference: Double?
+    let differenceDirectory: URL?
 }
 
 func fail(_ message: String) -> Never {
@@ -17,10 +18,11 @@ func fail(_ message: String) -> Never {
 func options() -> Options {
     let arguments = Array(CommandLine.arguments.dropFirst())
     guard arguments.count >= 2, !arguments[0].isEmpty, !arguments[1].isEmpty else {
-        fail("사용법: compare-pages.swift <한컴 PNG 폴더> <활자 PNG 폴더> [--threshold 0...255] [--max-diff-percent 0...100]")
+        fail("사용법: compare-pages.swift <한컴 PNG 폴더> <활자 PNG 폴더> [--threshold 0...255] [--max-diff-percent 0...100] [--diff-dir 폴더]")
     }
     var threshold = 8
     var maximum: Double?
+    var differenceDirectory: URL?
     var index = 2
     while index < arguments.count {
         guard index + 1 < arguments.count else { fail("\(arguments[index]) 값이 없습니다") }
@@ -35,6 +37,9 @@ func options() -> Options {
                 fail("--max-diff-percent는 0...100이어야 합니다")
             }
             maximum = value
+        case "--diff-dir":
+            guard !arguments[index + 1].isEmpty else { fail("--diff-dir 폴더가 비었습니다") }
+            differenceDirectory = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
         default:
             fail("알 수 없는 옵션: \(arguments[index])")
         }
@@ -42,7 +47,8 @@ func options() -> Options {
     }
     return Options(reference: URL(fileURLWithPath: arguments[0], isDirectory: true),
                    actual: URL(fileURLWithPath: arguments[1], isDirectory: true),
-                   channelThreshold: threshold, maximumDifference: maximum)
+                   channelThreshold: threshold, maximumDifference: maximum,
+                   differenceDirectory: differenceDirectory)
 }
 
 func pngs(in directory: URL) -> [URL] {
@@ -81,12 +87,32 @@ func rgba(_ url: URL) -> (width: Int, height: Int, bytes: [UInt8]) {
     return (width, height, Array(UnsafeBufferPointer(start: data, count: height * normalized.bytesPerRow)))
 }
 
+func writeDifference(_ bytes: [UInt8], width: Int, height: Int, to url: URL) {
+    guard let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                       isPlanar: false, colorSpaceName: .deviceRGB,
+                                       bytesPerRow: width * 4, bitsPerPixel: 32),
+          let destination = image.bitmapData else { fail("차이 이미지를 만들 수 없습니다") }
+    bytes.withUnsafeBytes { source in
+        destination.update(from: source.bindMemory(to: UInt8.self).baseAddress!, count: bytes.count)
+    }
+    guard let png = image.representation(using: .png, properties: [:]) else {
+        fail("차이 PNG를 만들 수 없습니다: \(url.path)")
+    }
+    do { try png.write(to: url, options: .atomic) }
+    catch { fail("차이 PNG를 저장할 수 없습니다: \(url.path)") }
+}
+
 let option = options()
 let references = pngs(in: option.reference)
 let actuals = pngs(in: option.actual)
 guard !references.isEmpty else { fail("기준 폴더에 PNG가 없습니다") }
 guard references.count == actuals.count else {
     fail("쪽 수가 다릅니다: 기준 \(references.count)쪽, 활자 \(actuals.count)쪽")
+}
+if let directory = option.differenceDirectory {
+    do { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+    catch { fail("차이 이미지 폴더를 만들 수 없습니다: \(directory.path)") }
 }
 
 var failed = false
@@ -101,11 +127,19 @@ for (page, pair) in zip(references, actuals).enumerated() {
         continue
     }
     var different = 0
+    var differenceBytes = option.differenceDirectory == nil ? [] : [UInt8](repeating: 0, count: reference.bytes.count)
     for pixel in 0 ..< reference.width * reference.height {
         let offset = pixel * 4
-        if (0 ..< 4).contains(where: {
-            abs(Int(reference.bytes[offset + $0]) - Int(actual.bytes[offset + $0])) > option.channelThreshold
-        }) { different += 1 }
+        let delta = (0 ..< 4).map {
+            abs(Int(reference.bytes[offset + $0]) - Int(actual.bytes[offset + $0]))
+        }.max() ?? 0
+        if delta > option.channelThreshold {
+            different += 1
+            if !differenceBytes.isEmpty {
+                differenceBytes[offset] = 255
+                differenceBytes[offset + 3] = UInt8(max(96, delta))
+            }
+        }
     }
     let pixels = reference.width * reference.height
     let percent = Double(different) * 100 / Double(pixels)
@@ -113,6 +147,10 @@ for (page, pair) in zip(references, actuals).enumerated() {
                  pixels, pair.0.lastPathComponent, pair.1.lastPathComponent))
     totalDifferent += different
     totalPixels += pixels
+    if let directory = option.differenceDirectory {
+        writeDifference(differenceBytes, width: reference.width, height: reference.height,
+                        to: directory.appendingPathComponent(String(format: "diff-%03d.png", page + 1)))
+    }
     if let maximum = option.maximumDifference, percent > maximum { failed = true }
 }
 
