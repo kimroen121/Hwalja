@@ -13,8 +13,8 @@ fn normalize(paragraphs: &mut [Paragraph]) {
         // IR-only axis of the stored line segments, rebuilt with them.
         p.hwpx_axis_shift = 0;
         p.source_line_seg_vertical_pos = None;
-        p.single_line_overflow_memo = Default::default();
         p.layout_only_fill_lines = 0;
+        p.layout_space_metrics.clear();
         for c in &mut p.controls {
             if let Control::Table(t) = c {
                 for cell in &mut t.cells {
@@ -114,7 +114,6 @@ fn edited_paragraphs<'a>(
                     .paragraphs
             }
             Some(Control::Table(table)) => {
-                table.text_reflowed_after_edit = false;
                 if c.cell == commands::CAPTION {
                     &mut table
                         .caption

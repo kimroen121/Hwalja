@@ -428,6 +428,8 @@ impl EditSession {
         self.core.show_paragraph_marks = paragraph;
         self.core.show_control_codes = control;
         self.core.show_transparent_borders = borders;
+        // 투명 선 is drawn into the cached page trees.
+        self.core.invalidate_page_tree_cache();
         let rendered = self.render(0, u32::MAX)?;
         self.publish(rendered, self.selection.clone());
         Ok(self.reply())

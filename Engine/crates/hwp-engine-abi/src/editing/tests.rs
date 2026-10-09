@@ -1703,7 +1703,7 @@ fn format_rejects_empty_changes() {
 fn a_document_locked_with_a_password_opens_with_it_and_saves_locked() {
     for format in ["hwp", "hwpx"] {
         let plain = DocumentCore::from_bytes(&plain_document(format, false)).unwrap();
-        let mut core = plain;
+        let core = plain;
         let locked = if format == "hwp" {
             core.export_hwp_with_adapter_with_password(b"1234").unwrap()
         } else {

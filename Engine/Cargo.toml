@@ -3,4 +3,4 @@ members = ["crates/hwp-engine-abi"]
 resolver = "2"
 
 [patch.crates-io]
-svg2pdf = { path = "../build/svg2pdf" }
+svg2pdf = { path = "../build/rhwp/vendor/svg2pdf" }
