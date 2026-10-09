@@ -256,6 +256,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Replaces the selection with typed text. Keystrokes that arrive while earlier work is
     /// still running join one edit, so typing never falls behind the engine.
     func type(_ text: String, _ undoManager: UndoManager?) {
+        defer { linkTypedAddress(after: text, undoManager) }
         if let typing, typing.work == queued {
             typing.text.text += text
             return
@@ -266,6 +267,38 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             return selection.map { .replace($0, text: typed.text) }
         }
         typing = (queued, typed)
+    }
+
+    /// 웹 주소 자동 연결: a web address just ended by a space or Enter becomes a 하이퍼링크,
+    /// as its own edit, so one undo takes the link back off.
+    func linkTypedAddress(after typed: String, _ undoManager: UndoManager?) {
+        guard let last = typed.unicodeScalars.last, CharacterSet.whitespacesAndNewlines.contains(last) else { return }
+        enqueue { document in
+            guard let caret = document.selection?.focus, caret == document.selection?.anchor,
+                  caret.target.note == nil, caret.target.headerFooter == nil else { return }
+            // After Enter, the address ends the paragraph before.
+            var target = caret.target
+            if caret.scalar == 0 {
+                if var cell = target.cell, cell.paragraph > 0 {
+                    cell.paragraph -= 1
+                    target.cell = cell
+                } else if target.cell == nil, target.paragraph > 0 {
+                    target.paragraph -= 1
+                } else {
+                    return
+                }
+            }
+            let text = try await document.paragraph(target).text
+            let before = caret.scalar == 0 ? text : String(String.UnicodeScalarView(text.unicodeScalars.prefix(Int(caret.scalar))))
+            guard let found = Hyperlink.typedAddress(before) else { return }
+            let at = { (scalar: Int) in EditPosition(target: target, scalar: UInt32(scalar)) }
+            guard try await document.hyperlink(at: at(found.start + 1)) == nil else { return }
+            let word = String(String.UnicodeScalarView(text.unicodeScalars.dropFirst(found.start).prefix(found.end - found.start)))
+            let kept = document.selection
+            try await document.run(.insertHyperlink(EditSelection(anchor: at(found.start), focus: at(found.end)), text: word, uri: found.uri))
+            document.selection = kept
+            document.registerHistory(.undo, undoManager)
+        }
     }
 
     /// Deletes the selection, or the text between the caret and where `motion` takes it.
@@ -299,7 +332,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             let end = EditPosition(target: start.target, scalar: start.scalar + UInt32(typed.text.unicodeScalars.count))
             document.marked = commit || typed.text.isEmpty ? nil : EditSelection(anchor: start, focus: end)
         }
-        if !commit { composing = (queued, typed) }
+        if !commit { composing = (queued, typed) } else { linkTypedAddress(after: text, undoManager) }
     }
     /// Keeps the composing text as typed and ends the composition.
     func endComposition() {

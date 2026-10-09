@@ -1144,6 +1144,29 @@ struct ClickHere: Decodable, Hashable, Sendable {
 struct Hyperlink: Decodable, Hashable, Sendable {
     var text: String
     var uri: String
+
+    /// An http or https address with a host, as rhwp writes links.
+    static func isWebAddress(_ uri: String) -> Bool {
+        guard !uri.contains(where: \.isWhitespace), let url = URL(string: uri),
+              ["http", "https"].contains(url.scheme?.lowercased()), url.host?.isEmpty == false else { return false }
+        return true
+    }
+    /// 웹 주소 자동 연결: the web address `text` ends with, before the spaces after it, as
+    /// scalar offsets and the address to link; a trailing mark of punctuation stays out.
+    static func typedAddress(_ text: String) -> (start: Int, end: Int, uri: String)? {
+        let scalars = Array(text.unicodeScalars)
+        var end = scalars.count
+        while end > 0, CharacterSet.whitespacesAndNewlines.contains(scalars[end - 1]) { end -= 1 }
+        var start = end
+        while start > 0, !CharacterSet.whitespacesAndNewlines.contains(scalars[start - 1]) { start -= 1 }
+        while end > start, ".,;:!?)]}\"'".unicodeScalars.contains(scalars[end - 1]) { end -= 1 }
+        let word = String(String.UnicodeScalarView(scalars[start..<end]))
+        let lower = word.lowercased()
+        let uri = lower.hasPrefix("http://") || lower.hasPrefix("https://") ? word
+            : lower.hasPrefix("www.") ? "http://" + word : nil
+        guard let uri, isWebAddress(uri) else { return nil }
+        return (start, end, uri)
+    }
 }
 
 /// 개요 보기's 개요 문단: its 수준 (1–7), its number as drawn, and its text.

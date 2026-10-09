@@ -416,17 +416,11 @@ struct HyperlinkSheet: View {
         _text = State(initialValue: editing.text)
         _uri = State(initialValue: editing.uri)
     }
-    /// An http or https address with a host, as rhwp writes links.
-    static func webAddress(_ uri: String) -> Bool {
-        guard !uri.contains(where: \.isWhitespace), let url = URL(string: uri),
-              ["http", "https"].contains(url.scheme?.lowercased()), url.host?.isEmpty == false else { return false }
-        return true
-    }
     var body: some View {
         DialogFrame(editing.existing == nil ? "하이퍼링크" : "하이퍼링크 고치기",
                     confirmTitle: editing.existing == nil ? "넣기" : "고치기",
                     canConfirm: !text.trimmingCharacters(in: .whitespaces).isEmpty && !text.contains(where: \.isNewline)
-                        && Self.webAddress(uri)) {
+                        && Hyperlink.isWebAddress(uri)) {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     FieldLabel("표시할 문자열")

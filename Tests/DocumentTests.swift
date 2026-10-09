@@ -37,6 +37,29 @@ struct DocumentTests {
         #expect(!reopened.pages.isEmpty)
     }
 
+    /// 웹 주소 자동 연결: a web address ended by a space or Enter becomes a link, which one
+    /// undo takes off.
+    @Test func typedWebAddressesBecomeLinks() async throws {
+        #expect(Hyperlink.typedAddress("보기 https://example.com/a. ")! == (3, 24, "https://example.com/a"))
+        #expect(Hyperlink.typedAddress("www.hancom.com\n")!.uri == "http://www.hancom.com")
+        #expect(Hyperlink.typedAddress("example.com ") == nil && Hyperlink.typedAddress("https:// ") == nil)
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type("보기 https://example.com ", undo)
+        await document.settle()
+        let link = try await document.hyperlink(at: EditPosition(target: body, scalar: 5))
+        #expect(link?.uri == "https://example.com" && link?.text == "https://example.com")
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 23)))
+        undo.undo()
+        await document.settle()
+        #expect(try await document.hyperlink(at: EditPosition(target: body, scalar: 5)) == nil)
+        #expect(try await document.paragraph(body).text.hasPrefix("보기 https://example.com "))
+        document.type("www.hancom.com\n", undo)
+        await document.settle()
+        #expect(try await document.hyperlink(at: EditPosition(target: body, scalar: 25))?.uri == "http://www.hancom.com")
+    }
+
     /// A save that starts after an edit was accepted must not overtake that edit.
     @Test(arguments: ["hwp", "hwpx"])
     func immediateSaveIncludesQueuedTyping(ext: String) async throws {
@@ -238,9 +261,9 @@ struct DocumentTests {
         let titles = MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true), link: link).compactMap { $0?.title }
         #expect(titles.contains("하이퍼링크 고치기…") && titles.contains("하이퍼링크 지우기"))
         #expect(!MenuItems.quickMenu(Viewer(), EditingContext(hasSelection: true)).contains { $0?.title == "하이퍼링크 지우기" })
-        #expect(HyperlinkSheet.webAddress("https://www.hancom.com/a?b#c") && HyperlinkSheet.webAddress("HTTP://x.kr"))
-        #expect(!HyperlinkSheet.webAddress("www.hancom.com") && !HyperlinkSheet.webAddress("mailto:a@b.c")
-            && !HyperlinkSheet.webAddress("https:// a.b") && !HyperlinkSheet.webAddress("https://"))
+        #expect(Hyperlink.isWebAddress("https://www.hancom.com/a?b#c") && Hyperlink.isWebAddress("HTTP://x.kr"))
+        #expect(!Hyperlink.isWebAddress("www.hancom.com") && !Hyperlink.isWebAddress("mailto:a@b.c")
+            && !Hyperlink.isWebAddress("https:// a.b") && !Hyperlink.isWebAddress("https://"))
     }
 
     @Test func quickMenuOffersDeletionForObjects() {

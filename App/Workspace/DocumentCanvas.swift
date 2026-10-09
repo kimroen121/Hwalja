@@ -1065,7 +1065,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             await model.settle()
             guard model.object == nil, let selection = model.selection, selection.anchor == selection.focus,
                   let link = try? await model.hyperlink(at: selection.focus),
-                  HyperlinkSheet.webAddress(link.uri), let url = URL(string: link.uri) else { return }
+                  Hyperlink.isWebAddress(link.uri), let url = URL(string: link.uri) else { return }
             NSWorkspace.shared.open(url)
         }
     }
@@ -1288,6 +1288,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private func replaceSelection(with text: String) {
         commitComposition()
         model?.edit(undoManager) { selection in selection.map { .replace($0, text: text) } }
+        model?.linkTypedAddress(after: text, undoManager)
     }
 
     /// Moves the caret a screenful up or down, scrolling with it.
