@@ -20,6 +20,13 @@ let package = Package(
             exclude: ["Resources"],
             linkerSettings: [.unsafeFlags(["-L\(root)/build"])]
         ),
+        // Quick Look preview extension; shares the app's engine and page drawing (Preview/Editing).
+        .executableTarget(
+            name: "HwaljaPreview",
+            dependencies: ["CHwpEngine", "SwiftMath"],
+            path: "Preview",
+            linkerSettings: [.unsafeFlags(["-L\(root)/build", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
         .testTarget(
             name: "HwaljaTests",
             dependencies: ["Hwalja"],

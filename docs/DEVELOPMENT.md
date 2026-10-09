@@ -25,6 +25,7 @@ Xcode에서 작업하려면 `Package.swift`를 엽니다. 먼저 `make engine`�
 | 경로 | 내용 |
 |---|---|
 | `App/` | SwiftUI 문서 앱: `Document/`(`HwpDocument`: 열기·편집·저장), `Workspace/`(창, 편집 캔버스), `Editing/`(엔진 세션, 프로토콜, 좌표) |
+| `Preview/` | Finder 훑어보기 확장. `Editing/`은 `App/Editing`을 가리키는 링크라 앱과 같은 엔진과 그리기 코드를 씁니다 |
 | `Engine/` | rhwp를 감싸는 Rust C ABI (`hwp-engine-abi`). `editing/`은 편집 세션(명령, 기록, 보존 검사, 좌표, `ffi`) |
 | `Vendor/` | 체크섬으로 검증하는 rhwp 소스 압축본과 패치 (`Vendor/README.md`) |
 | `Tests/` | Swift 테스트와 생성된 공개 fixture |
