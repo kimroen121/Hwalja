@@ -9,7 +9,7 @@
   - ○ rhwp에 있음: 엔진(rhwp)에 함수가 있어 앱에 연결하면 된다.
   - △ 엔진 작업: rhwp에 없거나 고쳐야 한다. 앱만으로 되는 일이면 메모에 적었다.
   - — 범위 밖: Windows 전용, 한컴 서비스, macOS 기능으로 대신하는 것. 메모에 이유를 적었다.
-- 상태는 2026-10-08에 코드, 지난 화면 점검 기록, 2024 대화 상자 탭 구성과 대조해 매겼다.
+- 상태는 2026-10-08에 코드, 지난 화면 점검 기록, 2024 대화 상자 탭 구성과 대조해 매겼고, 2026-10-09에 rhwp 0.8.7의 공개 함수와 다시 대조했다. ○의 메모에 쓸 rhwp 함수를 적었다. rhwp에 있는 기능은 앱에서 따로 만들지 않고 그 함수를 쓴다.
 - 기능을 끝내면 상태를 바꾸고, 메모에서 끝난 내용을 지운다.
 
 
@@ -31,12 +31,12 @@
 | 새 문서 | ◐ | `file/new/new.htm` | 새 문서 ●. 새 탭은 macOS 창 탭. 한/워드·한/셀·한/쇼 문서는 범위 밖 |
 | 문서마당 | △ | `file/madang/madang(madang).htm` | 서식 파일 묶음이 필요. 앱 번들 서식은 사용권 확인 후 |
 | 문서 시작 도우미 | — | `file/start_screen.htm` | macOS 열기 패널과 최근 사용 항목으로 대신 |
-| 불러오기 | ◐ | `file/open/open.htm` | HWP·HWPX ●, 암호 문서 ●. 텍스트·DBF 불러오기 △ |
+| 불러오기 | ◐ | `file/open/open.htm` | HWP·HWPX ●, 암호 문서 ●. 한/글 97(HWP 3.0)·HWPML(.hml) ○(rhwp가 읽음, 앱의 열 수 있는 형식에 없음). 텍스트·DBF 불러오기 △ |
 | PDF를 오피스 문서로 변환하기 | — | `file/open/open(pdf).htm` | 한컴 변환 서비스 |
 | 그림을 오피스 문서로 변환하기 | — | `file/open/open(picture)_ocr.htm` | 한컴 OCR |
 | XML 문서 | — | `file/xml_document.htm` |  |
-| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기 △ |
-| 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 저장 설정 △, 인터넷 문서·텍스트 파일·한/글 97·XML △, 블록 저장하기 △ |
+| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기 ○ `render_page_png_native` |
+| 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 텍스트 파일 ○ `text_file_unicode_json`(CP949는 `text_file_json`), 인터넷 문서 ○ `render_page_html_native`(쪽마다), HWPML ○ `export_hml_native`(HML에서 연 문서만). 저장 설정·한/글 97 △, 블록 저장하기 ○ `export_selection_html_native`(HTML만) |
 | PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
 | 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●·글꼴 정보(언어별 사용된/대체된 글꼴, 글꼴 바꾸기) ●·그림 정보(그림 목록, 그림 삽입·모두 삽입, 삽입 그림 저장하기, 모든 삽입 그림 저장하기, 그림 목록 저장, 그림 바꾸기·경로 바꾸기·그림 확장자 바꾸기·그림 경로 복사) ●. 샌드박스라 그림 삽입은 파일을, 모두 삽입은 폴더를 골라 줘야 함, 문서 요약 △(rhwp에 요약 쓰기 없음), 저작권 △ |
@@ -68,7 +68,7 @@
 | 지우기 | ● | `edit/erase.htm` |  |
 | 조판 부호 지우기 | ● | `edit/erase_code.htm` |  |
 | 모두 선택 | ● | `edit/select_all.htm` |  |
-| 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기·찾아가기(쪽) ●. 찾기 선택 사항(대소문자, 온전한 낱말 등)·찾아가기의 줄·구역·책갈피·개체 △ |
+| 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기·찾아가기(쪽) ●. 대소문자 구분·표 안까지 찾기·찾은 개수 ○ `search_text_native`·`search_all_text_native`. 온전한 낱말 등 나머지 선택 사항 △(앱이 찾은 결과를 거르면 됨). 찾아가기의 책갈피 ○ `get_bookmarks_native`, 줄·구역·개체 △ |
 | 글자 바꾸기 | △ | `edit/change_characters/change_characters.htm` | 대문자/소문자·전각/반각·일어·간체/번체는 앱에서 바꿔 넣으면 됨. 한자로 바꾸기는 macOS 입력기 |
 | 정렬 | △ | `tools/sort/sort.htm` | 문단 정렬. 엔진에 문단 순서 바꾸기 명령 필요 |
 | 고치기 | ◐ | `edit/modification.htm` | 선택한 개체의 속성 열기 ● |
@@ -121,13 +121,13 @@
 | 주석 | ◐ | `insert/annotations/annotations.htm` | 각주·미주 넣기 ●. 각주/미주 모양 ● (번호 모양·장식 문자·구분선·여백·번호 매기기; 번호 모양 「기호」, 번호 매기기 「쪽마다 새로 시작」, 각주 내용 번호 속성, 각주 세로 위치, 단 각주 위치, 미주 위치는 △), 각주↔미주 △, 주석 저장하기 △, 숨은 설명 △ |
 | 날짜/시간/파일 이름 | △ | `insert/date/date.htm` | 문자열 넣기는 앱 쪽 작업, 코드는 필드 필요 |
 | 덧말 넣기 | △ | `insert/addsummary.htm` |  |
-| 문서 끼워 넣기 | △ | `insert/insert_file.htm` | 다른 문서의 본문을 커서 위치에. 붙이기 경로로 만들 수 있음 |
+| 문서 끼워 넣기 | ○ | `insert/insert_file.htm` | `paste_foreign_document_native`(글꼴·스타일 대응표를 만들어 커서에서 문단을 나눠 끼움) |
 | 문자표 | ◐ | `insert/character_set.htm` | 문자표 ●(유니코드). 사용자 문자표·한/글 문자표·완성형 문자표 △ |
 | 한자 입력 | — | `insert/chinese_input.htm` | macOS 입력기 |
-| 메모 | △ | `insert/memo/memo.htm` | rhwp에 메모 없음 |
+| 메모 | △ | `insert/memo/memo.htm` | rhwp는 메모 필드를 읽고 저장하지만 넣기·그리기가 없음 |
 | 상호 참조 | △ | `insert/cross_reference/cross_reference.htm` |  |
 | 책갈피 | ● | `insert/bookmark/bookmark.htm` | 넣기·이동·이름 바꾸기·지우기 |
-| 하이퍼링크 | △ | `insert/hyperlink/hyperlink.htm` | rhwp에 넣기 없음 |
+| 하이퍼링크 | ○ | `insert/hyperlink/hyperlink.htm` | 넣기 `insert_hyperlink_native`, 고치기 `update_hyperlink_native`·`replace_hyperlink_text_native`, 지우기 `remove_hyperlink_native`, 목록 `hyperlinks_native`·`page_hyperlinks_native`. 웹 주소만(문서 안 책갈피로 가는 연결은 △) |
 
 ## 서식
 
@@ -146,7 +146,7 @@
 | 한 수준 증가/감소 | ● | `format/outline/outline_numbering(depth).htm` |  |
 | 스타일 | ◐ | `format/style/style.htm` | 서식 도구 상자의 스타일 고르기 ●. 스타일 대화 상자(F6): 스타일 목록, 추가하기·편집하기(이름, 영문 이름, 종류, 다음 문단에 적용할 스타일, 문단 모양·글자 모양)·지우기(바꿀 스타일 선택)·커서 위치의 스타일로 바꾸기·한 줄 위로/아래로 이동하기, 문단 모양 정보·글자 모양 정보·현재 커서 위치 스타일 ●. 문단 모양 미리 보기, 글머리표/문단 번호 단추·정보, 글자 스타일 해제, 스타일 가져오기·내보내기는 △ |
 | 스타일마당 | △ | `format/style_templates/style_templates.htm` | 서식 파일 자료 필요 |
-| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 2024 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 선·그림 탭, 도형의 선(사각형 모서리 곡률 포함)·채우기·글상자(안쪽 여백·세로 정렬)·그림자(종류·색·이동·투명도) 탭 ●. 그림자 중 작게·크게·뒤·앞은 옮긴 모양으로만 그림, 글상자의 한 줄로 입력·세로쓰기·필드, 호 테두리 ○. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
+| 개체 속성 | ◐ | `insert/objectattribute/objectattribute.htm` | 개체 보호하기 ○ `set_control_lock`. 2024 탭은 기본·여백/캡션·선·채우기·글상자·그림자·그림·수식·글맵시. 앱은 기본·여백/캡션, 그림의 선·그림 탭, 도형의 선(사각형 모서리 곡률 포함)·채우기·글상자(안쪽 여백·세로 정렬)·그림자(종류·색·이동·투명도) 탭 ●. 그림자 중 작게·크게·뒤·앞은 옮긴 모양으로만 그림, 글상자의 한 줄로 입력·세로쓰기·필드, 호 테두리 ○. 너비·높이 기준과 본문 위치 △(rhwp 속성 JSON이 받지 않음) |
 
 ## 쪽
 
@@ -158,14 +158,14 @@
 | 글자 방향 | △ | `format/vertical.htm` | 세로쓰기 |
 | 쪽 테두리/배경 | ● | `format/pageborder/page_border.htm` | 테두리(선 종류 바로 적용, 위치, 머리말·꼬리말 포함, 적용 쪽)와 배경의 색 채우기·채울 영역. 홀수/짝수 쪽, 그러데이션·그림 채우기, 적용 범위 「새 구역으로」는 △ (rhwp가 홀짝 쪽 테두리를 그리지 않음) |
 | 바탕쪽 | △ | `format/masterpages/master_pages.htm` | rhwp에 바탕쪽 편집 없음(그리기는 됨) |
-| 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf` |
+| 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf`, 쪽 번호·현재 쪽·전체 쪽수 ○ `insert_auto_number_at_cursor` |
 | 쪽 번호 매기기 | △ | `format/pagenumber.htm` | 앱에는 머리말·꼬리말 모양 목록의 쪽 번호만 있다. [쪽 번호 매기기] 대화 상자(번호 위치 10가지·번호 모양)는 없음. rhwp에 쪽 번호 위치(`PageNumberPos`) 모델과 그리기는 있고 넣기 명령이 없다(새 번호로 시작처럼 패치) |
 | 새 번호로 시작 | ● | `format/new_number.htm` |  |
 | 현재 쪽만 감추기 | ● | `format/hide.htm` |  |
 | 줄 번호 | △ | `view/line_number.htm` |  |
 | 쪽 나누기 | ● | `format/break/page_break.htm` |  |
 | 단 나누기 | ● | `format/break/column_break.htm` |  |
-| 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 왼쪽·오른쪽 △, 다단 설정 대화 상자 △(rhwp가 구역의 줄을 첫 단 정의 너비로 나눔) |
+| 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 다단 설정 대화 상자의 단 종류(일반·배분·평행)·너비 같게·간격 ○ `set_column_def_native`. 왼쪽·오른쪽(단 너비 따로)·구분선 △, rhwp가 구역의 줄을 첫 단 정의 너비로 나눔 |
 | 단 설정 나누기 | △ | `format/break/new_columns.htm` | 단 정의가 둘 이상인 구역의 조판부터 |
 | 구역 설정 | ● | `format/section/section.htm` | 시작 쪽 번호(홀수·짝수는 번호만 건너뛰고 빈 쪽은 넣지 않음), 개체 시작 번호, 첫 쪽에만 감추기, 빈 줄 감추기, 단 사이 간격, 기본 탭 간격. 적용 범위 「새 구역으로」는 구역 나누기와 함께 △ |
 | 구역 나누기 | △ | `format/break/section_break.htm` |  |
@@ -185,7 +185,7 @@
 | 배포용 문서로 저장 | △ | `file/send_to_mail/publish(save).htm` |  |
 | 배포용 문서 편집 | — | `file/send_to_mail/publish(edit).htm` | 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요) |
 | 배포용 문서 암호 변경/해제 | △ | `file/send_to_mail/publish(cancel).htm` |  |
-| 개인 정보 보호 | △ | `security/user_info_security/user_info_security.htm` | rhwp `scan_pii`로 찾기는 됨, 보호(암호화) 저장 △ |
+| 개인 정보 보호 | △ | `security/user_info_security/user_info_security.htm` | 찾기 ○ `scan_pii`. 보호(암호화) 저장 △ |
 | 문서 보안 설정 | △ | `security/document_security.htm` |  |
 
 ## 검토
@@ -216,7 +216,7 @@
 | 번역 | — | `view/workwindow/workwindow(translation).htm#bc-1` | macOS 번역 서비스 |
 | 빠른 교정 | △ | `tools/qcorrect/qcorrect.htm` | macOS 텍스트 대치로 |
 | 한컴 애셋 | — | `tools/asset.htm` |  |
-| 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` |  |
+| 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` | 누름틀 값 채우기 ○ `set_field_value_by_name`·`fill_template_native`, 표 줄 반복 채우기 ○ `repeat_and_fill_table_rows_native`. 자료 파일(DBF·한/셀·CSV) 읽기와 출력 방향 △ |
 | 스크립트 매크로 | — | `tools/macro/macro.htm` |  |
 | 차례/색인 | △ | `tools/index/index.htm` | 개요 탐색 ○ `get_outline_navigation_native`가 시작점 |
 | 참고 문헌 | △ | `tools/bibliography/bibliography.htm` |  |
@@ -272,7 +272,7 @@
 | 개체 크기 조절 | ● | `draw/drawing(size).htm` |  |
 | 개체 기울이기 | △ | `draw/drawing(incline).htm` |  |
 | 개체 복사하기/붙이기 | ● | `draw/drawing(copy).htm` |  |
-| 개체를 그림 파일로 저장하기 | △ | `draw/drawing(save).htm` | 표시 목록을 그림으로 그리면 됨 |
+| 개체를 그림 파일로 저장하기 | △ | `draw/drawing(save).htm` | 앱이 그 개체의 표시 목록을 그림으로 그리면 됨 |
 
 ## 추가 기능
 
