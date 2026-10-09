@@ -234,6 +234,14 @@ pub(super) fn body_or_cell(t: &EditTarget) -> Result<(), EditError> {
         Ok(())
     }
 }
+/// A 누름틀's 안내문 (not blank), 메모 and 이름, within their lengths and without controls.
+fn click_here_text(guide: &str, memo: &str, name: &str) -> Result<(), EditError> {
+    let fits = |s: &str, n: usize| s.chars().count() <= n && !s.chars().any(char::is_control);
+    if guide.trim().is_empty() || !fits(guide, 1_000) || !fits(memo, 1_000) || !fits(name, 255) {
+        return Err(EditError::InvalidInput);
+    }
+    Ok(())
+}
 pub(super) fn body_only(t: &EditTarget) -> Result<(), EditError> {
     if t.cell.is_some() {
         return Err(EditError::UnsupportedTarget);
@@ -460,17 +468,7 @@ impl EditSession {
             } => {
                 self.click_here_at(position)?
                     .ok_or(EditError::UnsupportedTarget)?;
-                let fits = |s: &String, n: usize| {
-                    s.chars().count() <= n && !s.chars().any(char::is_control)
-                };
-                if guide.trim().is_empty()
-                    || !fits(guide, 1_000)
-                    || !fits(memo, 1_000)
-                    || !fits(name, 255)
-                {
-                    return Err(EditError::InvalidInput);
-                }
-                Ok(())
+                click_here_text(guide, memo, name)
             }
             EditCommand::InsertClickHere {
                 position,
@@ -484,17 +482,7 @@ impl EditSession {
                     return Err(EditError::UnsupportedTarget);
                 }
                 self.validate_position(position)?;
-                let fits = |s: &String, n: usize| {
-                    s.chars().count() <= n && !s.chars().any(char::is_control)
-                };
-                if guide.trim().is_empty()
-                    || !fits(guide, 1_000)
-                    || !fits(memo, 1_000)
-                    || !fits(name, 255)
-                {
-                    return Err(EditError::InvalidInput);
-                }
-                Ok(())
+                click_here_text(guide, memo, name)
             }
             EditCommand::Break { position, .. } => {
                 body_only(&position.target)?;

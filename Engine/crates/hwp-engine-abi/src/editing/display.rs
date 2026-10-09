@@ -834,6 +834,29 @@ fn transform(text: &str) -> Option<Op> {
         m: [a, b, c, d, e, f],
     })
 }
+/// Fill (black by default), stroke (none by default) and stroke width (1 by default).
+fn paint(n: roxmltree::Node) -> Option<(Option<u32>, Option<u32>, f64)> {
+    fn color(text: Option<&str>, default: Option<u32>) -> Option<Option<u32>> {
+        match text {
+            None => Some(default),
+            Some("none") => Some(None),
+            Some(text) => {
+                let hex = text.strip_prefix('#')?;
+                (hex.len() == 6).then_some(())?;
+                Some(Some(u32::from_str_radix(hex, 16).ok()?))
+            }
+        }
+    }
+    let width = match n.attribute("stroke-width") {
+        Some(w) => w.parse().ok()?,
+        None => 1.0,
+    };
+    Some((
+        color(n.attribute("fill"), Some(0))?,
+        color(n.attribute("stroke"), None)?,
+        width,
+    ))
+}
 
 #[cfg(test)]
 mod tests {
@@ -886,27 +909,4 @@ mod tests {
         assert!(regular < bold);
         assert!(bold < italic);
     }
-}
-/// Fill (black by default), stroke (none by default) and stroke width (1 by default).
-fn paint(n: roxmltree::Node) -> Option<(Option<u32>, Option<u32>, f64)> {
-    fn color(text: Option<&str>, default: Option<u32>) -> Option<Option<u32>> {
-        match text {
-            None => Some(default),
-            Some("none") => Some(None),
-            Some(text) => {
-                let hex = text.strip_prefix('#')?;
-                (hex.len() == 6).then_some(())?;
-                Some(Some(u32::from_str_radix(hex, 16).ok()?))
-            }
-        }
-    }
-    let width = match n.attribute("stroke-width") {
-        Some(w) => w.parse().ok()?,
-        None => 1.0,
-    };
-    Some((
-        color(n.attribute("fill"), Some(0))?,
-        color(n.attribute("stroke"), None)?,
-        width,
-    ))
 }

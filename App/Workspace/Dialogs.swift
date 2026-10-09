@@ -18,15 +18,22 @@ extension Viewer {
     /// Asks for an image file and puts it at the caret.
     func insertPicture() {
         guard document?.selection != nil else { return NSSound.beep() }
+        chooseImage { [weak self] data, name in
+            guard let self else { return }
+            document?.insertPicture(data, name: name, undoManager)
+        }
+    }
+    /// Asks for an image file and hands over its bytes and file name.
+    private func chooseImage(_ chosen: @escaping (Data, String) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.image]
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else { return }
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
-            document?.insertPicture(data, name: url.lastPathComponent, undoManager)
+            chosen(data, url.lastPathComponent)
         }
     }
     /// The name a file saved from this document starts with.
@@ -158,14 +165,8 @@ extension Viewer {
     /// 그림 바꾸기: an image file in place of `object` (the selected picture), at its size.
     func replacePicture(_ object: ObjectRef? = nil) {
         guard let object = object ?? document?.object?.object, object.kind == .picture else { return NSSound.beep() }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else { return }
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
+        chooseImage { [weak self] data, _ in
+            guard let self else { return }
             document?.replacePicture(data, object: object, undoManager)
         }
     }

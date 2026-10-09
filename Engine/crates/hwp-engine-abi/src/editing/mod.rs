@@ -278,112 +278,7 @@ impl EditSession {
         // as it costs a document copy per keystroke.
         #[cfg(test)]
         let before = self.core.document().clone();
-        let start = match &request.command {
-            EditCommand::ReplaceAll { selections, .. } => {
-                selections.first().map(|s| commands::ordered(s).0.clone())
-            }
-            EditCommand::Replace { selection, .. }
-            | EditCommand::Paste { selection, .. }
-            | EditCommand::FormatText { selection, .. }
-            | EditCommand::FormatParagraphs { selection, .. }
-            | EditCommand::ApplyStyle { selection, .. } => {
-                Some(commands::ordered(selection).0.clone())
-            }
-            EditCommand::MergeCells { selection }
-            | EditCommand::SplitCells { selection, .. }
-            | EditCommand::EqualizeCells { selection, .. }
-            | EditCommand::CalculateBlock { selection, .. } => Some(selection.anchor.clone()),
-            EditCommand::Split { position }
-            | EditCommand::MergePrevious { position }
-            | EditCommand::Break { position, .. }
-            | EditCommand::InsertTable { position, .. }
-            | EditCommand::InsertPicture { position, .. }
-            | EditCommand::InsertEquation { position, .. }
-            | EditCommand::InsertShape { position, .. }
-            | EditCommand::InsertNote { position, .. }
-            | EditCommand::InsertClickHere { position, .. }
-            | EditCommand::EditClickHere { position, .. }
-            | EditCommand::EditHyperlink { position, .. }
-            | EditCommand::RemoveHyperlink { position } => Some(position.clone()),
-            EditCommand::InsertDocument { position, .. }
-            | EditCommand::InsertPageCode { position, .. } => Some(position.clone()),
-            EditCommand::InsertHyperlink { selection, .. } => {
-                Some(commands::ordered(selection).0.clone())
-            }
-            EditCommand::EditTable { cell, .. }
-            | EditCommand::FlipTable { cell, .. }
-            | EditCommand::SetCellBorder {
-                selection:
-                    EditSelection {
-                        anchor: EditPosition { target: cell, .. },
-                        ..
-                    },
-                ..
-            }
-            | EditCommand::SetCell { cell, .. } => Some(EditPosition {
-                target: cell.clone(),
-                scalar: 0,
-                upstream: false,
-            }),
-            EditCommand::SetObject { object, .. }
-            | EditCommand::MoveObject { object, .. }
-            | EditCommand::DeleteObject { object }
-            | EditCommand::Order { object, .. }
-            | EditCommand::Ungroup { object }
-            | EditCommand::ReplacePicture { object, .. }
-            | EditCommand::SetPictureLink { object, .. }
-            | EditCommand::MoveLineEnd { object, .. }
-            | EditCommand::SetTextBox { object, .. }
-            | EditCommand::ResizeTable { table: object, .. } => Some(EditPosition {
-                target: EditTarget {
-                    section: object.section,
-                    paragraph: object.paragraph,
-                    cell: None,
-                    note: None,
-                    header_footer: None,
-                },
-                scalar: 0,
-                upstream: false,
-            }),
-            EditCommand::Group { objects } => objects.first().map(|object| EditPosition {
-                target: EditTarget {
-                    section: object.section,
-                    paragraph: object.paragraph,
-                    cell: None,
-                    note: None,
-                    header_footer: None,
-                },
-                scalar: 0,
-                upstream: false,
-            }),
-            EditCommand::NewNumber { position, .. } | EditCommand::AddBookmark { position, .. } => {
-                Some(position.clone())
-            }
-            EditCommand::SetPageHide { target, .. }
-            | EditCommand::ChangeBookmark { target, .. } => Some(EditPosition {
-                target: target.clone(),
-                scalar: 0,
-                upstream: false,
-            }),
-            EditCommand::SetPage { .. }
-            | EditCommand::SetForm { .. }
-            | EditCommand::SetChartData { .. }
-            | EditCommand::SetPageBorder { .. }
-            | EditCommand::SetSection { .. }
-            | EditCommand::SetNoteShape { .. }
-            | EditCommand::AddStyle { .. }
-            | EditCommand::EditStyle { .. }
-            | EditCommand::DeleteStyle { .. }
-            | EditCommand::MoveStyle { .. }
-            | EditCommand::RestyleFromCaret { .. }
-            | EditCommand::ReplaceFont { .. }
-            | EditCommand::EraseCodes { .. }
-            | EditCommand::SetColumns { .. }
-            | EditCommand::DeleteHeaderFooter { .. }
-            | EditCommand::HeaderFooter { .. }
-            | EditCommand::Undo
-            | EditCommand::Redo => None,
-        };
+        let start = request.command.start();
         // A page earlier: joined or shortened text can move back onto the previous page.
         // A command with no place in the text can change any page.
         let from = start.map(|p| self.page_of(&p).map_or(0, |p| p.saturating_sub(1)));
@@ -537,6 +432,110 @@ impl EditSession {
             EditError::Locked
         } else {
             error
+        }
+    }
+}
+impl EditCommand {
+    /// Where in the text the command starts changing the document; `None` for a command
+    /// with no place in it.
+    fn start(&self) -> Option<EditPosition> {
+        // The body paragraph holding an object.
+        let at_object = |object: &ObjectRef| EditPosition {
+            target: EditTarget {
+                section: object.section,
+                paragraph: object.paragraph,
+                cell: None,
+                note: None,
+                header_footer: None,
+            },
+            scalar: 0,
+            upstream: false,
+        };
+        match self {
+            EditCommand::ReplaceAll { selections, .. } => {
+                selections.first().map(|s| commands::ordered(s).0.clone())
+            }
+            EditCommand::Replace { selection, .. }
+            | EditCommand::Paste { selection, .. }
+            | EditCommand::FormatText { selection, .. }
+            | EditCommand::FormatParagraphs { selection, .. }
+            | EditCommand::ApplyStyle { selection, .. } => {
+                Some(commands::ordered(selection).0.clone())
+            }
+            EditCommand::MergeCells { selection }
+            | EditCommand::SplitCells { selection, .. }
+            | EditCommand::EqualizeCells { selection, .. }
+            | EditCommand::CalculateBlock { selection, .. } => Some(selection.anchor.clone()),
+            EditCommand::Split { position }
+            | EditCommand::MergePrevious { position }
+            | EditCommand::Break { position, .. }
+            | EditCommand::InsertTable { position, .. }
+            | EditCommand::InsertPicture { position, .. }
+            | EditCommand::InsertEquation { position, .. }
+            | EditCommand::InsertShape { position, .. }
+            | EditCommand::InsertNote { position, .. }
+            | EditCommand::InsertClickHere { position, .. }
+            | EditCommand::EditClickHere { position, .. }
+            | EditCommand::EditHyperlink { position, .. }
+            | EditCommand::RemoveHyperlink { position } => Some(position.clone()),
+            EditCommand::InsertDocument { position, .. }
+            | EditCommand::InsertPageCode { position, .. } => Some(position.clone()),
+            EditCommand::InsertHyperlink { selection, .. } => {
+                Some(commands::ordered(selection).0.clone())
+            }
+            EditCommand::EditTable { cell, .. }
+            | EditCommand::FlipTable { cell, .. }
+            | EditCommand::SetCellBorder {
+                selection:
+                    EditSelection {
+                        anchor: EditPosition { target: cell, .. },
+                        ..
+                    },
+                ..
+            }
+            | EditCommand::SetCell { cell, .. } => Some(EditPosition {
+                target: cell.clone(),
+                scalar: 0,
+                upstream: false,
+            }),
+            EditCommand::SetObject { object, .. }
+            | EditCommand::MoveObject { object, .. }
+            | EditCommand::DeleteObject { object }
+            | EditCommand::Order { object, .. }
+            | EditCommand::Ungroup { object }
+            | EditCommand::ReplacePicture { object, .. }
+            | EditCommand::SetPictureLink { object, .. }
+            | EditCommand::MoveLineEnd { object, .. }
+            | EditCommand::SetTextBox { object, .. }
+            | EditCommand::ResizeTable { table: object, .. } => Some(at_object(object)),
+            EditCommand::Group { objects } => objects.first().map(at_object),
+            EditCommand::NewNumber { position, .. } | EditCommand::AddBookmark { position, .. } => {
+                Some(position.clone())
+            }
+            EditCommand::SetPageHide { target, .. }
+            | EditCommand::ChangeBookmark { target, .. } => Some(EditPosition {
+                target: target.clone(),
+                scalar: 0,
+                upstream: false,
+            }),
+            EditCommand::SetPage { .. }
+            | EditCommand::SetForm { .. }
+            | EditCommand::SetChartData { .. }
+            | EditCommand::SetPageBorder { .. }
+            | EditCommand::SetSection { .. }
+            | EditCommand::SetNoteShape { .. }
+            | EditCommand::AddStyle { .. }
+            | EditCommand::EditStyle { .. }
+            | EditCommand::DeleteStyle { .. }
+            | EditCommand::MoveStyle { .. }
+            | EditCommand::RestyleFromCaret { .. }
+            | EditCommand::ReplaceFont { .. }
+            | EditCommand::EraseCodes { .. }
+            | EditCommand::SetColumns { .. }
+            | EditCommand::DeleteHeaderFooter { .. }
+            | EditCommand::HeaderFooter { .. }
+            | EditCommand::Undo
+            | EditCommand::Redo => None,
         }
     }
 }

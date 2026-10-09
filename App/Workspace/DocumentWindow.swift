@@ -684,12 +684,12 @@ private struct StylePane: View {
             .listStyle(.plain)
             Divider()
             HStack(spacing: 2) {
-                tool("스타일 추가", "plus") { viewer.styleEditor = viewer.newStyle() }
-                tool("스타일 편집", "pencil") { if let current { edit(current) } }.disabled(current == nil)
-                tool("스타일 지우기", "minus") { if let current { delete(current) } }.disabled((current?.id ?? 0) == 0)
-                tool("스타일 위로", "arrow.up") { if let current { viewer.moveStyle(current.id, up: true) } }
+                listTool("스타일 추가", "plus") { viewer.styleEditor = viewer.newStyle() }
+                listTool("스타일 편집", "pencil") { if let current { edit(current) } }.disabled(current == nil)
+                listTool("스타일 지우기", "minus") { if let current { delete(current) } }.disabled((current?.id ?? 0) == 0)
+                listTool("스타일 위로", "arrow.up") { if let current { viewer.moveStyle(current.id, up: true) } }
                     .disabled((current?.id ?? 0) < 2)
-                tool("스타일 아래로", "arrow.down") { if let current { viewer.moveStyle(current.id, up: false) } }
+                listTool("스타일 아래로", "arrow.down") { if let current { viewer.moveStyle(current.id, up: false) } }
                     .disabled(current.map { $0.id == 0 || Int($0.id) + 1 >= document.styles.count } ?? true)
                 Spacer()
             }
@@ -703,12 +703,6 @@ private struct StylePane: View {
     }
     private func delete(_ style: StyleInfo) {
         viewer.deleteStyle(style) { viewer.replacingStyle = $0 }
-    }
-    private func tool(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(width: 22, height: 20) }
-            .buttonStyle(ToolButtonStyle())
-            .help(title)
-            .accessibilityLabel(title)
     }
 }
 

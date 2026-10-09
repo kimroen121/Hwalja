@@ -439,10 +439,8 @@ fn latex_text(s: &str) -> String {
     let mut text = String::new();
     for c in s.chars() {
         let known = symbol(c.encode_utf8(&mut [0; 4])).filter(|s| !s.2.is_empty());
-        if c.is_ascii() || known.is_some() {
-            if !text.is_empty() {
-                out += &format!("\\text{{{}}}", escape_text(&std::mem::take(&mut text)));
-            }
+        if (c.is_ascii() || known.is_some()) && !text.is_empty() {
+            out += &format!("\\text{{{}}}", escape_text(&std::mem::take(&mut text)));
         }
         match (c, known) {
             (_, Some(s)) => {

@@ -480,3 +480,11 @@ struct IconTiles<Value: Hashable, Picture: View>: View {
         }
     }
 }
+
+/// A small icon button beside a list, named by its help tag.
+func listTool(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) { Image(systemName: symbol).frame(width: 22, height: 20) }
+        .buttonStyle(ToolButtonStyle())
+        .help(title)
+        .accessibilityLabel(title)
+}

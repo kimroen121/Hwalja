@@ -2638,7 +2638,7 @@ fn sets_paper_and_margins() {
 #[test]
 fn notes_are_gone_through_in_order() {
     let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
-    let mut note = |s: &mut EditSession, scalar, endnote| {
+    let note = |s: &mut EditSession, scalar, endnote| {
         let position = point(body(), scalar);
         let reply = run(s, EditCommand::InsertNote { position, endnote }).unwrap();
         reply.selection.unwrap().focus.target

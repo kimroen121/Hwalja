@@ -84,7 +84,7 @@ struct StyleSheet: View {
                     List(document.styles, id: \.id, selection: $selection) { StyleLabel(style: $0) }
                         .frame(width: 230, height: 300)
                     HStack(spacing: 2) {
-                        tool("스타일 추가하기", "plus") { editor = viewer.newStyle() }
+                        listTool("스타일 추가하기", "plus") { editor = viewer.newStyle() }
                         tool("스타일 편집하기", "pencil", needs: chosen) { style in
                             Task { editor = await viewer.styleEditor(style) }
                         }
@@ -149,15 +149,9 @@ struct StyleSheet: View {
         }
     }
 
-    private func tool(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(width: 22, height: 20) }
-            .buttonStyle(ToolButtonStyle())
-            .help(title)
-            .accessibilityLabel(title)
-    }
     private func tool(_ title: String, _ symbol: String, needs style: StyleInfo?,
                       action: @escaping (StyleInfo) -> Void) -> some View {
-        tool(title, symbol) { if let style { action(style) } }.disabled(style == nil)
+        listTool(title, symbol) { if let style { action(style) } }.disabled(style == nil)
     }
     @ViewBuilder private func info(_ title: String, _ value: String?) -> some View {
         GridRow {

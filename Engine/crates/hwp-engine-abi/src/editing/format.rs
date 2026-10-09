@@ -973,8 +973,8 @@ impl EditSession {
                     .get("textColor")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                underline_shape: number(&text, "underlineShape").map(|v| v as u8),
-                strike_shape: number(&text, "strikeShape").map(|v| v as u8),
+                underline_shape: number(text, "underlineShape").map(|v| v as u8),
+                strike_shape: number(text, "strikeShape").map(|v| v as u8),
                 underline_color: text
                     .get("underlineColor")
                     .and_then(Value::as_str)
