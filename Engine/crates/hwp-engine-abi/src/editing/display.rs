@@ -68,12 +68,15 @@ pub enum Op {
         data: String,
     },
     /// One SVG `<text>`: `runs` are (font index, text) in order. With `length`, the glyphs
-    /// are stretched horizontally to that advance; `center` anchors at the middle.
+    /// are stretched horizontally to that advance; `center` anchors at the middle. A
+    /// `stroke` outlines the glyphs too (rhwp's bold for a face without one).
     Text {
         x: f64,
         y: f64,
         size: f64,
         color: u32,
+        stroke: Option<u32>,
+        width: f64,
         runs: Vec<(u16, String)>,
         length: Option<f64>,
         center: bool,
@@ -183,6 +186,8 @@ impl Display {
                     y,
                     size,
                     color: c,
+                    stroke,
+                    width,
                     runs,
                     length,
                     center,
@@ -192,6 +197,8 @@ impl Display {
                         .iter()
                         .for_each(|&v| f(out, v));
                     u(out, *c);
+                    color(out, *stroke);
+                    f(out, *width);
                     out.push(*center as u8);
                     u(out, runs.len() as u32);
                     for (font, s) in runs {
@@ -555,6 +562,8 @@ impl<'a> Builder<'a> {
             "font-size",
             "fill",
             "fill-opacity",
+            "stroke",
+            "stroke-width",
             "textLength",
             "lengthAdjust",
             "font-weight",
@@ -610,7 +619,11 @@ impl<'a> Builder<'a> {
                 _ => runs.push((font, c.to_string())),
             }
         }
-        let (fill, _, _) = paint(n)?;
+        let (fill, stroke, width) = paint(n)?;
+        // An outline alone is not covered.
+        if fill.is_none() && stroke.is_some() {
+            return None;
+        }
         let transformed = n.attribute("transform").is_some();
         if let Some(t) = n.attribute("transform") {
             self.ops.push(Op::Save);
@@ -623,6 +636,8 @@ impl<'a> Builder<'a> {
                 y: at("y")?,
                 size: number(n, "font-size")?,
                 color,
+                stroke,
+                width,
                 runs,
                 length,
                 center,

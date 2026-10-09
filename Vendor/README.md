@@ -43,6 +43,8 @@
 - 셀·표 배경: border fills take a 그러데이션 or 그림 from JSON and give them back, are reused only when their whole fill matches, and a table's own 테두리/배경 no longer overwrites every cell's; `register_embedded_bin_data` is public.
 - adds `update_click_here_native` to `DocumentCore` (the wasm `update_click_here_props`, laid out again) for 누름틀 고치기.
 - adds `insert_auto_number_in_hf_native` for 머리말/꼬리말 › 코드 넣기's 현재 쪽 번호 and 전체 쪽수 (a placeholder space and an auto number, as the 쪽 번호 모양 make), and lets typing at a 머리말/꼬리말 caret go in at the character offset after the controls `set_insert_skip` names (splitting counted a 쪽 번호 as a position and put text one place early).
+- reads a page's text layout from the cached page tree the page was drawn from, as the control layout does (it built the tree again for every caret query after an edit);
+- skips the bold ExtraLight check for SVG text runs that name no weight (it lowercased a copy of every run).
 
 `vendor/svg2pdf` takes the same patch: it resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 

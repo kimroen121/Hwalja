@@ -1157,6 +1157,27 @@ impl EditSession {
         }
         Ok(())
     }
+    /// Deletes from `start` to `end` and puts `text` (its lines as paragraphs) there.
+    fn replace(
+        &mut self,
+        start: &EditPosition,
+        end: &EditPosition,
+        text: &str,
+    ) -> Result<EditSelection, EditError> {
+        self.delete_range(start, end)?;
+        let mut p = start.clone();
+        // Objects come only from the document.
+        for (i, part) in text.split('\n').enumerate() {
+            if i > 0 {
+                p = self.split(&p)?;
+            }
+            if !part.is_empty() {
+                self.insert(&p, part)?;
+            }
+            p.scalar += part.chars().count() as u32;
+        }
+        Ok(EditSelection::caret(p))
+    }
     fn split(&mut self, p: &EditPosition) -> Result<EditPosition, EditError> {
         let t = &p.target;
         let at = self.spot(p)?.split(get(self.core.document(), t)?);
@@ -1267,19 +1288,18 @@ impl EditSession {
                         upstream: false,
                     }));
                 }
-                self.delete_range(start, end)?;
-                let mut p = start.clone();
-                // Objects come only from the document.
-                for (i, part) in normalized.split('\n').enumerate() {
-                    if i > 0 {
-                        p = self.split(&p)?;
-                    }
-                    if !part.is_empty() {
-                        self.insert(&p, part)?;
-                    }
-                    p.scalar += part.chars().count() as u32;
+                // rhwp lays the section out after each change; a replacement that makes
+                // more than one (a 한글 composition step deletes, then inserts) is laid
+                // out once at the end.
+                let batch = (start != end && !normalized.is_empty()) || normalized.contains('\n');
+                if batch {
+                    self.core.begin_batch_native()?;
                 }
-                Ok(EditSelection::caret(p))
+                let replaced = self.replace(start, end, &normalized);
+                if batch {
+                    self.core.end_batch_native()?;
+                }
+                replaced
             }
             EditCommand::Split { position } => Ok(EditSelection::caret(self.split(position)?)),
             EditCommand::MergePrevious { position } => {

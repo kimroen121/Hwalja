@@ -122,6 +122,9 @@ final class PageDisplay: @unchecked Sendable {
             let origin: CGPoint
             let size: Double
             let color: CGColor
+            /// Outlines the glyphs too, `width` wide (rhwp's bold for a face without one).
+            let stroke: CGColor?
+            let width: Double
             let runs: [(font: Int, text: String)]
             let length: Double?
             let center: Bool
@@ -160,11 +163,11 @@ final class PageDisplay: @unchecked Sendable {
                 self = .image(rect, CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
             case 9:
                 let v = try numbers(4)
-                let color = Self.color(try r.u32())
+                let fill = Self.color(try r.u32()), stroke = try color(), width = try number()
                 let center = try r.u8() != 0
                 let runs = try (0..<r.count()).map { _ in (font: Int(try r.u16()), text: try r.string()) }
-                self = .text(Text(origin: CGPoint(x: v[0], y: v[1]), size: v[2], color: color, runs: runs,
-                                  length: v[3] < 0 ? nil : v[3], center: center))
+                self = .text(Text(origin: CGPoint(x: v[0], y: v[1]), size: v[2], color: fill, stroke: stroke, width: width,
+                                  runs: runs, length: v[3] < 0 ? nil : v[3], center: center))
             case 10:
                 let rect = try rect(), v = try numbers(2), color = Self.color(try r.u32())
                 self = .equation(Equation(rect: rect, baseline: v[0], size: v[1], color: color, latex: try r.string()),
@@ -297,6 +300,11 @@ final class PageDisplay: @unchecked Sendable {
         context.scaleBy(x: scale, y: 1)
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         context.setFillColor(text.color)
+        if let stroke = text.stroke {
+            context.setStrokeColor(stroke)
+            context.setLineWidth(text.width)
+            context.setTextDrawingMode(.fillStroke)
+        }
         for run in runs {
             context.saveGState()
             if run.syntheticItalic { context.concatenate(Self.syntheticItalicTransform) }

@@ -3191,6 +3191,17 @@ fn notes_are_inserted_and_edited() {
     }
 }
 
+/// rhwp outlines text for a bold its face lacks; the page stays a display list.
+#[test]
+fn outlined_text_is_drawn_from_the_display_list() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="20" font-family="serif" font-size="12" fill="#000000" stroke="#000000" stroke-width="0.4">굵게</text></svg>"##;
+    let display = display::build(svg).unwrap();
+    assert!(display.ops.iter().any(|op| matches!(
+        op,
+        display::Op::Text { stroke: Some(0), width, .. } if (*width - 0.4).abs() < 1e-9
+    )));
+    assert!(display::build(&svg.replace(r##"fill="#000000""##, r#"fill="none""#)).is_none());
+}
 #[test]
 fn marks_show_on_pages_but_not_in_the_pdf() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
