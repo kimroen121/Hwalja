@@ -913,15 +913,14 @@ struct ChartEditing: Identifiable {
     let data: ChartData
 }
 
-/// [차트 데이터 편집]: the 줄 names down the side, the 칸 names across the top and the values;
-/// a cell's quick menu adds or removes 줄 and 칸.
+/// [차트 데이터 편집]: a table of the 줄 names down the side, the 칸 names across the top and
+/// the values, each cell typed in; the bar below and a cell's quick menu add and remove 행 and 열.
 struct ChartDataSheet: View {
     let editing: ChartEditing
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var data: ChartData
-    @State private var editingCell: Cell?
-    @FocusState private var focused: Bool
+    @FocusState private var focused: Cell?
 
     init(editing: ChartEditing, viewer: Viewer) {
         (self.editing, self.viewer) = (editing, viewer)
@@ -929,91 +928,129 @@ struct ChartDataSheet: View {
     }
     private var valid: Bool {
         !data.labels.isEmpty && !data.series.isEmpty
-            && data.series.allSatisfy { $0.values.allSatisfy { Double($0)?.isFinite == true } }
+            && data.series.allSatisfy { $0.values.allSatisfy(Self.number) }
     }
+    private static func number(_ text: String) -> Bool { Double(text)?.isFinite == true }
+
     var body: some View {
         DialogFrame("차트 데이터 편집", confirmTitle: "설정", canConfirm: valid && data != editing.data) {
-            ScrollView([.horizontal, .vertical]) {
-                Grid(horizontalSpacing: 4, verticalSpacing: 4) {
-                    GridRow {
-                        Color.clear.frame(width: 1, height: 1)
-                        ForEach(data.series.indices, id: \.self) { c in
-                            cell(Binding { data.series[c].name } set: { data.series[c].name = $0 }, row: nil, column: c)
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    ForEach(data.labels.indices, id: \.self) { r in
+            VStack(alignment: .leading, spacing: 6) {
+                ScrollView([.horizontal, .vertical]) {
+                    Grid(horizontalSpacing: 1, verticalSpacing: 1) {
                         GridRow {
-                            cell(Binding { data.labels[r] } set: { data.labels[r] = $0 }, row: r, column: nil)
-                                .fontWeight(.semibold)
+                            Self.fill(header: true).frame(width: Self.width, height: Self.height)
                             ForEach(data.series.indices, id: \.self) { c in
-                                cell(Binding { data.series[c].values[r] } set: { data.series[c].values[r] = $0 }, row: r, column: c)
-                                    .multilineTextAlignment(.trailing)
+                                cell(Binding { data.series[c].name } set: { data.series[c].name = $0 }, Cell(row: nil, column: c))
+                            }
+                        }
+                        ForEach(data.labels.indices, id: \.self) { r in
+                            GridRow {
+                                cell(Binding { data.labels[r] } set: { data.labels[r] = $0 }, Cell(row: r, column: nil))
+                                ForEach(data.series.indices, id: \.self) { c in
+                                    cell(Binding { data.series[c].values[r] } set: { data.series[c].values[r] = $0 }, Cell(row: r, column: c))
+                                }
                             }
                         }
                     }
+                    .padding(1)
+                    .background(Color(nsColor: .separatorColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                .padding(2)
+                .frame(width: 520, height: 240)
+                HStack(spacing: 14) {
+                    tools("행", add: { addRow(at: (focused?.row).map { $0 + 1 } ?? data.labels.count) },
+                          remove: focused?.row.flatMap { data.labels.count > 1 ? $0 : nil }.map { r in { removeRow(r) } })
+                    tools("열", add: { addColumn(at: (focused?.column).map { $0 + 1 } ?? data.series.count) },
+                          remove: focused?.column.flatMap { data.series.count > 1 ? $0 : nil }.map { c in { removeColumn(c) } })
+                }
             }
-            .frame(width: 520, height: 260)
         } confirm: {
             viewer.setChartData(data, chart: editing.chart)
             dismiss()
         }
     }
-    /// A cell: double-clicked it is edited (Return or leaving it sets it); its quick menu
-    /// adds and removes 줄 and 칸.
-    private func cell(_ text: Binding<String>, row: Int?, column: Int?) -> some View {
-        let key = Cell(row: row, column: column)
-        return Group {
-            if editingCell == key {
-                TextField("", text: text)
-                    .focused($focused)
-                    .onSubmit { editingCell = nil }
-                    .onAppear { focused = true }
-                    .onChange(of: focused) { _, now in if !now { editingCell = nil } }
-            } else {
-                Text(text.wrappedValue)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: column != nil && row != nil ? .trailing : .leading)
-                    .padding(.horizontal, 6)
-                    .frame(height: 22)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { editingCell = key }
+
+    private static let (width, height): (CGFloat, CGFloat) = (88, 24)
+    /// A cell's ground: the names' row and column shaded.
+    private static func fill(header: Bool) -> some View {
+        Color(nsColor: .textBackgroundColor).overlay(Color.primary.opacity(header ? 0.05 : 0))
+    }
+    /// A cell typed in place; a value that is not a number shows red.
+    private func cell(_ text: Binding<String>, _ key: Cell) -> some View {
+        let header = key.row == nil || key.column == nil
+        return TextField("", text: text)
+            .textFieldStyle(.plain)
+            .focused($focused, equals: key)
+            .fontWeight(header ? .semibold : .regular)
+            .monospacedDigit()
+            .multilineTextAlignment(header ? .leading : .trailing)
+            .foregroundStyle(header || Self.number(text.wrappedValue) ? Color.primary : Color.red)
+            .padding(.horizontal, 6)
+            .frame(width: Self.width, height: Self.height)
+            .background(Self.fill(header: header))
+            .overlay {
+                // A click enters the cell with its text selected, as Tab does; a second click places the caret.
+                if focused == key {
+                    Rectangle().strokeBorder(Color.accentColor, lineWidth: 2)
+                } else {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { focused = key }
+                }
             }
-        }
-        .frame(width: 90)
-        .contextMenu {
-            if let column {
-                Button("왼쪽에 열 추가하기") { addColumn(at: column) }
+            .contextMenu {
+                if let row = key.row {
+                    Button("위에 행 추가하기") { addRow(at: row) }
+                    Button("아래에 행 추가하기") { addRow(at: row + 1) }
+                }
+                if let column = key.column {
+                    Button("왼쪽에 열 추가하기") { addColumn(at: column) }
+                    Button("오른쪽에 열 추가하기") { addColumn(at: column + 1) }
+                }
+                Divider()
+                if let row = key.row {
+                    Button("행 지우기") { removeRow(row) }.disabled(data.labels.count == 1)
+                }
+                if let column = key.column {
+                    Button("열 지우기") { removeColumn(column) }.disabled(data.series.count == 1)
+                }
             }
-            if let row {
-                Button("위에 행 추가하기") { addRow(at: row) }.disabled(row == 0)
-                if row == data.labels.count - 1 { Button("아래에 행 추가하기") { addRow(at: row + 1) } }
-            }
-            Divider()
-            if let column {
-                Button("열 지우기") { data.series.remove(at: column) }.disabled(data.series.count == 1)
-            }
-            if let row {
-                Button("행 지우기") { removeRow(row) }.disabled(data.labels.count == 1)
-            }
+    }
+    /// 행 or 열 with its + and −: added after the focused cell's, or at the end; the focused one removed.
+    private func tools(_ title: String, add: @escaping () -> Void, remove: (() -> Void)?) -> some View {
+        HStack(spacing: 2) {
+            Text(title).foregroundStyle(.secondary).padding(.trailing, 4)
+            Button(action: add) { Image(systemName: "plus").frame(width: 22, height: 20) }
+                .buttonStyle(ToolButtonStyle())
+                .help("\(title) 추가하기")
+                .accessibilityLabel("\(title) 추가하기")
+            Button { remove?() } label: { Image(systemName: "minus").frame(width: 22, height: 20) }
+                .buttonStyle(ToolButtonStyle())
+                .disabled(remove == nil)
+                .help("\(title) 지우기")
+                .accessibilityLabel("\(title) 지우기")
         }
     }
     /// A cell of the table: a 줄 name (no column), a 칸 name (no row) or a value.
-    private struct Cell: Equatable {
+    private struct Cell: Hashable {
         let row: Int?
         let column: Int?
     }
     private func addColumn(at c: Int) {
         data.series.insert(ChartSeries(name: "계열 \(data.series.count + 1)", values: Array(repeating: "0", count: data.labels.count)), at: c)
+        focused = Cell(row: nil, column: c)
     }
     private func addRow(at r: Int) {
         data.labels.insert("항목 \(data.labels.count + 1)", at: r)
         for c in data.series.indices { data.series[c].values.insert("0", at: r) }
+        focused = Cell(row: r, column: nil)
+    }
+    private func removeColumn(_ c: Int) {
+        focused = nil
+        data.series.remove(at: c)
     }
     private func removeRow(_ r: Int) {
+        focused = nil
         data.labels.remove(at: r)
         for c in data.series.indices { data.series[c].values.remove(at: r) }
     }
