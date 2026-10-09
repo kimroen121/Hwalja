@@ -613,7 +613,7 @@ enum Icon {
     static let replacePicture = "photo.badge.arrow.down"
     static let cellBorder = "square.grid.3x3"
     static let field = "character.cursor.ibeam", modify = "square.and.pencil", chartData = "tablecells"
-    static let hyperlink = "link"
+    static let hyperlink = "link", insertFile = "doc.badge.plus"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

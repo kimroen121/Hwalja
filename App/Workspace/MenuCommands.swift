@@ -364,6 +364,8 @@ struct MenuItems {
             } label: { Label("주석", systemImage: Icon.footnote) }
                 .disabled(viewer == nil)
             Divider()
+            item("문서 끼워 넣기…", Icon.insertFile) { viewer?.insertDocuments() }
+                .disabled(!context.inBody || context.locked)
             item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF10FunctionKey)!)))
                 .disabled(!context.hasSelection)

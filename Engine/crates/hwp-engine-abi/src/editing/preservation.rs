@@ -277,6 +277,23 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
+        EditCommand::InsertDocument { position, .. } => {
+            let (mut a, mut b) = (before.clone(), after.clone());
+            for doc in [&mut a, &mut b] {
+                doc.doc_properties.caret_list_id = 0;
+                doc.doc_properties.caret_para_id = 0;
+                doc.doc_properties.caret_char_pos = 0;
+                if let Some(raw) = &mut doc.doc_info.raw_stream {
+                    let _ = rhwp::serializer::doc_info::surgical_update_caret(raw, 0, 0, 0);
+                }
+            }
+            // Its pictures come too.
+            b.bin_data_content.truncate(a.bin_data_content.len());
+            b.doc_info
+                .bin_data_list
+                .truncate(a.doc_info.bin_data_list.len());
+            return check_pasted(&a, &b, &EditSelection::caret(position.clone()));
+        }
         EditCommand::InsertHyperlink { selection, .. } => {
             // Text typed in moves the caret the file remembers.
             let (mut a, mut b) = (before.clone(), after.clone());
@@ -609,6 +626,8 @@ fn trim_appended(a: &mut Document, b: &mut Document) -> bool {
         && prefix(&x.border_fills, &mut y.border_fills)
         && prefix(&x.numberings, &mut y.numberings)
         && prefix(&x.bullets, &mut y.bullets)
+        && prefix(&x.tab_defs, &mut y.tab_defs)
+        && prefix(&x.styles, &mut y.styles)
         && x.font_faces.len() <= y.font_faces.len()
         && {
             y.font_faces.truncate(x.font_faces.len());

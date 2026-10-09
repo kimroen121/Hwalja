@@ -121,7 +121,7 @@
 | 주석 | ◐ | `insert/annotations/annotations.htm` | 각주·미주 넣기 ●. 각주/미주 모양 ● (번호 모양·장식 문자·구분선·여백·번호 매기기; 번호 모양 「기호」, 번호 매기기 「쪽마다 새로 시작」, 각주 내용 번호 속성, 각주 세로 위치, 단 각주 위치, 미주 위치는 △), 각주↔미주 △, 주석 저장하기 △, 숨은 설명 △ |
 | 날짜/시간/파일 이름 | △ | `insert/date/date.htm` | 문자열 넣기는 앱 쪽 작업, 코드는 필드 필요 |
 | 덧말 넣기 | △ | `insert/addsummary.htm` |  |
-| 문서 끼워 넣기 | ○ | `insert/insert_file.htm` | `paste_foreign_document_native`(글꼴·스타일 대응표를 만들어 커서에서 문단을 나눠 끼움) |
+| 문서 끼워 넣기 | ◐ | `insert/insert_file.htm` | 입력 › 문서 끼워 넣기: HWP·HWPX 파일 여러 개를 커서 위치에 차례로(본문), 파일 이름으로 책갈피 넣기 ●. 끼운 문서의 서식·스타일은 rhwp가 옮겨 심고 같은 것은 다시 씀. 스타일의 글자 모양 유지·문단 모양 유지·스타일 유지(사본 이름)·쪽 모양 유지 △(rhwp가 고르지 못함), [여러 문서 끼워 넣기]의 순서 바꾸기 △ |
 | 문자표 | ◐ | `insert/character_set.htm` | 문자표 ●(유니코드). 사용자 문자표·한/글 문자표·완성형 문자표 △ |
 | 한자 입력 | — | `insert/chinese_input.htm` | macOS 입력기 |
 | 메모 | △ | `insert/memo/memo.htm` | rhwp는 메모 필드를 읽고 저장하지만 넣기·그리기가 없음 |

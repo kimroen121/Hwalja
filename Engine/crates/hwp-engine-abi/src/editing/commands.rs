@@ -428,6 +428,23 @@ impl EditSession {
             EditCommand::InsertHyperlink { .. }
             | EditCommand::EditHyperlink { .. }
             | EditCommand::RemoveHyperlink { .. } => self.validate_hyperlink(command),
+            EditCommand::InsertDocument {
+                position,
+                data,
+                bookmark,
+            } => {
+                codes::body(&position.target)?;
+                self.validate_position(position)?;
+                if data.len() > 256 * 1024 * 1024 {
+                    return Err(EditError::ResourceLimit);
+                }
+                if bookmark.as_ref().is_some_and(|name| {
+                    name.trim().is_empty() || self.bookmarks().iter().any(|b| &b.name == name)
+                }) {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
             EditCommand::EditClickHere {
                 position,
                 guide,
@@ -1515,6 +1532,11 @@ impl EditSession {
                 text,
                 uri,
             } => self.insert_hyperlink(selection, text, uri),
+            EditCommand::InsertDocument {
+                position,
+                data,
+                bookmark,
+            } => self.insert_document(position, data, bookmark.as_deref()),
             EditCommand::EditHyperlink {
                 position,
                 text,

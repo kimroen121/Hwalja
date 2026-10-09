@@ -6156,3 +6156,53 @@ fn whole_word_matches_stand_alone() {
         }
     ));
 }
+#[test]
+fn documents_are_inserted_with_their_formats() {
+    use base64::Engine;
+    for (format, save) in [("hwp", SaveFormat::Hwp), ("hwpx", SaveFormat::Hwpx)] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let before = s.core.document().sections[0].paragraphs.len();
+        let other = plain_document(format, true);
+        // As the app sends it.
+        let insert: EditCommand = serde_json::from_value(serde_json::json!({
+            "kind": "insertDocument", "position": point(body(), 1),
+            "data": base64::engine::general_purpose::STANDARD.encode(&other), "bookmark": "부록",
+        }))
+        .unwrap();
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let doc = s.core.document();
+        let texts: Vec<_> = doc.sections[0]
+            .paragraphs
+            .iter()
+            .map(|p| p.text.clone())
+            .collect();
+        assert!(texts.len() > before, "{format} {texts:?}");
+        assert!(texts.iter().any(|t| t.contains("가👨")), "{texts:?}");
+        // What followed the caret comes after what came in.
+        let rest = s.paragraph(&caret.target).unwrap().text;
+        assert!(
+            rest.chars()
+                .skip(caret.scalar as usize)
+                .collect::<String>()
+                .starts_with("👨"),
+            "{rest}"
+        );
+        assert!(doc.sections[0]
+            .paragraphs
+            .iter()
+            .any(|p| p.controls.iter().any(|c| matches!(c, Control::Table(_)))));
+        assert_eq!(s.bookmarks()[0].name, "부록");
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        assert_eq!(reopened.bookmarks()[0].name, "부록", "{format}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(s.core.document().sections[0].paragraphs.len(), before);
+        assert!(s.bookmarks().is_empty());
+    }
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let bad = EditCommand::InsertDocument {
+        position: point(body(), 0),
+        data: "AAAA".into(),
+        bookmark: None,
+    };
+    assert_eq!(run(&mut s, bad).err(), Some(EditError::InvalidInput));
+}

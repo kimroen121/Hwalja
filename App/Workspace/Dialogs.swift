@@ -28,6 +28,31 @@ extension Viewer {
             document?.insertPicture(data, name: url.lastPathComponent, undoManager)
         }
     }
+    /// 문서 끼워 넣기: the chosen HWP and HWPX files at the caret, one after another, each
+    /// marked with a 책갈피 of its name when 파일 이름으로 책갈피 넣기 is on.
+    func insertDocuments() {
+        guard document?.context.inBody == true else { return NSSound.beep() }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = UTType.hwpFamily
+        panel.prompt = "넣기"
+        let bookmark = NSButton(checkboxWithTitle: "파일 이름으로 책갈피 넣기", target: nil, action: nil)
+        panel.accessoryView = bookmark
+        panel.isAccessoryViewDisclosed = true
+        panel.begin { [weak self] response in
+            guard response == .OK, let self, let document else { return }
+            for url in panel.urls {
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
+                let name = bookmark.state == .on ? url.deletingPathExtension().lastPathComponent : nil
+                document.edit(undoManager) { selection in
+                    selection.map { .insertDocument($0.focus, data: data, bookmark: name) }
+                }
+            }
+        }
+    }
     /// 그림 바꾸기: an image file in place of `object` (the selected picture), at its size.
     func replacePicture(_ object: ObjectRef? = nil) {
         guard let object = object ?? document?.object?.object, object.kind == .picture else { return NSSound.beep() }

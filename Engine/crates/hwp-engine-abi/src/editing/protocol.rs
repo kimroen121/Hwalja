@@ -313,6 +313,15 @@ pub enum EditCommand {
         #[serde(default, rename = "formEditable")]
         form_editable: bool,
     },
+    /// 문서 끼워 넣기: the body of the HWP or HWPX file `data` (base64) at `position` in the
+    /// body; with `bookmark` (파일 이름으로 책갈피 넣기) a 책갈피 of that name marks where it
+    /// starts.
+    InsertDocument {
+        position: EditPosition,
+        data: String,
+        #[serde(default)]
+        bookmark: Option<String>,
+    },
     /// 입력 › 하이퍼링크: links the text `selection` holds to the web address `uri`, the
     /// text becoming `text` (표시할 문자열); with no selection `text` goes in at the caret.
     InsertHyperlink {

@@ -89,6 +89,50 @@ impl EditSession {
             _ => Err(EditError::InvalidInput),
         }
     }
+    /// 문서 끼워 넣기 of the file `data` (base64) at `position`; the caret ends after it.
+    pub(super) fn insert_document(
+        &mut self,
+        position: &EditPosition,
+        data: &str,
+        bookmark: Option<&str>,
+    ) -> Result<EditSelection, EditError> {
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|_| EditError::InvalidInput)?;
+        let foreign = DocumentCore::from_bytes(&bytes)
+            .map_err(|_| EditError::InvalidInput)?
+            .document()
+            .clone();
+        let t = &position.target;
+        let para = get(self.core.document(), t)?;
+        let rest = logical::length(para) - position.scalar;
+        let at = logical::spot(para, position.scalar).split(para);
+        let reply = self.core.paste_foreign_document_native(
+            t.section as usize,
+            t.paragraph as usize,
+            at,
+            foreign,
+        )?;
+        let reply: Value = serde_json::from_str(&reply).map_err(|_| EditError::RenderFailed)?;
+        let last = reply
+            .get("paraIdx")
+            .and_then(Value::as_u64)
+            .ok_or(EditError::RenderFailed)?;
+        let target = at_index(t, last as usize);
+        let scalar = logical::length(get(self.core.document(), &target)?)
+            .checked_sub(rest)
+            .ok_or(EditError::RenderFailed)?;
+        // Where it starts, now the first of what came in.
+        if let Some(name) = bookmark {
+            self.add_bookmark(position, name)?;
+        }
+        Ok(EditSelection::caret(EditPosition {
+            target,
+            scalar,
+            upstream: false,
+        }))
+    }
     /// Replaces the selection with copy `copy` from the engine's clipboard, or with `html`.
     /// The caret ends after what came in.
     pub(super) fn paste(

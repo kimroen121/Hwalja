@@ -303,6 +303,7 @@ impl EditSession {
             | EditCommand::EditClickHere { position, .. }
             | EditCommand::EditHyperlink { position, .. }
             | EditCommand::RemoveHyperlink { position } => Some(position.clone()),
+            EditCommand::InsertDocument { position, .. } => Some(position.clone()),
             EditCommand::InsertHyperlink { selection, .. } => {
                 Some(commands::ordered(selection).0.clone())
             }
