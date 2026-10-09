@@ -9,8 +9,7 @@ Mac에서 한글 문서를 바로 열고 수정하는 네이티브 편집기.
 
 ## 설치
 
-macOS 14 이상. 아직 정식 버전이 출시되지 않았습니다. ~[Releases](https://github.com/kimroen121/HwpStudio/releases)에서 `hwalja.zip`로 설치할 수 있습니다~
-
+macOS 14 이상. 아직 정식 버전이 출시되지 않았습니다.
 직접 빌드하거나 기여하려면 [CONTRIBUTING.md](CONTRIBUTING.md)를 확인하세요.
 
 ## 알아 두기

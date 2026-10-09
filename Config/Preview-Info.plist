@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key><string>ko</string>
-	<key>CFBundleDisplayName</key><string>hwalja</string>
+	<key>CFBundleDisplayName</key><string>Hwalja</string>
 	<key>CFBundleExecutable</key><string>HwaljaPreview</string>
 	<key>CFBundleIdentifier</key><string>app.hwalja.mac.preview</string>
-	<key>CFBundleName</key><string>hwalja</string>
+	<key>CFBundleName</key><string>Hwalja</string>
 	<key>CFBundlePackageType</key><string>XPC!</string>
 	<key>CFBundleShortVersionString</key><string>0.1.0</string>
 	<key>CFBundleVersion</key><string>1</string>

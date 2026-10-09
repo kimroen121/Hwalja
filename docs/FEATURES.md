@@ -311,7 +311,7 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 한/글 정보 | ● | `rights/rights(info).htm` | macOS 「hwalja에 관하여」 |
+| 한/글 정보 | ● | `rights/rights(info).htm` | macOS 「Hwalja에 관하여」 |
 
 ## 오픈 소스 라이선스
 
