@@ -611,6 +611,15 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         try await session.convertEquation(text, fromLatex: fromLatex)
     }
     /// The whole document as PDF, after queued edits.
+    /// 텍스트 문서 and 서식 있는 인터넷 문서 of the current revision.
+    func textDocument() async throws -> String {
+        await settle()
+        return try await session.textDocument()
+    }
+    func webDocument() async throws -> String {
+        await settle()
+        return try await session.webDocument()
+    }
     func pdf() async throws -> Data {
         await settle()
         return try pdfData(drawing: pages)

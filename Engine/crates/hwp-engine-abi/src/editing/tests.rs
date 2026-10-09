@@ -6305,3 +6305,19 @@ fn page_codes_go_into_headers_and_round_trip() {
         );
     }
 }
+#[test]
+fn documents_are_saved_as_text_and_web_pages() {
+    let s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let text = s.text_document().unwrap();
+    assert!(
+        text.contains("가👨") && text.contains("표 내용"),
+        "{text:?}"
+    );
+    let html = s.web_document();
+    assert!(html.starts_with("<!DOCTYPE html>") && html.contains("<meta charset=\"utf-8\">"));
+    assert_eq!(
+        html.matches("class=\"hwp-page\"").count(),
+        s.core.page_count() as usize
+    );
+    assert!(html.contains("표") && html.contains("내"));
+}

@@ -1271,6 +1271,8 @@ enum EngineRequest: Encodable, Sendable {
     case fonts
     case clickHereAt(EditPosition)
     case hyperlinkAt(EditPosition)
+    case textDocument
+    case webDocument
     case pictures
     case statistics
     case hasPassword
@@ -1385,6 +1387,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(position, forKey: .position)
         case .pictures:
             try c.encode("pictures", forKey: .op)
+        case .textDocument:
+            try c.encode("textDocument", forKey: .op)
+        case .webDocument:
+            try c.encode("webDocument", forKey: .op)
         case .statistics:
             try c.encode("statistics", forKey: .op)
         case .hasPassword:

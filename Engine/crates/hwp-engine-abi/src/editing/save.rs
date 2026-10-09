@@ -94,4 +94,19 @@ impl EditSession {
         }
         Ok(bytes)
     }
+    /// 텍스트 문서: the document's text as 한/글 saves it.
+    pub fn text_document(&self) -> Result<String, EditError> {
+        serde_json::from_str(&self.core.text_file_unicode_json())
+            .map_err(|_| EditError::RenderFailed)
+    }
+    /// 서식 있는 인터넷 문서: one page after another, each as rhwp lays it out.
+    pub fn web_document(&self) -> String {
+        let pages: Vec<String> = (0..self.core.page_count())
+            .filter_map(|p| self.core.render_page_html_native(p).ok())
+            .collect();
+        format!(
+            "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"></head>\n<body style=\"margin:0;background:#fff\">\n{}\n</body></html>\n",
+            pages.join("\n")
+        )
+    }
 }

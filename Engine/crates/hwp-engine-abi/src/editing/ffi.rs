@@ -155,6 +155,10 @@ pub(super) enum Request {
     Outline,
     /// 글꼴 정보: the fonts of 대표, then of each 언어.
     Fonts,
+    /// 다른 파일 형식으로 저장하기: 텍스트 문서 (the text, lines ending in CR LF).
+    TextDocument,
+    /// 다른 파일 형식으로 저장하기: 서식 있는 인터넷 문서 (each page placed as laid out).
+    WebDocument,
     /// The 누름틀 the caret at `position` is in, if any.
     ClickHereAt {
         position: EditPosition,
@@ -374,6 +378,8 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             HwpEditResult::ok(session.hyperlink_at(&position)?.map(|(_, l)| l), Vec::new())
         }
         Request::Pictures => HwpEditResult::ok(session.pictures(), Vec::new()),
+        Request::TextDocument => HwpEditResult::ok(session.text_document()?, Vec::new()),
+        Request::WebDocument => HwpEditResult::ok(session.web_document(), Vec::new()),
         Request::Statistics => HwpEditResult::ok(session.statistics(), Vec::new()),
         Request::HasPassword => HwpEditResult::ok(session.has_password(), Vec::new()),
         Request::SetPassword { current, new } => {

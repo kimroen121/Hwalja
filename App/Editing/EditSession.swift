@@ -128,6 +128,12 @@ final class EditSession: @unchecked Sendable {
     func pictures() async throws -> [PictureInfo] {
         try await decode(send(.pictures))
     }
+    func textDocument() async throws -> String {
+        try await decode(send(.textDocument))
+    }
+    func webDocument() async throws -> String {
+        try await decode(send(.webDocument))
+    }
     func hasPassword() async throws -> Bool {
         try await decode(send(.hasPassword))
     }

@@ -35,8 +35,8 @@
 | PDF를 오피스 문서로 변환하기 | — | `file/open/open(pdf).htm` | 한컴 변환 서비스 |
 | 그림을 오피스 문서로 변환하기 | — | `file/open/open(picture)_ocr.htm` | 한컴 OCR |
 | XML 문서 | — | `file/xml_document.htm` |  |
-| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기 ○ `render_page_png_native` |
-| 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 텍스트 파일 ○ `text_file_unicode_json`(CP949는 `text_file_json`), 인터넷 문서 ○ `render_page_html_native`(쪽마다), HWPML ○ `export_hml_native`(HML에서 연 문서만). 저장 설정·한/글 97 △, 블록 저장하기 ○ `export_selection_html_native`(HTML만) |
+| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기(파일 › 그림으로 저장하기: 폴더·파일 이름·BMP/GIF/PNG/JPG·해상도 72~300DPI, 쪽마다 001·002…) ●, WMF·색 지정 △ |
+| 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 파일 › 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt, 문자 코드 유니코드(UTF-8)·유니코드·유니코드(Big-Endian)·한국(KS))·서식 있는 인터넷 문서(*.html, 쪽 배치 그대로) ●. HWPML ○ `export_hml_native`(HML에서 연 문서만). 저장 설정·한/글 97·DOCX·ODT·RTF △, 블록 저장하기 ○ `export_selection_html_native`(HTML만) |
 | PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
 | 문서 정보 | ◐ | `file/document_properties/document_properties.htm` | 일반 ●·문서 통계 ●·글꼴 정보(언어별 사용된/대체된 글꼴, 글꼴 바꾸기) ●·그림 정보(그림 목록, 그림 삽입·모두 삽입, 삽입 그림 저장하기, 모든 삽입 그림 저장하기, 그림 목록 저장, 그림 바꾸기·경로 바꾸기·그림 확장자 바꾸기·그림 경로 복사) ●. 샌드박스라 그림 삽입은 파일을, 모두 삽입은 폴더를 골라 줘야 함, 문서 요약 △(rhwp에 요약 쓰기 없음), 저작권 △ |

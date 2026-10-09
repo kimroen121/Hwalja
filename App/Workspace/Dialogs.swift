@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -26,6 +27,107 @@ extension Viewer {
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url) else { return NSSound.beep() }
             document?.insertPicture(data, name: url.lastPathComponent, undoManager)
+        }
+    }
+    /// The name a file saved from this document starts with.
+    private var baseName: String {
+        canvas.window?.representedURL?.deletingPathExtension().lastPathComponent ?? canvas.window?.title ?? "문서"
+    }
+    /// 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt) in the chosen 문자 코드, or 서식 있는
+    /// 인터넷 문서(*.html).
+    func saveInOtherFormat() {
+        guard let window = canvas.window, let document else { return }
+        let panel = NSSavePanel()
+        let format = NSPopUpButton(frame: .zero, pullsDown: false)
+        format.addItems(withTitles: ["텍스트 문서(*.txt)", "서식 있는 인터넷 문서(*.html)"])
+        let encodings: [(String, String.Encoding)] = [
+            ("유니코드(UTF-8)", .utf8), ("유니코드", .utf16LittleEndian), ("유니코드(Big-Endian)", .utf16BigEndian),
+            ("한국(KS)", String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.dosKorean.rawValue)))),
+        ]
+        let encoding = NSPopUpButton(frame: .zero, pullsDown: false)
+        encoding.addItems(withTitles: encodings.map(\.0))
+        let accessory = ActionTarget.form([("파일 형식", format), ("문자 코드", encoding)])
+        panel.accessoryView = accessory
+        let update = { [weak panel] in
+            let text = format.indexOfSelectedItem == 0
+            panel?.allowedContentTypes = [text ? .plainText : .html]
+            panel?.nameFieldStringValue = self.baseName + (text ? ".txt" : ".html")
+            (accessory.subviews.first as? NSGridView)?.row(at: 1).isHidden = !text
+        }
+        let target = ActionTarget(update)
+        format.target = target
+        format.action = #selector(ActionTarget.run)
+        update()
+        panel.beginSheetModal(for: window) { response in
+            withExtendedLifetime(target) {}
+            guard response == .OK, let url = panel.url else { return }
+            let text = format.indexOfSelectedItem == 0, chosen = encodings[encoding.indexOfSelectedItem].1
+            Task {
+                do {
+                    let data = text ? try await document.textDocument().data(using: chosen, allowLossyConversion: true)
+                        : try await document.webDocument().data(using: .utf8)
+                    try data?.write(to: url, options: .atomic)
+                } catch {
+                    NSApp.presentError(error)
+                }
+            }
+        }
+    }
+    /// 그림으로 저장하기: each page as a picture in the chosen folder, the name followed by
+    /// 001, 002, …, in the chosen 파일 형식 and 해상도.
+    func saveAsPictures() {
+        guard let window = canvas.window, let document else { return }
+        let types: [(String, UTType, NSBitmapImageRep.FileType)] = [
+            ("BMP(*.bmp)", .bmp, .bmp), ("GIF(*.gif)", .gif, .gif), ("PNG(*.png)", .png, .png), ("JPG(*.jpg)", .jpeg, .jpeg),
+        ]
+        let resolutions: [(String, CGFloat)] = [
+            ("최저 해상도(72DPI)", 72), ("저 해상도(120DPI)", 120), ("중간 해상도(150DPI)", 150),
+            ("고 해상도(180DPI)", 180), ("최고 해상도(300DPI)", 300),
+        ]
+        let name = NSTextField(string: baseName)
+        name.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let format = NSPopUpButton(frame: .zero, pullsDown: false)
+        format.addItems(withTitles: types.map(\.0))
+        let resolution = NSPopUpButton(frame: .zero, pullsDown: false)
+        resolution.addItems(withTitles: resolutions.map(\.0))
+        resolution.selectItem(at: 1)
+        let accessory = ActionTarget.form([("파일 이름", name), ("파일 형식", format), ("해상도", resolution)])
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "저장"
+        panel.accessoryView = accessory
+        panel.isAccessoryViewDisclosed = true
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let folder = panel.url else { return }
+            let (_, type, fileType) = types[format.indexOfSelectedItem]
+            let scale = resolutions[resolution.indexOfSelectedItem].1 / 72
+            let base = name.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ? self.baseName : name.stringValue
+            Task {
+                let access = folder.startAccessingSecurityScopedResource()
+                defer { if access { folder.stopAccessingSecurityScopedResource() } }
+                do {
+                    guard let pdf = PDFDocument(data: try await document.pdf()) else { return NSSound.beep() }
+                    for index in 0..<pdf.pageCount {
+                        guard let page = pdf.page(at: index) else { continue }
+                        let bounds = page.bounds(for: .mediaBox)
+                        guard let image = NSBitmapImageRep(
+                            bitmapDataPlanes: nil, pixelsWide: Int(bounds.width * scale), pixelsHigh: Int(bounds.height * scale),
+                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                            bytesPerRow: 0, bitsPerPixel: 0), let context = NSGraphicsContext(bitmapImageRep: image) else { continue }
+                        context.cgContext.setFillColor(.white)
+                        context.cgContext.fill(CGRect(x: 0, y: 0, width: image.pixelsWide, height: image.pixelsHigh))
+                        context.cgContext.scaleBy(x: scale, y: scale)
+                        page.draw(with: .mediaBox, to: context.cgContext)
+                        let file = folder.appendingPathComponent(base + String(format: "%03d", index + 1))
+                            .appendingPathExtension(type.preferredFilenameExtension ?? "png")
+                        try image.representation(using: fileType, properties: [:])?.write(to: file, options: .atomic)
+                    }
+                } catch {
+                    NSApp.presentError(error)
+                }
+            }
         }
     }
     /// 문서 끼워 넣기: the chosen HWP and HWPX files at the caret, one after another, each
@@ -1490,5 +1592,29 @@ struct CellBorderSheet: View {
         .buttonStyle(ToolButtonStyle(on: on))
         .help(title)
         .accessibilityLabel(title)
+    }
+}
+
+/// Runs a closure as an AppKit control's action.
+final class ActionTarget: NSObject {
+    let action: () -> Void
+    init(_ action: @escaping () -> Void) { self.action = action }
+    @objc func run() { action() }
+
+    /// A panel's accessory: each title beside its control, the titles right-aligned.
+    @MainActor static func form(_ rows: [(String, NSView)]) -> NSView {
+        let grid = NSGridView(views: rows.map { [NSTextField(labelWithString: $0.0), $0.1] })
+        grid.column(at: 0).xPlacement = .trailing
+        grid.rowAlignment = .firstBaseline
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        let box = NSView()
+        box.addSubview(grid)
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: box.topAnchor, constant: 10),
+            grid.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -10),
+            grid.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            grid.leadingAnchor.constraint(greaterThanOrEqualTo: box.leadingAnchor, constant: 20),
+        ])
+        return box
     }
 }

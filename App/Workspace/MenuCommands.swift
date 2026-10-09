@@ -228,8 +228,12 @@ struct MenuItems {
 
     /// 파일 items beyond the system's New, Open, Save and Revert.
     @ViewBuilder var file: some View {
+        item("다른 파일 형식으로 저장하기…", Icon.saveAs) { viewer?.saveInOtherFormat() }
+            .disabled(viewer == nil)
         item("PDF로 저장하기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
             .keyboardShortcut("e", modifiers: [.command, .shift])
+        item("그림으로 저장하기…", Icon.picture) { viewer?.saveAsPictures() }
+            .disabled(viewer == nil)
         Divider()
         item("문서 정보…", Icon.documentInfo) { viewer?.showDocumentInfo() }
             .disabled(viewer == nil)
