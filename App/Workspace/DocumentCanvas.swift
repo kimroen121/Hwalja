@@ -1315,7 +1315,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     @objc func copy(_ sender: Any?) { copySelection(cut: false) }
     @objc func cut(_ sender: Any?) { copySelection(cut: true) }
     /// This document's copy number on the pasteboard, as `copyID:number`.
-    static let copyType = NSPasteboard.PasteboardType("app.hwpstudio.mac.copy")
+    static let copyType = NSPasteboard.PasteboardType("app.hwalja.mac.copy")
     /// Pastes with formats (a copy of this document, else HTML), or text, or else an image
     /// as a picture.
     @objc func paste(_ sender: Any?) {

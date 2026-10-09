@@ -1048,7 +1048,7 @@ fn generated_fixtures_open_as_display_lists() {
     let mut source = DocumentCore::new_empty();
     source.create_blank_document_native().unwrap();
     source
-        .insert_text_native(0, 0, 0, "HwpStudio generated fixture — 한글 읽기 전용")
+        .insert_text_native(0, 0, 0, "hwalja generated fixture — 한글 읽기 전용")
         .unwrap();
     for (extension, bytes) in [
         ("hwp", source.export_hwp_native().unwrap()),

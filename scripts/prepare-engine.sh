@@ -9,12 +9,12 @@ actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
 stamp="$expected-$(shasum -a 256 "$patch_file" | awk '{print $1}')"
 
 destination="$repo_root/build/rhwp"
-if [[ -f "$destination/.hwpstudio-$stamp" ]]; then exit 0; fi
+if [[ -f "$destination/.hwalja-$stamp" ]]; then exit 0; fi
 mkdir -p "$repo_root/build"
 staging="$(mktemp -d "$repo_root/build/rhwp-prepare.XXXXXX")"
 tar -xzf "$archive" -C "$staging"
 patch --batch -d "$staging" -p1 < "$patch_file"
-touch "$staging/.hwpstudio-$stamp"
+touch "$staging/.hwalja-$stamp"
 previous=""
 if [[ -e "$destination" ]]; then
   previous="$(mktemp -d "$repo_root/build/rhwp-previous.XXXXXX")"

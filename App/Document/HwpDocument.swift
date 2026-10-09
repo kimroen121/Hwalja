@@ -5,8 +5,8 @@ import UniformTypeIdentifiers
 import OSLog
 
 extension UTType {
-    static let hwp = UTType(importedAs: "app.hwpstudio.hwp")
-    static let hwpx = UTType(importedAs: "app.hwpstudio.hwpx")
+    static let hwp = UTType(importedAs: "app.hwalja.hwp")
+    static let hwpx = UTType(importedAs: "app.hwalja.hwpx")
     /// Our declarations plus whatever type another installed app (e.g. Hancom) owns
     /// for the same extensions, which the system may prefer over ours.
     static let hwpFamily: [UTType] = Array(Set([hwpx, hwp] + ["hwpx", "hwp"].flatMap {
@@ -185,7 +185,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             pages = []
             reply = EditReply(revision: 0, pageCount: 0, changedPages: [], canUndo: false, canRedo: false, dirty: false)
             // EditError contains only a category, never document text or bytes.
-            Logger(subsystem: "app.hwpstudio.mac", category: "Document").error("Blank document creation failed: \(String(describing: error), privacy: .public)")
+            Logger(subsystem: "app.hwalja.mac", category: "Document").error("Blank document creation failed: \(String(describing: error), privacy: .public)")
         }
     }
     nonisolated convenience init(configuration: ReadConfiguration) throws {

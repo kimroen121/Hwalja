@@ -1,6 +1,6 @@
 # 작업 지침
 
-HwpStudio에서 일하는 사람(사람과 에이전트 모두)이 지키는 방식이다. 목표와 할 일은 `ROADMAP.md`, 전체 기능과 상태는 `FEATURES.md`, 내부 문제와 수동 점검은 `BUG_HANDOFF.md`.
+hwalja에서 일하는 사람(사람과 에이전트 모두)이 지키는 방식이다. 목표와 할 일은 `ROADMAP.md`, 전체 기능과 상태는 `FEATURES.md`, 내부 문제와 수동 점검은 `BUG_HANDOFF.md`.
 
 ## 무엇을 만드는가
 

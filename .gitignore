@@ -6,7 +6,7 @@ Engine/include/HwpEngineABI.h
 DerivedData/
 FoundationDerivedData/
 Generated/
-HwpStudio.xcodeproj/
+Hwalja.xcodeproj/
 Tests/PrivateFixtures/
 .DS_Store
 docs/superpowers/

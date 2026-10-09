@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct HwpStudioApp: App {
+struct HwaljaApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { HwpDocument() }) { file in
             DocumentWindow(document: file.document)

@@ -5,7 +5,7 @@ import CoreText
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
-@testable import HwpStudio
+@testable import Hwalja
 
 @MainActor
 struct DocumentTests {

@@ -6,7 +6,7 @@ import Foundation
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 
 let package = Package(
-    name: "HwpStudio",
+    name: "Hwalja",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/mgriebling/SwiftMath.git", revision: "1d2c90827e9c3908269d810d055fb03b7da5fd53"),
@@ -14,15 +14,15 @@ let package = Package(
     targets: [
         .systemLibrary(name: "CHwpEngine", path: "Engine/include"),
         .executableTarget(
-            name: "HwpStudio",
+            name: "Hwalja",
             dependencies: ["CHwpEngine", "SwiftMath"],
             path: "App",
             exclude: ["Resources"],
             linkerSettings: [.unsafeFlags(["-L\(root)/build"])]
         ),
         .testTarget(
-            name: "HwpStudioTests",
-            dependencies: ["HwpStudio"],
+            name: "HwaljaTests",
+            dependencies: ["Hwalja"],
             path: "Tests",
             resources: [.copy("Fixtures")]
         ),

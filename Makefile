@@ -16,18 +16,18 @@ fmt-check:
 
 app: engine
 	swift build $(SWIFT_FLAGS)
-	./scripts/bundle-app.sh "$$(swift build $(SWIFT_FLAGS) --show-bin-path)/HwpStudio"
+	./scripts/bundle-app.sh "$$(swift build $(SWIFT_FLAGS) --show-bin-path)/Hwalja"
 run: app
-	open build/HwpStudio.app
+	open build/hwalja.app
 
 # Universal, Developer ID-signed, notarized zip. Needs SIGN_IDENTITY and a
-# notarytool profile: xcrun notarytool store-credentials hwpstudio
+# notarytool profile: xcrun notarytool store-credentials hwalja
 dist:
 	HWP_ENGINE_TARGETS="aarch64-apple-darwin x86_64-apple-darwin" $(MAKE) app SWIFT_ARCHS="arm64 x86_64"
-	ditto -c -k --keepParent build/HwpStudio.app build/HwpStudio.zip
-	xcrun notarytool submit build/HwpStudio.zip --keychain-profile hwpstudio --wait
-	xcrun stapler staple build/HwpStudio.app
-	ditto -c -k --keepParent build/HwpStudio.app build/HwpStudio.zip
+	ditto -c -k --keepParent build/hwalja.app build/hwalja.zip
+	xcrun notarytool submit build/hwalja.zip --keychain-profile hwalja --wait
+	xcrun stapler staple build/hwalja.app
+	ditto -c -k --keepParent build/hwalja.app build/hwalja.zip
 
 clean:
 	rm -rf .build build Engine/target Engine/include/HwpEngineABI.h

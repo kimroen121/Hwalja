@@ -3,7 +3,7 @@ import Foundation
 import PDFKit
 import OSLog
 
-private let renderLog = Logger(subsystem: "app.hwpstudio.mac", category: "Rendering")
+private let renderLog = Logger(subsystem: "app.hwalja.mac", category: "Rendering")
 
 /// Owns one engine edit session. Every call to the raw handle runs on `queue`,
 /// so the handle is never touched concurrently; callers only see owned values.
@@ -15,7 +15,7 @@ final class EditSession: @unchecked Sendable {
         var pages: [RenderedPage]
     }
 
-    private let queue = DispatchQueue(label: "app.hwpstudio.edit-session")
+    private let queue = DispatchQueue(label: "app.hwalja.edit-session")
     private let handle: OpaquePointer
 
     private init(handle: OpaquePointer) { self.handle = handle }

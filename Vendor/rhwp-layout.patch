@@ -26,7 +26,7 @@ diff --git a/src/document_core/commands/document.rs b/src/document_core/commands
      /// 이 함수는 `reflow_linesegs_on_demand` 에서만 사용되며, 자동 파싱 경로에는 영향 없음.
      fn needs_reflow_broadly(para: &crate::model::paragraph::Paragraph) -> bool {
 -        if !para.text.is_empty() && para.line_segs.is_empty() {
-+        // HwpStudio: a paragraph holding only an object in the line (a display equation)
++        // hwalja: a paragraph holding only an object in the line (a display equation)
 +        // has no text, and still needs its line laid out to the object's height.
 +        let holds_inline_object = para.controls.iter().any(|c| match c {
 +            Control::Equation(e) => e.common.treat_as_char,
@@ -408,7 +408,7 @@ diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core
          end_char_offset: usize,
          replacement_text: &str,
      ) -> Result<String, HwpError> {
-+        // HwpStudio: typing at a caret after controls standing there (a 쪽 번호 after its
++        // hwalja: typing at a caret after controls standing there (a 쪽 번호 after its
 +        // placeholder) goes after them, as `set_insert_skip` makes it in the body.
 +        let skip = std::mem::take(&mut self.insert_skip);
          let ((start_para, start_offset), (end_para, end_offset)) =
@@ -449,7 +449,7 @@ diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core
          Ok("{\"ok\":true}".to_string())
      }
  
-+    /// HwpStudio: 머리말/꼬리말 탭 › 코드 넣기의 현재 쪽 번호(`total` 이 거짓)·전체 쪽수 —
++    /// hwalja: 머리말/꼬리말 탭 › 코드 넣기의 현재 쪽 번호(`total` 이 거짓)·전체 쪽수 —
 +    /// 파일에서 읽은 것과 같은 꼴(자리 글자 한 칸 + 자동 번호 컨트롤)로 넣는다
 +    /// (`insert_auto_number_at_cursor` 의 머리말/꼬리말 판). 넣은 뒤의 글자 위치를 돌려준다.
 +    pub fn insert_auto_number_in_hf_native(
@@ -587,7 +587,7 @@ diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_co
                      *offset -= 8;
 +                }
 +            }
-+            // HwpStudio: character shapes after the control move back with the text.
++            // hwalja: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
@@ -632,7 +632,7 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
                      };
 -                    cap.paragraphs
 -                        .push(crate::model::paragraph::Paragraph::default());
-+                    // HwpStudio: "그림 " + number + " ", as Hancom writes it and as the
++                    // hwalja: "그림 " + number + " ", as Hancom writes it and as the
 +                    // table and drawing-object captions are made.
 +                    let mut para = crate::model::paragraph::Paragraph::new_empty();
 +                    para.text = "그림  ".to_string();
@@ -661,7 +661,7 @@ diff --git a/src/document_core/commands/object_ops/picture.rs b/src/document_cor
                      *offset -= 8;
 +                }
 +            }
-+            // HwpStudio: character shapes after the control move back with the text.
++            // hwalja: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
@@ -706,7 +706,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
                      *offset -= 8;
 +                }
 +            }
-+            // HwpStudio: character shapes after the control move back with the text.
++            // hwalja: character shapes after the control move back with the text.
 +            for shape in para.char_shapes.iter_mut() {
 +                if shape.start_pos >= threshold {
 +                    shape.start_pos -= 8;
@@ -719,7 +719,7 @@ diff --git a/src/document_core/commands/object_ops/shape.rs b/src/document_core/
                          *offset -= 8;
 +                    }
 +                }
-+                // HwpStudio: character shapes after the control move back with the text.
++                // hwalja: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
@@ -903,7 +903,7 @@ diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/
              cell_path_json,
              inner_control_idx,
 -            |c| matches!(c, Control::Picture(_)),
-+            // HwpStudio: an equation or drawing object is taken out the same way.
++            // hwalja: an equation or drawing object is taken out the same way.
 +            |c| matches!(c, Control::Picture(_) | Control::Equation(_) | Control::Shape(_)),
              "그림이",
          )
@@ -912,7 +912,7 @@ diff --git a/src/document_core/commands/object_ops/table.rs b/src/document_core/
                          *offset -= 8;
                      }
                  }
-+                // HwpStudio: character shapes after the control move back with the text.
++                // hwalja: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
@@ -1262,7 +1262,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
          )))
      }
  
-+    /// HwpStudio: 표 뒤집기 (table(transform).htm); `turn` and `margins` as `Table::flip`
++    /// hwalja: 표 뒤집기 (table(transform).htm); `turn` and `margins` as `Table::flip`
 +    /// takes them. A line moving to another side takes a border fill with it there.
 +    pub fn flip_table_native(
 +        &mut self,
@@ -1477,7 +1477,7 @@ diff --git a/src/document_core/commands/table_ops.rs b/src/document_core/command
                          *offset -= 8;
 +                    }
 +                }
-+                // HwpStudio: character shapes after the control move back with the text.
++                // hwalja: character shapes after the control move back with the text.
 +                for shape in para.char_shapes.iter_mut() {
 +                    if shape.start_pos >= threshold {
 +                        shape.start_pos -= 8;
@@ -1646,7 +1646,7 @@ diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
      /// 현재 활성 필드 위치 (커서가 진입한 누름틀 — 안내문 렌더링 스킵용)
      /// (section_idx, para_idx, field_control_idx)
      pub(crate) active_field: Option<ActiveFieldInfo>,
-+    /// Controls the next text insertion goes after (HwpStudio, `set_insert_skip`).
++    /// Controls the next text insertion goes after (hwalja, `set_insert_skip`).
 +    pub(crate) insert_skip: usize,
      /// 구역별 문단 인덱스 오프셋 (삽입=+N, 삭제=-N, 페이지네이션 수렴 감지용)
      /// paginate() 후 리셋.
@@ -1656,7 +1656,7 @@ diff --git a/src/document_core/mod.rs b/src/document_core/mod.rs
  
      /// 빈 문서를 생성한다 (테스트/미리보기용).
 +    /// Makes the next text insertion go after the first `skip` controls standing at its
-+    /// offset instead of before them (HwpStudio).
++    /// offset instead of before them (hwalja).
 +    pub fn set_insert_skip(&mut self, skip: usize) {
 +        self.insert_skip = skip;
 +    }
@@ -2081,7 +2081,7 @@ diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
 +    }
 +
 +    /// `insert_text_at_caret`, but after the first `skip` controls standing at `char_offset`
-+    /// (HwpStudio: typing right after an inline picture or equation).
++    /// (hwalja: typing right after an inline picture or equation).
 +    pub fn insert_text_after_controls(
 +        &mut self,
 +        char_offset: usize,
@@ -2124,7 +2124,7 @@ diff --git a/src/model/table.rs b/src/model/table.rs
              .collect())
 +    }
 +
-+    /// HwpStudio: 표 뒤집기 (table(transform).htm). `turn`: 0 줄 기준 뒤집기, 1 칸 기준
++    /// hwalja: 표 뒤집기 (table(transform).htm). `turn`: 0 줄 기준 뒤집기, 1 칸 기준
 +    /// 뒤집기, 2 줄/칸 뒤집기, 3 반시계 방향 90도, 4 180도, 5 시계 방향 90도. Cells keep
 +    /// their spans and turn with the table; mirrored, they keep their sizes, and with rows
 +    /// and columns swapped the table keeps its width, shared evenly, and every row takes
@@ -2332,7 +2332,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
      }
  }
  
-+/// HwpStudio: grows a reflowed line for an object in it. An equation stands on its own
++/// hwalja: grows a reflowed line for an object in it. An equation stands on its own
 +/// baseline (`baseline` percent of its height down), so the line takes the larger of the
 +/// text's and the equation's parts above and below the baseline; other objects keep
 +/// [`apply_inline_control_line_height`].
@@ -2347,7 +2347,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
 +    seg.baseline_distance = ascent;
 +}
 +
-+/// HwpStudio: each object in the line of a paragraph with its height and, for an equation,
++/// hwalja: each object in the line of a paragraph with its height and, for an equation,
 +/// its baseline from the top.
 +fn inline_control_metrics_hwp(para: &Paragraph) -> Vec<(i32, Option<i32>)> {
 +    para.controls
@@ -2380,7 +2380,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
          if !inline_sizes.is_empty() {
              let max_line_width = seg_width_hwp.max(1);
 -            let mut line_specs: Vec<(u32, i32, i32)> = Vec::new();
-+            // HwpStudio: each line keeps its objects' heights and equation baselines.
++            // hwalja: each line keeps its objects' heights and equation baselines.
 +            let mut line_specs: Vec<(u32, i32, Vec<(i32, Option<i32>)>)> = Vec::new();
              let mut line_start = 0u32;
              let mut line_width = 0i32;
@@ -2475,7 +2475,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
              }
          }
 +    } else if forced_inline_line.is_none() {
-+        // HwpStudio: 마지막 글자 뒤에 놓인 개체(`, ` 뒤 수식 등)는 `FlowInlineControl` 에
++        // hwalja: 마지막 글자 뒤에 놓인 개체(`, ` 뒤 수식 등)는 `FlowInlineControl` 에
 +        // 들지 않지만 마지막 줄에 서므로 그 줄을 키운다.
 +        let trailing: Vec<(i32, Option<i32>)> = para
 +            .controls
@@ -2508,7 +2508,7 @@ diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
          sup: Option<Box<EqNode>>,
      },
  
-+    /// HwpStudio: 아래·위 첨자를 밑글자 아래·위에 놓는다: UNDEROVER {max}_{a}^{b}
++    /// hwalja: 아래·위 첨자를 밑글자 아래·위에 놓는다: UNDEROVER {max}_{a}^{b}
 +    UnderOver {
 +        base: Box<EqNode>,
 +        under: Option<Box<EqNode>>,
@@ -2525,7 +2525,7 @@ diff --git a/src/renderer/equation/dispatch.rs b/src/renderer/equation/dispatch.
      BigOperator,
      /// `lim`/`Lim`. 원문 대소문자를 구분한다.
      Limit,
-+    /// HwpStudio: `UNDEROVER` — 첨자를 밑글자 아래·위에.
++    /// hwalja: `UNDEROVER` — 첨자를 밑글자 아래·위에.
 +    UnderOver,
      /// `MATRIX`/`PMATRIX`/`BMATRIX`/`DMATRIX`. `VMATRIX` 는 여기 넣지 않는다.
      Matrix,
@@ -2565,11 +2565,11 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
  /// 텍스트 기본 baseline 비율 (상단에서 baseline까지)
  const TEXT_BASELINE: f64 = 0.8;
 +
-+/// HwpStudio: 아래첨자 기준선이 밑글자 기준선보다 내려가는 거리 (글자 크기 배수).
++/// hwalja: 아래첨자 기준선이 밑글자 기준선보다 내려가는 거리 (글자 크기 배수).
 +const SUB_DROP: f64 = 0.25;
-+/// HwpStudio: 관계 기호 둘레 (글자 크기 배수, 한쪽).
++/// hwalja: 관계 기호 둘레 (글자 크기 배수, 한쪽).
 +const RELATION_SPACE: f64 = 0.28;
-+/// HwpStudio: 이항 연산 기호 둘레 (글자 크기 배수, 한쪽).
++/// hwalja: 이항 연산 기호 둘레 (글자 크기 배수, 한쪽).
 +const BINARY_SPACE: f64 = 0.22;
 +
 +#[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2578,7 +2578,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +    Binary,
 +}
  
-+/// HwpStudio: 둘레를 띄우는 기호의 갈래.
++/// hwalja: 둘레를 띄우는 기호의 갈래.
 +fn operator_class(text: &str) -> Option<OperatorClass> {
 +    match text {
 +        "=" | "<" | ">" | ":=" | "≤" | "≥" | "≠" | "≡" | "≈" | "∼" | "≃" | "≅" | "∝" | "≪"
@@ -2605,7 +2605,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
              };
          }
  
-+        // HwpStudio: 한컴처럼 관계 기호 둘레는 넓게, 이항 연산 둘레는 그보다 좁게 띄운다.
++        // hwalja: 한컴처럼 관계 기호 둘레는 넓게, 이항 연산 둘레는 그보다 좁게 띄운다.
 +        // 앞에 피연산자가 없는 +, − 등은 단항이라 붙인다.
 +        let mut operand_before = false;
 +        for b in &mut boxes {
@@ -2654,7 +2654,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
          let b = self.layout_node(body, fs);
          let pad = fs * SQRT_PAD;
 -        let sign_w = fs * 0.6; // √ 기호 폭
-+        // √ 기호 폭 (HwpStudio: 글꼴의 근호를 그 높이로 늘린 폭)
++        // √ 기호 폭 (hwalja: 글꼴의 근호를 그 높이로 늘린 폭)
 +        let sign_w = stretched_width("√", b.height + pad * 2.0, fs).map_or(fs * 0.6, |w| w + fs * 0.05);
          let body_w = b.width + pad;
          let body_h = b.height + pad * 2.0;
@@ -2664,7 +2664,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
          let s = self.layout_node(sub, fs * SCRIPT_SCALE);
  
 -        let sub_shift = b.baseline * 0.4;
-+        // HwpStudio: 한컴처럼 아래첨자의 기준선을 밑글자 기준선보다 글자 크기의 1/4 아래에.
++        // hwalja: 한컴처럼 아래첨자의 기준선을 밑글자 기준선보다 글자 크기의 1/4 아래에.
 +        let sub_shift = (b.baseline + fs * SUB_DROP - s.baseline).max(0.0);
          let total_h = (b.height).max(sub_shift + s.height);
  
@@ -2691,7 +2691,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
  
              let mut sub_box = sb;
 -            sub_box.x = base_box.x + geom.bottom_hook_x + gap_x;
-+            // HwpStudio: under the stem's right, clear of the bottom hook.
++            // hwalja: under the stem's right, clear of the bottom hook.
 +            sub_box.x = base_box.x + base_box.width * 0.55 + fs * 0.05;
              sub_box.y = base_box.y + sub_dy;
  
@@ -2700,7 +2700,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
      }
  
      /// 적분 기호 레이아웃: 큰 기호 + 오른쪽 위/아래 첨자 (nolimits 스타일)
-+    /// HwpStudio: 적분 기호는 그리는 경로(`integral_geom`)의 크기로 놓고, 첨자를 그 오른쪽
++    /// hwalja: 적분 기호는 그리는 경로(`integral_geom`)의 크기로 놓고, 첨자를 그 오른쪽
 +    /// 위(위 끝)와 아래(아래 끝)에 붙인다 — 종전의 글꼴 기준 크기는 경로보다 작아 기호가
 +    /// 잘렸다.
      fn layout_integral(
@@ -2785,7 +2785,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +        }
 +    }
 +
-+    /// HwpStudio: 밑글자를 가운데, 첨자를 작게 그 위·아래에 (빈 첨자는 자리를 차지하지 않는다).
++    /// hwalja: 밑글자를 가운데, 첨자를 작게 그 위·아래에 (빈 첨자는 자리를 차지하지 않는다).
 +    fn layout_under_over(
 +        &self,
 +        base: &EqNode,
@@ -2852,7 +2852,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 -            .width
 -            .max(over_box.width)
 -            .max(under_box.as_ref().map(|u| u.width).unwrap_or(0.0));
-+        // 전체 폭: 가장 넓은 요소 기준. HwpStudio: 화살표는 위아래 내용보다 조금 길게,
++        // 전체 폭: 가장 넓은 요소 기준. hwalja: 화살표는 위아래 내용보다 조금 길게,
 +        // 적어도 1.5em으로 그리고(svg_render가 선으로 늘림), 양옆은 관계 기호만큼 띄운다.
 +        let pad = fs * RELATION_SPACE;
 +        let max_w = (over_box.width)
@@ -2874,7 +2874,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +        arrow_box.x = pad;
          arrow_box.y = y;
 -        let arrow_center_y = y + arrow_box.height / 2.0;
-+        // HwpStudio: the arrow's own baseline, so the letters beside it sit on the line
++        // hwalja: the arrow's own baseline, so the letters beside it sit on the line
 +        // and the arrow on the math axis (was its box's middle, the letters on the arrow).
 +        let arrow_baseline = y + arrow_box.baseline;
          y += arrow_box.height + gap;
@@ -2884,7 +2884,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +            ub.x = pad + (max_w - ub.width) / 2.0;
              ub.y = y;
 -            y += ub.height;
-+            // HwpStudio: and room for its descenders (y, g), which go below its box.
++            // hwalja: and room for its descenders (y, g), which go below its box.
 +            y += ub.height + gap;
          } else {
              y -= gap; // under가 없으면 마지막 gap 제거
@@ -2907,7 +2907,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
  
 -        let left_w = if left.is_empty() { 0.0 } else { paren_w };
 -        let right_w = if right.is_empty() { 0.0 } else { paren_w };
-+        // HwpStudio: as wide as the font's bracket drawn there.
++        // hwalja: as wide as the font's bracket drawn there.
 +        let side = |d: &str| {
 +            if d.is_empty() {
 +                0.0
@@ -2925,7 +2925,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
      matches!(symbol, "∫" | "∬" | "∭" | "∮" | "∯" | "∰")
 +}
 +
-+/// HwpStudio: 적분 기호의 줄기 수와 고리(선적분) 여부.
++/// hwalja: 적분 기호의 줄기 수와 고리(선적분) 여부.
 +pub(crate) fn integral_strokes(symbol: &str) -> (usize, bool) {
 +    match symbol {
 +        "∬" => (2, false),
@@ -2936,9 +2936,9 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +        _ => (1, false),
 +    }
  }
-+/// HwpStudio: 겹친 줄기 사이 (글자 크기 배수).
++/// hwalja: 겹친 줄기 사이 (글자 크기 배수).
 +pub(crate) const INTEGRAL_STROKE_STEP: f64 = 0.22;
-+/// HwpStudio: the width of the font's `delimiter` grown to `height` (as the renderers draw
++/// hwalja: the width of the font's `delimiter` grown to `height` (as the renderers draw
 +/// it), `None` without the font or for a name rather than a character.
 +pub(crate) fn stretched_width(delimiter: &str, height: f64, fs: f64) -> Option<f64> {
 +    let mut chars = delimiter.chars();
@@ -2949,7 +2949,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +    Some(super::stix::stretched(c, true, height / scale)?.width() * scale)
 +}
  
-+/// HwpStudio: STIX Two Math's upright display integral for `symbol`, drawn to the
++/// hwalja: STIX Two Math's upright display integral for `symbol`, drawn to the
 +/// integral's box (`integral_geom`).
 +pub(crate) fn integral_glyph(symbol: &str) -> Option<super::stix::Shape> {
 +    let name = match symbol {
@@ -2964,7 +2964,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +    super::stix::named(&format!("{name}.updsp"))
 +}
 +
-+/// HwpStudio: 줄기 수만큼 넓힌 적분 기호의 폭 (글꼴이 있으면 그 글리프의 폭).
++/// hwalja: 줄기 수만큼 넓힌 적분 기호의 폭 (글꼴이 있으면 그 글리프의 폭).
 +pub(crate) fn integral_width(fs: f64, symbol: &str) -> f64 {
 +    if let Some(shape) = integral_glyph(symbol) {
 +        let g = integral_geom(fs);
@@ -2975,7 +2975,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +}
 +
  /// 텍스트 폭 추정
-+/// HwpStudio: Times 로만의 글자 폭 (1/1000 em, ASCII 32–126, Adobe Times-Roman AFM).
++/// hwalja: Times 로만의 글자 폭 (1/1000 em, ASCII 32–126, Adobe Times-Roman AFM).
 +/// 수식은 Times New Roman 으로 그리므로 그 폭으로 잰다.
 +const TIMES_ROMAN: [u16; 95] = [
 +    250, 333, 408, 500, 500, 833, 778, 180, 333, 333, 500, 564, 250, 333, 250, 278, 500, 500, 500,
@@ -2984,7 +2984,7 @@ diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
 +    722, 611, 333, 278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500,
 +    278, 778, 500, 500, 500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541,
 +];
-+/// HwpStudio: Times 이탤릭의 글자 폭 (A–Z, a–z, Adobe Times-Italic AFM).
++/// hwalja: Times 이탤릭의 글자 폭 (A–Z, a–z, Adobe Times-Italic AFM).
 +const TIMES_ITALIC_UPPER: [u16; 26] = [
 +    611, 611, 667, 722, 611, 611, 722, 722, 333, 444, 667, 556, 833, 667, 722, 611, 722, 611, 500,
 +    556, 722, 611, 833, 611, 556, 556,
@@ -3043,7 +3043,7 @@ diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
  };
  use super::tokenizer::{tokenize, Token, TokenType};
 +
-+/// HwpStudio: 두 글자 이상의 기호(`<=`, `+-`, `->` …)는 그것이 뜻하는 기호로 그린다.
++/// hwalja: 두 글자 이상의 기호(`<=`, `+-`, `->` …)는 그것이 뜻하는 기호로 그린다.
 +fn symbol_node(val: String) -> EqNode {
 +    if val == "->" {
 +        return EqNode::MathSymbol("→".to_string());
@@ -3114,7 +3114,7 @@ diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
          EqNode::BigOp { symbol, sub, sup }
 +    }
 +
-+    /// HwpStudio: UNDEROVER 밑글자 _ 아래 ^ 위
++    /// hwalja: UNDEROVER 밑글자 _ 아래 ^ 위
 +    fn parse_under_over(&mut self) -> EqNode {
 +        let base = Box::new(self.parse_single_or_group());
 +        let (mut under, mut over) = (None, None);
@@ -3137,7 +3137,7 @@ diff --git a/src/renderer/equation/stix.rs b/src/renderer/equation/stix.rs
 --- a/src/renderer/equation/stix.rs
 +++ b/src/renderer/equation/stix.rs
 @@ -0,0 +1,210 @@
-+//! HwpStudio: 수식 기호(적분·근호·괄호·화살표·장식)를 STIX Two Math 글리프로 그린다.
++//! hwalja: 수식 기호(적분·근호·괄호·화살표·장식)를 STIX Two Math 글리프로 그린다.
 +//! 기호를 늘릴 때는 글꼴 MATH 표의 크기 변형 글리프를 고르고, 그보다 길면 표의 조각
 +//! 이음(assembly)으로 잇는다. 글꼴이 없으면 모두 `None` 이고 호출부는 종전대로 그린다.
 +
@@ -3355,7 +3355,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
  pub const DEFAULT_EQUATION_FONT_FAMILY_ATTR: &str =
      "font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
 -const EQ_FONT_FAMILY: &str = " font-family=\"'Latin Modern Math', 'STIX Two Text', 'STIX Two Math', 'Times New Roman', 'Times', serif\"";
-+// HwpStudio: STIX Two Math를 먼저(기울인 글자는 그 수학 이탤릭 글자로), 없는 글자는 다른 글꼴로.
++// hwalja: STIX Two Math를 먼저(기울인 글자는 그 수학 이탤릭 글자로), 없는 글자는 다른 글꼴로.
 +const EQ_FONT_FAMILY: &str = " font-family=\"'STIX Two Math', 'STIX Two Text', 'Times New Roman', 'Times', serif\"";
  
  /// 수식을 SVG 조각 문자열로 렌더링
@@ -3365,7 +3365,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
              // FontStyle::Roman(`rm` 적용)으로 italic=false 가 전달된 경우에도 이탤릭을 적용하지 않는다.
              let has_cjk = super::text_has_cjk(text);
 -            let italic_attr = if !has_cjk && italic {
-+            // HwpStudio: STIX Two Math has no italic face; its math italic letters are.
++            // hwalja: STIX Two Math has no italic face; its math italic letters are.
 +            let esc = if !has_cjk && italic && !bold {
 +                escape_xml(&math_italic(text))
 +            } else {
@@ -3383,11 +3383,11 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
 +                svg.push_str(&integral_path(x, y, fs, color, text));
              } else {
 -                let text_x = x;
-+                // HwpStudio: 줄이 둘레를 띄운 기호도 제자리에 오도록 상자 가운데에 둔다.
++                // hwalja: 줄이 둘레를 띄운 기호도 제자리에 오도록 상자 가운데에 둔다.
 +                let text_x = x + lb.width / 2.0;
                  let text_y = y + lb.baseline;
                  let esc = escape_xml(text);
-+                // HwpStudio: 한컴은 그리스 소문자를 변수처럼 기울여 쓴다.
++                // hwalja: 한컴은 그리스 소문자를 변수처럼 기울여 쓴다.
 +                let greek = text
 +                    .chars()
 +                    .all(|c| matches!(c, 'α'..='ω' | 'ϑ' | 'ϕ' | 'ϖ' | 'ϵ' | 'ϱ'));
@@ -3409,7 +3409,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
              let sign_h = lb.height;
              let body_left = x + body.x - fs * 0.1;
              let sign_x = x;
-+            // HwpStudio: the font's radical, its top on the rule over the body.
++            // hwalja: the font's radical, its top on the rule over the body.
 +            let scale = fs / super::stix::units_per_em();
 +            let radical = super::stix::stretched('√', true, sign_h / scale);
 +            if let (Some(shape), Some(rule)) = (radical, super::stix::radical_rule()) {
@@ -3463,7 +3463,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
              // 텍스트 높이 파렌(`(`, `)`)은 폰트 글리프로 렌더, 그 외는 path. (Task #283)
              let use_glyph = lb.height <= fs * 1.2;
              let paren_w = if use_glyph { fs * 0.333 } else { fs * 0.27 };
-+            // HwpStudio: with the font, each bracket fills the side the layout gave it.
++            // hwalja: with the font, each bracket fills the side the layout gave it.
 +            if super::layout::stretched_width("(", lb.height, fs).is_some() {
 +                let right_x = x + body.x + body.width;
 +                if !left.is_empty() {
@@ -3484,7 +3484,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
  /// attach point(동일 geom)와 정합한다.
 -fn integral_path(x: f64, y: f64, fs: f64, color: &str) -> String {
 +fn integral_path(x: f64, y: f64, fs: f64, color: &str, symbol: &str) -> String {
-+    // HwpStudio: STIX Two Math's own upright display integral, sized to the integral's box.
++    // hwalja: STIX Two Math's own upright display integral, sized to the integral's box.
 +    if let Some(shape) = super::layout::integral_glyph(symbol) {
 +        let g = integral_geom(fs);
 +        let scale = (g.bottom_y - g.top_y) / shape.height();
@@ -3549,7 +3549,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
 +        .collect()
 +}
 +
-+/// HwpStudio: REL's arrow across its box, so it spans what is written over and under it:
++/// hwalja: REL's arrow across its box, so it spans what is written over and under it:
 +/// the font's, or lines without it. Returns false for other symbols.
 +fn draw_rel_arrow(svg: &mut String, arrow: &str, x: f64, y: f64, w: f64, h: f64, color: &str) -> bool {
 +    // The font's arrow, grown to the width, on the glyph's baseline (0.8 em down the box).
@@ -3604,7 +3604,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
      color: &str,
      fs: f64,
  ) {
-+    // HwpStudio: the font's own bracket, as tall as the box, centred in it.
++    // hwalja: the font's own bracket, as tall as the box, centred in it.
 +    let scale = fs / super::stix::units_per_em();
 +    let mut chars = bracket.chars();
 +    if let (Some(c), None) = (chars.next(), chars.next()) {
@@ -3625,7 +3625,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
      color: &str,
      fs: f64,
  ) {
-+    // HwpStudio: the font's accent (the wide ones grown to the body), its foot just over the
++    // hwalja: the font's accent (the wide ones grown to the body), its foot just over the
 +    // body; rules stay lines.
 +    let accent = match kind {
 +        DecoKind::Hat => Some(('\u{302}', true)),
@@ -3662,7 +3662,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
          }
 -        _ => {
 -            // Check, Acute, Grave, Dyad, Arch, StrikeThrough 등 간략 처리
-+        // HwpStudio: 남은 장식도 제 모양으로 (종전에는 모두 짧은 가로선이었다).
++        // hwalja: 남은 장식도 제 모양으로 (종전에는 모두 짧은 가로선이었다).
 +        DecoKind::Check => {
              svg.push_str(&format!(
 +                "<path d=\"M{:.2},{:.2} L{:.2},{:.2} L{:.2},{:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"/>\n",
@@ -3723,7 +3723,7 @@ diff --git a/src/renderer/equation/svg_render.rs b/src/renderer/equation/svg_ren
      result
  }
  
-+/// HwpStudio: 수식 그룹에 붙여 앱이 수식을 직접 조판할 수 있게 하는 속성: 스크립트,
++/// hwalja: 수식 그룹에 붙여 앱이 수식을 직접 조판할 수 있게 하는 속성: 스크립트,
 +/// 레이아웃 상자(폭 높이 기준선)와 글자 크기, 색.
 +pub fn equation_group_attrs(script: &str, layout: &LayoutBox, font_size: f64, color: &str) -> String {
 +    format!(
@@ -3759,7 +3759,7 @@ diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenize
              }
          }
  
-+        // HwpStudio: 단어 전체가 수식 키워드(`SIMEQ`, `itimes`…)면 앞부분을 떼지 않는다.
++        // hwalja: 단어 전체가 수식 키워드(`SIMEQ`, `itimes`…)면 앞부분을 떼지 않는다.
 +        let word: String = self.chars[self.pos..]
 +            .iter()
 +            .take_while(|c| c.is_ascii_alphanumeric())
@@ -3777,13 +3777,13 @@ diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenize
              return Some(Token::new(TokenType::Symbol, s, start));
          }
  
-+        // HwpStudio: := (정의)
++        // hwalja: := (정의)
 +        if ch == ':' && next == '=' {
 +            self.pos += 2;
 +            return Some(Token::new(TokenType::Symbol, ":=", start));
 +        }
 +
-+        // HwpStudio: +- (±), -+ (∓)
++        // hwalja: +- (±), -+ (∓)
 +        if (ch == '+' && next == '-') || (ch == '-' && next == '+') {
 +            self.pos += 2;
 +            let s: String = [ch, next].iter().collect();
@@ -3797,7 +3797,7 @@ diff --git a/src/renderer/equation/tokenizer.rs b/src/renderer/equation/tokenize
          loop {
              let mut token = self.next_token();
              token.space_before = self.last_had_space;
-+            // HwpStudio: 한컴 수식의 `from` / `to` 는 `_` / `^` 처럼 아래·위 끝을 붙인다
++            // hwalja: 한컴 수식의 `from` / `to` 는 `_` / `^` 처럼 아래·위 끝을 붙인다
 +            // (`sum from {i=1} to {n}`). LaTeX 의 `\to`(화살표)는 그대로 둔다.
 +            if token.ty == TokenType::Command
 +                && self.chars.get(token.pos) != Some(&'\\')
@@ -3903,7 +3903,7 @@ diff --git a/src/renderer/layout.rs b/src/renderer/layout.rs
      width
 +}
 +
-+/// HwpStudio: a 글자처럼 취급 equation of a paragraph split over pages comes as an object
++/// hwalja: a 글자처럼 취급 equation of a paragraph split over pages comes as an object
 +/// item on the page of the paragraph's last fragment; when its line is before that
 +/// fragment, it was drawn on an earlier page with its line.
 +fn tac_equation_on_earlier_page(
@@ -3945,7 +3945,7 @@ diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/parag
      // 어느 줄에도 안 실려 그려지지 않았다 — 156585314 3쪽: 그림(pos 0)만 그려지고
      // 4×8 표(pos 1)가 사라진다.
      let single_empty_line = comp.lines.len() == 1 && end <= start;
-+    // HwpStudio: 글자 없는 문단의 마지막 빈 줄은 그 뒤 개체를 모두 담는다 — 글자가 없으면
++    // hwalja: 글자 없는 문단의 마지막 빈 줄은 그 뒤 개체를 모두 담는다 — 글자가 없으면
 +    // 개체 위치가 0, 1, 2… 로 이어 매겨져 `pos == start` 인 첫 개체만 남았다.
 +    let last_empty_line = line.runs.is_empty() && comp.lines.get(line_idx + 1).is_none();
      tac_offsets_px
@@ -3973,7 +3973,7 @@ diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/parag
          // 본문 좌측, 가운데라면 269.6). `column_start > 0` 인 줄은 한컴이 흐름 x 를 적어 둔
          // 경우이므로 #1256/#1308 계약대로 그 값을 존중한다.
 -        let align_offset = if cell_ctx.is_some() || comp_line.column_start == 0 {
-+        // HwpStudio: 다시 조판한 줄의 시작이 반올림으로 몇 HWPUNIT 어긋난 것(1px 미만)은
++        // hwalja: 다시 조판한 줄의 시작이 반올림으로 몇 HWPUNIT 어긋난 것(1px 미만)은
 +        // 흐름 x 가 아니다.
 +        let align_offset = if cell_ctx.is_some() || comp_line.column_start.abs() < 75 {
              match alignment {

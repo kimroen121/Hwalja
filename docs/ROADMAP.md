@@ -1,4 +1,4 @@
-# HwpStudio 로드맵
+# hwalja 로드맵
 
 목표: HWP/HWPX 문서를 원본 훼손 없이 편집하는 macOS 네이티브 편집기. **한컴오피스 2024 한/글 도움말에 적힌 기능을 그 도움말대로, 최대한 정확하게 지원한다.**
 
@@ -24,7 +24,7 @@
 
 도움말 `hwpbase/screen.htm`(그림 `intro_screen.png`), `view/toolbar/menu.htm`, `view/toolbar/toolbar.htm`, `view/toolbar/toolbar(base).htm`, `view/toolbar_formatting.htm`, `view/status_bar.htm`, `view/view_selection_icon.htm`, `view/workwindow/workwindow.htm`.
 
-| 한/글 2024 | HwpStudio |
+| 한/글 2024 | hwalja |
 |---|---|
 | 제목 | macOS 창 제목 막대(문서 이름, 편집됨 표시). 한/글의 빨강·파랑 파일 이름 색은 쓰지 않는다. |
 | 메뉴(파일·편집·보기·입력·서식·쪽·보안·검토·도구, 표 안에서는 표) | macOS 메뉴 막대에 같은 순서로 둔다. 각 메뉴의 항목과 순서는 `menu/*.htm`을 따르고, 아직 동작하지 않는 항목은 넣지 않는다. 앞에는 앱 메뉴, 뒤에는 macOS 윈도우·도움말 메뉴가 붙는다. |

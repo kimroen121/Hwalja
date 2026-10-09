@@ -7,16 +7,16 @@ Command Line Tools만으로는 SwiftUI 매크로가 없어 빌드되지 않습�
 
 ```sh
 make test     # Rust 엔진 + Swift 테스트
-make run      # build/HwpStudio.app 생성(ad-hoc 서명) 후 실행
-make dist     # 유니버설 빌드, Developer ID 서명, 공증, build/HwpStudio.zip
+make run      # build/hwalja.app 생성(ad-hoc 서명) 후 실행
+make dist     # 유니버설 빌드, Developer ID 서명, 공증, build/hwalja.zip
 ```
 
-엔진 프로토콜이 바뀐 커밋을 pull한 뒤에는 예전에 만든 앱이나 `libhwp_engine_abi.a`를 그대로 실행하지 마세요. 앱과 엔진의 프로토콜 버전이 다르면 HwpStudio는 렌더링을 시작하기 전에 열기를 거부합니다(로그에 두 버전이 남습니다). 이때 `make engine` 뒤 `make run`을 실행하세요.
+엔진 프로토콜이 바뀐 커밋을 pull한 뒤에는 예전에 만든 앱이나 `libhwp_engine_abi.a`를 그대로 실행하지 마세요. 앱과 엔진의 프로토콜 버전이 다르면 hwalja는 렌더링을 시작하기 전에 열기를 거부합니다(로그에 두 버전이 남습니다). 이때 `make engine` 뒤 `make run`을 실행하세요.
 
 `make dist` 준비:
 `rustup target add x86_64-apple-darwin`,
 `export SIGN_IDENTITY="Developer ID Application: …"`,
-`xcrun notarytool store-credentials hwpstudio`.
+`xcrun notarytool store-credentials hwalja`.
 
 Xcode에서 작업하려면 `Package.swift`를 엽니다. 먼저 `make engine`을 한 번 실행해야 합니다.
 
