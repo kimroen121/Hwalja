@@ -762,6 +762,12 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 page: hit.page, x: hit.point.x, y: hit.point.y,
                 includeHeaderFooter: clicks >= 2 || editingHeaderFooter
             )
+            // A click on a 양식 개체 works it, as in 한/글 outside 양식 편집 상태.
+            if clicks == 1, !extend, let form = try? await model.form(page: hit.page, x: hit.point.x, y: hit.point.y),
+               form.enabled, form.kind != "PushButton" {
+                self?.work(form, model)
+                return nil
+            }
             // A click on an object selects it, except inside a 글상자, away from its edge,
             // where it places the caret in the box's text.
             // With <Shift>, a click on another object chooses it too.
@@ -798,6 +804,33 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
+    /// 양식 개체: a 선택 상자 turns, a 라디오 단추 is chosen, a 콤보 상자 offers its items, and
+    /// an 입력 상자 (or a 콤보 상자 without items) takes text.
+    private func work(_ form: FormInfo, _ model: HwpDocument) {
+        let set = { [weak self] (value: Int32?, text: String?) in
+            model.edit(self?.undoManager) { _ in .setForm(form.form, value: value, text: text) }
+        }
+        switch form.kind {
+        case "CheckBox": set(form.value == 0 ? 1 : 0, nil)
+        case "RadioButton": if form.value == 0 { set(1, nil) }
+        case "ComboBox" where !form.items.isEmpty:
+            let menu = DropDown.menu(form.items.map { item in Choice(title: item, on: item == form.text) { set(nil, item) } })
+            guard let rect = viewRect(form.rect) else { return }
+            DispatchQueue.main.async { menu.popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.maxY), in: self) }
+        default:
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = form.name
+                let field = NSTextField(string: form.text)
+                field.frame = NSRect(x: 0, y: 0, width: 240, height: 22)
+                alert.accessoryView = field
+                alert.addButton(withTitle: "확인")
+                alert.addButton(withTitle: "취소")
+                alert.window.initialFirstResponder = field
+                if alert.runModal() == .alertFirstButtonReturn { set(nil, field.stringValue) }
+            }
+        }
+    }
     /// Whether `position` is in the text of the 글상자 `object`.
     private static func holds(_ object: ObjectRef, _ position: EditPosition) -> Bool {
         object.kind == .shape && position.target.paragraph == object.paragraph

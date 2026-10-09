@@ -60,6 +60,13 @@ enum Request {
         x: f64,
         y: f64,
     },
+    /// The 양식 개체 under a page point.
+    FormAt {
+        revision: u64,
+        page: u32,
+        x: f64,
+        y: f64,
+    },
     /// Every object laid out on `page`, bottom first.
     Objects {
         revision: u64,
@@ -269,6 +276,12 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             x,
             y,
         } => HwpEditResult::ok(session.object_at(revision, page, x, y)?, Vec::new()),
+        Request::FormAt {
+            revision,
+            page,
+            x,
+            y,
+        } => HwpEditResult::ok(session.form_at(revision, page, x, y)?, Vec::new()),
         Request::Objects { revision, page } => {
             HwpEditResult::ok(session.objects(revision, page)?, Vec::new())
         }

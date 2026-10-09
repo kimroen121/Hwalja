@@ -6,6 +6,7 @@ mod commands;
 mod display;
 pub mod ffi;
 mod format;
+mod forms;
 mod geometry;
 mod header_footer;
 mod latex;
@@ -354,6 +355,7 @@ impl EditSession {
                 upstream: false,
             }),
             EditCommand::SetPage { .. }
+            | EditCommand::SetForm { .. }
             | EditCommand::SetPageBorder { .. }
             | EditCommand::SetSection { .. }
             | EditCommand::SetNoteShape { .. }

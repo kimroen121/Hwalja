@@ -101,6 +101,8 @@ enum EditCommand: Encodable, Sendable {
     case insertNote(EditPosition, endnote: Bool)
     /// 필드 입력 › 누름틀: 안내문, 메모 내용, 필드 이름 and 양식 모드에서 편집 가능.
     case insertClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
+    /// A 양식 개체's value (선택 상자, 라디오 단추) or text (입력 상자, 콤보 상자).
+    case setForm(FormRef, value: Int32?, text: String?)
     /// 고치기 of the 누름틀 at the position.
     case editClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
     /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
@@ -173,7 +175,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -256,6 +258,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .setForm(form, value, text):
+            try c.encode("setForm", forKey: .kind)
+            try c.encode(form, forKey: .form)
+            try c.encodeIfPresent(value, forKey: .value)
+            try c.encodeIfPresent(text, forKey: .text)
         case let .editClickHere(position, guide, memo, name, formEditable):
             try c.encode("editClickHere", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -1067,6 +1074,27 @@ struct PictureInfo: Decodable, Hashable, Sendable, Identifiable {
     var object: ObjectRef
 }
 
+/// A 양식 개체: control `control` of the paragraph (in a table's cell when `cell`).
+struct FormRef: Codable, Hashable, Sendable {
+    var section: UInt32
+    var paragraph: UInt32
+    var control: UInt32
+    var cell: CellTarget?
+}
+/// A 양식 개체 under the pointer.
+struct FormInfo: Decodable, Hashable, Sendable {
+    var form: FormRef
+    /// PushButton, CheckBox, ComboBox, RadioButton or Edit.
+    var kind: String
+    var name: String
+    var caption: String
+    var value: Int32
+    var text: String
+    var enabled: Bool
+    var items: [String]
+    var rect: PageRect
+}
+
 /// A 누름틀 as 필드 입력 shows it.
 struct ClickHere: Decodable, Hashable, Sendable {
     var guide: String
@@ -1158,6 +1186,7 @@ enum EngineRequest: Encodable, Sendable {
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
     case objects(revision: UInt64, page: UInt32)
+    case formAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case objectProps(ObjectRef)
     /// 삽입 그림 저장하기: the picture's image file.
     case pictureFile(ObjectRef)
@@ -1278,6 +1307,12 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("tableLines", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(page, forKey: .page)
+        case let .formAt(revision, page, x, y):
+            try c.encode("formAt", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(page, forKey: .page)
+            try c.encode(x, forKey: .x)
+            try c.encode(y, forKey: .y)
         case let .objects(revision, page):
             try c.encode("objects", forKey: .op)
             try c.encode(revision, forKey: .revision)

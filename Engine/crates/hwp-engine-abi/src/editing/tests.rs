@@ -5902,3 +5902,95 @@ fn click_here_fields_show_their_guide_and_take_typing() {
             .is_empty());
     }
 }
+/// A document whose first paragraph holds a 선택 상자, two 라디오 단추 of one group and an
+/// 입력 상자, as a saved HWPX.
+fn form_document() -> Vec<u8> {
+    use rhwp::model::control::{FormObject, FormType};
+    let mut core = DocumentCore::from_bytes(&plain_document("hwpx", false)).unwrap();
+    let mut doc = core.document().clone();
+    let para = &mut doc.sections[0].paragraphs[0];
+    for (i, kind) in [
+        FormType::CheckBox,
+        FormType::RadioButton,
+        FormType::RadioButton,
+        FormType::Edit,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut f = FormObject {
+            form_type: kind,
+            name: format!("양식{i}"),
+            caption: format!("항목{i}"),
+            width: 6_000,
+            height: 1_500,
+            enabled: true,
+            value: i32::from(i == 1),
+            ..Default::default()
+        };
+        f.common.treat_as_char = true;
+        (f.common.width, f.common.height) = (6_000, 1_500);
+        if kind == FormType::RadioButton {
+            f.properties.insert("RadioGroupName".into(), "묶음".into());
+        }
+        para.controls
+            .push(rhwp::model::control::Control::Form(Box::new(f)));
+    }
+    doc.sections[0].raw_stream = None;
+    core.set_document(doc);
+    core.export_hwpx_native().unwrap()
+}
+#[test]
+fn form_objects_take_values() {
+    let mut s = EditSession::open(&form_document()).unwrap();
+    let forms: Vec<FormInfo> = (0..800)
+        .step_by(4)
+        .filter_map(|x| s.form_at(s.revision, 0, x as f64, 142.0).unwrap())
+        .fold(Vec::new(), |mut all, f| {
+            if !all.iter().any(|g: &FormInfo| g.form == f.form) {
+                all.push(f);
+            }
+            all
+        });
+    let kinds: Vec<_> = forms.iter().map(|f| f.kind.as_str()).collect();
+    assert_eq!(
+        kinds,
+        ["CheckBox", "RadioButton", "RadioButton", "Edit"],
+        "{forms:?}"
+    );
+    let set = |s: &mut EditSession, i: usize, value: Option<i32>, text: Option<&str>| {
+        run(
+            s,
+            EditCommand::SetForm {
+                form: forms[i].form.clone(),
+                value,
+                text: text.map(String::from),
+            },
+        )
+    };
+    set(&mut s, 0, Some(1), None).unwrap();
+    // Choosing the second 라디오 단추 leaves the first.
+    set(&mut s, 2, Some(1), None).unwrap();
+    set(&mut s, 3, None, Some("홍길동")).unwrap();
+    assert!(set(&mut s, 3, Some(1), None).is_err());
+    for save in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        let values: Vec<_> = forms
+            .iter()
+            .map(|f| {
+                let g = reopened.form(&f.form).unwrap();
+                (g.value, g.text.clone())
+            })
+            .collect();
+        assert_eq!(
+            values,
+            [
+                (1, String::new()),
+                (0, String::new()),
+                (1, String::new()),
+                (0, "홍길동".into())
+            ],
+            "{save:?}"
+        );
+    }
+}

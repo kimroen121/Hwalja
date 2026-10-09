@@ -541,6 +541,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
     }
     /// The table borders on a page that can be dragged.
+    /// The 양식 개체 under a page point.
+    func form(page: Int, x: Double, y: Double) async throws -> FormInfo? {
+        try await session.form(revision: revision, page: UInt32(page), x: x, y: y)
+    }
     /// Every object on `page`, bottom first.
     func objects(page: Int) async throws -> [PlacedObject] {
         try await session.objects(revision: revision, page: UInt32(page))

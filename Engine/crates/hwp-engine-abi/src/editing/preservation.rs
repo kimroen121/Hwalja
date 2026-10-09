@@ -196,6 +196,22 @@ pub(super) fn check(
         EditCommand::InsertPicture { position, .. } => {
             return check_inserted_picture(before, after, &position.target)
         }
+        EditCommand::SetForm { .. } => {
+            // Only forms' values and text change.
+            let (mut a, mut b) = (before.clone(), after.clone());
+            for doc in [&mut a, &mut b] {
+                for s in &mut doc.sections {
+                    s.raw_stream = None;
+                    super::forms::without_values(&mut s.paragraphs);
+                    normalize(&mut s.paragraphs);
+                }
+            }
+            return if same(&mut a, &mut b) {
+                Ok(())
+            } else {
+                Err(EditError::PreservationFailed)
+            };
+        }
         EditCommand::SetPictureLink { .. } => {
             // Only one 연결 entry's path changes.
             let mut b = after.clone();

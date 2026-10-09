@@ -278,6 +278,14 @@ pub enum EditCommand {
         position: EditPosition,
         endnote: bool,
     },
+    /// A 양식 개체's value (선택 상자, 라디오 단추: 0 or 1) or text (입력 상자, 콤보 상자).
+    SetForm {
+        form: FormRef,
+        #[serde(default)]
+        value: Option<i32>,
+        #[serde(default)]
+        text: Option<String>,
+    },
     /// 고치기 of the 누름틀 at `position`: its 안내문, 메모 내용, 필드 이름 and 양식 모드에서 편집
     /// 가능.
     EditClickHere {
@@ -489,6 +497,31 @@ pub struct PictureInfo {
     pub page: u32,
     pub path: String,
     pub object: ObjectRef,
+}
+/// A 양식 개체: control `control` of the paragraph (in a table's cell when `cell`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormRef {
+    pub section: u32,
+    pub paragraph: u32,
+    pub control: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell: Option<CellTarget>,
+}
+/// A 양식 개체 under the pointer: its kind (PushButton, CheckBox, ComboBox, RadioButton,
+/// Edit), name, caption, value, text, whether enabled, a 콤보 상자's items, and where it is.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormInfo {
+    pub form: FormRef,
+    pub kind: String,
+    pub name: String,
+    pub caption: String,
+    pub value: i32,
+    pub text: String,
+    pub enabled: bool,
+    pub items: Vec<String>,
+    pub rect: PageRect,
 }
 /// A 누름틀 as 필드 입력 shows it.
 #[derive(Debug, Clone, PartialEq, Serialize)]

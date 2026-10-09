@@ -421,6 +421,9 @@ impl EditSession {
                 body_only(&position.target)?;
                 self.validate_position(position)
             }
+            EditCommand::SetForm { form, value, text } => {
+                self.validate_form(form, *value, text.as_deref())
+            }
             EditCommand::EditClickHere {
                 position,
                 guide,
@@ -1494,6 +1497,10 @@ impl EditSession {
                     )?,
                 };
                 Ok(EditSelection::caret(position.clone()))
+            }
+            EditCommand::SetForm { form, value, text } => {
+                self.set_form(form, *value, text.as_deref())?;
+                Ok(self.kept(form.section))
             }
             EditCommand::EditClickHere {
                 position,
