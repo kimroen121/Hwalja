@@ -6,7 +6,6 @@ import SwiftUI
 struct DocumentWindow: View {
     let document: HwpDocument
     @StateObject private var viewer = Viewer()
-    @State private var pageField = ""
 
     var body: some View {
         if document.creationFailed {
@@ -53,11 +52,7 @@ struct DocumentWindow: View {
                 StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
             }
         }
-        .alert("찾아가기", isPresented: $viewer.goingToPage) {
-            TextField("쪽", text: $pageField)
-            Button("가기") { Int(pageField).map { viewer.go(toPage: $0 - 1) } }
-            Button("취소", role: .cancel) {}
-        }
+        .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.flippingTable) { TableFlipSheet(viewer: viewer) }
@@ -305,6 +300,7 @@ final class Viewer: ObservableObject {
     @Published var replacing = false
     @Published var query = ""
     @Published var replacement = ""
+    @Published var findOptions = FindOptions()
     /// Matches of `query` in the latest searched revision, and the selected one.
     /// Bumped by every request to find, so the bar takes the keyboard even when already shown.
     @Published private(set) var findRequests = 0
@@ -424,9 +420,10 @@ extension Viewer {
     func search() async {
         searchedRevision = document?.revision
         let asked = query
-        let found = asked.isEmpty ? [] : (try? await document?.find(asked)) ?? []
+        let options = findOptions
+        let found = asked.isEmpty ? [] : (try? await document?.find(asked, options)) ?? []
         // A newer query started meanwhile owns the result.
-        guard asked == query else { return }
+        guard asked == query, options == findOptions else { return }
         matches = found
         currentMatch = document?.selection.flatMap { matches.firstIndex(of: $0) }
     }
@@ -435,9 +432,9 @@ extension Viewer {
     /// Matches are looked up after queued edits, so it follows a replacement correctly.
     func findNext(backward: Bool = false) {
         guard let document, !query.isEmpty else { return NSSound.beep() }
-        let query = query
+        let (query, options) = (query, findOptions)
         document.select { [weak self] document in
-            let matches = try await document.find(query)
+            let matches = try await document.find(query, options)
             self?.matches = matches
             guard !matches.isEmpty else {
                 NSSound.beep()
@@ -461,7 +458,7 @@ extension Viewer {
     }
     func replaceAll() {
         guard !query.isEmpty else { return NSSound.beep() }
-        document?.replaceAll(query, with: replacement, undoManager)
+        document?.replaceAll(query, findOptions, with: replacement, undoManager)
     }
 
     /// Shows a zero-based page and puts the caret at its top.
@@ -491,6 +488,17 @@ private struct FindBar: View {
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
+                Menu {
+                    Toggle("대소문자 구별", isOn: $viewer.findOptions.matchCase)
+                    Toggle("온전한 낱말", isOn: $viewer.findOptions.wholeWord)
+                } label: {
+                    Image(systemName: viewer.findOptions == FindOptions() ? "line.3.horizontal.decrease.circle"
+                          : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("선택 사항")
+                .accessibilityLabel("선택 사항")
                 ControlGroup {
                     Button { viewer.findNext(backward: true) } label: { Label("이전 찾기", systemImage: "chevron.left") }
                     Button { viewer.findNext() } label: { Label("다음 찾기", systemImage: "chevron.right") }
@@ -517,7 +525,7 @@ private struct FindBar: View {
         .overlay(alignment: .bottom) { Divider() }
         .onAppear { focused = true }
         .onChange(of: viewer.findRequests) { focused = true }
-        .task(id: viewer.query) { await viewer.search() }
+        .task(id: [viewer.query, "\(viewer.findOptions.matchCase)\(viewer.findOptions.wholeWord)"]) { await viewer.search() }
     }
 }
 

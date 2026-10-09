@@ -1140,6 +1140,14 @@ struct ClickHere: Decodable, Hashable, Sendable {
     var formEditable: Bool
 }
 
+/// 찾기's 선택 사항.
+struct FindOptions: Hashable, Sendable {
+    /// 대소문자 구별.
+    var matchCase = false
+    /// 온전한 낱말: no letter or digit right before or after.
+    var wholeWord = false
+}
+
 /// A 하이퍼링크: 표시할 문자열 and its web address.
 struct Hyperlink: Decodable, Hashable, Sendable {
     var text: String
@@ -1231,7 +1239,7 @@ enum EngineRequest: Encodable, Sendable {
     /// With `from`, of the characters selected between the two positions.
     case format(revision: UInt64, EditPosition, from: EditPosition?)
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
-    case find(query: String, caseSensitive: Bool)
+    case find(query: String, FindOptions)
     case pageSetup(section: UInt32)
     case pageBorder(section: UInt32)
     case styleFormat(UInt32)
@@ -1273,7 +1281,7 @@ enum EngineRequest: Encodable, Sendable {
     case export(SaveFormat)
 
     private enum Key: String, CodingKey {
-        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
+        case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, wholeWord, section,
              includeHeaderFooter, borders,
              object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new, chart
     }
@@ -1319,10 +1327,11 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(position, forKey: .position)
             try c.encode(motion, forKey: .motion)
             try c.encodeIfPresent(goalX, forKey: .goalX)
-        case let .find(query, caseSensitive):
+        case let .find(query, options):
             try c.encode("find", forKey: .op)
             try c.encode(query, forKey: .query)
-            try c.encode(caseSensitive, forKey: .caseSensitive)
+            try c.encode(options.matchCase, forKey: .caseSensitive)
+            try c.encode(options.wholeWord, forKey: .wholeWord)
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
             try c.encode(section, forKey: .section)

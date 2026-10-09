@@ -13,7 +13,7 @@ const REQUEST_LIMIT: usize = 8 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase", deny_unknown_fields)]
-enum Request {
+pub(super) enum Request {
     Apply {
         request: Box<EditRequest>,
         /// The app's selection, which commands that leave the text alone keep.
@@ -186,6 +186,9 @@ enum Request {
     Find {
         query: String,
         case_sensitive: bool,
+        /// 온전한 낱말.
+        #[serde(default)]
+        whole_word: bool,
     },
     /// 복사하기 with formats: the selection to the engine's clipboard, and as HTML.
     Copy {
@@ -383,7 +386,14 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Find {
             query,
             case_sensitive,
-        } => HwpEditResult::ok(session.find(&query, case_sensitive)?, Vec::new()),
+            whole_word,
+        } => {
+            let mut found = session.find(&query, case_sensitive)?;
+            if whole_word {
+                found = session.whole_words(found);
+            }
+            HwpEditResult::ok(found, Vec::new())
+        }
         Request::Export { format } => HwpEditResult::ok(session.reply(), session.export(format)?),
     })
 }

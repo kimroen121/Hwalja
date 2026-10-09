@@ -1690,6 +1690,7 @@ struct DocumentTests {
             ("pictureLine", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(borderColor: 0xff, borderWidth: 100, lineType: 2)), viewer: viewer, tab: "선"))),
+            ("goTo", AnyView(GoToSheet(viewer: viewer, pageCount: 7))),
             ("hyperlink", AnyView(HyperlinkSheet(viewer: viewer, editing: HyperlinkEditing(
                 existing: nil, text: "한컴 홈페이지", uri: "https://www.hancom.com")))),
             ("chartData", AnyView(ChartDataSheet(editing: ChartEditing(chart: 0, data: ChartData(

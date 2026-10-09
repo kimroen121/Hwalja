@@ -496,6 +496,62 @@ struct BookmarkSheet: View {
     }
 }
 
+/// [찾아가기]: 쪽 (a number, or +n/−n from the caret's page) or 책갈피 (a name or one of the
+/// list); 가기 moves the caret there.
+struct GoToSheet: View {
+    let viewer: Viewer
+    let pageCount: Int
+    @Environment(\.dismiss) private var dismiss
+    @State private var kind = "쪽"
+    @State private var page = ""
+    @State private var marks: [Bookmark] = []
+    @State private var mark = ""
+
+    /// The zero-based page `page` names.
+    private var target: Int? {
+        let text = page.trimmingCharacters(in: .whitespaces)
+        guard let number = Int(text) else { return nil }
+        let current = Int(viewer.status.caret?.page ?? UInt32(viewer.position.page + 1))
+        let result = text.hasPrefix("+") || text.hasPrefix("-") ? current + number : number
+        return (1...max(pageCount, 1)).contains(result) ? result - 1 : nil
+    }
+    private var chosen: Bookmark? { marks.first { $0.name == mark } }
+
+    var body: some View {
+        DialogFrame("찾아가기", confirmTitle: "가기", canConfirm: kind == "쪽" ? target != nil : chosen != nil) {
+            HStack(alignment: .top, spacing: 16) {
+                Picker("", selection: $kind) {
+                    Text("쪽").tag("쪽")
+                    Text("책갈피").tag("책갈피")
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                VStack(alignment: .leading, spacing: 8) {
+                    if kind == "쪽" {
+                        LabeledField("쪽 번호") { TextField("", text: $page).frame(width: 80) }
+                        Text("1–\(pageCount)쪽").foregroundStyle(.secondary)
+                    } else {
+                        LabeledField("책갈피 이름") { TextField("", text: $mark).frame(width: 200) }
+                        List(marks, id: \.self, selection: Binding { chosen } set: { mark = $0?.name ?? mark }) {
+                            Text($0.name)
+                        }
+                        .frame(width: 260, height: 160)
+                    }
+                }
+                .frame(width: 280, alignment: .leading)
+            }
+        } confirm: {
+            if kind == "쪽" {
+                target.map { viewer.go(toPage: $0) }
+            } else if let chosen {
+                viewer.go(to: chosen)
+            }
+            dismiss()
+        }
+        .task { marks = (try? await viewer.document?.bookmarks()) ?? [] }
+    }
+}
+
 /// [책갈피] 작업 창: the dialog's items, with 넣기 under the name.
 struct BookmarkPane: View {
     let viewer: Viewer

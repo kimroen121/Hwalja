@@ -85,8 +85,8 @@ final class EditSession: @unchecked Sendable {
     }
 
     /// Every match of `query` the editor can select, in document order.
-    func find(_ query: String) async throws -> [EditSelection] {
-        try await decode(send(.find(query: query, caseSensitive: false)))
+    func find(_ query: String, _ options: FindOptions = FindOptions()) async throws -> [EditSelection] {
+        try await decode(send(.find(query: query, options)))
     }
 
     func copyObject(_ object: ObjectRef) async throws -> Copied {

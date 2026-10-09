@@ -553,4 +553,23 @@ impl EditSession {
         }
         Ok(results)
     }
+
+    /// 온전한 낱말: the matches with no letter or digit right before or after them.
+    pub fn whole_words(&self, matches: Vec<EditSelection>) -> Vec<EditSelection> {
+        matches
+            .into_iter()
+            .filter(|m| {
+                let Ok(para) = get(self.core.document(), &m.anchor.target) else {
+                    return false;
+                };
+                let text: Vec<char> = logical::text(para).chars().collect();
+                let (start, end) = (m.anchor.scalar as usize, m.focus.scalar as usize);
+                let word = |i: Option<usize>| {
+                    i.and_then(|i| text.get(i))
+                        .is_some_and(|c| c.is_alphanumeric())
+                };
+                !word(start.checked_sub(1)) && !word(Some(end))
+            })
+            .collect()
+    }
 }

@@ -341,9 +341,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
 
     /// Replaces every match of `query` as one undo step. Matches in paragraphs the editor
     /// cannot change are skipped.
-    func replaceAll(_ query: String, with text: String, _ undoManager: UndoManager?) {
+    func replaceAll(_ query: String, _ options: FindOptions = FindOptions(), with text: String, _ undoManager: UndoManager?) {
         enqueue { document in
-            let matches = try await document.find(query)
+            let matches = try await document.find(query, options)
             guard !matches.isEmpty else { return NSSound.beep() }
             try await document.run(.replaceAll(matches, text: text))
             document.goalX = nil
@@ -505,8 +505,8 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         try await session.paragraph(target)
     }
     /// Matches of `query` in the current revision, in document order.
-    func find(_ query: String) async throws -> [EditSelection] {
-        try await session.find(query)
+    func find(_ query: String, _ options: FindOptions = FindOptions()) async throws -> [EditSelection] {
+        try await session.find(query, options)
     }
     /// Format at `position` in the current revision.
     func session(formatAt position: EditPosition) async throws -> Format {

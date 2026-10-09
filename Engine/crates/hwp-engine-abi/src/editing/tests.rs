@@ -6135,3 +6135,24 @@ fn hyperlinks_are_inserted_edited_and_removed() {
     let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
     assert!(reopened.hyperlink_at(&point(cell, 1)).unwrap().is_some());
 }
+#[test]
+fn whole_word_matches_stand_alone() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let end = s.paragraph(&body()).unwrap().text.chars().count() as u32;
+    replace(&mut s, body(), 0, end, "한글, 한글과 참한글 Hangul hangul").unwrap();
+    assert_eq!(s.whole_words(s.find("한글", false).unwrap()).len(), 1);
+    assert_eq!(s.find("hangul", false).unwrap().len(), 2);
+    assert_eq!(s.find("hangul", true).unwrap().len(), 1);
+    // As the app asks.
+    let request: super::ffi::Request = serde_json::from_value(serde_json::json!({
+        "op": "find", "query": "한글", "caseSensitive": false, "wholeWord": true,
+    }))
+    .unwrap();
+    assert!(matches!(
+        request,
+        super::ffi::Request::Find {
+            whole_word: true,
+            ..
+        }
+    ));
+}

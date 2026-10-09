@@ -68,7 +68,7 @@
 | 지우기 | ● | `edit/erase.htm` |  |
 | 조판 부호 지우기 | ● | `edit/erase_code.htm` |  |
 | 모두 선택 | ● | `edit/select_all.htm` |  |
-| 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기·찾아가기(쪽) ●. 대소문자 구분·표 안까지 찾기·찾은 개수 ○ `search_text_native`·`search_all_text_native`. 온전한 낱말 등 나머지 선택 사항 △(앱이 찾은 결과를 거르면 됨). 찾아가기의 책갈피 ○ `get_bookmarks_native`, 줄·구역·개체 △ |
+| 찾기 | ◐ | `edit/find/find_find.htm` | 찾기·찾아 바꾸기·다시 찾기 ●, 찾은 개수 ●, 선택 사항의 대소문자 구별·온전한 낱말 ●. 여러 단어 찾기·띄어쓰기 무시·아무개 문자·한글로 한자 찾기·자소 단위 찾기·조건식 사용·조사 자동 교정 △. 찾아가기(⌥⌘G)의 쪽(+n·−n 포함)·책갈피 ●, 구역·줄·스타일·조판 부호 △ |
 | 글자 바꾸기 | △ | `edit/change_characters/change_characters.htm` | 대문자/소문자·전각/반각·일어·간체/번체는 앱에서 바꿔 넣으면 됨. 한자로 바꾸기는 macOS 입력기 |
 | 정렬 | △ | `tools/sort/sort.htm` | 문단 정렬. 엔진에 문단 순서 바꾸기 명령 필요 |
 | 고치기 | ◐ | `edit/modification.htm` | 선택한 개체의 속성, 커서 위치의 누름틀·하이퍼링크 ● |
