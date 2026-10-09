@@ -908,7 +908,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let page = page(near: point), frame = pageFrames[page]
         guard frame.contains(point) else { return nil }
         guard let lines = tableLines[page] else {
-            loadLines(page)
+            loadLines(page, cursorAt: point)
             return nil
         }
         let scale = PageGeometry.pointsPerPixel
@@ -923,14 +923,18 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let extent = origin + same.map(\.from).min()! * scale...origin + same.map(\.to).max()! * scale
         return (line, page, extent)
     }
-    private func loadLines(_ page: Int) {
+    private func loadLines(_ page: Int, cursorAt point: NSPoint) {
         guard let model, !loadingLines.contains(page) else { return }
         loadingLines.insert(page)
         let generation = linesGeneration
         Task { [weak self] in
             let lines = (try? await model.tableLines(page: page)) ?? []
             // Borders read before an edit landed would drag the wrong place.
-            guard let self, generation == linesGeneration else { return }
+            guard let self else { return }
+            guard generation == linesGeneration else {
+                updateCursor(at: point)
+                return
+            }
             loadingLines.remove(page)
             tableLines[page] = lines
             updateCursor()
