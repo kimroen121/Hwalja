@@ -1,4 +1,4 @@
-.PHONY: engine test test-rust test-swift fmt-check app run dist clean
+.PHONY: engine test test-rust test-swift fmt-check compare-pages app run dist clean
 SWIFT_ARCHS ?= arm64
 SWIFT_FLAGS = -c release $(foreach a,$(SWIFT_ARCHS),--arch $(a))
 
@@ -13,6 +13,9 @@ test-swift: engine
 	swift test
 fmt-check:
 	git ls-files -z 'Engine/**/*.rs' | xargs -0 rustfmt --edition 2021 --check
+compare-pages:
+	mkdir -p .build/compare-module-cache
+	swift -module-cache-path .build/compare-module-cache scripts/compare-pages.swift "$(REF_DIR)" "$(ACTUAL_DIR)" $(COMPARE_FLAGS)
 
 app: engine
 	swift build $(SWIFT_FLAGS)

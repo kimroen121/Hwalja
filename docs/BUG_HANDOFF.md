@@ -51,4 +51,4 @@
 
 ### 한컴과 비교
 - [ ] 서식의 한컴 시각 일치: 진하게는 화면 표시용 face가 bold로 바뀌는 것까지 테스트함. 기울임·밑줄·취소선·글자 크기·색·형광펜, 글자·문단 테두리와 배경은 HWP/HWPX 저장 후 한컴 PDF와 비교해야 함(저장·다시 읽기는 테스트함).
-- [ ] 비교 도구: 한컴 뷰어에서 PDF로 인쇄한 결과와 쪽마다 픽셀 비교. 지금은 손으로 나란히 본다: 엔진 `HWP_RENDER=<문서> HWP_RENDER_DIR=<폴더> cargo test render_pages -- --ignored`(쪽 SVG·PDF), 앱 `HWP_SNAPSHOT_DIR=<폴더> HWP_SNAPSHOT_DOC=<문서> swift test --filter snapshots`(캔버스 그대로의 쪽 PNG, 쪽 윤곽 끈 모습 `draft.png`).
+- [x] 비교 도구: 한컴 PDF와 활자 렌더를 같은 크기의 쪽별 PNG로 만든 뒤 `make compare-pages REF_DIR=<한컴 PNG 폴더> ACTUAL_DIR=<활자 PNG 폴더>`로 픽셀 차이율을 계산한다. `COMPARE_FLAGS='--threshold 8 --max-diff-percent 0.1'`처럼 채널 허용차와 실패 기준을 줄 수 있다. 엔진 렌더는 `HWP_RENDER=<문서> HWP_RENDER_DIR=<폴더> cargo test render_pages -- --ignored`, 앱 렌더는 `HWP_SNAPSHOT_DIR=<폴더> HWP_SNAPSHOT_DOC=<문서> swift test --filter snapshots`를 쓴다.
