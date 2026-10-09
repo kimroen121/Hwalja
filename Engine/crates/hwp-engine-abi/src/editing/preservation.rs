@@ -196,6 +196,20 @@ pub(super) fn check(
         EditCommand::InsertPicture { position, .. } => {
             return check_inserted_picture(before, after, &position.target)
         }
+        EditCommand::SetChartData { .. } => {
+            // Only the chart's stored copies change.
+            let mut b = after.clone();
+            b.bin_data_content = before.bin_data_content.clone();
+            for (x, y) in b.sections.iter_mut().zip(&before.sections) {
+                x.raw_stream = y.raw_stream.clone();
+            }
+            let mut a = before.clone();
+            return if same(&mut a, &mut b) {
+                Ok(())
+            } else {
+                Err(EditError::PreservationFailed)
+            };
+        }
         EditCommand::SetForm { .. } => {
             // Only forms' values and text change.
             let (mut a, mut b) = (before.clone(), after.clone());

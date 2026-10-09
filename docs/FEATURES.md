@@ -109,7 +109,7 @@
 | 도형 | ◐ | `draw/drawing(polygon).htm` | 직선·직사각형·타원·호·글상자 ●. 다각형·곡선·자유선·개체 연결선 △. 새 그리기 속성 △ |
 | 그림 | ◐ | `insert/figure/figure(figure).htm` | 그림 넣기 ●. 그림 탭의 바꾸기/저장(그림 바꾸기, 삽입 그림 저장하기) ●, 바꾼 그림의 옛 데이터는 파일에 남는다. 그리기마당 △(자료 필요), 스크린 샷 △, 연결 그림 새로 고침 △, 그림에서 글자 가져오기 — |
 | 표 | ◐ | `table/table(table).htm` | 표 만들기 ●. 표 그리기·표 지우개·문자열을 표로·표를 문자열로 △ |
-| 차트 | △ | `table/chart/chart(createchart).htm` | rhwp가 차트를 새로 만들지 못함. 데이터 편집은 ○ `get/set_chart_data_native` |
+| 차트 | ◐ | `table/chart/chart(createchart).htm` | 차트 고르기·차트 디자인 탭·차트 데이터 편집(두 번 눌러 셀 편집, 줄/칸 추가·지우기, 두 번 누르기·빠른 메뉴 「데이터 편집」) ●. 차트 만들기 △(rhwp가 새로 만들지 못함), 차트 모양 바꾸기 ○, HWPX의 차트는 HWP로 저장하면 사라짐(rhwp) |
 | 글상자 | ◐ | `insert/textbox/textbox.htm#bc-1` | 넣기 ●. 글상자 연결·세로쓰기 △ |
 | 멀티미디어 | △ | `insert/multimedia.htm` | 동영상·소리 개체 |
 | 수식 | ● | `insert/equation/equation.htm` | 수식 편집기. 각주 안 수식은 속성만(rhwp 쪽 배치 한계) |

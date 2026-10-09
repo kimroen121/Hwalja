@@ -207,6 +207,9 @@ struct MenuItems {
         if context.objects > 1 {
             items += [nil, Choice(title: "개체 묶기", key: "g", modifiers: [], enabled: !context.locked) { viewer.groupObjects() }]
         }
+        if context.chart {
+            items += [nil, Choice(title: "데이터 편집…", symbol: Icon.chartData, enabled: !context.locked) { viewer.editChartData() }]
+        }
         if context.object != nil {
             items += [nil, Choice(title: "개체 속성…", symbol: Icon.objectProps, key: "p", modifiers: [], enabled: !context.locked) { viewer.showObjectProperties() }]
         }

@@ -62,6 +62,8 @@ struct EditingContext: Equatable {
     var object: ObjectKind?
     /// How many objects are chosen; more than one for 개체 묶기.
     var objects = 0
+    /// The selected object is a 차트.
+    var chart = false
     /// Formats can be read and changed here.
     var canFormat: Bool { hasSelection && !locked }
     /// 스타일 apply in the body and in cells, not in notes, 머리말 or 꼬리말.
@@ -541,6 +543,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         try await session.objectAt(revision: revision, page: UInt32(page), x: x, y: y)
     }
     /// The table borders on a page that can be dragged.
+    func chartData(_ chart: UInt32) async throws -> ChartData {
+        try await session.chartData(chart)
+    }
     /// The 양식 개체 under a page point.
     func form(page: Int, x: Double, y: Double) async throws -> FormInfo? {
         try await session.form(revision: revision, page: UInt32(page), x: x, y: y)
@@ -703,6 +708,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
                               pageCount: pages.count,
                               canUndo: reply.canUndo, canRedo: reply.canRedo, cellBlock: editable && block, object: object?.object.kind,
                               objects: others.count + (object == nil ? 0 : 1),
+                              chart: object?.chart != nil,
                               locked: reply.locked == true)
         if context != self.context { self.context = context }
         if !next.changedPages.isEmpty { scheduleThumbnails() }

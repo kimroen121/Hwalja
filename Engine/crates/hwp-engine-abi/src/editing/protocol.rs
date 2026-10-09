@@ -278,6 +278,12 @@ pub enum EditCommand {
         position: EditPosition,
         endnote: bool,
     },
+    /// 차트 데이터 편집: chart `chart` (its number in the document) takes `data`, its 줄 and
+    /// 칸 added or removed at the ends.
+    SetChartData {
+        chart: u32,
+        data: ChartData,
+    },
     /// A 양식 개체's value (선택 상자, 라디오 단추: 0 or 1) or text (입력 상자, 콤보 상자).
     SetForm {
         form: FormRef,
@@ -652,6 +658,22 @@ pub struct PlacedObject {
     pub text_box: Option<bool>,
     /// A 직선's start and end on the page (x, y, x, y in page pixels), for dragging them.
     pub ends: Option<[f64; 4]>,
+    /// A 차트: its number in the document, for 차트 데이터 편집.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart: Option<u32>,
+}
+/// 차트 데이터: the 줄 names (labels), and each 칸 (series) with its name and values.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartData {
+    pub labels: Vec<String>,
+    pub series: Vec<ChartSeries>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeries {
+    pub name: String,
+    pub values: Vec<String>,
 }
 /// Object properties in rhwp's names and units (lengths in HWPUNIT). As a query result
 /// the fields the object has are set; as a change, unset fields stay.

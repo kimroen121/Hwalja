@@ -1,5 +1,6 @@
 mod borders;
 mod cells;
+mod charts;
 mod clipboard;
 mod codes;
 mod commands;
@@ -356,6 +357,7 @@ impl EditSession {
             }),
             EditCommand::SetPage { .. }
             | EditCommand::SetForm { .. }
+            | EditCommand::SetChartData { .. }
             | EditCommand::SetPageBorder { .. }
             | EditCommand::SetSection { .. }
             | EditCommand::SetNoteShape { .. }

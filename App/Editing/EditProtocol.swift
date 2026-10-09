@@ -103,6 +103,8 @@ enum EditCommand: Encodable, Sendable {
     case insertClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
     /// A 양식 개체's value (선택 상자, 라디오 단추) or text (입력 상자, 콤보 상자).
     case setForm(FormRef, value: Int32?, text: String?)
+    /// 차트 데이터 편집 of chart `chart`.
+    case setChartData(chart: UInt32, ChartData)
     /// 고치기 of the 누름틀 at the position.
     case editClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
     /// A drawing object in front of the text, anchored at `position`; `x` and `y` place it
@@ -175,7 +177,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -258,6 +260,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(section, forKey: .section)
             try c.encode(border, forKey: .border)
             try c.encode(whole, forKey: .whole)
+        case let .setChartData(chart, data):
+            try c.encode("setChartData", forKey: .kind)
+            try c.encode(chart, forKey: .chart)
+            try c.encode(data, forKey: .data)
         case let .setForm(form, value, text):
             try c.encode("setForm", forKey: .kind)
             try c.encode(form, forKey: .form)
@@ -500,6 +506,17 @@ struct PlacedObject: Decodable, Hashable, Sendable {
     var textBox: Bool?
     /// A 직선's start and end on the page (x, y, x, y in page pixels).
     var ends: [Double]?
+    /// A 차트: its number in the document.
+    var chart: UInt32?
+}
+/// 차트 데이터: the 줄 names, and each 칸 (series) with its name and values.
+struct ChartData: Codable, Hashable, Sendable {
+    var labels: [String]
+    var series: [ChartSeries]
+}
+struct ChartSeries: Codable, Hashable, Sendable {
+    var name: String
+    var values: [String]
 }
 
 /// Object properties in the engine's names and units (lengths in HWPUNIT). As a query
@@ -1187,6 +1204,7 @@ enum EngineRequest: Encodable, Sendable {
     case tableLines(revision: UInt64, page: UInt32)
     case objects(revision: UInt64, page: UInt32)
     case formAt(revision: UInt64, page: UInt32, x: Double, y: Double)
+    case chartData(UInt32)
     case objectProps(ObjectRef)
     /// 삽입 그림 저장하기: the picture's image file.
     case pictureFile(ObjectRef)
@@ -1207,7 +1225,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new, chart
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -1307,6 +1325,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("tableLines", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(page, forKey: .page)
+        case let .chartData(chart):
+            try c.encode("chartData", forKey: .op)
+            try c.encode(chart, forKey: .chart)
         case let .formAt(revision, page, x, y):
             try c.encode("formAt", forKey: .op)
             try c.encode(revision, forKey: .revision)

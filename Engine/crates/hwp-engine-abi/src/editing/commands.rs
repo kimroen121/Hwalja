@@ -424,6 +424,7 @@ impl EditSession {
             EditCommand::SetForm { form, value, text } => {
                 self.validate_form(form, *value, text.as_deref())
             }
+            EditCommand::SetChartData { chart, data } => self.validate_chart_data(*chart, data),
             EditCommand::EditClickHere {
                 position,
                 guide,
@@ -1501,6 +1502,10 @@ impl EditSession {
             EditCommand::SetForm { form, value, text } => {
                 self.set_form(form, *value, text.as_deref())?;
                 Ok(self.kept(form.section))
+            }
+            EditCommand::SetChartData { chart, data } => {
+                self.set_chart_data(*chart, data)?;
+                Ok(self.kept(0))
             }
             EditCommand::EditClickHere {
                 position,

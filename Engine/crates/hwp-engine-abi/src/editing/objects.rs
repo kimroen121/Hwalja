@@ -223,6 +223,18 @@ impl EditSession {
         let controls = layout["controls"]
             .as_array()
             .ok_or(EditError::RenderFailed)?;
+        // The 차트 of the body by place, numbered in document order.
+        let charts: std::collections::HashMap<(u32, u32, u32), u32> =
+            rhwp::document_core::queries::chart_extract::collect_charts(self.core.document())
+                .iter()
+                .filter(|c| c.is_top_level())
+                .map(|c| {
+                    (
+                        (c.section as u32, c.paragraph as u32, c.control as u32),
+                        c.index as u32,
+                    )
+                })
+                .collect();
         Ok(controls
             .iter()
             .filter_map(|c| {
@@ -230,6 +242,16 @@ impl EditSession {
                     "image" => ObjectKind::Picture,
                     "equation" => ObjectKind::Equation,
                     "shape" | "line" | "group" => ObjectKind::Shape,
+                    // An OLE object is chosen only when it is a 차트.
+                    "ole"
+                        if charts.contains_key(&(
+                            index(c, "secIdx")?,
+                            index(c, "paraIdx")?,
+                            index(c, "controlIdx")?,
+                        )) =>
+                    {
+                        ObjectKind::Shape
+                    }
                     _ => return None,
                 };
                 // Objects in headers and nested cells, and those of notes other than
@@ -261,6 +283,7 @@ impl EditSession {
                         height: number(c, "h")?,
                     };
                     return Some(PlacedObject {
+                        chart: None,
                         ends: None,
                         group: false,
                         text_box: None,
@@ -330,6 +353,7 @@ impl EditSession {
                     _ => None,
                 };
                 Some(PlacedObject {
+                    chart: charts.get(&(section, paragraph, control)).copied(),
                     ends,
                     group: matches!(shape, Some(ShapeObject::Group(_))),
                     text_box: shape

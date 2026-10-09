@@ -5994,3 +5994,35 @@ fn form_objects_take_values() {
         );
     }
 }
+/// `HWP_CHART=<an HWPX with a 차트 first>`: 차트 데이터 편집 changes values, adds a 줄 and
+/// a 칸, and keeps them through saving as HWPX (never commit the input). rhwp drops an
+/// HWPX's 차트 on saving as HWP, edited or not.
+#[test]
+#[ignore]
+fn chart_data_is_edited() {
+    let bytes = std::fs::read(std::env::var("HWP_CHART").unwrap()).unwrap();
+    let mut s = EditSession::open(&bytes).unwrap();
+    let chart = (0..s.core.page_count())
+        .flat_map(|p| s.placed(p).unwrap())
+        .find_map(|o| o.chart)
+        .expect("a 차트 to choose");
+    let mut data = s.chart_data(chart).unwrap();
+    data.series[0].values[0] = "9".into();
+    data.labels.push("항목 새".into());
+    for series in &mut data.series {
+        series.values.push("1".into());
+    }
+    let mut extra = data.series[0].clone();
+    extra.name = "계열 새".into();
+    data.series.push(extra);
+    let set = EditCommand::SetChartData {
+        chart,
+        data: data.clone(),
+    };
+    run(&mut s, set).unwrap();
+    assert_eq!(s.chart_data(chart).unwrap(), data);
+    let reopened = EditSession::open(&s.export(SaveFormat::Hwpx).unwrap()).unwrap();
+    assert_eq!(reopened.chart_data(chart).unwrap(), data);
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert_ne!(s.chart_data(chart).unwrap(), data);
+}

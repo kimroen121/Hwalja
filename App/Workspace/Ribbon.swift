@@ -26,7 +26,7 @@ struct ToolRow: View {
     static func contextTabs(_ context: EditingContext) -> [String] {
         switch context.object {
         case .picture: ["그림"]
-        case .shape: ["도형"]
+        case .shape: context.chart ? ["차트 디자인"] : ["도형"]
         case .equation: []
         case .table, nil: context.inHeaderFooter ? ["머리말/꼬리말"] : context.inTable ? ["표 디자인", "표 레이아웃"] : []
         }
@@ -125,6 +125,7 @@ struct ToolRow: View {
         case "표 디자인": tableDesign(context)
         case "표 레이아웃": tableLayout(context)
         case "도형": shape(context)
+        case "차트 디자인": chartDesign(context)
         case "그림": picture(context)
         case "머리말/꼬리말": headerFooter(context)
         default: edit(context)
@@ -283,6 +284,12 @@ struct ToolRow: View {
             })
         }
         .disabled(!context.cellBlock || context.locked)
+        RowDivider()
+        arrangement(context)
+    }
+    @ViewBuilder private func chartDesign(_ context: EditingContext) -> some View {
+        ToolTile("차트 데이터 편집", Icon.chartData) { viewer.editChartData() }
+            .disabled(context.locked)
         RowDivider()
         arrangement(context)
     }
@@ -603,7 +610,7 @@ enum Icon {
     static let splitCells = "square.split.2x2", mergeCells = "square.dashed"
     static let replacePicture = "photo.badge.arrow.down"
     static let cellBorder = "square.grid.3x3"
-    static let field = "character.cursor.ibeam", modify = "square.and.pencil"
+    static let field = "character.cursor.ibeam", modify = "square.and.pencil", chartData = "tablecells"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

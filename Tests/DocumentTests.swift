@@ -1656,6 +1656,10 @@ struct DocumentTests {
             ("pictureLine", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(borderColor: 0xff, borderWidth: 100, lineType: 2)), viewer: viewer, tab: "선"))),
+            ("chartData", AnyView(ChartDataSheet(editing: ChartEditing(chart: 0, data: ChartData(
+                labels: ["항목 1", "항목 2", "항목 3"],
+                series: [ChartSeries(name: "계열 1", values: ["4.3", "2.5", "3.5"]), ChartSeries(name: "계열 2", values: ["2.4", "4.4", "1.8"])])),
+                viewer: viewer))),
             ("tableBorder", AnyView(TableBorderSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(cellSpacing: 283, tableBorder: CellBorder(

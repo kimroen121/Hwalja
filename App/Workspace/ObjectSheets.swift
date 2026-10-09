@@ -48,14 +48,27 @@ extension Viewer {
             }
         }
     }
-    /// What double-click and Return open: 수식 편집기 for an equation, else 개체 속성.
+    /// What double-click and Return open: 수식 편집기 for an equation, 차트 데이터 편집 for a
+    /// 차트, else 개체 속성.
     func open(_ placed: PlacedObject) {
+        if placed.chart != nil { return editChartData() }
         guard placed.object.kind == .equation, let document else { return showObjectProperties() }
         Task {
             guard let props = try? await document.objectProps(placed.object) else { return NSSound.beep() }
             equation = EquationEdit(object: placed.object, script: props.script ?? "",
                                     fontSize: Double(props.fontSize ?? 1000) / 100, color: props.color ?? 0)
         }
+    }
+    /// 차트 데이터 편집 of the selected 차트.
+    func editChartData() {
+        guard let document, let chart = document.object?.chart else { return NSSound.beep() }
+        Task {
+            guard let data = try? await document.chartData(chart) else { return NSSound.beep() }
+            chartData = ChartEditing(chart: chart, data: data)
+        }
+    }
+    func setChartData(_ data: ChartData, chart: UInt32) {
+        document?.edit(undoManager) { _ in .setChartData(chart: chart, data) }
     }
     func setObject(_ object: ObjectRef, _ change: ObjectProps) {
         guard change != ObjectProps() else { return }
@@ -890,5 +903,118 @@ private struct TableSides: View {
             .buttonStyle(ToolButtonStyle(on: down))
             .help(title)
             .accessibilityLabel(title)
+    }
+}
+
+/// 차트 데이터 편집 as opened: the chart's number and its data.
+struct ChartEditing: Identifiable {
+    let id = UUID()
+    let chart: UInt32
+    let data: ChartData
+}
+
+/// [차트 데이터 편집]: the 줄 names down the side, the 칸 names across the top and the values;
+/// a cell's quick menu adds or removes 줄 and 칸.
+struct ChartDataSheet: View {
+    let editing: ChartEditing
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var data: ChartData
+    @State private var editingCell: Cell?
+    @FocusState private var focused: Bool
+
+    init(editing: ChartEditing, viewer: Viewer) {
+        (self.editing, self.viewer) = (editing, viewer)
+        _data = State(initialValue: editing.data)
+    }
+    private var valid: Bool {
+        !data.labels.isEmpty && !data.series.isEmpty
+            && data.series.allSatisfy { $0.values.allSatisfy { Double($0)?.isFinite == true } }
+    }
+    var body: some View {
+        DialogFrame("차트 데이터 편집", confirmTitle: "설정", canConfirm: valid && data != editing.data) {
+            ScrollView([.horizontal, .vertical]) {
+                Grid(horizontalSpacing: 4, verticalSpacing: 4) {
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        ForEach(data.series.indices, id: \.self) { c in
+                            cell(Binding { data.series[c].name } set: { data.series[c].name = $0 }, row: nil, column: c)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    ForEach(data.labels.indices, id: \.self) { r in
+                        GridRow {
+                            cell(Binding { data.labels[r] } set: { data.labels[r] = $0 }, row: r, column: nil)
+                                .fontWeight(.semibold)
+                            ForEach(data.series.indices, id: \.self) { c in
+                                cell(Binding { data.series[c].values[r] } set: { data.series[c].values[r] = $0 }, row: r, column: c)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                }
+                .padding(2)
+            }
+            .frame(width: 520, height: 260)
+        } confirm: {
+            viewer.setChartData(data, chart: editing.chart)
+            dismiss()
+        }
+    }
+    /// A cell: double-clicked it is edited (Return or leaving it sets it); its quick menu
+    /// adds and removes 줄 and 칸.
+    private func cell(_ text: Binding<String>, row: Int?, column: Int?) -> some View {
+        let key = Cell(row: row, column: column)
+        return Group {
+            if editingCell == key {
+                TextField("", text: text)
+                    .focused($focused)
+                    .onSubmit { editingCell = nil }
+                    .onAppear { focused = true }
+                    .onChange(of: focused) { _, now in if !now { editingCell = nil } }
+            } else {
+                Text(text.wrappedValue)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: column != nil && row != nil ? .trailing : .leading)
+                    .padding(.horizontal, 6)
+                    .frame(height: 22)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { editingCell = key }
+            }
+        }
+        .frame(width: 90)
+        .contextMenu {
+            if let column {
+                Button("왼쪽에 열 추가하기") { addColumn(at: column) }
+            }
+            if let row {
+                Button("위에 행 추가하기") { addRow(at: row) }.disabled(row == 0)
+                if row == data.labels.count - 1 { Button("아래에 행 추가하기") { addRow(at: row + 1) } }
+            }
+            Divider()
+            if let column {
+                Button("열 지우기") { data.series.remove(at: column) }.disabled(data.series.count == 1)
+            }
+            if let row {
+                Button("행 지우기") { removeRow(row) }.disabled(data.labels.count == 1)
+            }
+        }
+    }
+    /// A cell of the table: a 줄 name (no column), a 칸 name (no row) or a value.
+    private struct Cell: Equatable {
+        let row: Int?
+        let column: Int?
+    }
+    private func addColumn(at c: Int) {
+        data.series.insert(ChartSeries(name: "계열 \(data.series.count + 1)", values: Array(repeating: "0", count: data.labels.count)), at: c)
+    }
+    private func addRow(at r: Int) {
+        data.labels.insert("항목 \(data.labels.count + 1)", at: r)
+        for c in data.series.indices { data.series[c].values.insert("0", at: r) }
+    }
+    private func removeRow(_ r: Int) {
+        data.labels.remove(at: r)
+        for c in data.series.indices { data.series[c].values.remove(at: r) }
     }
 }

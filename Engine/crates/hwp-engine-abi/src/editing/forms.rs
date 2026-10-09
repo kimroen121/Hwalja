@@ -1,7 +1,6 @@
 //! 양식 개체 values: 선택 상자 and 라디오 단추 chosen, 입력 상자 and 콤보 상자 text.
 use super::*;
 use rhwp::model::control::{Control, FormType};
-use rhwp::model::paragraph::Paragraph;
 
 fn kind(t: FormType) -> &'static str {
     match t {
@@ -62,7 +61,7 @@ fn host(r: &FormRef) -> EditTarget {
 }
 /// Every form's value and text cleared, for checking that only they changed.
 #[cfg(test)]
-pub(super) fn without_values(paragraphs: &mut [Paragraph]) {
+pub(super) fn without_values(paragraphs: &mut [rhwp::model::paragraph::Paragraph]) {
     for p in paragraphs {
         for c in &mut p.controls {
             match c {

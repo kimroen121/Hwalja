@@ -60,6 +60,10 @@ enum Request {
         x: f64,
         y: f64,
     },
+    /// 차트 `chart`'s data.
+    ChartData {
+        chart: u32,
+    },
     /// The 양식 개체 under a page point.
     FormAt {
         revision: u64,
@@ -276,6 +280,7 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             x,
             y,
         } => HwpEditResult::ok(session.object_at(revision, page, x, y)?, Vec::new()),
+        Request::ChartData { chart } => HwpEditResult::ok(session.chart_data(chart)?, Vec::new()),
         Request::FormAt {
             revision,
             page,
