@@ -222,6 +222,14 @@ impl EditSession {
         }
         cache
     }
+    /// Drops the layouts read before the document changed within the revision (an edit
+    /// before it is published, an undo, a roll-back).
+    pub(super) fn forget_layouts(&self) {
+        *self.layouts.borrow_mut() = Layouts {
+            revision: self.revision,
+            ..Default::default()
+        };
+    }
     fn layout(&self, page: u32) -> Option<Rc<Layout>> {
         let mut cache = self.layouts();
         if let Some(layout) = cache.pages.get(&page) {

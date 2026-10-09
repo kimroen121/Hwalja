@@ -833,6 +833,53 @@ fn failed_render_rolls_back_edits_and_undo() {
     command(&mut s, EditCommand::Undo).unwrap();
     assert!(!s.reply().dirty);
 }
+/// The caret reads the layout as it was before a failed edit.
+#[test]
+fn a_failed_edit_leaves_the_caret_layout() {
+    let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
+    let caret = s.caret(s.revision, &point(body(), 3)).unwrap();
+    s.fail_render = true;
+    let long = "가나다라마바사아자차카타파하 ".repeat(20);
+    assert!(replace(&mut s, body(), 0, 0, &long).is_err());
+    s.fail_render = false;
+    assert_eq!(s.caret(s.revision, &point(body(), 3)).unwrap(), caret);
+}
+/// Undo and redo draw again only from the page the edit started on, and end where a
+/// full render would.
+#[test]
+fn undo_renders_from_the_page_the_edit_changed() {
+    use std::hash::{Hash, Hasher};
+    let hashes = |s: &EditSession| -> Vec<u64> {
+        (0..s.core.page_count())
+            .map(|page| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                s.core
+                    .render_page_svg_native(page)
+                    .unwrap()
+                    .hash(&mut hasher);
+                hasher.finish()
+            })
+            .collect()
+    };
+    let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
+    let line = "가나다라마바사아자차카타파하 ".repeat(6) + "\n";
+    replace(&mut s, body(), 0, 0, &line.repeat(60)).unwrap();
+    assert!(s.core.page_count() >= 3);
+    let last = EditTarget {
+        paragraph: 61,
+        ..body()
+    };
+    replace(&mut s, last, 0, 0, "끝").unwrap();
+    for motion in [EditCommand::Undo, EditCommand::Redo] {
+        let reply = run(&mut s, motion).unwrap();
+        assert!(
+            !reply.changed_pages.contains(&0),
+            "{:?}",
+            reply.changed_pages
+        );
+        assert_eq!(s.pages, hashes(&s));
+    }
+}
 #[test]
 fn history_is_bounded_and_new_edit_clears_redo() {
     let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();

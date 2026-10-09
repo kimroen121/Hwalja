@@ -30,11 +30,13 @@ pub use styles::StyleInfo;
 /// Undo + redo states kept in memory; the original bytes are kept separately.
 const HISTORY_LIMIT: usize = 20;
 
-/// A restorable document state. `id` 0 is the opened original.
+/// A restorable document state. `id` 0 is the opened original. `from` is the first page
+/// the edits between it and the next state can have changed; `None` for any page.
 struct State {
     snapshot: u32,
     selection: Option<EditSelection>,
     id: u64,
+    from: Option<u32>,
 }
 
 /// Pages after a render (the hash of each page's SVG), and how to draw the ones that
@@ -383,29 +385,35 @@ impl EditSession {
             | EditCommand::Redo => None,
         };
         // A page earlier: joined or shortened text can move back onto the previous page.
-        let from = start
-            .and_then(|p| self.page_of(&p))
-            .map_or(0, |p| p.saturating_sub(1));
+        // A command with no place in the text can change any page.
+        let from = start.map(|p| self.page_of(&p).map_or(0, |p| p.saturating_sub(1)));
         let snapshot = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {
             let selection = self.execute(&request.command)?;
+            self.forget_layouts();
             #[cfg(test)]
             preservation::check(&before, self.core.document(), &request.command)?;
             let (_, end) = commands::ordered(&selection);
-            let settle = self.page_of(end).unwrap_or(u32::MAX);
-            Ok((selection, self.render(from, settle)?))
+            let settle = match from {
+                Some(_) => self.page_of(end).unwrap_or(u32::MAX),
+                None => u32::MAX,
+            };
+            Ok((selection, self.render(from.unwrap_or(0), settle)?))
         }))
         .unwrap_or(Err(EditError::RenderFailed));
         match result {
             Ok((selection, output)) => {
-                if request.amend && !self.undo.is_empty() {
-                    self.core.discard_snapshot_native(snapshot);
-                } else {
-                    self.undo.push(State {
+                match self.undo.last_mut() {
+                    Some(last) if request.amend => {
+                        self.core.discard_snapshot_native(snapshot);
+                        last.from = last.from.zip(from).map(|(a, b)| a.min(b));
+                    }
+                    _ => self.undo.push(State {
                         snapshot,
                         selection: self.selection.take(),
                         id: self.state,
-                    });
+                        from,
+                    }),
                 }
                 for state in std::mem::take(&mut self.redo) {
                     self.core.discard_snapshot_native(state.snapshot);
@@ -450,12 +458,24 @@ impl EditSession {
             self.redo.pop()
         }
         .ok_or(EditError::InvalidInput)?;
+        // The pages the edits changed, through the last page either side shows them on.
+        let end = |s: &Self, selection: &Option<EditSelection>| {
+            selection
+                .as_ref()
+                .and_then(|selection| s.page_of(commands::ordered(selection).1))
+        };
+        let leaving_end = end(self, &self.selection);
         let current = self.core.save_snapshot_native();
         let result = catch_unwind(AssertUnwindSafe(|| {
             self.core
                 .restore_snapshot_native(target.snapshot)
                 .map_err(|_| EditError::RenderFailed)?;
-            self.render(0, u32::MAX)
+            self.forget_layouts();
+            let settle = match target.from {
+                Some(_) => leaving_end.max(end(self, &target.selection)),
+                None => None,
+            };
+            self.render(target.from.unwrap_or(0), settle.unwrap_or(u32::MAX))
         }))
         .unwrap_or(Err(EditError::RenderFailed));
         match result {
@@ -465,6 +485,7 @@ impl EditSession {
                     snapshot: current,
                     selection: self.selection.take(),
                     id: self.state,
+                    from: target.from,
                 };
                 if back {
                     self.redo.push(leaving)
@@ -501,6 +522,7 @@ impl EditSession {
     }
     /// Restores `snapshot` after a failed command; locks the session if even that fails.
     fn roll_back(&mut self, snapshot: u32, error: EditError) -> EditError {
+        self.forget_layouts();
         if catch_unwind(AssertUnwindSafe(|| {
             self.core.restore_snapshot_native(snapshot)
         }))
