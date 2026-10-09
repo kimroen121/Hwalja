@@ -1,6 +1,6 @@
 # 기능 목록
 
-한컴오피스 2024 한/글 도움말(<https://help.hancom.com/hoffice130/ko-KR/Hwp/>) 목차의 기능을 빠짐없이 옮긴 표다. 순서와 이름은 도움말 목차 그대로다. 계획은 `ROADMAP.md`, 일하는 방식은 `GUIDELINES.md`.
+한컴오피스 2024 한/글 도움말(<https://help.hancom.com/hoffice130/ko-KR/Hwp/>) 목차의 기능을 빠짐없이 옮긴 표다. 순서와 이름은 도움말 목차 그대로다. 계획은 `ROADMAP.md`, 일하는 방식은 `CONTRIBUTING.md`.
 
 - 도움말 경로는 위 주소 뒤에 붙는다. `scripts/hancom-help.py`를 돌리면 `build/hancom-help/`에 목차(`toc.md`), 쪽마다 글(`pages/`), 그림(`img/`)이 생긴다. 아래 표에는 목차의 두 단계까지만 적었다. 그 아래 단계(대화 상자의 탭, 세부 기능)는 그 기능을 만들 때 도움말에서 하나씩 확인한다.
 - 상태
