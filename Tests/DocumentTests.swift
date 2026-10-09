@@ -891,12 +891,68 @@ struct DocumentTests {
         #expect(try await document.text(of: selection) == "째\n둘")
     }
 
+    /// A fast drag out of a table cell reaches the nearest edge of that cell instead of
+    /// leaving the selection at its starting character or crossing document containers.
+    @Test func draggingAcrossAContainerClampsToItsEdge() async throws {
+        let document = HwpDocument()
+        let canvas = DocumentCanvas(frame: NSRect(x: 0, y: 0, width: 900, height: 900))
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        canvas.bind(document)
+        canvas.setZoom(1)
+        canvas.tile()
+        let editor = canvas.editor
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.edit(nil) { $0.map { .insertTable($0.focus, rows: 1, columns: 1) } }
+        await document.settle()
+        document.type("셀 내용", nil)
+        await document.settle()
+        var start = try #require(document.selection?.focus)
+        start.scalar = 0
+        document.select { _ in .caret(start) }
+        await document.settle()
+
+        let page = try #require(editor.frame(ofPage: 0))
+        let caret = PageGeometry.viewRect(try await document.caret(at: start), in: page)
+        let from = NSPoint(x: caret.midX + 2, y: caret.midY)
+        let to = NSPoint(x: caret.midX + 2, y: page.maxY - 80)
+        let outside = PageGeometry.enginePoint(to, in: page)
+        #expect(try await document.hitTest(page: 0, x: outside.x, y: outside.y).target.cell == nil)
+        let event = { (type: NSEvent.EventType, point: NSPoint) in
+            NSEvent.mouseEvent(with: type, location: editor.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        editor.mouseDown(with: event(.leftMouseDown, from))
+        editor.mouseDragged(with: event(.leftMouseDragged, to))
+        editor.mouseUp(with: event(.leftMouseUp, to))
+        for _ in 0..<20 {
+            try? await Task.sleep(for: .milliseconds(20))
+            await document.settle()
+        }
+        let selection = try #require(document.selection)
+        #expect(selection.anchor.target.cell != nil && selection.focus.target.cell != nil)
+        #expect(selection.focus.scalar > selection.anchor.scalar)
+    }
+
     @Test func pageGeometryRoundTrips() {
         let frame = CGRect(x: 24, y: 900, width: 595, height: 842)
         let rect = PageRect(page: 0, x: 120, y: 200, width: 40, height: 16)
         let view = PageGeometry.viewRect(rect, in: frame)
         let back = PageGeometry.enginePoint(view.origin, in: frame)
         #expect(abs(back.x - 120) < 0.001 && abs(back.y - 200) < 0.001)
+    }
+
+    @Test func selectionReachStaysInOneHeaderFooterDefinition() {
+        let header = EditTarget(section: 0, paragraph: 0, cell: nil, note: nil,
+                                headerFooter: HeaderFooterTarget(footer: false, applyTo: 0, page: 0))
+        let sameHeaderOnAnotherPage = EditTarget(section: 0, paragraph: 0, cell: nil, note: nil,
+                                                 headerFooter: HeaderFooterTarget(footer: false, applyTo: 0, page: 2))
+        let otherHeader = EditTarget(section: 0, paragraph: 0, cell: nil, note: nil,
+                                     headerFooter: HeaderFooterTarget(footer: false, applyTo: 1, page: 0))
+        let selection = EditSelection.caret(EditPosition(target: header, scalar: 0))
+        #expect(selection.reaches(EditPosition(target: sameHeaderOnAnotherPage, scalar: 0)))
+        #expect(!selection.reaches(EditPosition(target: otherHeader, scalar: 0)))
+        #expect(!selection.reaches(EditPosition(target: body, scalar: 0)))
     }
 
     @Test func scalarRangesKeepClustersWhole() {

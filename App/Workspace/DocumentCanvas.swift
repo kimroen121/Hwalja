@@ -324,6 +324,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var markedText = ""
     /// Latest drag point waiting for the hit test in flight.
     private var pendingDrag: NSPoint?
+    /// Last pointer position whose hit belongs to the selection anchor's container.
+    private var selectionDragPoint: NSPoint?
     private var hitTesting = false
     /// Injectable so editor tests never overwrite the user's system clipboard.
     var pasteboard = NSPasteboard.general
@@ -708,6 +710,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) { return rightMouseDown(with: event) }
         let point = convert(event.locationInWindow, from: nil)
+        selectionDragPoint = point
         if drawingShape != nil { return setRubber((point, point)) }
         guard let model, let hit = enginePoint(point) else { return }
         window?.makeFirstResponder(self)
@@ -1173,6 +1176,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// drag never queues stale points.
     private func extendToDrag() {
         guard let model, !hitTesting, let point = pendingDrag, let hit = enginePoint(point) else { return }
+        let previousPoint = selectionDragPoint ?? point
         pendingDrag = nil
         hitTesting = true
         model.select { [weak self] model in
@@ -1186,9 +1190,35 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 page: hit.page, x: hit.point.x, y: hit.point.y,
                 includeHeaderFooter: anchor.target.isHeaderFooter
             )
-            // The selection stops at the edge of its text, table or note.
             let selection = EditSelection(anchor: anchor, focus: position)
-            return selection.reaches(position) ? selection : nil
+            if selection.reaches(position) {
+                self?.selectionDragPoint = point
+                return selection
+            }
+            // A fast pointer can jump across the edge between the body, a table cell,
+            // a note or a header. Find the last reachable hit on that path rather than
+            // leaving the focus behind at an arbitrary character.
+            guard let self else { return nil }
+            var insidePoint = previousPoint
+            var outsidePoint = point
+            var insidePosition = model.selection?.focus ?? anchor
+            for _ in 0..<12 {
+                let middle = NSPoint(x: (insidePoint.x + outsidePoint.x) / 2,
+                                     y: (insidePoint.y + outsidePoint.y) / 2)
+                guard let middleHit = enginePoint(middle) else { break }
+                let candidate = try await model.hitTest(
+                    page: middleHit.page, x: middleHit.point.x, y: middleHit.point.y,
+                    includeHeaderFooter: anchor.target.isHeaderFooter
+                )
+                if EditSelection(anchor: anchor, focus: candidate).reaches(candidate) {
+                    insidePoint = middle
+                    insidePosition = candidate
+                } else {
+                    outsidePoint = middle
+                }
+            }
+            selectionDragPoint = insidePoint
+            return EditSelection(anchor: anchor, focus: insidePosition)
         }
     }
 

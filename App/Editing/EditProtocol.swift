@@ -829,11 +829,16 @@ protocol PartialFormat: Codable, Hashable, Sendable {
 }
 
 extension EditSelection {
-    /// Whether `position` is in the same body, table (any of its cells) or note as the anchor,
-    /// the only places a selection can reach.
+    /// Whether `position` is in the same body, header/footer definition, table (any of its
+    /// cells) or note as the anchor, the only places a selection can reach.
     func reaches(_ position: EditPosition) -> Bool {
         let (a, b) = (anchor.target, position.target)
         if a.section != b.section { return false }
+        switch (a.headerFooter, b.headerFooter) {
+        case (nil, nil): break
+        case let (x?, y?) where x.footer == y.footer && x.applyTo == y.applyTo: break
+        default: return false
+        }
         switch (a.cell, b.cell, a.note, b.note) {
         case (nil, nil, nil, nil): return true
         case let (x?, y?, nil, nil): return a.paragraph == b.paragraph && x.control == y.control
