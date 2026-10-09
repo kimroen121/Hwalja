@@ -1228,6 +1228,11 @@ pub enum Motion {
     /// that has one.
     NextHeaderFooter,
     PreviousHeaderFooter,
+    /// From a 각주 or 미주 to the start of the next (or previous) one in the document.
+    NextNote,
+    PreviousNote,
+    /// From a 각주 or 미주 to the body, just after its number.
+    NoteMark,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

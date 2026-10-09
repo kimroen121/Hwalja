@@ -2589,6 +2589,41 @@ fn sets_paper_and_margins() {
     }
 }
 #[test]
+fn notes_are_gone_through_in_order() {
+    let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
+    let mut note = |s: &mut EditSession, scalar, endnote| {
+        let position = point(body(), scalar);
+        let reply = run(s, EditCommand::InsertNote { position, endnote }).unwrap();
+        reply.selection.unwrap().focus.target
+    };
+    // A 각주 after 가, then a 미주 after the emoji that follows it.
+    let first = note(&mut s, 1, false);
+    let second = note(&mut s, 9, true);
+    let go = |s: &EditSession, target: &EditTarget, motion| {
+        s.navigate(s.revision, &point(target.clone(), 0), motion, None)
+            .unwrap()
+            .position
+    };
+    assert_eq!(go(&s, &first, Motion::NextNote), point(second.clone(), 0));
+    assert_eq!(
+        go(&s, &second, Motion::PreviousNote),
+        point(first.clone(), 0)
+    );
+    assert_eq!(go(&s, &second, Motion::NextNote), point(second.clone(), 0));
+    assert_eq!(
+        go(&s, &first, Motion::PreviousNote),
+        point(first.clone(), 0)
+    );
+    // 닫기 and 주석 지우기 start just after the number in the body.
+    assert_eq!(go(&s, &first, Motion::NoteMark), point(body(), 2));
+    assert_eq!(go(&s, &second, Motion::NoteMark), point(body(), 10));
+    replace(&mut s, body(), 9, 10, "").unwrap();
+    assert_eq!(go(&s, &first, Motion::NextNote), point(first.clone(), 0));
+    assert!(s
+        .navigate(s.revision, &point(body(), 0), Motion::NextNote, None)
+        .is_err());
+}
+#[test]
 fn note_shapes_number_and_mark_notes() {
     for format in ["hwp", "hwpx"] {
         let mut s = EditSession::open(&plain_document(format, false)).unwrap();

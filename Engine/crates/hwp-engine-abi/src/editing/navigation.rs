@@ -228,6 +228,77 @@ impl EditSession {
                     _ => from.clone(),
                 }
             }
+            Motion::NextNote | Motion::PreviousNote => {
+                let note = from
+                    .target
+                    .note
+                    .as_ref()
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let here = (from.target.section, from.target.paragraph, note.control);
+                // Every 각주 and 미주 in the body, in document order.
+                let notes: Vec<(u32, u32, u32)> =
+                    doc.sections
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(s, section)| {
+                            section
+                                .paragraphs
+                                .iter()
+                                .enumerate()
+                                .flat_map(move |(p, para)| {
+                                    para.controls.iter().enumerate().filter_map(
+                                        move |(c, control)| {
+                                            matches!(
+                                                control,
+                                                Control::Footnote(_) | Control::Endnote(_)
+                                            )
+                                            .then_some((s as u32, p as u32, c as u32))
+                                        },
+                                    )
+                                })
+                        })
+                        .collect();
+                let found = notes.iter().position(|&n| n == here);
+                let next = match (found, motion == Motion::NextNote) {
+                    (Some(k), true) => notes.get(k + 1),
+                    (Some(k), false) => k.checked_sub(1).and_then(|k| notes.get(k)),
+                    (None, _) => None,
+                };
+                match next {
+                    Some(&(section, paragraph, control)) => EditPosition {
+                        target: EditTarget {
+                            section,
+                            paragraph,
+                            cell: None,
+                            note: Some(NoteTarget {
+                                control,
+                                paragraph: 0,
+                            }),
+                            header_footer: None,
+                        },
+                        scalar: 0,
+                        upstream: false,
+                    },
+                    None => from.clone(),
+                }
+            }
+            Motion::NoteMark => {
+                let note = from
+                    .target
+                    .note
+                    .as_ref()
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let target = EditTarget {
+                    note: None,
+                    ..from.target.clone()
+                };
+                let host = get(doc, &target)?;
+                EditPosition {
+                    scalar: logical::control_position(host, note.control as usize) + 1,
+                    target,
+                    upstream: false,
+                }
+            }
             Motion::DocumentStart => at(0, 0),
             Motion::DocumentEnd => at(count - 1, length(count - 1)?),
         };

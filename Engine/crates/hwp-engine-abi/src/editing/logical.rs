@@ -23,6 +23,10 @@ pub(super) fn control_offset(p: &Paragraph, control: usize) -> usize {
         .copied()
         .unwrap_or(p.text.chars().count())
 }
+/// The position of control `control`, an object in the line.
+pub(super) fn control_position(p: &Paragraph, control: usize) -> u32 {
+    (control_offset(p, control) + in_line(p).filter(|&(i, _)| i < control).count()) as u32
+}
 /// Each control in the line with its character offset, in control order.
 fn in_line(p: &Paragraph) -> impl Iterator<Item = (usize, usize)> + '_ {
     let at = offsets(p);

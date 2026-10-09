@@ -280,8 +280,8 @@ extension Viewer {
             setPage(page, section: section)
         }
     }
-    /// 이전 or 다음 머리말/꼬리말 from the one holding the caret.
-    func goToHeaderFooter(_ motion: Motion) {
+    /// 이전 or 다음 머리말/꼬리말 (or 주석) from the one holding the caret.
+    func goTo(_ motion: Motion) {
         document?.select { document in
             guard let focus = document.selection?.focus else { return nil }
             return try await .caret(document.navigate(from: focus, motion).position)

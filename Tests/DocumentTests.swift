@@ -1246,6 +1246,7 @@ struct DocumentTests {
         #expect(ToolRow.contextTabs(EditingContext(object: .shape)) == ["도형"])
         #expect(ToolRow.contextTabs(EditingContext(object: .equation)) == [])
         #expect(ToolRow.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
+        #expect(ToolRow.contextTabs(EditingContext(inNote: true)) == ["주석"])
     }
 
     /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
@@ -1382,6 +1383,40 @@ struct DocumentTests {
         await document.settle()
         #expect(document.selection?.focus.scalar == caret.scalar + 5)
         #expect(document.presentation.caret != nil)
+    }
+
+    /// The 주석 탭: 이전/다음 주석으로, 닫기 back after the number, and 주석 지우기.
+    @Test func notesAreGoneThroughClosedAndDeleted() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = .caret(EditPosition(target: body, scalar: 1))
+        viewer.insertNote(endnote: false)
+        await document.settle()
+        let first = try #require(document.selection?.focus.target)
+        document.selection = .caret(EditPosition(target: body, scalar: 3))
+        viewer.insertNote(endnote: true)
+        await document.settle()
+        let second = try #require(document.selection?.focus.target)
+        #expect(document.context.inNote)
+
+        viewer.goTo(.previousNote)
+        await document.settle()
+        #expect(document.selection?.focus.target == first)
+        viewer.goTo(.nextNote)
+        await document.settle()
+        #expect(document.selection?.focus.target == second)
+
+        document.closeNote()
+        await document.settle()
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 4)))
+        let text = try await document.paragraph(body).text
+
+        document.selection = .caret(EditPosition(target: first, scalar: 0))
+        document.deleteNote(nil)
+        await document.settle()
+        #expect(document.selection == .caret(EditPosition(target: body, scalar: 1)))
+        #expect(try await document.paragraph(body).text.unicodeScalars.count == text.unicodeScalars.count - 1)
     }
 
     @Test func headerFooterTargetSupportsTypingSelectionAndPlainTextCopy() async throws {
@@ -1656,12 +1691,20 @@ struct DocumentTests {
         let viewer = Viewer()
         viewer.canvas.bind(document)
         let format = try #require(document.format)
+        // A document with the caret in a 각주, for the 주석 탭.
+        let noted = try HwpDocument(data: fixture("hwpx"))
+        let notedViewer = Viewer()
+        notedViewer.canvas.bind(noted)
+        noted.selection = .caret(EditPosition(target: body, scalar: 1))
+        notedViewer.insertNote(endnote: false)
+        await noted.settle()
         let views: [(String, AnyView)] = [
             ("rows", AnyView(VStack(spacing: 0) {
                 ToolRow(document: document, viewer: viewer)
                 Divider()
                 FormatRow(document: document, editor: viewer.canvas.editor)
             }.frame(width: 1400))),
+            ("annotations", AnyView(ToolRow(document: noted, viewer: notedViewer, contextTab: "주석").frame(width: 1400))),
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("char", AnyView(CharShapeSheet(style: format.text, languages: format.languages, viewer: viewer))),

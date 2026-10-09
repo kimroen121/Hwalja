@@ -979,6 +979,10 @@ enum Motion: String, Encodable, Sendable {
     case documentStart, documentEnd
     /// From a 머리말 (or 꼬리말) to the one on the next (or previous) page that has one.
     case nextHeaderFooter, previousHeaderFooter
+    /// From a 각주 or 미주 to the next (or previous) one in the document.
+    case nextNote, previousNote
+    /// From a 각주 or 미주 to the body, just after its number.
+    case noteMark
 
     var isVertical: Bool { self == .up || self == .down }
 }

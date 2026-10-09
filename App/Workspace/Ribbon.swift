@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 기본 도구 상자, as in 한/글 2022: the 메뉴 탭 each switch a row of large labeled icons,
 /// and the 개체 탭 and 상황 탭 come after them while an object is selected or the caret is in
-/// a table or a 머리말/꼬리말. Commands that do not work yet are left out, and so are the
+/// a table, a 머리말/꼬리말 or a 각주/미주. Commands that do not work yet are left out, and so are the
 /// tabs left with none (검토, 도구).
 struct ToolRow: View {
     @ObservedObject var document: HwpDocument
@@ -28,7 +28,9 @@ struct ToolRow: View {
         case .picture: ["그림"]
         case .shape: context.chart ? ["차트 디자인"] : ["도형"]
         case .equation: []
-        case .table, nil: context.inHeaderFooter ? ["머리말/꼬리말"] : context.inTable ? ["표 디자인", "표 레이아웃"] : []
+        case .table, nil:
+            context.inHeaderFooter ? ["머리말/꼬리말"] : context.inNote ? ["주석"]
+                : context.inTable ? ["표 디자인", "표 레이아웃"] : []
         }
     }
 
@@ -75,7 +77,7 @@ struct ToolRow: View {
         }
         .onChange(of: extra) { old, new in
             if let shown = contextTab, !new.contains(shown) { contextTab = nil }
-            // A selected object or 머리말/꼬리말 brings its tab up; a table's do not, so typing in cells keeps the tab.
+            // A selected object, 머리말/꼬리말 or 주석 brings its tab up; a table's do not, so typing in cells keeps the tab.
             if let first = new.first, !old.contains(first), !first.hasPrefix("표") { contextTab = first }
         }
     }
@@ -128,6 +130,7 @@ struct ToolRow: View {
         case "차트 디자인": chartDesign(context)
         case "그림": picture(context)
         case "머리말/꼬리말": headerFooter(context)
+        case "주석": annotations(context)
         default: edit(context)
         }
     }
@@ -357,12 +360,23 @@ struct ToolRow: View {
         RowDivider()
         ToolTile("편집 용지", Icon.pageSetup) { viewer.showPageSetup() }
             .disabled(context.locked)
-        ToolTile("이전", Icon.previous) { viewer.goToHeaderFooter(.previousHeaderFooter) }
-        ToolTile("다음", Icon.next) { viewer.goToHeaderFooter(.nextHeaderFooter) }
+        ToolTile("이전", Icon.previous) { viewer.goTo(.previousHeaderFooter) }
+        ToolTile("다음", Icon.next) { viewer.goTo(.nextHeaderFooter) }
         ToolTile("지우기", Icon.eraseCodes) { document.deleteHeaderFooter(viewer.undoManager) }
             .disabled(context.locked)
         RowDivider()
         ToolTile("닫기", Icon.close) { document.closeHeaderFooter() }
+    }
+    @ViewBuilder private func annotations(_ context: EditingContext) -> some View {
+        ToolTile("각주/미주 모양", Icon.noteShape) { viewer.showNoteShapes() }
+            .disabled(context.locked)
+        RowDivider()
+        ToolTile("주석 지우기", Icon.eraseCodes) { document.deleteNote(viewer.undoManager) }
+            .disabled(context.locked)
+        ToolTile("이전 주석으로", Icon.previous) { viewer.goTo(.previousNote) }
+        ToolTile("다음 주석으로", Icon.next) { viewer.goTo(.nextNote) }
+        RowDivider()
+        ToolTile("닫기", Icon.close) { document.closeNote() }
     }
 
     // MARK: Groups shared by tabs

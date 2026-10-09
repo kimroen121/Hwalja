@@ -159,8 +159,8 @@ struct MenuItems {
                 Choice(title: "머리말/꼬리말 지우기", enabled: !context.locked) {
                     document?.deleteHeaderFooter(viewer.undoManager)
                 },
-                Choice(title: "다음 머리말/꼬리말") { viewer.goToHeaderFooter(.nextHeaderFooter) },
-                Choice(title: "이전 머리말/꼬리말") { viewer.goToHeaderFooter(.previousHeaderFooter) },
+                Choice(title: "다음 머리말/꼬리말") { viewer.goTo(.nextHeaderFooter) },
+                Choice(title: "이전 머리말/꼬리말") { viewer.goTo(.previousHeaderFooter) },
                 Choice(title: "닫기") { document?.closeHeaderFooter() },
             ]
         }

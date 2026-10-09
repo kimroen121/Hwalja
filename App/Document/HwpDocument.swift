@@ -470,6 +470,24 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             document.registerHistory(.undo, undoManager)
         }
     }
+    /// 닫기: from a 각주 or 미주 back to the body, just after its number.
+    func closeNote() {
+        select { document in
+            guard let focus = document.selection?.focus, focus.target.note != nil else { return nil }
+            return try await .caret(document.navigate(from: focus, .noteMark).position)
+        }
+    }
+    /// 주석 지우기 for the 각주 or 미주 holding the caret, which goes back to the body where its number was.
+    func deleteNote(_ undoManager: UndoManager?) {
+        enqueue { document in
+            guard let focus = document.selection?.focus, focus.target.note != nil else { return }
+            var mark = try await document.navigate(from: focus, .noteMark).position
+            let after = mark
+            mark.scalar -= 1
+            try await document.run(.replace(EditSelection(anchor: mark, focus: after), text: ""))
+            document.registerHistory(.undo, undoManager)
+        }
+    }
     /// Lets go of the selected object, keeping the caret where it was.
     func deselectObject() {
         enqueue { $0.object = nil }
