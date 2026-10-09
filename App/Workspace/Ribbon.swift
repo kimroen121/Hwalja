@@ -348,6 +348,13 @@ struct ToolRow: View {
     @ViewBuilder private func headerFooter(_ context: EditingContext) -> some View {
         headers(context)
         RowDivider()
+        ToolTile("상용구", Icon.autoText, choices: {
+            [("전체 쪽수", PageCode.total), ("현재 쪽 번호", .page), ("현재 쪽/전체 쪽수", .pageOfTotal)].map { title, code in
+                Choice(title: title) { viewer.insertPageCode(code) }
+            }
+        })
+        .disabled(context.locked)
+        RowDivider()
         ToolTile("편집 용지", Icon.pageSetup) { viewer.showPageSetup() }
             .disabled(context.locked)
         ToolTile("이전", Icon.previous) { viewer.goToHeaderFooter(.previousHeaderFooter) }
@@ -613,7 +620,7 @@ enum Icon {
     static let replacePicture = "photo.badge.arrow.down"
     static let cellBorder = "square.grid.3x3"
     static let field = "character.cursor.ibeam", modify = "square.and.pencil", chartData = "tablecells"
-    static let hyperlink = "link", insertFile = "doc.badge.plus"
+    static let hyperlink = "link", insertFile = "doc.badge.plus", autoText = "text.badge.plus"
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"

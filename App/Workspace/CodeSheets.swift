@@ -10,6 +10,10 @@ extension Viewer {
               focus.target.headerFooter == nil else { return nil }
         return focus
     }
+    /// 머리말/꼬리말 › 코드 넣기 › 상용구's page number codes, at the caret.
+    func insertPageCode(_ code: PageCode) {
+        document?.edit(undoManager) { selection in selection.map { .insertPageCode($0.focus, code) } }
+    }
     func newNumber(_ kind: NumberKind, from number: UInt16) {
         guard let at = bodyCaret else { return NSSound.beep() }
         document?.edit(undoManager) { _ in .newNumber(at, numbering: kind, number: number) }

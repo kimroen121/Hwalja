@@ -313,6 +313,11 @@ pub enum EditCommand {
         #[serde(default, rename = "formEditable")]
         form_editable: bool,
     },
+    /// 머리말/꼬리말 탭 › 코드 넣기: a page number code at `position` in a 머리말 or 꼬리말.
+    InsertPageCode {
+        position: EditPosition,
+        code: PageCode,
+    },
     /// 문서 끼워 넣기: the body of the HWP or HWPX file `data` (base64) at `position` in the
     /// body; with `bookmark` (파일 이름으로 책갈피 넣기) a 책갈피 of that name marks where it
     /// starts.
@@ -563,6 +568,17 @@ pub struct ClickHere {
     pub memo: String,
     pub name: String,
     pub form_editable: bool,
+}
+/// The page number codes of 머리말/꼬리말 › 코드 넣기.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PageCode {
+    /// 현재 쪽 번호.
+    Page,
+    /// 전체 쪽수.
+    Total,
+    /// 현재 쪽/전체 쪽수.
+    PageOfTotal,
 }
 /// A 하이퍼링크 as its dialog shows it: 표시할 문자열 and the web address.
 #[derive(Debug, Clone, PartialEq, Serialize)]

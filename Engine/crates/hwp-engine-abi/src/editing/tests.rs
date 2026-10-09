@@ -6206,3 +6206,102 @@ fn documents_are_inserted_with_their_formats() {
     };
     assert_eq!(run(&mut s, bad).err(), Some(EditError::InvalidInput));
 }
+#[test]
+fn page_codes_go_into_headers_and_round_trip() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::blank().unwrap();
+        let header = EditCommand::HeaderFooter {
+            section: 0,
+            footer: false,
+            page_number: None,
+        };
+        run(&mut s, header).unwrap();
+        let body = EditTarget {
+            section: 0,
+            paragraph: 0,
+            cell: None,
+            note: None,
+            header_footer: None,
+        };
+        replace(&mut s, body.clone(), 0, 0, "본문").unwrap();
+        let page_break = EditCommand::Break {
+            position: point(body, 1),
+            column: false,
+        };
+        run(&mut s, page_break).unwrap();
+        let hf = header_footer_target(false, 0, 0);
+        replace(&mut s, hf.clone(), 0, 0, "쪽 ").unwrap();
+        // As the app sends it.
+        let insert: EditCommand = serde_json::from_value(serde_json::json!({
+            "kind": "insertPageCode", "position": point(hf.clone(), 2), "code": "pageOfTotal",
+        }))
+        .unwrap();
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        replace(&mut s, hf.clone(), caret.scalar, caret.scalar, " 끝").unwrap();
+        // The page's text in reading order: by line, then left to right.
+        let text = |s: &EditSession, page: u32| {
+            let svg = s.core.render_page_svg_native(page).unwrap();
+            let number = |t: &str, key: &str| {
+                t.split(key)
+                    .nth(1)
+                    .and_then(|v| v.split('"').next()?.parse::<f64>().ok())
+            };
+            let mut glyphs: Vec<(i64, f64, String)> = svg
+                .split("</text>")
+                .filter_map(|t| {
+                    let start = t.rfind("<text ")?;
+                    let t = &t[start..];
+                    let x = number(t, " x=\"")?;
+                    let y = number(t, " y=\"")?;
+                    Some((y.round() as i64, x, t.rsplit('>').next()?.to_string()))
+                })
+                .collect();
+            glyphs.sort_by(|a, b| (a.0, a.1).partial_cmp(&(b.0, b.1)).unwrap());
+            glyphs.into_iter().map(|g| g.2).collect::<String>()
+        };
+        assert!(text(&s, 1).contains("쪽2/2끝"), "{}", text(&s, 1));
+        // Typed between the numbers, text stays there.
+        let end = s.paragraph(&hf).unwrap().text.chars().count() as u32;
+        replace(&mut s, hf.clone(), end - 3, end - 3, "쪽").unwrap();
+        assert!(text(&s, 1).contains("쪽2/쪽2끝"), "{}", text(&s, 1));
+        // After the number of a 쪽 번호 모양, typing follows the number.
+        let mut t = EditSession::blank().unwrap();
+        let left = EditCommand::HeaderFooter {
+            section: 0,
+            footer: false,
+            page_number: Some(Placement::Left),
+        };
+        run(&mut t, left).unwrap();
+        replace(&mut t, hf.clone(), 1, 1, "쪽").unwrap();
+        assert!(text(&t, 0).contains("1쪽"), "{}", text(&t, 0));
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert!(
+            text(&reopened, 0).contains("쪽1/쪽2끝"),
+            "{format:?} {}",
+            text(&reopened, 0)
+        );
+        assert!(text(&reopened, 1).contains("쪽2/쪽2끝"), "{format:?}");
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(s.paragraph(&hf).unwrap().text, "쪽 ");
+        // Only in a 머리말 or 꼬리말.
+        let body_code = EditCommand::InsertPageCode {
+            position: point(
+                EditTarget {
+                    section: 0,
+                    paragraph: 0,
+                    cell: None,
+                    note: None,
+                    header_footer: None,
+                },
+                0,
+            ),
+            code: PageCode::Page,
+        };
+        assert_eq!(
+            run(&mut s, body_code).err(),
+            Some(EditError::UnsupportedTarget)
+        );
+    }
+}

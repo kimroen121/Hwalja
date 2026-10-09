@@ -277,6 +277,22 @@ pub(super) fn check(
         EditCommand::InsertNote { position, .. } => {
             return check_inserted_note(before, after, &position.target)
         }
+        EditCommand::InsertPageCode { position, .. } => {
+            // Only the 머리말 or 꼬리말 paragraph changes.
+            let t = &position.target;
+            let (mut a, mut b) = (before.clone(), after.clone());
+            for doc in [&mut a, &mut b] {
+                let paragraphs = edited_paragraphs(doc, t)?;
+                if commands::index(t) >= paragraphs.len() {
+                    return Err(EditError::PreservationFailed);
+                }
+                paragraphs.remove(commands::index(t));
+            }
+            if !trim_appended(&mut a, &mut b) {
+                return Err(EditError::PreservationFailed);
+            }
+            return same_rest(&mut a, &mut b, t.section);
+        }
         EditCommand::InsertDocument { position, .. } => {
             let (mut a, mut b) = (before.clone(), after.clone());
             for doc in [&mut a, &mut b] {

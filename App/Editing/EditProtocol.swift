@@ -107,6 +107,8 @@ enum EditCommand: Encodable, Sendable {
     case setChartData(chart: UInt32, ChartData)
     /// 고치기 of the 누름틀 at the position.
     case editClickHere(EditPosition, guide: String, memo: String, name: String, formEditable: Bool)
+    /// 머리말/꼬리말 탭 › 코드 넣기: a page number code at the position in a 머리말 or 꼬리말.
+    case insertPageCode(EditPosition, PageCode)
     /// 문서 끼워 넣기: the body of the HWP or HWPX file `data` at the position; with
     /// `bookmark` (파일 이름으로 책갈피 넣기) a 책갈피 of that name where it starts.
     case insertDocument(EditPosition, data: Data, bookmark: String?)
@@ -187,7 +189,7 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri, bookmark
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri, bookmark, code
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -286,6 +288,10 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(memo, forKey: .memo)
             try c.encode(name, forKey: .name)
             try c.encode(formEditable, forKey: .formEditable)
+        case let .insertPageCode(position, code):
+            try c.encode("insertPageCode", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(code.rawValue, forKey: .code)
         case let .insertDocument(position, data, bookmark):
             try c.encode("insertDocument", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -1146,6 +1152,12 @@ struct ClickHere: Decodable, Hashable, Sendable {
     var memo: String
     var name: String
     var formEditable: Bool
+}
+
+/// The page number codes of 머리말/꼬리말 › 코드 넣기.
+enum PageCode: String, Sendable {
+    /// 현재 쪽 번호, 전체 쪽수, 현재 쪽/전체 쪽수.
+    case page, total, pageOfTotal
 }
 
 /// 찾기's 선택 사항.

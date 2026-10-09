@@ -404,7 +404,33 @@ diff --git a/src/document_core/commands/formatting.rs b/src/document_core/comman
 diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core/commands/header_footer_ops.rs
 --- a/src/document_core/commands/header_footer_ops.rs
 +++ b/src/document_core/commands/header_footer_ops.rs
-@@ -1146,6 +1146,14 @@
+@@ -593,6 +593,9 @@
+         end_char_offset: usize,
+         replacement_text: &str,
+     ) -> Result<String, HwpError> {
++        // HwpStudio: typing at a caret after controls standing there (a 쪽 번호 after its
++        // placeholder) goes after them, as `set_insert_skip` makes it in the body.
++        let skip = std::mem::take(&mut self.insert_skip);
+         let ((start_para, start_offset), (end_para, end_offset)) =
+             if (start_hf_para_idx, start_char_offset) > (end_hf_para_idx, end_char_offset) {
+                 (
+@@ -629,7 +632,14 @@
+         let normalized = replacement_text.replace("\r\n", "\n").replace('\r', "\n");
+         let lines: Vec<&str> = normalized.split('\n').collect();
+         let (cursor_para, cursor_offset);
+-        {
++        // Typing (one line at a caret) goes in at the character offset; splitting would count
++        // a 쪽 번호 as a position and put the text one place early.
++        if start_para == end_para && start_offset == end_offset && lines.len() == 1 {
++            let paragraphs = self.get_hf_paragraphs_mut(section_idx, is_header, apply_to)?;
++            paragraphs[start_para].insert_text_after_controls(start_offset, skip, lines[0], false);
++            cursor_para = start_para;
++            cursor_offset = start_offset + lines[0].chars().count();
++        } else {
+             let paragraphs = self.get_hf_paragraphs_mut(section_idx, is_header, apply_to)?;
+ 
+             // 끝 문단의 선택 뒤 suffix를 서식·인라인 컨트롤과 함께 보존한다.
+@@ -1146,6 +1156,14 @@
                      &styles,
                      self.dpi,
                  );
@@ -419,6 +445,60 @@ diff --git a/src/document_core/commands/header_footer_ops.rs b/src/document_core
              }
          }
      }
+@@ -1242,6 +1260,53 @@
+         Ok("{\"ok\":true}".to_string())
+     }
+ 
++    /// HwpStudio: 머리말/꼬리말 탭 › 코드 넣기의 현재 쪽 번호(`total` 이 거짓)·전체 쪽수 —
++    /// 파일에서 읽은 것과 같은 꼴(자리 글자 한 칸 + 자동 번호 컨트롤)로 넣는다
++    /// (`insert_auto_number_at_cursor` 의 머리말/꼬리말 판). 넣은 뒤의 글자 위치를 돌려준다.
++    pub fn insert_auto_number_in_hf_native(
++        &mut self,
++        section_idx: usize,
++        is_header: bool,
++        apply_to: u8,
++        hf_para_idx: usize,
++        char_offset: usize,
++        total: bool,
++    ) -> Result<usize, HwpError> {
++        use crate::model::control::{AutoNumber, AutoNumberType};
++        let para = self.get_hf_paragraph_mut(section_idx, is_header, apply_to, hf_para_idx)?;
++        let at = char_offset.min(para.text.chars().count());
++        // 파일에서 읽은 꼴: 자리 공백 한 칸 뒤에 8칸 컨트롤이 선다.
++        let space = para.insert_text_at(at, " ");
++        let control_index = para
++            .control_text_positions()
++            .iter()
++            .filter(|p| **p <= space)
++            .count();
++        para.shift_for_inline_control_insert(control_index, space + 1);
++        para.controls.insert(
++            control_index,
++            Control::AutoNumber(AutoNumber {
++                number_type: if total {
++                    AutoNumberType::TotalPage
++                } else {
++                    AutoNumberType::Page
++                },
++                ..Default::default()
++            }),
++        );
++        if para.ctrl_data_records.len() >= control_index {
++            para.ctrl_data_records.insert(control_index, None);
++        }
++        para.char_count += 8;
++        para.control_mask |= 1 << 0x12;
++        let at = space + 1;
++        self.reflow_hf_paragraph(section_idx, is_header, apply_to, hf_para_idx);
++        self.document.sections[section_idx].raw_stream = None;
++        self.mark_section_dirty(section_idx);
++        self.paginate_if_needed();
++        Ok(at)
++    }
++
+     /// 머리말/꼬리말 문단에 필드 마커를 삽입한다.
+     /// field_type: 1=쪽번호(\u{0015}), 2=총쪽수(\u{0016}), 3=파일이름(\u{0017})
+     pub fn insert_field_in_hf_native(
 diff --git a/src/document_core/commands/mod.rs b/src/document_core/commands/mod.rs
 --- a/src/document_core/commands/mod.rs
 +++ b/src/document_core/commands/mod.rs

@@ -428,6 +428,12 @@ impl EditSession {
             EditCommand::InsertHyperlink { .. }
             | EditCommand::EditHyperlink { .. }
             | EditCommand::RemoveHyperlink { .. } => self.validate_hyperlink(command),
+            EditCommand::InsertPageCode { position, .. } => {
+                if position.target.header_footer.is_none() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                self.validate_position(position)
+            }
             EditCommand::InsertDocument {
                 position,
                 data,
@@ -1226,6 +1232,20 @@ impl EditSession {
                 if let Some(hf) = &start.target.header_footer {
                     let start_at = self.spot(start)?.text;
                     let end_at = self.spot(end)?.text;
+                    // A 쪽 번호 stands right after its placeholder; text typed after the
+                    // placeholder goes after the number.
+                    if start == end {
+                        let para = get(self.core.document(), &start.target)?;
+                        let numbers = para
+                            .controls
+                            .iter()
+                            .zip(para.control_text_positions())
+                            .filter(|(c, at)| {
+                                *at == start_at && matches!(c, Control::AutoNumber(_))
+                            })
+                            .count();
+                        self.core.set_insert_skip(numbers);
+                    }
                     let json = self.core.replace_range_in_header_footer_native(
                         start.target.section as usize,
                         !hf.footer,
@@ -1537,6 +1557,35 @@ impl EditSession {
                 data,
                 bookmark,
             } => self.insert_document(position, data, bookmark.as_deref()),
+            EditCommand::InsertPageCode { position, code } => {
+                let t = &position.target;
+                let hf = t
+                    .header_footer
+                    .as_ref()
+                    .ok_or(EditError::UnsupportedTarget)?;
+                let (s, header, apply, p) = (t.section as usize, !hf.footer, hf.apply_to, index(t));
+                let mut at = self.spot(position)?.text;
+                let number = |me: &mut Self, at: usize, total: bool| {
+                    me.core
+                        .insert_auto_number_in_hf_native(s, header, apply, p, at, total)
+                };
+                at = match code {
+                    PageCode::Page => number(self, at, false)?,
+                    PageCode::Total => number(self, at, true)?,
+                    // The slash first, then a number on each side of it.
+                    PageCode::PageOfTotal => {
+                        self.core
+                            .insert_text_in_header_footer_native(s, header, apply, p, at, "/")?;
+                        let slash = number(self, at, false)?;
+                        number(self, slash + 1, true)?
+                    }
+                };
+                Ok(EditSelection::caret(EditPosition {
+                    target: t.clone(),
+                    scalar: at as u32,
+                    upstream: false,
+                }))
+            }
             EditCommand::EditHyperlink {
                 position,
                 text,

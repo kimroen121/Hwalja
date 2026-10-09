@@ -158,7 +158,7 @@
 | 글자 방향 | △ | `format/vertical.htm` | 세로쓰기 |
 | 쪽 테두리/배경 | ● | `format/pageborder/page_border.htm` | 테두리(선 종류 바로 적용, 위치, 머리말·꼬리말 포함, 적용 쪽)와 배경의 색 채우기·채울 영역. 홀수/짝수 쪽, 그러데이션·그림 채우기, 적용 범위 「새 구역으로」는 △ (rhwp가 홀짝 쪽 테두리를 그리지 않음) |
 | 바탕쪽 | △ | `format/masterpages/master_pages.htm` | rhwp에 바탕쪽 편집 없음(그리기는 됨) |
-| 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭(상황 탭) 2단계. 코드 넣기 ○ `insert_field_in_hf`, 쪽 번호·현재 쪽·전체 쪽수 ○ `insert_auto_number_at_cursor` |
+| 머리말/꼬리말 | ◐ | `format/header/header.htm` | 만들기·편집·지우기·이전/다음·감추기 ●. 머리말/꼬리말 탭의 코드 넣기 › 상용구: 전체 쪽수·현재 쪽 번호·현재 쪽/전체 쪽수 ●(편집 중 번호 그리기 위치는 BUG_HANDOFF P2). 상용구의 나머지(날짜·지은이·제목·파일 이름 등)·날짜/시간·그림 △. 머리말/꼬리말 탭(상황 탭) 2단계 |
 | 쪽 번호 매기기 | △ | `format/pagenumber.htm` | 앱에는 머리말·꼬리말 모양 목록의 쪽 번호만 있다. [쪽 번호 매기기] 대화 상자(번호 위치 10가지·번호 모양)는 없음. rhwp에 쪽 번호 위치(`PageNumberPos`) 모델과 그리기는 있고 넣기 명령이 없다(새 번호로 시작처럼 패치) |
 | 새 번호로 시작 | ● | `format/new_number.htm` |  |
 | 현재 쪽만 감추기 | ● | `format/hide.htm` |  |
