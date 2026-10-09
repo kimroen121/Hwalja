@@ -1093,7 +1093,18 @@ fn selection_rects_cover_the_selected_text() {
         anchor: point(body(), 0),
         focus: point(other, 2),
     };
-    assert_eq!(s.selection_rects(0, &across).unwrap().len(), 2);
+    let across_rects = s.selection_rects(0, &across).unwrap();
+    assert_eq!(across_rects.len(), 2);
+    let first_end = s
+        .caret(
+            0,
+            &point(
+                body(),
+                s.paragraph(&body()).unwrap().text.chars().count() as u32,
+            ),
+        )
+        .unwrap();
+    assert!((across_rects[0].x + across_rects[0].width - first_end.x).abs() < 1.0);
 }
 #[test]
 fn export_round_trips_edits() {

@@ -340,7 +340,11 @@ impl EditSession {
         commands::get(self.core.document(), &end.target)?;
         let t = &start.target;
         let (s, e) = (commands::index(&start.target), commands::index(&end.target));
-        if t.note.is_none() && (s..=e).any(|i| self.has_stops(&commands::at_index(t, i))) {
+        // Ask for each paragraph separately so selecting its paragraph break does not
+        // paint the unused width from the last glyph to the body margin.
+        if s != e
+            || (t.note.is_none() && (s..=e).any(|i| self.has_stops(&commands::at_index(t, i))))
+        {
             return self.rects_by_paragraph(revision, start, end);
         }
         let json = parse(if let Some(hf) = &t.header_footer {
