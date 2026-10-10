@@ -51,7 +51,7 @@ struct DocumentWindow: View {
                 }
             }
         }
-        .toolbar(id: "document") { DocumentToolbar(document: document, viewer: viewer) }
+        .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
@@ -145,38 +145,36 @@ private struct StatusBar: View {
     }
 }
 
-/// The toolbar, as Pages': the things put in most often, then 찾기 and the inspector.
-/// 보기 › 도구 막대 사용자화… changes it.
-private struct DocumentToolbar: CustomizableToolbarContent {
+/// The toolbar, as Pages': the things put in most often, then 찾기 and the inspector. It is
+/// not customizable: SwiftUI's customizable toolbars share items between windows and throw
+/// when a second document opens.
+private struct DocumentToolbar: ToolbarContent {
     let document: HwpDocument
     let viewer: Viewer
 
-    var body: some CustomizableToolbarContent {
-        ToolbarItem(id: "zoom", placement: .navigation, showsByDefault: false) {
-            Menu { ZoomItems(viewer: viewer, position: viewer.position) } label: { Label("확대/축소", systemImage: Icon.zoomIn) }
-        }
-        ToolbarItem(id: "table") {
+    var body: some ToolbarContent {
+        ToolbarItem {
             InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
         }
-        ToolbarItem(id: "picture") {
+        ToolbarItem {
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
         }
-        ToolbarItem(id: "shape") {
+        ToolbarItem {
             DrawMenu(document: document, viewer: viewer)
         }
-        ToolbarItem(id: "textbox") {
+        ToolbarItem {
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
         }
-        ToolbarItem(id: "equation") {
+        ToolbarItem {
             InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
         }
-        ToolbarItem(id: "symbols") {
+        ToolbarItem {
             InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
         }
-        ToolbarItem(id: "find", placement: .primaryAction) {
+        ToolbarItem(placement: .primaryAction) {
             Button { viewer.showFind(replace: false) } label: { Label("찾기", systemImage: Icon.find) }.help("찾기")
         }
-        ToolbarItem(id: "inspector", placement: .primaryAction) {
+        ToolbarItem(placement: .primaryAction) {
             InspectorButton(viewer: viewer)
         }
     }
@@ -626,26 +624,55 @@ enum TaskPane: String, CaseIterable {
     }
 }
 
-/// The sidebar, as in Preview: 쪽 모양 보기, 개요 보기 or 책갈피, chosen above it.
+/// The sidebar, as Xcode's navigator: a row of icons choosing 쪽 모양 보기, 개요 보기 or
+/// 책갈피 over it, and a filter under the lists.
 private struct Sidebar: View {
     @ObservedObject var document: HwpDocument
     @ObservedObject var viewer: Viewer
+    @State private var filter = ""
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("작업 창", selection: $viewer.sidebarPane) {
+            HStack(spacing: 0) {
                 ForEach(TaskPane.allCases, id: \.self) { pane in
-                    Image(systemName: pane.symbol).help(pane.rawValue).accessibilityLabel(pane.rawValue).tag(pane)
+                    let on = pane == viewer.sidebarPane
+                    Button { viewer.sidebarPane = pane } label: {
+                        Image(systemName: pane.symbol)
+                            .symbolVariant(on ? .fill : .none)
+                            .foregroundStyle(on ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(pane.rawValue)
+                    .accessibilityLabel(pane.rawValue)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(8)
+            .padding(.horizontal, 8)
+            Divider()
             switch viewer.sidebarPane {
             case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
-            case .bookmarks: BookmarkPane(viewer: viewer)
-            case .outline: OutlinePane(document: document, viewer: viewer)
+            case .outline: OutlinePane(document: document, viewer: viewer, filter: filter)
+            case .bookmarks: BookmarkPane(document: document, viewer: viewer, filter: filter)
+            }
+            if viewer.sidebarPane != .pages {
+                Divider()
+                HStack(spacing: 6) {
+                    if viewer.sidebarPane == .bookmarks {
+                        Button { viewer.bookmarking = true } label: { Image(systemName: "plus") }
+                            .buttonStyle(.borderless)
+                            .help("책갈피…")
+                            .accessibilityLabel("책갈피…")
+                    }
+                    TextField("필터", text: $filter)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .controlSize(.small)
+                .padding(8)
             }
         }
+        .onChange(of: viewer.sidebarPane) { filter = "" }
     }
 }
 
@@ -654,6 +681,8 @@ private struct Sidebar: View {
 private struct OutlinePane: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
+    /// Shows only the 개요 whose title holds it, in one list.
+    var filter = ""
     @State private var nodes: [OutlineNode] = []
     @State private var chosen: Int?
     /// Every 개요 shows until its 수준 is folded.
@@ -661,12 +690,21 @@ private struct OutlinePane: View {
 
     var body: some View {
         List(selection: $chosen) {
-            ForEach(nodes) { row($0) }
+            if filter.isEmpty {
+                ForEach(nodes) { row($0) }
+            } else {
+                ForEach(Self.flat(nodes).filter { $0.item.title.localizedCaseInsensitiveContains(filter) }) { row(OutlineNode(id: $0.id, item: $0.item)) }
+            }
         }
+        .listStyle(.sidebar)
         .task(id: document.reply.revision) {
             await document.settle()
             nodes = OutlineNode.tree((try? await document.outline()) ?? [])
         }
+    }
+
+    private static func flat(_ nodes: [OutlineNode]) -> [OutlineNode] {
+        nodes.flatMap { [$0] + flat($0.children ?? []) }
     }
 
     private func row(_ node: OutlineNode) -> AnyView {

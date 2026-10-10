@@ -9,7 +9,6 @@ struct HwaljaApp: App {
         .commands {
             MenuBarCommands()
             SidebarCommands()
-            ToolbarCommands()
         }
         Settings { SettingsView() }
     }

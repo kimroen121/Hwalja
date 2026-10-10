@@ -556,25 +556,32 @@ struct GoToSheet: View {
     }
 }
 
-/// [책갈피] 작업 창: the dialog's items, with 넣기 under the name.
+/// [책갈피] 작업 창, as a sidebar list: a click goes to the 책갈피, its quick menu goes or
+/// deletes, and the 책갈피 dialog adds and renames them.
 struct BookmarkPane: View {
+    @ObservedObject var document: HwpDocument
     let viewer: Viewer
-    @State private var name = ""
-    @State private var added = 0
+    /// Shows only the 책갈피 whose name holds it.
+    var filter = ""
+    @State private var marks: [Bookmark] = []
+    @State private var chosen: String?
+
     var body: some View {
-        BookmarkForm(viewer: viewer, name: $name, reload: added) {}
-            .padding([.horizontal, .bottom], 12)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .safeAreaInset(edge: .bottom) {
-                Button("넣기") {
-                    viewer.addBookmark(name)
-                    name = ""
-                    added += 1
+        let shown = filter.isEmpty ? marks : marks.filter { $0.name.localizedCaseInsensitiveContains(filter) }
+        List(shown, id: \.name, selection: $chosen) { mark in
+            Label(mark.name, systemImage: "bookmark")
+                .contextMenu {
+                    Button("이동") { viewer.go(to: mark) }
+                    Button("지우기") { viewer.changeBookmark(mark, name: nil) }
+                        .disabled(document.context.locked)
                 }
-                .disabled(!BookmarkForm.addable(name) || viewer.document?.context.inBody != true)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding([.horizontal, .bottom], 12)
-            }
+        }
+        .listStyle(.sidebar)
+        .onChange(of: chosen) { if let mark = marks.first(where: { $0.name == chosen }) { viewer.go(to: mark) } }
+        .task(id: document.reply.revision) {
+            await document.settle()
+            marks = (try? await document.bookmarks()) ?? []
+        }
     }
 }
 
