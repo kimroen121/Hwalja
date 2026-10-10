@@ -195,6 +195,29 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
     @Namespace private var indicator
 
     var body: some View {
+        GeometryReader { geometry in
+            tabs
+                .contentShape(Capsule())
+                // Once dragging starts, consume the button's click so mouse-up cannot
+                // reselect the tab where the drag began.
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { drag in select(at: drag.location.x, width: geometry.size.width) }
+                        .onEnded { drag in select(at: drag.location.x, width: geometry.size.width) }
+                )
+        }
+        .frame(height: 34)
+    }
+
+    private func select(at x: CGFloat, width: CGFloat) {
+        guard !values.isEmpty, width > 6 else { return }
+        let fraction = min(max((x - 3) / (width - 6), 0), 1)
+        let index = min(Int(fraction * CGFloat(values.count)), values.count - 1)
+        guard selection != values[index] else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.15)) { selection = values[index] }
+    }
+
+    private var tabs: some View {
         HStack(spacing: 0) {
             ForEach(values, id: \.self) { value in
                 Button {
