@@ -182,75 +182,24 @@ struct SpinField: View {
 }
 
 /// A color: macOS's color well, its swatch beside the color wheel. Where `none` offers no
-/// color, Keynote's fill well: a swatch whose popover holds the colors, 다른 색 and `noneTitle`.
+/// color, the well's own: no color is clear, shown with its slash.
 struct ColorWell: View {
     @Binding var hex: String
     var none: String?
-    var noneTitle = "채우기 없음"
-    @State private var picking = false
-    private static let palette = ["#6db4f7", "#9ff5ea", "#a6f06b", "#fdef72", "#f2a093", "#f19ccb",
-                                  "#4aa1f8", "#6be0cc", "#7ed54f", "#fbd85a", "#ee7259", "#e858a6",
-                                  "#2d6fb8", "#45a58b", "#57ae35", "#f1b13e", "#d93b2a", "#c12f7c",
-                                  "#1d4c7c", "#2a6a64", "#336e22", "#e47c30", "#a62c19", "#8a1e55",
-                                  "#ffffff", "#d6d6d6", "#929292", "#5e5e5e", "#000000"]
-
     var body: some View {
-        if let none {
-            Button { picking = true } label: { swatch(hex == none ? nil : hex).frame(width: 36, height: 14) }
-                .help(hex == none ? noneTitle : hex)
-                .popover(isPresented: $picking, arrowEdge: .bottom) { choices(none) }
-        } else {
-            SystemColorWell(hex: hex) { hex = $0 }.fixedSize()
-        }
-    }
-
-    private func choices(_ none: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 2), count: 6), spacing: 2) {
-                ForEach(Self.palette, id: \.self) { color in
-                    Button { (hex, picking) = (color, false) } label: { swatch(color).frame(width: 36, height: 20) }
-                        .buttonStyle(.plain)
-                        .help(color)
-                }
-            }
-            ColorPicker("다른 색", selection: Binding { HexColor.color(hex == none ? "#000000" : hex) } set: { hex = HexColor.hex($0) },
-                        supportsOpacity: false)
-            Divider()
-            Button { (hex, picking) = (none, false) } label: {
-                HStack {
-                    Image(systemName: "checkmark").opacity(hex == none ? 1 : 0)
-                    Text(noneTitle).frame(maxWidth: .infinity)
-                }
-            }
-            .controlSize(.large)
-        }
-        .padding(14)
-        .fixedSize()
-    }
-
-    /// The color, or no color as a red slash.
-    private func swatch(_ color: String?) -> some View {
-        Rectangle()
-            .fill(color.map(HexColor.color) ?? .white)
-            .overlay {
-                if color == nil {
-                    GeometryReader { box in
-                        Path { $0.move(to: CGPoint(x: 0, y: box.size.height)); $0.addLine(to: CGPoint(x: box.size.width, y: 0)) }
-                            .stroke(.red, lineWidth: 1.5)
-                    }
-                }
-            }
-            .border(.separator)
+        SystemColorWell(hex: hex == none ? nil : hex, clearable: none != nil) { hex = $0 ?? none ?? hex }
+            .fixedSize()
     }
 }
 
 private struct SystemColorWell: NSViewRepresentable {
-    let hex: String
-    let set: (String) -> Void
+    let hex: String?
+    let clearable: Bool
+    let set: (String?) -> Void
 
     func makeNSView(context: Context) -> NSColorWell {
         let well = NSColorWell(style: .expanded)
-        well.supportsAlpha = false
+        well.supportsAlpha = clearable
         well.target = context.coordinator
         well.action = #selector(Coordinator.changed(_:))
         return well
@@ -259,16 +208,20 @@ private struct SystemColorWell: NSViewRepresentable {
         context.coordinator.set = set
         context.coordinator.hex = hex
         well.isEnabled = context.environment.isEnabled
-        if HexColor.hex(Color(nsColor: well.color)) != hex { well.color = NSColor(HexColor.color(hex)) }
+        if Coordinator.hex(well.color) != hex { well.color = hex.map { NSColor(HexColor.color($0)) } ?? .clear }
     }
     func makeCoordinator() -> Coordinator { Coordinator(hex: hex, set: set) }
 
     final class Coordinator: NSObject {
-        var hex: String
-        var set: (String) -> Void
-        init(hex: String, set: @escaping (String) -> Void) { (self.hex, self.set) = (hex, set) }
+        var hex: String?
+        var set: (String?) -> Void
+        init(hex: String?, set: @escaping (String?) -> Void) { (self.hex, self.set) = (hex, set) }
+        /// The color as `#rrggbb`, or nil when clear.
+        static func hex(_ color: NSColor) -> String? {
+            color.alphaComponent == 0 ? nil : HexColor.hex(Color(nsColor: color))
+        }
         @objc func changed(_ well: NSColorWell) {
-            let picked = HexColor.hex(Color(nsColor: well.color))
+            let picked = Self.hex(well.color)
             guard picked != hex else { return }
             hex = picked
             set(picked)

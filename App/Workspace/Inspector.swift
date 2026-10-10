@@ -37,7 +37,14 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large, accent: true, capsule: true) { .init(title: $0, help: $0) }
+                Picker("", selection: Binding(get: { tab }, set: { chosen = $0 }).animation()) {
+                    ForEach(tabs, id: \.self) { Text($0).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.large)
+                .flexibleButtons()
+                .tint(.accentColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             } else {
@@ -340,7 +347,7 @@ private struct TextTab: View {
         }
         InspectorSection {
             LabeledContent("글자 색") { ColorWell(hex: char(\.color, "#000000")) }
-            LabeledContent("음영 색") { ColorWell(hex: char(\.shade, FormatChoices.none), none: FormatChoices.none, noneTitle: "음영 없음") }
+            LabeledContent("음영 색") { ColorWell(hex: char(\.shade, FormatChoices.none), none: FormatChoices.none) }
         }
         InspectorSection {
             Segments(Alignment.allCases.map(Optional.some),

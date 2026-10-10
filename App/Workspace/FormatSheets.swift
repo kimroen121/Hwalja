@@ -249,7 +249,7 @@ struct CharShapeSheet: View {
                     ColorWell(hex: value(\.color, "#000000"))
                     Spacer().frame(width: 24)
                     FieldLabel("음영 색")
-                    ColorWell(hex: value(\.shade, "#ffffff"), none: "#ffffff", noneTitle: "음영 없음")
+                    ColorWell(hex: value(\.shade, "#ffffff"), none: "#ffffff")
                 }
             }
             .padding(.leading, 12)

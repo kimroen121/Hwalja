@@ -595,7 +595,7 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("작업 창", selection: $viewer.sidebarPane) {
+            Picker("작업 창", selection: $viewer.sidebarPane.animation()) {
                 ForEach(TaskPane.allCases, id: \.self) { Image(systemName: $0.symbol).help($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
