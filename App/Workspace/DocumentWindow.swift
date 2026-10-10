@@ -2,7 +2,7 @@ import PDFKit
 import SwiftUI
 
 /// One document window, laid out like Hancom Office Web below the macOS menu bar: the
-/// 기본 and 서식 tool rows, then page thumbnails beside the pages, and a status bar.
+/// toolbar, then page thumbnails beside the pages and the inspector.
 struct DocumentWindow: View {
     let document: HwpDocument
     @StateObject private var viewer = Viewer()
@@ -33,19 +33,9 @@ struct DocumentWindow: View {
             // 100pt at its least makes SwiftUI work out the split again and again until AppKit
             // stops the app.
             VStack(spacing: 0) {
-                if viewer.showsFormat {
-                    FormatRow(document: document, editor: viewer.canvas.editor)
-                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                        .clipped()
-                    Divider()
-                }
                 if viewer.finding { FindBar(viewer: viewer) }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minHeight: 300)
-                if viewer.showsStatusBar {
-                    Divider()
-                    StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
-                }
             }
             // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
             .toolbar { DocumentToolbar(document: document, viewer: viewer) }
@@ -116,39 +106,6 @@ struct DocumentWindow: View {
         }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
-    }
-}
-
-/// The bar under the pages, as Scrivener's footer: 쪽 and 글자 수 at the left, zoom at the right.
-/// The caret's 단, 줄, 칸 and 구역 show over 쪽.
-private struct StatusBar: View {
-    @ObservedObject var document: HwpDocument
-    @ObservedObject var viewer: Viewer
-    @ObservedObject var position: ViewPosition
-    @ObservedObject var status: StatusModel
-
-    var body: some View {
-        let caret = status.caret
-        HStack(spacing: 14) {
-            Button("\(caret?.page ?? UInt32(position.page + 1))/\(document.context.pageCount)쪽") { viewer.goingToPage = true }
-                .buttonStyle(.plain)
-                .help(caret.map { "\($0.column)단 \($0.line)줄 \($0.character)칸 · \($0.section)/\($0.sections) 구역" } ?? "")
-            if let caret { Text("\(caret.characters)글자") }
-            Spacer()
-            HStack(spacing: 4) {
-                ToolIcon("축소", symbol: Icon.zoomOut) { viewer.canvas.zoomOut(nil) }
-                Menu("\(position.zoomPercent)%") { ZoomItems(viewer: viewer, position: position) }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                ToolIcon("확대", symbol: Icon.zoomIn) { viewer.canvas.zoomIn(nil) }
-            }
-        }
-        .font(.callout)
-        .monospacedDigit()
-        .foregroundStyle(.secondary)
-        .controlSize(.small)
-        .padding(.horizontal, 12)
-        .frame(height: 24)
     }
 }
 
@@ -229,7 +186,7 @@ enum InspectorPane: String, CaseIterable {
     var symbol: String { self == .format ? "paintbrush" : "doc.text" }
 }
 
-/// Zoom choices shared by the status bar and the View menu.
+/// Zoom choices of the View menu.
 struct ZoomItems: View {
     let viewer: Viewer
     @ObservedObject var position: ViewPosition
@@ -274,10 +231,6 @@ final class Viewer: ObservableObject {
             if columns > 1 { showsOutline = true }
         }
     }
-    /// 서식 도구 상자, remembered for new windows.
-    @Published var showsFormat = UserDefaults.standard.object(forKey: "showsFormat") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(showsFormat, forKey: "showsFormat") }
-    }
     /// The sidebar at the left and the 작업 창 it shows, and the inspector at the right; they stay as they were left.
     @Published var showsSidebar = UserDefaults.standard.object(forKey: "showsSidebar") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showsSidebar, forKey: "showsSidebar") }
@@ -313,8 +266,7 @@ final class Viewer: ObservableObject {
     @Published var showsGrid = false {
         didSet { canvas.editor.showsGrid = showsGrid }
     }
-    /// 보기 › 문서 창: 상황 선, 가로 눈금자 and 세로 눈금자.
-    @Published var showsStatusBar = true
+    /// 보기 › 문서 창: 가로 눈금자 and 세로 눈금자.
     @Published var showsHorizontalRuler = false {
         didSet { canvas.showsHorizontalRuler = showsHorizontalRuler }
     }
@@ -643,7 +595,13 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Segments(TaskPane.allCases, selection: $viewer.sidebarPane, size: .large, emphasized: false, capsule: true) { .init(symbol: $0.symbol, help: $0.rawValue) }
+            Picker("작업 창", selection: $viewer.sidebarPane) {
+                ForEach(TaskPane.allCases, id: \.self) { Image(systemName: $0.symbol).help($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+            .flexibleButtons()
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             switch viewer.sidebarPane {

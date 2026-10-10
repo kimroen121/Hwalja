@@ -199,8 +199,8 @@ struct Segments: NSViewRepresentable {
     let on: [Bool]
     var any = false
     var size: NSControl.ControlSize = .regular
-    /// The selection in the accent color; off, in the gray of a selection out of focus.
-    var emphasized = true
+    /// The selection in the accent color, as tabs.
+    var accent = false
     /// A capsule, as a pane's tabs; else a rounded rectangle, as the controls in a pane.
     var capsule = false
     let pick: (Int) -> Void
@@ -223,7 +223,7 @@ struct Segments: NSViewRepresentable {
         }
         set(\.trackingMode, any ? .selectAny : .selectOne)
         set(\.controlSize, size)
-        set(\.selectedSegmentBezelColor, emphasized ? nil : .unemphasizedSelectedContentBackgroundColor)
+        set(\.selectedSegmentBezelColor, accent ? .controlAccentColor : nil)
         set(\.isEnabled, context.environment.isEnabled)
         if #available(macOS 26, *) { set(\.borderShape, capsule ? .capsule : .roundedRectangle) }
         set(\.segmentCount, segments.count)
@@ -261,51 +261,10 @@ struct Segments: NSViewRepresentable {
 extension Segments {
     /// One of `values`, bound to `selection`.
     init<Value: Hashable>(_ values: [Value], selection: Binding<Value>, size: NSControl.ControlSize = .regular,
-                          emphasized: Bool = true, capsule: Bool = false, segment: (Value) -> Segment) {
-        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized,
+                          accent: Bool = false, capsule: Bool = false, segment: (Value) -> Segment) {
+        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, accent: accent,
                   capsule: capsule) {
             selection.wrappedValue = values[$0]
-        }
-    }
-}
-
-/// macOS's combo box: a value typed, or picked from `items`; `commit` takes either.
-struct ComboField: NSViewRepresentable {
-    let value: String
-    let items: [String]
-    let commit: (String) -> Void
-
-    func makeNSView(context: Context) -> NSComboBox {
-        let box = NSComboBox()
-        box.completes = false
-        box.numberOfVisibleItems = 15
-        box.alignment = .right
-        box.target = context.coordinator
-        box.action = #selector(Coordinator.committed(_:))
-        box.delegate = context.coordinator
-        return box
-    }
-    func updateNSView(_ box: NSComboBox, context: Context) {
-        context.coordinator.commit = commit
-        box.controlSize = context.environment.controlSize == .small || context.environment.controlSize == .mini ? .small : .regular
-        box.font = .systemFont(ofSize: NSFont.systemFontSize(for: box.controlSize))
-        box.isEnabled = context.environment.isEnabled
-        if box.objectValues as? [String] != items {
-            box.removeAllItems()
-            box.addItems(withObjectValues: items)
-        }
-        if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
-    }
-    func makeCoordinator() -> Coordinator { Coordinator(commit: commit) }
-
-    final class Coordinator: NSObject, NSComboBoxDelegate {
-        var commit: (String) -> Void
-        init(commit: @escaping (String) -> Void) { self.commit = commit }
-        @objc func committed(_ box: NSComboBox) { commit(box.stringValue) }
-        func comboBoxSelectionDidChange(_ notification: Notification) {
-            guard let box = notification.object as? NSComboBox, box.indexOfSelectedItem >= 0,
-                  let item = box.itemObjectValue(at: box.indexOfSelectedItem) as? String else { return }
-            commit(item)
         }
     }
 }

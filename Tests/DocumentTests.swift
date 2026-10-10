@@ -1772,7 +1772,6 @@ struct DocumentTests {
         notedViewer.insertNote(endnote: false)
         await noted.settle()
         let views: [(String, AnyView)] = [
-            ("rows", AnyView(FormatRow(document: document, editor: viewer.canvas.editor).frame(width: 1100))),
             ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 900))),
             ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 270, height: 900))),
             ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),

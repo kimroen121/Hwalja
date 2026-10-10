@@ -322,14 +322,12 @@ struct MenuItems {
             Divider()
             Button(viewer.showsInspector ? "인스펙터 가리기" : "인스펙터 보기") { viewer.showsInspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
-            toggle("서식 도구 상자", viewer.showsFormat) { viewer.showsFormat.toggle() }
             Menu {
                 ForEach(TaskPane.allCases, id: \.self) { pane in
                     toggle(pane.rawValue, viewer.shows(pane)) { viewer.toggle(pane) }
                 }
             } label: { Label("작업 창", systemImage: "sidebar.right") }
             Menu {
-                toggle("상황 선", viewer.showsStatusBar) { viewer.showsStatusBar.toggle() }
                 toggle("가로 눈금자", viewer.showsHorizontalRuler) { viewer.showsHorizontalRuler.toggle() }
                 toggle("세로 눈금자", viewer.showsVerticalRuler) { viewer.showsVerticalRuler.toggle() }
             } label: { Label("문서 창", systemImage: "ruler") }
