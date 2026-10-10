@@ -846,6 +846,7 @@ mod tests {
             ("rm sin x", "\\mathrm{\\sin} x"),
             ("left ( {} right )", "\\left( {} \\right)"),
             ("int x + iint", "\\int x+\\iint"),
+            ("LEFT < R^2 RIGHT >", "\\left\\langle R^{2} \\right\\rangle"),
         ] {
             assert_eq!(to_latex(script), expected, "{script}");
         }

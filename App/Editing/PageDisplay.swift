@@ -392,7 +392,9 @@ final class Formulas: @unchecked Sendable {
         let pad = equation.size / 2
         var math = MathImage(latex: equation.latex, fontSize: equation.size,
                              textColor: NSColor(cgColor: equation.color) ?? .black, labelMode: .display, textAlignment: .left)
-        math.font = .xitsFont
+        // XITS has no long arrows to stretch over a 벡터's wide body, and SwiftMath draws a box
+        // there instead; Termes, also a Times face, has them.
+        math.font = ["\\overrightarrow", "\\overleftrightarrow"].contains(where: equation.latex.contains) ? .termesFont : .xitsFont
         math.contentInsets = MTEdgeInsets(top: pad, left: pad, bottom: pad, right: pad)
         let (error, image, info) = math.asImage()
         var result: Formula?

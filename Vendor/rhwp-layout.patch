@@ -37,6 +37,32 @@ diff --git a/src/document_core/commands/document.rs b/src/document_core/commands
              return true;
          }
          if Self::needs_line_seg_reflow(para, false) {
+@@ -1610,7 +1618,13 @@
+                 }) {
+                     latest_non_tac_picture_host = Some(pi);
+                 }
+-                if Self::needs_reflow_broadly(&section.paragraphs[pi]) {
++                // hwalja: an empty paragraph holding only a floating picture has no line of
++                // its own to flag it, yet its band decides where the text after it goes.
++                let picture_host_only = !Self::needs_reflow_broadly(&section.paragraphs[pi])
++                    && latest_non_tac_picture_host == Some(pi)
++                    && section.paragraphs[pi].text.is_empty()
++                    && section.paragraphs[pi].line_segs.is_empty();
++                if picture_host_only || Self::needs_reflow_broadly(&section.paragraphs[pi]) {
+                     // A damaged successor can still belong to a stored
+                     // Picture host. The forward walk records the latest
+                     // possible owner, resolves its own physical column, and
+@@ -1669,6 +1683,10 @@
+                                 start.min(paragraph_range.start)
+                             }));
+                         pi = paragraph_range.end;
++                        continue;
++                    }
++                    if picture_host_only {
++                        pi += 1;
+                         continue;
+                     }
+                     if tracked_picture_band_rejected {
 diff --git a/src/document_core/commands/footnote_ops.rs b/src/document_core/commands/footnote_ops.rs
 --- a/src/document_core/commands/footnote_ops.rs
 +++ b/src/document_core/commands/footnote_ops.rs
@@ -2490,22 +2516,28 @@ diff --git a/src/renderer/composer.rs b/src/renderer/composer.rs
 diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
 --- a/src/renderer/composer/line_breaking.rs
 +++ b/src/renderer/composer/line_breaking.rs
-@@ -3054,6 +3054,39 @@
+@@ -3052,6 +3052,43 @@
+         seg.text_height = height_hwp;
+         seg.baseline_distance = baseline_distance_hwp(height_hwp);
      }
- }
- 
++}
++
 +/// hwalja: grows a reflowed line for an object in it. An equation stands on its own
-+/// baseline (`baseline` percent of its height down), so the line takes the larger of the
-+/// text's and the equation's parts above and below the baseline; other objects keep
-+/// [`apply_inline_control_line_height`].
++/// baseline (`baseline` percent of its height down), level with the text's; as in 한/글,
++/// the line is as tall as the taller of the text and the equation, and grows past that
++/// only when the equation's part above the baseline pushes the text down. Other objects
++/// keep [`apply_inline_control_line_height`].
 +fn apply_inline_control_line_metrics(seg: &mut LineSeg, height_hwp: i32, baseline_hwp: Option<i32>) {
 +    let Some(above) = baseline_hwp.filter(|above| (0..=height_hwp).contains(above)) else {
 +        return apply_inline_control_line_height(seg, height_hwp);
 +    };
 +    let ascent = seg.baseline_distance.max(above);
-+    let descent = (seg.line_height - seg.baseline_distance).max(height_hwp - above);
-+    seg.line_height = ascent + descent;
-+    seg.text_height = ascent + descent;
++    let height = seg
++        .line_height
++        .max(height_hwp)
++        .max(ascent + seg.line_height - seg.baseline_distance);
++    seg.line_height = height;
++    seg.text_height = height;
 +    seg.baseline_distance = ascent;
 +}
 +
@@ -2525,12 +2557,69 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
 +            Some((height, baseline))
 +        })
 +        .collect()
+ }
+ 
+ fn apply_inline_control_frame_height(metrics: &mut FrameRowMetrics, height_hwp: i32) {
+@@ -4157,11 +4194,58 @@
+         line_segs.push(paragraph_lines);
+     }
+ 
++    fold_picture_band_gaps(&mut line_segs, host.text.is_empty());
+     (!line_segs.is_empty() && frame.top >= exclusion_end).then_some(PictureBandLayout {
+         paragraph_range: host_index..host_index + line_segs.len(),
+         line_segs,
+         space_metrics,
+     })
 +}
 +
- fn apply_inline_control_frame_height(metrics: &mut FrameRowMetrics, height_hwp: i32) {
-     if height_hwp > metrics.line_height {
-         metrics.line_height = height_hwp;
-@@ -4350,28 +4383,36 @@
++/// hwalja: a row the picture leaves no room beside goes below it, and its `vertical_pos`
++/// jumps; pagination adds up line heights and spacing, so the jump becomes the row
++/// before's spacing. The band's first row stays by the picture and reaches down to its
++/// bottom when the host has no text, as in 한/글; with text, it grows the same way with
++/// the text at its bottom.
++fn fold_picture_band_gaps(paragraphs: &mut [Vec<LineSeg>], empty_host: bool) {
++    let mut end = 0;
++    let mut row: Option<(i32, Vec<(usize, usize)>)> = None;
++    for p in 0..paragraphs.len() {
++        for s in 0..paragraphs[p].len() {
++            let v = paragraphs[p][s].vertical_pos;
++            if let Some((top, segs)) = row.as_mut().filter(|(top, _)| *top == v) {
++                let _ = top;
++                segs.push((p, s));
++                continue;
++            }
++            let gap = v - end;
++            if gap > 0 {
++                match &row {
++                    Some((_, segs)) => {
++                        for &(rp, rs) in segs {
++                            paragraphs[rp][rs].line_spacing += gap;
++                        }
++                    }
++                    None if empty_host => {
++                        let seg = &mut paragraphs[p][s];
++                        seg.vertical_pos -= gap;
++                        seg.line_height = seg.line_height.max(gap);
++                        seg.text_height = seg.text_height.max(gap);
++                    }
++                    None => {
++                        let seg = &mut paragraphs[p][s];
++                        seg.vertical_pos -= gap;
++                        seg.line_height += gap;
++                        seg.text_height += gap;
++                        seg.baseline_distance += gap;
++                    }
++                }
++            }
++            let seg = &paragraphs[p][s];
++            end = seg.vertical_pos + seg.line_height + seg.line_spacing;
++            row = Some((seg.vertical_pos, vec![(p, s)]));
++        }
++    }
+ }
+ 
+ /// 문단의 line_segs를 텍스트 내용과 **문단 상자**에 맞게 재계산한다.
+@@ -4350,28 +4434,36 @@
                              .saturating_add(i32::from(table.outer_margin_bottom)),
                          _ => height,
                      };
@@ -2575,7 +2664,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
  
              let orig_line_segs = para.line_segs.clone();
              let mut new_line_segs = Vec::with_capacity(line_specs.len());
-@@ -4390,7 +4431,7 @@
+@@ -4390,7 +4482,7 @@
              } else {
                  0.0
              };
@@ -2584,7 +2673,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
                  line_specs.into_iter().enumerate()
              {
                  let mut seg = make_line_seg(start_pos, paragraph_font_px);
-@@ -4410,7 +4451,9 @@
+@@ -4410,7 +4502,9 @@
                          seg.tag
                      };
                  }
@@ -2595,7 +2684,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
                  new_line_segs.push(seg);
              }
  
-@@ -4437,8 +4480,8 @@
+@@ -4437,8 +4531,8 @@
                      seg.segment_width = 0;
                  }
              }
@@ -2606,7 +2695,7 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
              }
              mark_indented_lines(
                  std::slice::from_mut(&mut seg),
-@@ -4698,16 +4741,15 @@
+@@ -4698,16 +4792,15 @@
              let (_, height_hwp) = forced_inline_line.expect("checked inline control");
              apply_inline_control_line_height(&mut text_seg, height_hwp);
          }
@@ -2632,10 +2721,12 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
          }
          new_line_segs.push(text_seg);
  
-@@ -4746,6 +4788,30 @@
+@@ -4744,6 +4837,30 @@
+                 .unwrap_or(0);
+             if let Some(seg) = new_line_segs.get_mut(preserved_prefix_len + line_index) {
                  apply_inline_control_line_height(seg, height_hwp);
-             }
-         }
++            }
++        }
 +    } else if forced_inline_line.is_none() {
 +        // hwalja: 마지막 글자 뒤에 놓인 개체(`, ` 뒤 수식 등)는 `FlowInlineControl` 에
 +        // 들지 않지만 마지막 줄에 서므로 그 줄을 키운다.
@@ -2658,11 +2749,9 @@ diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line
 +        if let Some(seg) = new_line_segs.last_mut() {
 +            for (height_hwp, baseline_hwp) in trailing {
 +                apply_inline_control_line_metrics(seg, height_hwp, baseline_hwp);
-+            }
-+        }
+             }
+         }
      }
- 
-     // vertical_pos 누적 계산 (각 줄의 문단 내 Y 오프셋)
 diff --git a/src/renderer/equation/ast.rs b/src/renderer/equation/ast.rs
 --- a/src/renderer/equation/ast.rs
 +++ b/src/renderer/equation/ast.rs
@@ -3200,11 +3289,10 @@ diff --git a/src/renderer/equation/mod.rs b/src/renderer/equation/mod.rs
 diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
 --- a/src/renderer/equation/parser.rs
 +++ b/src/renderer/equation/parser.rs
-@@ -9,6 +9,24 @@
-     FontStyleKind, DECORATIONS, FONT_STYLES,
+@@ -10,6 +10,24 @@
  };
  use super::tokenizer::{tokenize, Token, TokenType};
-+
+ 
 +/// hwalja: 두 글자 이상의 기호(`<=`, `+-`, `->` …)는 그것이 뜻하는 기호로 그린다.
 +fn symbol_node(val: String) -> EqNode {
 +    if val == "->" {
@@ -3222,9 +3310,10 @@ diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
 +        None => EqNode::Symbol(val),
 +    }
 +}
- 
++
  /// 수식 중첩 깊이 상한.
  ///
+ /// 적대적으로 깊게 중첩된 입력(`{{{…}}}`, `sqrt sqrt …`, `LEFT ( LEFT ( …`,
 @@ -233,12 +251,7 @@
              }
              TokenType::Symbol => {
@@ -3295,6 +3384,18 @@ diff --git a/src/renderer/equation/parser.rs b/src/renderer/equation/parser.rs
      }
  
      /// 극한 파싱
+@@ -1533,6 +1560,11 @@
+             | TokenType::RBrace => {
+                 self.pos += 1;
+                 val
++            }
++            // hwalja: 한/글 draws LEFT < … RIGHT > as angle brackets.
++            TokenType::Symbol if val == "<" || val == ">" => {
++                self.pos += 1;
++                if val == "<" { "⟨" } else { "⟩" }.to_string()
+             }
+             TokenType::Symbol if val == "|" || val == "." => {
+                 self.pos += 1;
 diff --git a/src/renderer/equation/stix.rs b/src/renderer/equation/stix.rs
 --- a/src/renderer/equation/stix.rs
 +++ b/src/renderer/equation/stix.rs
@@ -4880,6 +4981,68 @@ diff --git a/src/renderer/typeset/paragraph/flow.rs b/src/renderer/typeset/parag
          stored_vpos_rewind_break,
          stored_vpos_rewind_overflow_break,
          forced_page_break_line,
+diff --git a/src/renderer/typeset/paragraph/format.rs b/src/renderer/typeset/paragraph/format.rs
+--- a/src/renderer/typeset/paragraph/format.rs
++++ b/src/renderer/typeset/paragraph/format.rs
+@@ -443,12 +443,20 @@
+                 });
+             // Square wrap host 의 빈 wrap guide 줄은 높이를 제외하되, 같은 줄에
+             // TAC 수식/개체가 있으면 실제 콘텐츠 줄이므로 정상 advance 를 보존한다.
++            // hwalja: a line the picture leaves no room beside runs the column's full
++            // width below it; that is flow, not a guide beside the picture.
++            let below_picture = para.text.is_empty()
++                && column_width_px.zip(para.line_segs.get(line_idx)).is_some_and(|(width, seg)| {
++                    hwpunit_to_px(seg.segment_width, ctx.dpi()) >= width - 1.0
++                        && hwpunit_to_px(seg.line_height, ctx.dpi()) > width / 10.0
++                });
+             if has_picture_shape_square_wrap
+                 && runs_all_whitespace
+                 && !line_has_tac_control
+                 // 같은 문자 위치 때문에 귀속 범위가 비어도 개체 소유 줄은 안내 줄이 아니다.
+                 && !line_owns_tac_object
+                 && !line_owns_tac_table
++                && !below_picture
+             {
+                 pairs.push((0.0, 0.0));
+                 prev_line_reserved_tac_picture_height = None;
+diff --git a/src/renderer/typeset/section.rs b/src/renderer/typeset/section.rs
+--- a/src/renderer/typeset/section.rs
++++ b/src/renderer/typeset/section.rs
+@@ -344,6 +344,34 @@
+             st.ensure_page();
+ 
+             self.keep_heading_with_following_block(&mut st, para_idx, para, paragraphs);
++
++            // hwalja: as 한/글, an empty paragraph that holds a 어울림 picture kept inside the
++            // page (쪽 영역 안으로 제한) goes to the next page when the picture does not fit
++            // below; the picture then leads the page with the text wrapping it.
++            if !super::para_has_visible_text(para) && st.current_height > 0.0 {
++                use crate::model::shape::{TextWrap, VertRelTo};
++                let below = para
++                    .controls
++                    .iter()
++                    .filter_map(|c| match c {
++                        crate::model::control::Control::Picture(p)
++                            if !p.common.treat_as_char
++                                && p.common.flow_with_text
++                                && matches!(p.common.text_wrap, TextWrap::Square)
++                                && matches!(p.common.vert_rel_to, VertRelTo::Para) =>
++                        {
++                            Some(hwpunit_to_px(
++                                p.common.vertical_offset as i32 + p.common.height as i32,
++                                self.dpi,
++                            ))
++                        }
++                        _ => None,
++                    })
++                    .fold(0.0, f64::max);
++                if below > 0.0 && st.current_height + below > st.available_height() + 0.5 {
++                    st.advance_column_or_new_page();
++                }
++            }
+ 
+             let picture_host_origin = (st.pages.len(), st.current_column, st.current_height);
+             let native_hwp5_footnote_break = self.place_paragraph_flow(
 diff --git a/src/serializer/control.rs b/src/serializer/control.rs
 --- a/src/serializer/control.rs
 +++ b/src/serializer/control.rs

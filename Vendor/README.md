@@ -48,6 +48,9 @@
 - reads and writes a 글상자's 글자 방향 (`tbTextDirection`) and an arc's 호 테두리 (`arcType`) in the shape properties.
 - marks the section for drawing again after `set_control_flip_at`, so a flipped drawing object shows flipped.
 - gives the table 계산식 the 시트 함수 of the 한/글 help: `LOG` is the common logarithm, `LN` the natural one, and `RADTODEG` and `DEGTORAD` turn angles.
+- reads an equation's `LEFT <` and `RIGHT >` as angle brackets, as 한/글 draws them.
+- lays out a line holding an equation as 한/글 does: as tall as the taller of the text and the equation, growing past that only when the equation's part above the baseline pushes the text down.
+- for a document with no stored lines, gives an empty paragraph holding only a 어울림 picture its band, so the text after a picture that leaves no room beside it starts below it; and moves such a paragraph to the next page when its picture, kept inside the page, would not fit.
 
 `vendor/svg2pdf` takes the same patch: it resolves each glyph's font once per text element instead of cloning every font, and shares the font database's copy of a font file instead of copying it.
 
