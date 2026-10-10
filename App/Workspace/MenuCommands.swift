@@ -231,6 +231,8 @@ struct MenuItems {
     @ViewBuilder var file: some View {
         item("다른 파일 형식으로 저장하기…", Icon.saveAs) { viewer?.saveInOtherFormat() }
             .disabled(viewer == nil)
+        item("블록 저장…", Icon.saveAs) { viewer?.saveBlock() }
+            .disabled(viewer == nil || !(document?.context.hasRange ?? false))
         item("PDF로 저장하기…", Icon.pdf) { send(#selector(DocumentCanvas.exportAsPDF(_:))) }
             .keyboardShortcut("e", modifiers: [.command, .shift])
         item("그림으로 저장하기…", Icon.picture) { viewer?.saveAsPictures() }

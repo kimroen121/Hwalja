@@ -1287,6 +1287,8 @@ enum EditError: String, Error, Decodable, Sendable {
 
 enum SaveFormat: String, Encodable, Sendable {
     case hwp, hwpx
+    /// HWPML, for a document opened from one.
+    case hml
 }
 
 /// The `op`-tagged request envelope understood by `hwp_edit_request`.
@@ -1343,6 +1345,8 @@ enum EngineRequest: Encodable, Sendable {
     /// 복사하기 for a selected object.
     case copyObject(ObjectRef)
     case export(SaveFormat)
+    /// 블록 저장: the selected text of the body as a document of its own.
+    case exportBlock(EditSelection, SaveFormat)
 
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, wholeWord, section,
@@ -1513,6 +1517,10 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(borders, forKey: .borders)
         case let .export(format):
             try c.encode("export", forKey: .op)
+            try c.encode(format, forKey: .format)
+        case let .exportBlock(selection, format):
+            try c.encode("exportBlock", forKey: .op)
+            try c.encode(selection, forKey: .selection)
             try c.encode(format, forKey: .format)
         }
     }

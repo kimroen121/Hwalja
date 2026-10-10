@@ -82,6 +82,11 @@ impl EditSession {
                 Some(password) => self.core.export_hwpx_native_with_password(password),
                 None => self.core.export_hwpx_native(),
             },
+            // rhwp writes HWPML only for a document opened from it.
+            SaveFormat::Hml => match self.core.export_hml_native() {
+                Ok(bytes) => Ok(bytes),
+                Err(_) => return Err(EditError::UnsupportedFormat),
+            },
         }
         .map_err(|_| EditError::SaveFailed)?;
         let reparsed = match &self.password {
@@ -93,6 +98,62 @@ impl EditSession {
             return Err(EditError::PreservationFailed);
         }
         Ok(bytes)
+    }
+    /// 블록 저장: the selected text of the body in a document of its own, which keeps the
+    /// styles, the page and the 문서 암호.
+    /// ponytail: one section only; a document of several asks for deleting whole sections.
+    pub fn export_block(
+        &mut self,
+        selection: &EditSelection,
+        format: SaveFormat,
+    ) -> Result<Vec<u8>, EditError> {
+        if self.locked {
+            return Err(EditError::Locked);
+        }
+        let (start, end) = commands::ordered(selection);
+        commands::body_only(&start.target)?;
+        commands::body_only(&end.target)?;
+        if start == end
+            || matches!(format, SaveFormat::Pdf | SaveFormat::Hml)
+            || self.core.document().sections.len() != 1
+        {
+            return Err(EditError::UnsupportedTarget);
+        }
+        self.validate_range(selection)?;
+        let bytes = self
+            .core
+            .export_hwpx_native()
+            .map_err(|_| EditError::SaveFailed)?;
+        let mut block = EditSession::open(&bytes)?;
+        block.password = self.password.clone();
+        let last = block.core.document().sections[0].paragraphs.len() - 1;
+        let last = EditTarget {
+            paragraph: last as u32,
+            ..start.target.clone()
+        };
+        let at = |target: &EditTarget, scalar| EditPosition {
+            target: target.clone(),
+            scalar,
+            upstream: false,
+        };
+        let finish = at(&last, block.paragraph(&last)?.text.chars().count() as u32);
+        let first = EditTarget {
+            paragraph: 0,
+            ..start.target.clone()
+        };
+        // The text after the block, then before it.
+        for (from, to) in [(end.clone(), finish), (at(&first, 0), start.clone())] {
+            if from != to {
+                block.execute(&EditCommand::Replace {
+                    selection: EditSelection {
+                        anchor: from,
+                        focus: to,
+                    },
+                    text: String::new(),
+                })?;
+            }
+        }
+        block.export(format)
     }
     /// 텍스트 문서: the document's text as 한/글 saves it.
     pub fn text_document(&self) -> Result<String, EditError> {

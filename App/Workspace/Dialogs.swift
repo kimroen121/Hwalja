@@ -40,13 +40,14 @@ extension Viewer {
     private var baseName: String {
         canvas.window?.representedURL?.deletingPathExtension().lastPathComponent ?? canvas.window?.title ?? "문서"
     }
-    /// 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt) in the chosen 문자 코드, or 서식 있는
-    /// 인터넷 문서(*.html).
+    /// 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt) in the chosen 문자 코드, 서식 있는
+    /// 인터넷 문서(*.html), and for a document opened from HWPML, HWPML 문서(*.hml).
     func saveInOtherFormat() {
         guard let window = canvas.window, let document else { return }
         let panel = NSSavePanel()
         let format = NSPopUpButton(frame: .zero, pullsDown: false)
-        format.addItems(withTitles: ["텍스트 문서(*.txt)", "서식 있는 인터넷 문서(*.html)"])
+        let hml = (window.windowController?.document as? NSDocument)?.fileType == UTType.hml.identifier
+        format.addItems(withTitles: ["텍스트 문서(*.txt)", "서식 있는 인터넷 문서(*.html)"] + (hml ? ["HWPML 문서(*.hml)"] : []))
         let encodings: [(String, String.Encoding)] = [
             ("유니코드(UTF-8)", .utf8), ("유니코드", .utf16LittleEndian), ("유니코드(Big-Endian)", .utf16BigEndian),
             ("한국(KS)", String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.dosKorean.rawValue)))),
@@ -55,10 +56,11 @@ extension Viewer {
         encoding.addItems(withTitles: encodings.map(\.0))
         let accessory = ActionTarget.form([("파일 형식", format), ("문자 코드", encoding)])
         panel.accessoryView = accessory
+        let types: [UTType] = [.plainText, .html, .hml]
         let update = { [weak panel] in
-            let text = format.indexOfSelectedItem == 0
-            panel?.allowedContentTypes = [text ? .plainText : .html]
-            panel?.nameFieldStringValue = self.baseName + (text ? ".txt" : ".html")
+            let text = format.indexOfSelectedItem == 0, type = types[format.indexOfSelectedItem]
+            panel?.allowedContentTypes = [type]
+            panel?.nameFieldStringValue = self.baseName + "." + (type.preferredFilenameExtension ?? "")
             (accessory.subviews.first as? NSGridView)?.row(at: 1).isHidden = !text
         }
         let target = ActionTarget(update)
@@ -68,14 +70,50 @@ extension Viewer {
         panel.beginSheetModal(for: window) { response in
             withExtendedLifetime(target) {}
             guard response == .OK, let url = panel.url else { return }
-            let text = format.indexOfSelectedItem == 0, chosen = encodings[encoding.indexOfSelectedItem].1
+            let chosen = encodings[encoding.indexOfSelectedItem].1
+            let index = format.indexOfSelectedItem
             Task {
                 do {
-                    let data = text ? try await document.textDocument().data(using: chosen, allowLossyConversion: true)
-                        : try await document.webDocument().data(using: .utf8)
+                    let data = switch index {
+                    case 0: try await document.textDocument().data(using: chosen, allowLossyConversion: true)
+                    case 1: try await document.webDocument().data(using: .utf8)
+                    default: try await document.hmlDocument()
+                    }
                     try data?.write(to: url, options: .atomic)
                 } catch {
                     NSApp.presentError(error)
+                }
+            }
+        }
+    }
+    /// 블록 저장: the selected text as a 한/글 document of its own, in the chosen 파일 형식.
+    func saveBlock() {
+        guard let window = canvas.window, let document, let selection = document.selection,
+              selection.anchor != selection.focus else { return }
+        let panel = NSSavePanel()
+        let format = NSPopUpButton(frame: .zero, pullsDown: false)
+        let formats: [(String, UTType, SaveFormat)] = [("한글 표준 문서(*.hwpx)", .hwpx, .hwpx), ("한글 문서(*.hwp)", .hwp, .hwp)]
+        format.addItems(withTitles: formats.map(\.0))
+        panel.accessoryView = ActionTarget.form([("파일 형식", format)])
+        let update = { [weak panel] in
+            let type = formats[format.indexOfSelectedItem].1
+            panel?.allowedContentTypes = [type]
+            panel?.nameFieldStringValue = self.baseName + "." + (type.preferredFilenameExtension ?? "")
+        }
+        let target = ActionTarget(update)
+        format.target = target
+        format.action = #selector(ActionTarget.run)
+        update()
+        panel.prompt = "블록 저장"
+        panel.beginSheetModal(for: window) { response in
+            withExtendedLifetime(target) {}
+            guard response == .OK, let url = panel.url else { return }
+            let chosen = formats[format.indexOfSelectedItem].2
+            Task {
+                do {
+                    try await document.exportBlock(selection, chosen).write(to: url, options: .atomic)
+                } catch {
+                    NSSound.beep()
                 }
             }
         }

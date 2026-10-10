@@ -1347,4 +1347,6 @@ pub enum SaveFormat {
     Hwpx,
     /// The whole document as rendered, for printing and sharing.
     Pdf,
+    /// HWPML, for a document opened from one.
+    Hml,
 }

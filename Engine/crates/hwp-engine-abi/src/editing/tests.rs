@@ -3698,6 +3698,46 @@ fn protected_objects_are_not_chosen_until_all_are_unprotected() {
 }
 
 #[test]
+fn a_block_is_saved_as_a_document_of_its_own() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let next = EditTarget {
+            paragraph: 2,
+            ..body()
+        };
+        // From before 끝 in the first paragraph to after 보존 in the next.
+        let block = EditSelection {
+            anchor: point(body(), 11),
+            focus: point(next, 2),
+        };
+        let bytes = s.export_block(&block, format).unwrap();
+        let saved = EditSession::open(&bytes).unwrap();
+        let texts: Vec<_> = saved.core.document().sections[0]
+            .paragraphs
+            .iter()
+            .map(|p| p.text.clone())
+            .collect();
+        assert_eq!(texts, ["끝", "보존"], "{format:?}");
+        // The document itself is untouched.
+        assert_eq!(s.paragraph(&body()).unwrap().text, "가👨‍👩‍👧‍👦e\u{301} 끝");
+        let caret = EditSelection::caret(point(body(), 1));
+        assert!(s.export_block(&caret, format).is_err());
+    }
+}
+#[test]
+fn hwpml_opens_and_saves_back_only_as_hwpml() {
+    let hml = br#"<HWPML Version="2.91"><HEAD/><BODY><SECTION><P><TEXT><CHAR>ok</CHAR></TEXT></P></SECTION></BODY><TAIL/></HWPML>"#;
+    let mut s = EditSession::open(hml).unwrap();
+    let saved = s.export(SaveFormat::Hml).unwrap();
+    assert!(String::from_utf8_lossy(&saved).contains("ok"));
+    let mut hwpx = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    assert_eq!(
+        hwpx.export(SaveFormat::Hml).unwrap_err(),
+        EditError::UnsupportedFormat
+    );
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {
@@ -4293,7 +4333,7 @@ fn a_table_cell_picture_resizes_deletes_undoes_and_round_trips_both_formats() {
         let extension = match format {
             SaveFormat::Hwp => "hwp",
             SaveFormat::Hwpx => "hwpx",
-            SaveFormat::Pdf => unreachable!(),
+            SaveFormat::Pdf | SaveFormat::Hml => unreachable!(),
         };
         let mut s = EditSession::open(&plain_document(extension, false)).unwrap();
         let caret = run(

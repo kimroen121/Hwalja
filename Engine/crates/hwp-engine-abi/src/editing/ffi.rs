@@ -211,6 +211,11 @@ pub(super) enum Request {
     Export {
         format: SaveFormat,
     },
+    /// 블록 저장: the selected text of the body as a document of its own.
+    ExportBlock {
+        selection: EditSelection,
+        format: SaveFormat,
+    },
 }
 
 pub struct HwpEditResult {
@@ -408,6 +413,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
             HwpEditResult::ok(found, Vec::new())
         }
         Request::Export { format } => HwpEditResult::ok(session.reply(), session.export(format)?),
+        Request::ExportBlock { selection, format } => {
+            HwpEditResult::ok(session.reply(), session.export_block(&selection, format)?)
+        }
     })
 }
 

@@ -7,6 +7,8 @@ import OSLog
 extension UTType {
     static let hwp = UTType(importedAs: "app.hwalja.hwp")
     static let hwpx = UTType(importedAs: "app.hwalja.hwpx")
+    /// HWPML, opened and, from 다른 파일 형식으로 저장하기, saved back.
+    static let hml = UTType(importedAs: "app.hwalja.hml")
     /// Our declarations plus whatever type another installed app (e.g. Hancom) owns
     /// for the same extensions, which the system may prefer over ours.
     static let hwpFamily: [UTType] = Array(Set([hwpx, hwp] + ["hwpx", "hwp"].flatMap {
@@ -85,7 +87,7 @@ struct EditingContext: Equatable {
 /// previous one, and each ends by publishing a `Presentation` to `presented`.
 @MainActor
 final class HwpDocument: @preconcurrency ReferenceFileDocument {
-    static let readableContentTypes = UTType.hwpFamily
+    static let readableContentTypes = UTType.hwpFamily + [.hml]
     /// New documents are HWPX, like Hancom Office Web.
     static let writableContentTypes = [UTType.hwpx] + UTType.hwpFamily.filter { $0 != .hwpx }
     /// Undo depth kept by the engine (`HISTORY_LIMIT`).
@@ -633,6 +635,18 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     }
     /// The whole document as PDF, after queued edits.
     /// 텍스트 문서 and 서식 있는 인터넷 문서 of the current revision.
+    /// 블록 저장 of `selection`, after queued edits.
+    func exportBlock(_ selection: EditSelection, _ format: SaveFormat) async throws -> Data {
+        await settle()
+        let session = try session
+        return try await Task.detached { try session.exportBlock(selection, format) }.value
+    }
+    /// HWPML of a document opened from it.
+    func hmlDocument() async throws -> Data {
+        await settle()
+        let session = try session
+        return try await Task.detached { try session.export(.hml) }.value
+    }
     func textDocument() async throws -> String {
         await settle()
         return try await session.textDocument()

@@ -56,6 +56,10 @@ final class EditSession: @unchecked Sendable {
     func export(_ format: SaveFormat) throws -> Data {
         try queue.sync { try request(.export(format)).data }
     }
+    /// 블록 저장's document. Blocks until queued edits finish.
+    func exportBlock(_ selection: EditSelection, _ format: SaveFormat) throws -> Data {
+        try queue.sync { try request(.exportBlock(selection, format)).data }
+    }
 
     /// `amend` folds the edit into the latest undo step (IME composition).
     func apply(_ command: EditCommand, at revision: UInt64, amend: Bool = false,
