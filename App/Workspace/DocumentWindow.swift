@@ -624,8 +624,8 @@ enum TaskPane: String, CaseIterable {
     }
 }
 
-/// The sidebar, as Xcode's navigator: a row of icons choosing 쪽 모양 보기, 개요 보기 or
-/// 책갈피 over it, and a filter under the lists.
+/// The sidebar, as Xcode's navigator: the 작업 창 chosen in a row of icons over it, and a
+/// filter under the lists, in Liquid Glass where macOS has it.
 private struct Sidebar: View {
     @ObservedObject var document: HwpDocument
     @ObservedObject var viewer: Viewer
@@ -633,46 +633,67 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
+            Picker("작업 창", selection: $viewer.sidebarPane) {
                 ForEach(TaskPane.allCases, id: \.self) { pane in
-                    let on = pane == viewer.sidebarPane
-                    Button { viewer.sidebarPane = pane } label: {
-                        Image(systemName: pane.symbol)
-                            .symbolVariant(on ? .fill : .none)
-                            .foregroundStyle(on ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                            .frame(maxWidth: .infinity, minHeight: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(pane.rawValue)
-                    .accessibilityLabel(pane.rawValue)
-                    .accessibilityAddTraits(on ? .isSelected : [])
+                    Image(systemName: pane.symbol).help(pane.rawValue).accessibilityLabel(pane.rawValue).tag(pane)
                 }
             }
-            .padding(.horizontal, 8)
-            Divider()
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             switch viewer.sidebarPane {
             case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
             case .outline: OutlinePane(document: document, viewer: viewer, filter: filter)
             case .bookmarks: BookmarkPane(document: document, viewer: viewer, filter: filter)
             }
             if viewer.sidebarPane != .pages {
-                Divider()
                 HStack(spacing: 6) {
                     if viewer.sidebarPane == .bookmarks {
-                        Button { viewer.bookmarking = true } label: { Image(systemName: "plus") }
-                            .buttonStyle(.borderless)
+                        Button { viewer.bookmarking = true } label: { Image(systemName: "plus").frame(width: 16, height: 16) }
+                            .glassButton()
                             .help("책갈피…")
                             .accessibilityLabel("책갈피…")
                     }
-                    TextField("필터", text: $filter)
-                        .textFieldStyle(.roundedBorder)
+                    FilterField(text: $filter)
                 }
-                .controlSize(.small)
-                .padding(8)
+                .padding(10)
             }
         }
         .onChange(of: viewer.sidebarPane) { filter = "" }
+    }
+}
+
+/// Xcode's filter field: a capsule with the filter sign before the text and a clear button after it.
+private struct FilterField: View {
+    @Binding var text: String
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary)
+            TextField("필터", text: $text).textFieldStyle(.plain)
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("지우기")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .glassCapsule()
+    }
+}
+
+extension View {
+    /// Liquid Glass in a capsule on macOS 26 and later, a quiet fill before it.
+    @ViewBuilder func glassCapsule() -> some View {
+        if #available(macOS 26, *) { glassEffect(.regular, in: .capsule) } else { background(.quaternary, in: Capsule()) }
+    }
+    /// The Liquid Glass button style on macOS 26 and later, a bordered one before it.
+    @ViewBuilder func glassButton() -> some View {
+        if #available(macOS 26, *) { buttonStyle(.glass).buttonBorderShape(.circle) } else { buttonStyle(.bordered) }
     }
 }
 
