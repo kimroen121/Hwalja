@@ -588,6 +588,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }
+    /// 개인 정보 바꾸기's matches of `kinds` (phone, ssn, email, card) in the current revision.
+    func privateInfo(_ kinds: [String]) async throws -> [EditSelection] {
+        try await session.privateInfo(kinds)
+    }
     func columns(section: UInt32) async throws -> ColumnSetup {
         try await session.columns(section: section)
     }

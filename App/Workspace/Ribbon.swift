@@ -236,6 +236,12 @@ struct ToolRow: View {
             .disabled(context.locked || document.hasPassword)
         ToolTile("문서 암호 변경/해제", Icon.passwordChange) { viewer.passwordSheet = true }
             .disabled(context.locked || !document.hasPassword)
+        RowDivider()
+        ToolTile("개인 정보 바꾸기", Icon.privateInfo, choices: {
+            [Choice(title: "바로 바꾸기", enabled: context.hasRange) { viewer.hidePrivateInfo() },
+             Choice(title: "찾아서 바꾸기…") { viewer.replacingPrivateInfo = true }]
+        })
+        .disabled(context.locked)
     }
 
     // MARK: 개체 탭과 상황 탭
@@ -652,6 +658,7 @@ enum Icon {
     static let calculation = "function"
     static let rotate = "rotate.right"
     static let protect = "lock"
+    static let privateInfo = "eye.slash"
     static let newDocument = "doc.badge.plus", open = "folder", taskPane = "sidebar.right"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"

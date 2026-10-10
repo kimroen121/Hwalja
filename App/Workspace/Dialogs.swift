@@ -360,6 +360,122 @@ extension Viewer {
     }
 }
 
+extension Viewer {
+    /// 개인 정보 바꾸기 › 바로 바꾸기: the selected text becomes ***.
+    func hidePrivateInfo() {
+        document?.edit(undoManager) { selection in
+            guard let selection, selection.anchor != selection.focus else { return nil }
+            return .replace(selection, text: "***")
+        }
+    }
+}
+
+/// [개인 정보 바꾸기] (찾아서 바꾸기): 개인 정보 선택 사항 found one at a time or all at
+/// once, and 바꿀 문자 선택. It stays until 닫기, as in 한/글.
+struct PrivateInfoSheet: View {
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var kinds: Set<String> = ["phone", "ssn", "email", "card"]
+    @State private var other = false
+    @State private var otherText = ""
+    @State private var mark = "***"
+    @State private var custom = ""
+    @State private var found = false
+
+    private static let options = [("phone", "전화번호"), ("ssn", "주민등록번호"), ("email", "전자우편"), ("card", "신용카드 번호")]
+    private var replacement: String { mark.isEmpty ? custom : mark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("개인 정보 바꾸기").font(.headline)
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("개인 정보 선택 사항")
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Self.options, id: \.0) { kind, title in
+                            Toggle(title, isOn: Binding { kinds.contains(kind) } set: { on in
+                                if on { kinds.insert(kind) } else { kinds.remove(kind) }
+                            })
+                        }
+                        HStack {
+                            Toggle("기타", isOn: $other)
+                            TextField("", text: $otherText).frame(width: 120).disabled(!other)
+                        }
+                    }
+                    .padding(.leading, 12)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    GroupTitle("바꿀 문자 선택")
+                    Picker("", selection: $mark) {
+                        Text("***").tag("***")
+                        Text("~~~").tag("~~~")
+                        Text("XXX").tag("XXX")
+                        HStack {
+                            Text("사용자 정의 문자")
+                            TextField("", text: $custom).frame(width: 80).disabled(!mark.isEmpty)
+                        }
+                        .tag("")
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                    .padding(.leading, 12)
+                }
+            }
+            HStack {
+                Spacer()
+                Button(found ? "다음 찾기" : "찾기") { findNext() }
+                Button("바꾸기") { replace() }
+                Button("모두 바꾸기") { replaceAll() }
+                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .disabled(kinds.isEmpty && !(other && !otherText.isEmpty))
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    /// Every match in document order: the kinds rhwp finds, and 기타's text.
+    private func matches(_ document: HwpDocument) async throws -> [EditSelection] {
+        var all = try await document.privateInfo(Self.options.map(\.0).filter(kinds.contains))
+        if other, !otherText.isEmpty { all += try await document.find(otherText) }
+        return all.sorted { $0.ordered.start.order.lexicographicallyPrecedes($1.ordered.start.order) }
+    }
+    private func findNext() {
+        guard let document = viewer.document else { return }
+        found = true
+        document.select { document in
+            let all = try await matches(document)
+            guard !all.isEmpty else {
+                NSSound.beep()
+                return nil
+            }
+            guard let end = document.selection?.ordered.end.order else { return all[0] }
+            return all.first { !$0.ordered.start.order.lexicographicallyPrecedes(end) } ?? all[0]
+        }
+    }
+    private func replace() {
+        guard let document = viewer.document else { return }
+        let text = replacement
+        Task {
+            await document.settle()
+            let all = (try? await matches(document)) ?? []
+            guard let selection = document.selection, all.contains(selection) else { return findNext() }
+            document.edit(viewer.undoManager) { $0 == selection ? .replace(selection, text: text) : nil }
+            findNext()
+        }
+    }
+    private func replaceAll() {
+        guard let document = viewer.document else { return }
+        let text = replacement
+        Task {
+            await document.settle()
+            let all = (try? await matches(document)) ?? []
+            guard !all.isEmpty else { return NSSound.beep() }
+            document.edit(viewer.undoManager) { _ in .replaceAll(all, text: text) }
+        }
+    }
+}
+
 /// [단 설정]: 단 종류, 자주 쓰이는 모양 with 단 개수, and 너비 및 간격.
 struct ColumnSheet: View {
     let section: UInt32

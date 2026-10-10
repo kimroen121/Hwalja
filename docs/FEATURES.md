@@ -185,7 +185,7 @@
 | 배포용 문서로 저장 | △ | `file/send_to_mail/publish(save).htm` |  |
 | 배포용 문서 편집 | — | `file/send_to_mail/publish(edit).htm` | 자동 권한 판단이 보안 약화로 막아 보류(사용자 결정 필요) |
 | 배포용 문서 암호 변경/해제 | △ | `file/send_to_mail/publish(cancel).htm` |  |
-| 개인 정보 보호 | △ | `security/user_info_security/user_info_security.htm` | 찾기 ○ `scan_pii`. 보호(암호화) 저장 △ |
+| 개인 정보 보호 | △ | `security/user_info_security/user_info_security.htm` | 보호(암호화) 저장 △. 찾기는 개인 정보 바꾸기와 같은 `scan_pii` |
 | 문서 보안 설정 | △ | `security/document_security.htm` |  |
 
 ## 검토
@@ -222,7 +222,7 @@
 | 참고 문헌 | △ | `tools/bibliography/bibliography.htm` |  |
 | 블록 계산 | △ | `tools/blocksum/blocksum.htm` | 본문 블록의 합계·평균. 표 블록 계산식은 됨 |
 | 문서 찾기 | — | `file/finding_files/finding_files.htm` | Spotlight |
-| 개인 정보 바꾸기 | △ | `security/user_info_protection/user_info_protection.htm` |  |
+| 개인 정보 바꾸기 | ◐ | `security/user_info_protection/user_info_protection.htm` | 보안 메뉴·탭. 바로 바꾸기(블록을 ***로) ●, 찾아서 바꾸기(전화번호·주민등록번호·전자우편·신용카드 번호·기타; ***·~~~·XXX·사용자 정의 문자; 찾기/다음 찾기·바꾸기·모두 바꾸기) ●. 외국인등록번호·계좌 번호·IP 주소·생년월일·주소·사용자 정의 설정 △(rhwp `scan_pii`에 없음) |
 | 프레젠테이션 | — | `tools/presention/presentation.htm` |  |
 | 글자판 | — | `insert/keyboard/keyboard.htm` | macOS 입력기 |
 | COM 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |

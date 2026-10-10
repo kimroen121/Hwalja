@@ -1708,6 +1708,7 @@ struct DocumentTests {
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),
+            ("privateInfo", AnyView(PrivateInfoSheet(viewer: viewer))),
             ("columns", AnyView(ColumnSheet(section: 0, setup: try await document.columns(section: 0), viewer: viewer))),
             ("char", AnyView(CharShapeSheet(style: format.text, languages: format.languages, viewer: viewer))),
             ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),

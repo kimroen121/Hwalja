@@ -102,6 +102,9 @@ final class EditSession: @unchecked Sendable {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await decode(send(.pageSetup(section: section)))
     }
+    func privateInfo(_ kinds: [String]) async throws -> [EditSelection] {
+        try await decode(send(.privateInfo(kinds: kinds)))
+    }
     func columns(section: UInt32) async throws -> ColumnSetup {
         try await decode(send(.columns(section: section)))
     }

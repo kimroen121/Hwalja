@@ -538,6 +538,39 @@ impl EditSession {
 
     /// Every match of `query` in document order, in the body and in top-level table cells.
     /// Matches the editor cannot address (text boxes, nested tables, equations) are left out.
+    /// 개인 정보 바꾸기: each 전화번호, 주민등록번호, 전자우편 or 신용카드 번호 of `kinds`,
+    /// found by rhwp and placed as 찾기 places text.
+    pub fn private_info(&self, kinds: &[String]) -> Result<Vec<EditSelection>, EditError> {
+        use rhwp::document_core::queries::pii_scan::PiiKind;
+        let kinds = kinds
+            .iter()
+            .map(|k| match k.as_str() {
+                "phone" => Ok(PiiKind::Phone),
+                "ssn" => Ok(PiiKind::Ssn),
+                "email" => Ok(PiiKind::Email),
+                "card" => Ok(PiiKind::Card),
+                _ => Err(EditError::InvalidInput),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut values: Vec<String> = Vec::new();
+        for finding in self.core.scan_pii(&kinds, '*') {
+            if !values.contains(&finding.raw) {
+                values.push(finding.raw);
+            }
+        }
+        let mut found = Vec::new();
+        for value in values {
+            found.extend(self.find(&value, true)?);
+        }
+        let key = |s: &EditSelection| {
+            let t = &s.anchor.target;
+            let c = t.cell.as_ref().map(|c| (c.control, c.cell, c.paragraph));
+            (t.section, t.paragraph, c, s.anchor.scalar)
+        };
+        found.sort_by_key(key);
+        found.dedup();
+        Ok(found)
+    }
     pub fn find(&self, query: &str, case_sensitive: bool) -> Result<Vec<EditSelection>, EditError> {
         let json = self
             .core

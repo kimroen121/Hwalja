@@ -1305,6 +1305,8 @@ enum EngineRequest: Encodable, Sendable {
     case find(query: String, FindOptions)
     case pageSetup(section: UInt32)
     case columns(section: UInt32)
+    /// 개인 정보 바꾸기's matches: phone, ssn, email, card.
+    case privateInfo(kinds: [String])
     case pageBorder(section: UInt32)
     case styleFormat(UInt32)
     case sectionSetup(section: UInt32)
@@ -1351,7 +1353,7 @@ enum EngineRequest: Encodable, Sendable {
     private enum Key: String, CodingKey {
         case op, request, target, revision, page, x, y, position, selection, format, motion, goalX, query, caseSensitive, wholeWord, section,
              includeHeaderFooter, borders,
-             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new, chart
+             object, cell, script, fontSize, color, paragraph, control, from, text, fromLatex, footnote, style, current, new, chart, kinds
     }
     private struct Apply: Encodable {
         var version = EditProtocolVersion.current
@@ -1406,6 +1408,9 @@ enum EngineRequest: Encodable, Sendable {
         case let .columns(section):
             try c.encode("columns", forKey: .op)
             try c.encode(section, forKey: .section)
+        case let .privateInfo(kinds):
+            try c.encode("privateInfo", forKey: .op)
+            try c.encode(kinds, forKey: .kinds)
         case let .styleFormat(style):
             try c.encode("styleFormat", forKey: .op)
             try c.encode(style, forKey: .style)

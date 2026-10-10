@@ -247,6 +247,13 @@ struct MenuItems {
             .disabled(viewer == nil || context.locked || document?.hasPassword != false)
         item("문서 암호 변경/해제…", Icon.passwordChange) { viewer?.passwordSheet = true }
             .disabled(viewer == nil || context.locked || document?.hasPassword != true)
+        Divider()
+        Menu {
+            Button("바로 바꾸기") { viewer?.hidePrivateInfo() }
+                .disabled(!context.hasRange)
+            Button("찾아서 바꾸기…") { viewer?.replacingPrivateInfo = true }
+        } label: { Label("개인 정보 바꾸기", systemImage: Icon.privateInfo) }
+        .disabled(viewer == nil || context.locked)
     }
     @ViewBuilder var print: some View {
         item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }

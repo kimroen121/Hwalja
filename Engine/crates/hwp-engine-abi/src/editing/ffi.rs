@@ -128,6 +128,11 @@ pub(super) enum Request {
         #[serde(default)]
         borders: bool,
     },
+    /// 개인 정보 바꾸기: where the 전화번호, 주민등록번호, 전자우편 and 신용카드 번호 of
+    /// `kinds` (phone, ssn, email, card) are, in document order.
+    PrivateInfo {
+        kinds: Vec<String>,
+    },
     /// Paper and margins of a section.
     PageSetup {
         section: u32,
@@ -362,6 +367,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         } => {
             session.show_marks(paragraph, control, borders)?;
             state(session)
+        }
+        Request::PrivateInfo { kinds } => {
+            HwpEditResult::ok(session.private_info(&kinds)?, Vec::new())
         }
         Request::PageSetup { section } => {
             HwpEditResult::ok(session.page_setup(section)?, Vec::new())

@@ -56,6 +56,7 @@ struct DocumentWindow: View {
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.calculating) { CalculationSheet(viewer: viewer) }
+        .sheet(isPresented: $viewer.replacingPrivateInfo) { PrivateInfoSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.flippingTable) { TableFlipSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.startingNumber) { NewNumberSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.bookmarking) { BookmarkSheet(viewer: viewer) }
@@ -280,6 +281,7 @@ final class Viewer: ObservableObject {
     @Published var insertingTable = false
     @Published var splittingCells = false
     @Published var calculating = false
+    @Published var replacingPrivateInfo = false
     @Published var flippingTable = false
     /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
     @Published var equation: EquationEdit?

@@ -3738,6 +3738,38 @@ fn hwpml_opens_and_saves_back_only_as_hwpml() {
 }
 
 #[test]
+fn private_information_is_found_and_replaced() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    replace(
+        &mut s,
+        body(),
+        0,
+        0,
+        "전화 010-1234-5678, 메일 hong@example.com ",
+    )
+    .unwrap();
+    let kinds = |k: &[&str]| k.iter().map(|k| k.to_string()).collect::<Vec<_>>();
+    let found = s.private_info(&kinds(&["phone", "email"])).unwrap();
+    assert_eq!(found.len(), 2);
+    assert_eq!((found[0].anchor.scalar, found[0].focus.scalar), (3, 16));
+    assert_eq!(s.private_info(&kinds(&["ssn"])).unwrap(), []);
+    assert!(s.private_info(&kinds(&["주소"])).is_err());
+    run(
+        &mut s,
+        EditCommand::ReplaceAll {
+            selections: found,
+            text: "***".into(),
+        },
+    )
+    .unwrap();
+    assert!(s
+        .paragraph(&body())
+        .unwrap()
+        .text
+        .starts_with("전화 ***, 메일 *** "));
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {
