@@ -207,6 +207,10 @@ extension Viewer {
             return make(selection)
         }
     }
+    /// 계산식 into the cell holding the caret.
+    func calculate(_ formula: String, format: UInt8, separators: Bool) {
+        editCells { .calculate($0.focus, formula: formula, format: format, separators: separators) }
+    }
 
     /// Opens 편집 용지 for the section holding the caret.
     func showPageSetup() {
@@ -400,6 +404,59 @@ struct SplitCellSheet: View {
             let (rows, columns, equalHeight, mergeFirst) = (Int(rows), Int(columns), equalHeight, mergeFirst)
             viewer.editCells { .splitCells($0, rows: rows, columns: columns, equalHeight: equalHeight, mergeFirst: mergeFirst) }
             dismiss()
+        }
+    }
+}
+
+/// [계산식]: the formula, with 함수 and 쉬운 범위 to write it, 형식 and 세 자리마다 쉼표로 자리 구분.
+struct CalculationSheet: View {
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var formula = ""
+    @State private var function = ""
+    @State private var range = ""
+    @State private var format: UInt8 = 0
+    @State private var separators = false
+
+    /// 시트 함수 in the help's order.
+    private static let functions = ["SUM", "AVERAGE", "PRODUCT", "MIN", "MAX", "COUNT", "COS", "SIN", "TAN", "ACOS", "ASIN",
+                                    "ATAN", "ABS", "EXP", "LN", "LOG", "SQRT", "DEGTORAD", "RADTODEG", "SIGN", "CEILING",
+                                    "FLOOR", "INT", "ROUND", "MOD"]
+    private static let ranges = ["LEFT", "RIGHT", "ABOVE", "BELOW"]
+    private static let formats: [(UInt8, String)] = [(0, "기본 형식"), (1, "정수형"), (2, "소수점 이하 한 자리"),
+                                                     (3, "소수점 이하 두 자리"), (4, "소수점 이하 세 자리"), (5, "소수점 이하 네 자리")]
+
+    var body: some View {
+        DialogFrame("계산식", confirmTitle: "설정", canConfirm: !formula.trimmingCharacters(in: .whitespaces).isEmpty) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    FieldLabel("계산식")
+                    TextField("", text: $formula).frame(width: 240)
+                }
+                GridRow {
+                    FieldLabel("함수")
+                    ChoiceField($function, [("", "")] + Self.functions.map { ($0, "\($0)(..)") }, minWidth: 140)
+                }
+                GridRow {
+                    FieldLabel("쉬운 범위")
+                    ChoiceField($range, [("", "")] + Self.ranges.map { ($0, $0) }, minWidth: 140)
+                }
+                GridRow {
+                    FieldLabel("형식")
+                    ChoiceField($format, Self.formats, minWidth: 140)
+                }
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    Toggle("세 자리마다 쉼표로 자리 구분", isOn: $separators)
+                }
+            }
+        } confirm: {
+            viewer.calculate(formula, format: format, separators: separators)
+            dismiss()
+        }
+        // A 함수 or 쉬운 범위 chosen writes the formula from them.
+        .onChange(of: [function, range]) {
+            formula = function.isEmpty ? (range.isEmpty ? formula : "=SUM(\(range))") : "=\(function)(\(range))"
         }
     }
 }

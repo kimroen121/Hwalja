@@ -253,7 +253,7 @@
 | 표 뒤집기 | ● | `table/table(transform).htm` | 대칭 3가지, 회전 3가지, 여백 뒤집기. 합친 셀 포함. 줄/칸이 바뀌면 표 너비를 지키고 칸을 고르게 나눈다(rhwp 방식). 크기 고정·개체 보호 표를 막는 것은 아직 없다 |
 | 블록 계산식 | ◐ | `table/blockcal/blockcal.htm` | 값으로 넣음. 계산식 필드로 넣어 자동 다시 계산 △ |
 | 쉬운 계산식 | △ | `table/easycal/easycal.htm` |  |
-| 계산식 | ○ | `table/calculation/calculation.htm` | `evaluate_table_formula`. 계산식 필드 넣기 △ |
+| 계산식 | ◐ | `table/calculation/calculation.htm` | 표 레이아웃·표 메뉴의 계산식(함수·쉬운 범위·형식·세 자리마다 쉼표) ●, 결과는 값으로 들어간다. 계산식 필드(다시 계산·고치기) △ |
 | 1,000 단위 구분 쉼표 | △ | `table/table(threedigits).htm` | 자릿점 넣기·빼기 |
 | 셀 블록 | ● | `table/table(cell).htm` |  |
 | 표 크기 조절 | ◐ | `table/table(size).htm` | 테두리 끌기 ●. 바깥 테두리를 눌러 표를 개체로 고르고, 조절점으로 표 전체 크기를 비율대로 조절·끌어서 이동·Delete로 지우기 ●. 셀 안의 표 △ |

@@ -517,6 +517,54 @@ impl EditSession {
         }
         Ok(changes)
     }
+    /// 계산식: works `formula` out for the cell holding `p` and writes the result over
+    /// the cell's first paragraph.
+    pub(super) fn calculate(
+        &mut self,
+        p: &EditPosition,
+        formula: &str,
+        format: u8,
+        separators: bool,
+    ) -> Result<EditSelection, EditError> {
+        let t = &p.target;
+        let c = t.cell.as_ref().ok_or(EditError::UnsupportedTarget)?;
+        let table = commands::table(self.core.document(), t).ok_or(EditError::UnsupportedTarget)?;
+        let cell = table
+            .cells
+            .get(c.cell as usize)
+            .ok_or(EditError::InvalidInput)?;
+        let (row, col) = (cell.row as usize, cell.col as usize);
+        // A formula starts with = or @, which the box may leave out.
+        let formula = match formula.trim() {
+            f if f.starts_with(['=', '@']) => format!("={}", &f[1..]),
+            f => format!("={f}"),
+        };
+        let reply: Value = serde_json::from_str(&self.core.evaluate_table_formula(
+            t.section as usize,
+            t.paragraph as usize,
+            c.control as usize,
+            row,
+            col,
+            &formula,
+            false,
+        )?)
+        .map_err(|_| EditError::InvalidInput)?;
+        let value = reply["result"].as_f64().ok_or(EditError::InvalidInput)?;
+        let first = EditTarget {
+            cell: Some(CellTarget {
+                paragraph: 0,
+                ..c.clone()
+            }),
+            ..t.clone()
+        };
+        let end = self.paragraph(&first)?.text.chars().count() as u32;
+        let at = |scalar| EditPosition {
+            target: first.clone(),
+            scalar,
+            upstream: false,
+        };
+        self.replace(&at(0), &at(end), &calculated(value, format, separators))
+    }
     /// Sizes a table of the body to `width` × `height` (HWPUNIT), each column and row
     /// in proportion.
     pub(super) fn scale_table(
@@ -584,4 +632,29 @@ impl EditSession {
         }
         Ok(())
     }
+}
+
+/// A 계산식 result in its 형식: 기본 형식 shows a whole number without a point, 정수형
+/// rounds, and the others keep one to four decimals.
+fn calculated(value: f64, format: u8, separators: bool) -> String {
+    let text = match format {
+        0 if value == value.trunc() && value.abs() < 1e15 => format!("{}", value as i64),
+        0 => format!("{value}"),
+        n => format!("{value:.*}", n as usize - 1),
+    };
+    if !separators {
+        return text;
+    }
+    let (sign, rest) = text.split_at(usize::from(text.starts_with('-')));
+    let (whole, fraction) = rest.split_at(rest.find('.').unwrap_or(rest.len()));
+    let digits: Vec<char> = whole.chars().collect();
+    let grouped: String = digits
+        .iter()
+        .enumerate()
+        .flat_map(|(i, d)| {
+            let comma = i > 0 && (digits.len() - i) % 3 == 0;
+            comma.then_some(',').into_iter().chain([*d])
+        })
+        .collect();
+    format!("{sign}{grouped}{fraction}")
 }

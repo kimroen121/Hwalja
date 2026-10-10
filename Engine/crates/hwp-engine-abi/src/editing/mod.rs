@@ -466,6 +466,7 @@ impl EditCommand {
             | EditCommand::SplitCells { selection, .. }
             | EditCommand::EqualizeCells { selection, .. }
             | EditCommand::CalculateBlock { selection, .. } => Some(selection.anchor.clone()),
+            EditCommand::Calculate { position, .. } => Some(position.clone()),
             EditCommand::Split { position }
             | EditCommand::MergePrevious { position }
             | EditCommand::Break { position, .. }

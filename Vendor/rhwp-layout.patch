@@ -2080,6 +2080,29 @@ diff --git a/src/document_core/queries/rendering.rs b/src/document_core/queries/
  
          let wrap_around_paras = self
              .pagination
+diff --git a/src/document_core/table_calc/evaluator.rs b/src/document_core/table_calc/evaluator.rs
+--- a/src/document_core/table_calc/evaluator.rs
++++ b/src/document_core/table_calc/evaluator.rs
+@@ -223,7 +223,8 @@
+         "ABS" => unary_fn(args, ctx, get_cell, f64::abs),
+         "SQRT" => unary_fn(args, ctx, get_cell, f64::sqrt),
+         "EXP" => unary_fn(args, ctx, get_cell, f64::exp),
+-        "LOG" => unary_fn(args, ctx, get_cell, f64::ln),
++        "LN" => unary_fn(args, ctx, get_cell, f64::ln),
++        "LOG" => unary_fn(args, ctx, get_cell, f64::log10),
+         "LOG10" => unary_fn(args, ctx, get_cell, f64::log10),
+         "SIN" => unary_fn(args, ctx, get_cell, f64::sin),
+         "COS" => unary_fn(args, ctx, get_cell, f64::cos),
+@@ -231,7 +232,8 @@
+         "ASIN" => unary_fn(args, ctx, get_cell, f64::asin),
+         "ACOS" => unary_fn(args, ctx, get_cell, f64::acos),
+         "ATAN" => unary_fn(args, ctx, get_cell, f64::atan),
+-        "RADIAN" => unary_fn(args, ctx, get_cell, |d| d * std::f64::consts::PI / 180.0),
++        "RADTODEG" => unary_fn(args, ctx, get_cell, |r| r * 180.0 / std::f64::consts::PI),
++        "DEGTORAD" | "RADIAN" => unary_fn(args, ctx, get_cell, |d| d * std::f64::consts::PI / 180.0),
+         "SIGN" => unary_fn(args, ctx, get_cell, |v| {
+             if v > 0.0 {
+                 1.0
 diff --git a/src/model/paragraph.rs b/src/model/paragraph.rs
 --- a/src/model/paragraph.rs
 +++ b/src/model/paragraph.rs

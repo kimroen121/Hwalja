@@ -375,6 +375,15 @@ pub enum EditCommand {
         selection: EditSelection,
         height: bool,
     },
+    /// 계산식: `formula` worked out over the table holding `position`, written into its
+    /// cell in `format` (0 기본 형식, 1 정수형, 2–5 소수점 이하 한~네 자리), with
+    /// `separators` 세 자리마다 쉼표로 자리 구분.
+    Calculate {
+        position: EditPosition,
+        formula: String,
+        format: u8,
+        separators: bool,
+    },
     /// 블록 합계, 블록 평균 or 블록 곱 over the block `selection` covers.
     CalculateBlock {
         selection: EditSelection,

@@ -289,6 +289,8 @@ struct ToolRow: View {
             })
         }
         .disabled(!context.cellBlock || context.locked)
+        ToolTile("계산식", Icon.calculation) { viewer.calculating = true }
+            .disabled(context.cellBlock || context.locked)
         RowDivider()
         arrangement(context)
     }
@@ -642,6 +644,7 @@ enum Icon {
         static let levelUp = "increase.indent", levelDown = "decrease.indent"
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
+    static let calculation = "function"
     static let newDocument = "doc.badge.plus", open = "folder", taskPane = "sidebar.right"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"

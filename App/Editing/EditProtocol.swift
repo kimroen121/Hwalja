@@ -131,6 +131,8 @@ enum EditCommand: Encodable, Sendable {
     case order(ObjectRef, Order)
     /// 블록 합계, 블록 평균 or 블록 곱 over the block `selection` covers.
     case calculateBlock(EditSelection, BlockFunction)
+    /// 계산식 into the cell holding the caret: `format` 0 기본 형식, 1 정수형, 2–5 소수점 이하 한~네 자리.
+    case calculate(EditPosition, formula: String, format: UInt8, separators: Bool)
     /// Moves the start (or, with `end`, the end) of a 직선 by `dx`, `dy` (HWPUNIT).
     case moveLineEnd(ObjectRef, end: Bool, dx: Int32, dy: Int32)
     /// 개체 풀기.
@@ -189,7 +191,8 @@ enum EditCommand: Encodable, Sendable {
         case kind, selection, text, position, style, column, rows, columns, data, width, height,
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
-             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri, bookmark, code
+             numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri, bookmark, code,
+             formula, format, separators
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -443,6 +446,12 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("calculateBlock", forKey: .kind)
             try c.encode(selection, forKey: .selection)
             try c.encode(function, forKey: .function)
+        case let .calculate(position, formula, format, separators):
+            try c.encode("calculate", forKey: .kind)
+            try c.encode(position, forKey: .position)
+            try c.encode(formula, forKey: .formula)
+            try c.encode(format, forKey: .format)
+            try c.encode(separators, forKey: .separators)
         case let .moveLineEnd(object, end, dx, dy):
             try c.encode("moveLineEnd", forKey: .kind)
             try c.encode(object, forKey: .object)

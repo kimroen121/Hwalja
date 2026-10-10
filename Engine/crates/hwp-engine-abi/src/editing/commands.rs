@@ -672,6 +672,23 @@ impl EditSession {
             | EditCommand::SplitCells { .. }
             | EditCommand::EqualizeCells { .. }
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
+            EditCommand::Calculate {
+                position,
+                formula,
+                format,
+                ..
+            } => {
+                self.validate_position(position)?;
+                let t = &position.target;
+                if t.cell.is_none() || t.note.is_some() || t.header_footer.is_some() {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                commands::table(self.core.document(), t).ok_or(EditError::UnsupportedTarget)?;
+                if formula.trim().is_empty() || formula.chars().count() > 1_000 || *format > 5 {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
+            }
             EditCommand::SetCell { cell, props } => self.validate_cell(cell, props),
             EditCommand::SetCellBorder {
                 selection, border, ..
@@ -1146,7 +1163,7 @@ impl EditSession {
         Ok(())
     }
     /// Deletes from `start` to `end` and puts `text` (its lines as paragraphs) there.
-    fn replace(
+    pub(super) fn replace(
         &mut self,
         start: &EditPosition,
         end: &EditPosition,
@@ -1774,6 +1791,12 @@ impl EditSession {
             | EditCommand::SplitCells { .. }
             | EditCommand::EqualizeCells { .. }
             | EditCommand::CalculateBlock { .. } => self.edit_cells(command),
+            EditCommand::Calculate {
+                position,
+                formula,
+                format,
+                separators,
+            } => self.calculate(position, formula, *format, *separators),
             EditCommand::SetObject { object, props } => {
                 self.set_object(object, props)?;
                 Ok(self.kept(object.section))

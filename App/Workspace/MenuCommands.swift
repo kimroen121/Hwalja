@@ -185,6 +185,7 @@ struct MenuItems {
                 Choice(title: "블록 계산식", enabled: block, submenu: blockFunctions.map { function in
                     Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
                 }),
+                Choice(title: "계산식…", symbol: Icon.calculation, enabled: !block) { viewer.calculating = true },
                 Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
                 Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, submenu: [
                     Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
@@ -534,6 +535,8 @@ struct MenuItems {
             } label: { Text("블록 계산식") }
         }
         .disabled(!context.cellBlock)
+        item("계산식…", Icon.calculation) { viewer?.calculating = true }
+            .disabled(!context.inTable || context.cellBlock || context.locked)
     }
 }
 

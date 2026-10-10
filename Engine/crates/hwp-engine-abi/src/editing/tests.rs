@@ -3555,6 +3555,44 @@ fn tables_are_objects_sized_whole_and_deleted() {
 }
 
 #[test]
+fn formulas_are_worked_out_into_the_cell() {
+    let mut s = EditSession::open(&plain_document("hwp", false)).unwrap();
+    let insert = EditCommand::InsertTable {
+        position: point(body(), 0),
+        rows: 2,
+        columns: 2,
+        width: None,
+        height: None,
+        treat_as_char: false,
+    };
+    let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+    let cell = |n: u32| EditTarget {
+        cell: Some(CellTarget {
+            cell: n,
+            ..caret.target.cell.clone().unwrap()
+        }),
+        ..caret.target.clone()
+    };
+    for (n, text) in [(0, "1234"), (1, "1000.5")] {
+        replace(&mut s, cell(n), 0, 0, text).unwrap();
+    }
+    let calculate = |formula: &str, format, separators| EditCommand::Calculate {
+        position: point(cell(2), 0),
+        formula: formula.into(),
+        format,
+        separators,
+    };
+    run(&mut s, calculate("=SUM(A1:B1)", 3, true)).unwrap();
+    assert_eq!(s.paragraph(&cell(2)).unwrap().text, "2,234.50");
+    run(&mut s, calculate("product(above)", 0, false)).unwrap();
+    assert_eq!(s.paragraph(&cell(2)).unwrap().text, "1234");
+    run(&mut s, calculate("LOG(100)", 1, false)).unwrap();
+    assert_eq!(s.paragraph(&cell(2)).unwrap().text, "2");
+    assert!(run(&mut s, calculate("=NOPE(A1)", 0, false)).is_err());
+    assert_eq!(s.paragraph(&cell(2)).unwrap().text, "2");
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {
