@@ -180,7 +180,7 @@ struct ToolRow: View {
         let editor = viewer.canvas.editor, head = document.format?.paragraph.head
         shapes(context)
         ColorMenu(title: "형광펜", symbol: "highlighter", current: document.format?.text.shade ?? "#ffffff",
-                  colors: FormatChoices.highlights, clears: true) { editor.format(CharStyle(shade: $0)) }
+                  colors: FormatChoices.highlights, initial: FormatChoices.highlights[0], clears: true) { editor.format(CharStyle(shade: $0)) }
             .padding(.top, 3)
             .disabled(!context.canFormat)
         RowDivider()

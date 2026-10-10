@@ -258,7 +258,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// Replaces the selection with typed text. Keystrokes that arrive while earlier work is
     /// still running join one edit, so typing never falls behind the engine.
     func type(_ text: String, _ undoManager: UndoManager?) {
-        defer { linkTypedAddress(after: text, undoManager) }
+        defer {
+            linkTypedAddress(after: text, undoManager)
+            formatTypedList(after: text, undoManager)
+        }
         if let typing, typing.work == queued {
             typing.text.text += text
             return
@@ -303,11 +306,42 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
         }
     }
 
+    /// 입력 자동 서식's 자동 번호 매기기 and 자동 글머리 기호 넣기: "1." or a sign typed at a
+    /// paragraph's start, then a space or tab, becomes its 문단 번호 or 글머리표, as its own
+    /// edit, so one undo gives the typed text back.
+    func formatTypedList(after typed: String, _ undoManager: UndoManager?) {
+        guard typed.last == " " || typed.last == "\t" else { return }
+        enqueue { document in
+            guard let caret = document.selection?.focus, caret == document.selection?.anchor,
+                  (2...3).contains(caret.scalar), caret.target.headerFooter == nil else { return }
+            let text = try await document.paragraph(caret.target).text
+            let sign = String(String.UnicodeScalarView(text.unicodeScalars.prefix(Int(caret.scalar) - 1)))
+            let head: ParaStyle
+            switch sign {
+            case "1.": head = ParaStyle(head: "Number", numbering: 0)
+            case "*": head = ParaStyle(head: "Bullet", bullet: "●")
+            case "-": head = ParaStyle(head: "Bullet", bullet: "-")
+            case "--": head = ParaStyle(head: "Bullet", bullet: "■")
+            case ">": head = ParaStyle(head: "Bullet", bullet: "▶")
+            case ">>": head = ParaStyle(head: "Bullet", bullet: "√")
+            default: return
+            }
+            let start = EditPosition(target: caret.target, scalar: 0)
+            try await document.run(.replace(EditSelection(anchor: start, focus: caret), text: ""))
+            try await document.run(.formatParagraphs(.caret(start), head), amend: true)
+            document.registerHistory(.undo, undoManager)
+        }
+    }
+
     /// Deletes the selection, or the text between the caret and where `motion` takes it.
     func delete(_ motion: Motion, _ undoManager: UndoManager?) {
         perform(undoManager) { document in
             guard let selection = document.selection else { return nil }
             if selection.anchor != selection.focus { return .replace(selection, text: "") }
+            // <Backspace> at its start takes off the paragraph's 문단 번호 or 글머리표.
+            if motion == .left, selection.focus.scalar == 0, ["Number", "Bullet"].contains(document.format?.paragraph.head) {
+                return .formatParagraphs(selection, ParaStyle(head: "None"))
+            }
             let end = try await document.navigate(from: selection.focus, motion).position
             return end == selection.focus ? nil : .replace(EditSelection(anchor: selection.focus, focus: end), text: "")
         }

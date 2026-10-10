@@ -60,6 +60,34 @@ struct DocumentTests {
         #expect(try await document.hyperlink(at: EditPosition(target: body, scalar: 25))?.uri == "http://www.hancom.com")
     }
 
+    /// 자동 번호 매기기 and 자동 글머리 기호 넣기, which one undo takes back; <Backspace>
+    /// at the paragraph's start takes the head off.
+    @Test func typedSignsBecomeListHeads() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let undo = UndoManager()
+        let start = EditPosition(target: body, scalar: 0)
+        document.selection = .caret(start)
+        document.type("1. ", undo)
+        await document.settle()
+        #expect(document.format?.paragraph.head == "Number" && document.selection == .caret(start))
+        undo.undo()
+        await document.settle()
+        #expect(document.format?.paragraph.head == "None")
+        #expect(try await document.paragraph(body).text.hasPrefix("1. "))
+        document.selection = .caret(start)
+        document.delete(.right, undo)
+        document.delete(.right, undo)
+        document.delete(.right, undo)
+        document.type(">> ", undo)
+        await document.settle()
+        #expect(document.format?.paragraph.head == "Bullet" && document.format?.paragraph.bullet == "√")
+        let text = try await document.paragraph(body).text
+        document.delete(.left, undo)
+        await document.settle()
+        #expect(document.format?.paragraph.head == "None")
+        #expect(try await document.paragraph(body).text == text)
+    }
+
     /// A save that starts after an edit was accepted must not overtake that edit.
     @Test(arguments: ["hwp", "hwpx"])
     func immediateSaveIncludesQueuedTyping(ext: String) async throws {

@@ -1389,6 +1389,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         commitComposition()
         model?.edit(undoManager) { selection in selection.map { .replace($0, text: text) } }
         model?.linkTypedAddress(after: text, undoManager)
+        model?.formatTypedList(after: text, undoManager)
     }
 
     /// Moves the caret a screenful up or down, scrolling with it.

@@ -121,7 +121,7 @@ struct FormatRow: View {
                           shape: { CharStyle(strikethrough: true, strikeShape: $0) },
                           color: { CharStyle(strikethrough: true, strikeColor: $0) })
                 ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
-                          colors: FormatChoices.colors) { editor.format(CharStyle(color: $0)) }
+                          colors: FormatChoices.colors, initial: "#ff0000") { editor.format(CharStyle(color: $0)) }
             }
             .disabled(!context.canFormat)
             RowDivider()
@@ -308,41 +308,53 @@ struct Chevron: View {
     }
 }
 
-/// A color button: the symbol over a bar of the current color, with a palette.
+/// A color button, as 한/글's: the symbol over a bar of the color last picked, which the
+/// button applies; the arrow beside it opens the palette.
 struct ColorMenu: View {
     let title: String, symbol: String, current: String
     let colors: [String]
     /// Offers `FormatChoices.none` after the colors.
     var clears = false
     let pick: (String) -> Void
+    @AppStorage private var last: String
     @State private var open = false
+
+    init(title: String, symbol: String, current: String, colors: [String], initial: String, clears: Bool = false,
+         pick: @escaping (String) -> Void) {
+        (self.title, self.symbol, self.current, self.colors, self.clears, self.pick) = (title, symbol, current, colors, clears, pick)
+        _last = AppStorage(wrappedValue: initial, "lastColor.\(title)")
+    }
+
     var body: some View {
-        Button { open = true } label: {
-            HStack(spacing: 0) {
+        HStack(spacing: 0) {
+            Button { pick(last) } label: {
                 VStack(spacing: 1) {
                     Image(systemName: symbol).font(.system(size: 12, weight: .light))
-                    Rectangle().fill(HexColor.color(current)).frame(width: 14, height: 3)
+                    Rectangle().fill(HexColor.color(last)).frame(width: 14, height: 3)
                 }
-                .frame(width: 20)
-                Chevron()
+                .frame(width: 20, height: 22)
             }
-        }
-        .buttonStyle(ToolButtonStyle(on: open))
-        .help(title)
-        .popover(isPresented: $open, arrowEdge: .bottom) {
-            HStack(spacing: 4) {
-                ForEach(colors + (clears ? [FormatChoices.none] : []), id: \.self) { hex in
-                    Button {
-                        open = false
-                        pick(hex)
-                    } label: {
-                        Image(nsImage: FormatChoices.swatch(hex, none: clears && hex == FormatChoices.none))
-                            .padding(3)
+            .buttonStyle(ToolButtonStyle())
+            .help(title)
+            Button { open = true } label: { Chevron() }
+                .buttonStyle(ToolButtonStyle(on: open))
+                .help(title)
+                .popover(isPresented: $open, arrowEdge: .bottom) {
+                    HStack(spacing: 4) {
+                        ForEach(colors + (clears ? [FormatChoices.none] : []), id: \.self) { hex in
+                            Button {
+                                open = false
+                                last = hex
+                                pick(hex)
+                            } label: {
+                                Image(nsImage: FormatChoices.swatch(hex, none: clears && hex == FormatChoices.none))
+                                    .padding(3)
+                            }
+                            .buttonStyle(ToolButtonStyle(on: hex == current))
+                        }
                     }
-                    .buttonStyle(ToolButtonStyle(on: hex == current))
+                    .padding(8)
                 }
-            }
-            .padding(8)
         }
     }
 }
