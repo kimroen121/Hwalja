@@ -3770,6 +3770,51 @@ fn private_information_is_found_and_replaced() {
 }
 
 #[test]
+fn f11_goes_back_through_the_objects() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let shape = EditCommand::InsertShape {
+        position: point(body(), 0),
+        shape: "rectangle".into(),
+        x: 10_000,
+        y: 20_000,
+        width: 14_000,
+        height: 6_000,
+        flip: false,
+    };
+    run(&mut s, shape).unwrap();
+    let equation = EditCommand::InsertEquation {
+        position: point(
+            EditTarget {
+                paragraph: 2,
+                ..body()
+            },
+            0,
+        ),
+        script: "x".into(),
+        font_size: 1000,
+        color: 0,
+    };
+    run(&mut s, equation).unwrap();
+    let end = point(
+        EditTarget {
+            paragraph: 2,
+            ..body()
+        },
+        3,
+    );
+    let back = |s: &EditSession, from: &EditPosition, o: Option<&ObjectRef>| {
+        s.previous_object(s.revision, from, o)
+            .unwrap()
+            .map(|p| p.object)
+    };
+    let first = back(&s, &end, None).unwrap();
+    assert_eq!(first.kind, ObjectKind::Equation);
+    let second = back(&s, &end, Some(&first)).unwrap();
+    assert_eq!(second.kind, ObjectKind::Shape);
+    assert_eq!(back(&s, &end, Some(&second)), None);
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {

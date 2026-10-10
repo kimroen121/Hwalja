@@ -180,6 +180,9 @@ final class EditSession: @unchecked Sendable {
     func objects(revision: UInt64, page: UInt32) async throws -> [PlacedObject] {
         try await decode(send(.objects(revision: revision, page: page)))
     }
+    func previousObject(revision: UInt64, from: EditPosition, object: ObjectRef?) async throws -> PlacedObject? {
+        try await decode(send(.previousObject(revision: revision, from: from, object: object)))
+    }
     func tableLines(revision: UInt64, page: UInt32) async throws -> [TableLine] {
         try await decode(send(.tableLines(revision: revision, page: page)))
     }

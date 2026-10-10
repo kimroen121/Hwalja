@@ -402,6 +402,93 @@ impl EditSession {
             (r.x..=r.x + r.width).contains(&x) && (r.y..=r.y + r.height).contains(&y)
         }))
     }
+    /// <F11> 개체 선택: the object of the body at `from` (just after the caret, or the table
+    /// holding it), else the nearest one before; with `object`, the nearest before it.
+    /// None past the first, which leaves the selection.
+    pub fn previous_object(
+        &self,
+        revision: u64,
+        from: &EditPosition,
+        object: Option<&ObjectRef>,
+    ) -> Result<Option<PlacedObject>, EditError> {
+        self.check_revision(revision)?;
+        let doc = self.core.document();
+        let paragraph = |s: u32, p: u32| {
+            doc.sections
+                .get(s as usize)
+                .and_then(|s| s.paragraphs.get(p as usize))
+                .ok_or(EditError::InvalidInput)
+        };
+        // Where to look back from, in the body: objects at or before this place qualify.
+        let (section, para, limit) = match object {
+            Some(o) => {
+                let host = paragraph(o.section, o.paragraph)?;
+                let at = logical::control_position(host, o.control as usize);
+                (o.section, o.paragraph, at.checked_sub(1))
+            }
+            None => {
+                let t = &from.target;
+                let host = paragraph(t.section, t.paragraph)?;
+                let at = match (&t.cell, &t.note, &t.header_footer) {
+                    (None, None, None) => from.scalar,
+                    (Some(c), _, _) => logical::control_position(host, c.control as usize),
+                    _ => return Ok(None),
+                };
+                (t.section, t.paragraph, Some(at))
+            }
+        };
+        let kind = |c: &Control| match c {
+            Control::Picture(_) => Some(ObjectKind::Picture),
+            Control::Shape(_) => Some(ObjectKind::Shape),
+            Control::Table(_) => Some(ObjectKind::Table),
+            Control::Equation(_) => Some(ObjectKind::Equation),
+            _ => None,
+        };
+        let mut place = (section, para, limit);
+        loop {
+            let (s, p, limit) = place;
+            if let Some(limit) = limit {
+                let host = paragraph(s, p)?;
+                let mut candidates: Vec<(u32, u32, ObjectKind)> = host
+                    .controls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| !protected(c))
+                    .filter_map(|(i, c)| {
+                        let at = logical::control_position(host, i);
+                        kind(c).filter(|_| at <= limit).map(|k| (at, i as u32, k))
+                    })
+                    .collect();
+                candidates.sort_by_key(|(at, i, _)| (*at, *i));
+                for (_, control, kind) in candidates.into_iter().rev() {
+                    let found = ObjectRef {
+                        kind,
+                        section: s,
+                        paragraph: p,
+                        control,
+                        cell: None,
+                        note: None,
+                    };
+                    let near = self.page_of(from).unwrap_or(0);
+                    if let Ok(placed) = self.place(revision, &found, near) {
+                        return Ok(Some(placed));
+                    }
+                }
+            }
+            // The paragraph before, from its end.
+            place = match (s, p) {
+                (0, 0) => return Ok(None),
+                (s, 0) => {
+                    let last = doc.sections[s as usize - 1]
+                        .paragraphs
+                        .len()
+                        .saturating_sub(1);
+                    (s - 1, last as u32, Some(u32::MAX))
+                }
+                (s, p) => (s, p - 1, Some(u32::MAX)),
+            };
+        }
+    }
     /// Where `object` is laid out, looking from `page` outward.
     pub fn place(
         &self,

@@ -1329,6 +1329,8 @@ enum EngineRequest: Encodable, Sendable {
     case place(revision: UInt64, ObjectRef, page: UInt32)
     case tableLines(revision: UInt64, page: UInt32)
     case objects(revision: UInt64, page: UInt32)
+    /// <F11> 개체 선택: the object at `from` or the nearest before it (before `object`).
+    case previousObject(revision: UInt64, from: EditPosition, object: ObjectRef?)
     case formAt(revision: UInt64, page: UInt32, x: Double, y: Double)
     case chartData(UInt32)
     case objectProps(ObjectRef)
@@ -1480,6 +1482,11 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode("objects", forKey: .op)
             try c.encode(revision, forKey: .revision)
             try c.encode(page, forKey: .page)
+        case let .previousObject(revision, from, object):
+            try c.encode("previousObject", forKey: .op)
+            try c.encode(revision, forKey: .revision)
+            try c.encode(from, forKey: .from)
+            try c.encodeIfPresent(object, forKey: .object)
         case let .place(revision, object, page):
             try c.encode("place", forKey: .op)
             try c.encode(revision, forKey: .revision)

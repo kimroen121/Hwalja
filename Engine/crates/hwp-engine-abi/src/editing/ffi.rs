@@ -76,6 +76,14 @@ pub(super) enum Request {
         revision: u64,
         page: u32,
     },
+    /// <F11> 개체 선택: the object at `from`, or the nearest before it; before `object`
+    /// when one is selected.
+    PreviousObject {
+        revision: u64,
+        from: EditPosition,
+        #[serde(default)]
+        object: Option<ObjectRef>,
+    },
     /// The table borders on `page` that can be dragged.
     TableLines {
         revision: u64,
@@ -315,6 +323,14 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         Request::Objects { revision, page } => {
             HwpEditResult::ok(session.objects(revision, page)?, Vec::new())
         }
+        Request::PreviousObject {
+            revision,
+            from,
+            object,
+        } => HwpEditResult::ok(
+            session.previous_object(revision, &from, object.as_ref())?,
+            Vec::new(),
+        ),
         Request::TableLines { revision, page } => {
             HwpEditResult::ok(session.table_lines(revision, page)?, Vec::new())
         }

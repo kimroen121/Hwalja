@@ -7,6 +7,8 @@ import SwiftUI
 enum Saving {
     static let timedKey = "autosaveTimed", minutesKey = "autosaveMinutes"
     static let idleKey = "autosaveIdle", secondsKey = "autosaveSeconds"
+    /// 개체 탭's 일부분 선택만으로 개체 전체 선택.
+    static let partialKey = "partialObjectSelection"
 
     /// 무조건 자동 저장's interval in seconds, or nil when it is off.
     static var timed: TimeInterval? { value(timedKey, minutesKey).map { $0 * 60 } }
@@ -42,12 +44,13 @@ enum Saving {
     }
 }
 
-/// 설정 (환경 설정): 파일 탭's 복구용 임시 파일 자동 저장.
+/// 설정 (환경 설정): 파일 탭's 복구용 임시 파일 자동 저장 and 개체 탭's 선택.
 struct SettingsView: View {
     @AppStorage(Saving.timedKey) private var timed = true
     @AppStorage(Saving.minutesKey) private var minutes = 30.0
     @AppStorage(Saving.idleKey) private var idle = true
     @AppStorage(Saving.secondsKey) private var seconds = 60.0
+    @AppStorage(Saving.partialKey) private var partial = false
 
     var body: some View {
         TabView {
@@ -68,6 +71,13 @@ struct SettingsView: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .tabItem { Label("파일", systemImage: "doc") }
+            VStack(alignment: .leading, spacing: 8) {
+                GroupTitle("선택")
+                Toggle("일부분 선택만으로 개체 전체 선택", isOn: $partial).padding(.leading, 12)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .tabItem { Label("개체", systemImage: "square.on.circle") }
         }
         .frame(width: 420)
         .onChange(of: [timed ? minutes : 0]) { Saving.apply() }

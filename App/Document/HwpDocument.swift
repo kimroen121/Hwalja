@@ -619,6 +619,10 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func objects(page: Int) async throws -> [PlacedObject] {
         try await session.objects(revision: revision, page: UInt32(page))
     }
+    /// <F11> 개체 선택's object: at `from` or the nearest before it, or before `object`.
+    func previousObject(from: EditPosition, before object: ObjectRef?) async throws -> PlacedObject? {
+        try await session.previousObject(revision: revision, from: from, object: object)
+    }
     func tableLines(page: Int) async throws -> [TableLine] {
         try await session.tableLines(revision: revision, page: UInt32(page))
     }

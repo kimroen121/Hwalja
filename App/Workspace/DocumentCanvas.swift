@@ -1118,7 +1118,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
     }
 
-    /// 개체 선택: the objects wholly inside the drag on the page where it ended, but tables
+    /// 개체 선택: the objects wholly inside the drag (or touching it, by 설정) on the page where it ended, but tables
     /// and equations; a drag that does not move chooses what is under it.
     private func chooseObjects(in band: (start: NSPoint, end: NSPoint)) {
         guard let model, let hit = enginePoint(band.end) else { return }
@@ -1132,9 +1132,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 model.object = all.last { CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height).contains(b) }
                 return nil
             }
+            // 일부분 선택만으로 개체 전체 선택: an object the drag touches.
+            let partial = UserDefaults.standard.bool(forKey: Saving.partialKey)
             let chosen = all.filter {
-                ![.table, .equation].contains($0.object.kind)
-                    && area.contains(CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height))
+                let rect = CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height)
+                return ![.table, .equation].contains($0.object.kind) && (partial ? area.intersects(rect) : area.contains(rect))
             }
             if chosen.isEmpty { NSSound.beep() } else { model.choose(all: chosen) }
             return nil
@@ -1279,6 +1281,19 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
         }
         if onKey?(event) == true { return }
+        // <F11> 개체 선택: the object at the caret, or the one before it in turn.
+        if event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),
+           event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }) == NSF11FunctionKey,
+           let model {
+            commitComposition()
+            return model.select { model in
+                guard let from = model.selection?.focus else { return nil }
+                let found = try await model.previousObject(from: from, before: model.object?.object)
+                if found == nil, model.object == nil { NSSound.beep() }
+                model.object = found
+                return nil
+            }
+        }
         // Home and End go to the line's ends, as in 한글, where macOS would scroll.
         if event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
            let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }),
