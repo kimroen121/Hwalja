@@ -1,6 +1,10 @@
-# Hwalja
+<p align="center">
+    <img src="docs/brand/wordmark-transparent.svg" width="200">
+</p>
 
-Mac에서 한글 문서를 바로 열고 수정하는 네이티브 편집기.
+<h1 align="center">Hwalja</h1>
+
+<p align="center">Mac에서 한글 문서를 바로 열고 수정하는 네이티브 편집기.</p>
 
 ![Hwalja](docs/images/screenshot.png)
 
