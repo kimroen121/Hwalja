@@ -3663,6 +3663,41 @@ fn drawing_objects_flip_and_undo() {
 }
 
 #[test]
+fn protected_objects_are_not_chosen_until_all_are_unprotected() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        let insert = EditCommand::InsertShape {
+            position: point(body(), 0),
+            shape: "rectangle".into(),
+            x: 10_000,
+            y: 20_000,
+            width: 14_000,
+            height: 6_000,
+            flip: false,
+        };
+        run(&mut s, insert).unwrap();
+        let object = held(&s)[0].object.clone();
+        assert_eq!(s.object_props(&object).unwrap().protect, Some(false));
+        let protect = EditCommand::SetObject {
+            object: object.clone(),
+            props: ObjectProps {
+                protect: Some(true),
+                ..Default::default()
+            },
+        };
+        run(&mut s, protect).unwrap();
+        assert!(held(&s).is_empty());
+        assert_eq!(s.object_props(&object).unwrap().protect, Some(true));
+        let mut reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        assert!(held(&reopened).is_empty(), "{format:?}");
+        run(&mut reopened, EditCommand::UnprotectAll).unwrap();
+        assert_eq!(held(&reopened).len(), 1);
+        run(&mut reopened, EditCommand::Undo).unwrap();
+        assert!(held(&reopened).is_empty());
+    }
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {

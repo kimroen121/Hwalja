@@ -314,6 +314,7 @@ struct ToolRow: View {
             RowDivider()
             Arrangement(document: document, viewer: viewer)
             ToolTile("회전", Icon.rotate, choices: { viewer.rotationChoices })
+            ToolTile("개체 보호", Icon.protect, choices: { viewer.protectionChoices })
             RowDivider()
             ToolTile("앞으로", Icon.front, action: { viewer.change { .order($0, .forward) } }, choices: {
                 [Choice(title: "맨 앞으로") { viewer.change { .order($0, .front) } },
@@ -346,6 +347,7 @@ struct ToolRow: View {
             ToolTile("밝기", Icon.brightness, choices: { MenuItems.brightness(viewer) })
             ToolTile("대비", Icon.contrast, choices: { MenuItems.contrast(viewer) })
             ToolTile("회전", Icon.rotate, choices: { viewer.rotationChoices })
+            ToolTile("개체 보호", Icon.protect, choices: { viewer.protectionChoices })
         }
         .disabled(context.locked)
         RowDivider()
@@ -648,6 +650,7 @@ enum Icon {
     static let blockCalculation = "sum"
     static let calculation = "function"
     static let rotate = "rotate.right"
+    static let protect = "lock"
     static let newDocument = "doc.badge.plus", open = "folder", taskPane = "sidebar.right"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"

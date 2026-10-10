@@ -323,6 +323,10 @@ impl EditSession {
                     cell,
                     note: None,
                 };
+                // 개체 보호하기: a protected object of the body is not chosen.
+                if object.cell.is_none() && protected(self.control(&object).ok()?) {
+                    return None;
+                }
                 let shape = match self.control(&object).ok()? {
                     Control::Shape(s) => Some(&**s),
                     _ => None,
@@ -485,6 +489,9 @@ impl EditSession {
         let mut props: ObjectProps = serde_json::from_value(Value::Object(rename(map, false)))
             .map_err(|_| EditError::RenderFailed)?;
         props.table_border = border;
+        if o.cell.is_none() && o.note.is_none() {
+            props.protect = Some(protected(self.control(o)?));
+        }
         Ok(props)
     }
     pub fn cell_props(&self, t: &EditTarget) -> Result<CellProps, EditError> {
@@ -513,6 +520,12 @@ impl EditSession {
             {
                 return Err(EditError::InvalidInput);
             }
+        }
+        // rhwp protects tables, pictures and drawing objects of the body.
+        if props.protect.is_some()
+            && (o.cell.is_some() || o.note.is_some() || o.kind == ObjectKind::Equation)
+        {
+            return Err(EditError::InvalidInput);
         }
         let length = |v: Option<i32>| v.is_none_or(|v| v.abs() <= 1_000_000);
         let percent = |v: Option<i32>| v.is_none_or(|v| (-100..=100).contains(&v));
@@ -677,6 +690,12 @@ impl EditSession {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         let mut json = object_json(props);
         json.remove("tableBorder");
+        json.remove("protect");
+        if let Some(on) = props.protect {
+            let at = self.body_index(o);
+            self.core
+                .set_control_lock(Some(at), Some(o.control as usize), on)?;
+        }
         let table_border = match &props.table_border {
             Some(b) => Some(self.stored_fill(b)?),
             None => None,
@@ -899,13 +918,8 @@ impl EditSession {
             self.core.move_line_endpoint_native(s, p, c0, a, b, c, d)?;
             return Ok(());
         }
-        // rhwp counts the body's paragraphs across sections.
-        let before: usize = self.core.document().sections[..o.section as usize]
-            .iter()
-            .map(|s| s.paragraphs.len())
-            .sum();
         let reply = self.core.set_control_flip_at(
-            before + o.paragraph as usize,
+            self.body_index(o),
             o.control as usize,
             vertical,
             false,
@@ -914,6 +928,15 @@ impl EditSession {
             return Err(EditError::UnsupportedTarget);
         }
         Ok(())
+    }
+    /// Where rhwp's object calls find the paragraph holding `o`: the body's paragraphs
+    /// counted across sections.
+    fn body_index(&self, o: &ObjectRef) -> usize {
+        let before: usize = self.core.document().sections[..o.section as usize]
+            .iter()
+            .map(|s| s.paragraphs.len())
+            .sum();
+        before + o.paragraph as usize
     }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
@@ -1094,5 +1117,15 @@ impl EditSession {
             .render_equation_preview_native(script, font_size, color)
             .map_err(|_| EditError::RenderFailed)?;
         display::build(&svg).ok_or(EditError::RenderFailed)
+    }
+}
+
+/// 개체 보호하기 on a table, picture or drawing object.
+fn protected(control: &Control) -> bool {
+    match control {
+        Control::Table(t) => t.common.locked,
+        Control::Shape(s) => s.common().locked,
+        Control::Picture(p) => p.common.locked,
+        _ => false,
     }
 }

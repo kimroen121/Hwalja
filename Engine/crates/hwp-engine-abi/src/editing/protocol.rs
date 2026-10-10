@@ -375,6 +375,8 @@ pub enum EditCommand {
         selection: EditSelection,
         height: bool,
     },
+    /// 모든 보호 개체 해제하기.
+    UnprotectAll,
     /// 좌우 대칭 (or, `vertical`, 상하 대칭) of a picture or drawing object of the body.
     Flip {
         object: ObjectRef,
@@ -788,6 +790,8 @@ pub struct ObjectProps {
     pub contrast: Option<i32>,
     /// RealPic, GrayScale, BlackWhite.
     pub effect: Option<String>,
+    /// 개체 보호하기, for objects of the body: a protected object cannot be chosen.
+    pub protect: Option<bool>,
     pub rotation_angle: Option<i32>,
     pub horz_flip: Option<bool>,
     pub vert_flip: Option<bool>,

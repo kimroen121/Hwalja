@@ -672,6 +672,7 @@ impl EditSession {
             | EditCommand::SplitCells { .. }
             | EditCommand::EqualizeCells { .. }
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
+            EditCommand::UnprotectAll => Ok(()),
             EditCommand::Flip { object, .. } => {
                 if object.cell.is_some()
                     || object.note.is_some()
@@ -1809,6 +1810,10 @@ impl EditSession {
             EditCommand::Flip { object, vertical } => {
                 self.flip(object, *vertical)?;
                 Ok(self.kept(object.section))
+            }
+            EditCommand::UnprotectAll => {
+                self.core.set_control_lock(None, None, false)?;
+                Ok(self.kept(0))
             }
             EditCommand::SetObject { object, props } => {
                 self.set_object(object, props)?;

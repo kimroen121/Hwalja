@@ -88,6 +88,13 @@ extension Viewer {
             setObject(placed.object, changed.changes(from: props))
         }
     }
+    /// 개체 보호: 개체 보호하기 for the selected object, and 모든 보호 개체 해제하기.
+    var protectionChoices: [Choice?] {
+        [Choice(title: "개체 보호하기", enabled: document?.object?.object.cell == nil) {
+            self.change { .setObject($0, ObjectProps(protect: true)) }
+         },
+         Choice(title: "모든 보호 개체 해제하기") { self.document?.edit(self.undoManager) { _ in .unprotectAll } }]
+    }
     /// 회전: 왼쪽으로·오른쪽으로 90도 회전 and 좌우·상하 대칭 of the selected picture or
     /// drawing object. As in 한/글, one 글자처럼 취급 does not turn.
     var rotationChoices: [Choice?] {
@@ -266,6 +273,9 @@ struct ObjectSheet: View {
                 .disabled(props.treatAsChar == true)
             }
             .padding(.leading, 12)
+            if props.protect != nil {
+                Toggle("개체 보호하기", isOn: flag(\.protect))
+            }
             Spacer(minLength: 0)
         }
         .padding(16)

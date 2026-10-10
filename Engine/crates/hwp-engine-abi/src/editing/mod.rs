@@ -537,6 +537,7 @@ impl EditCommand {
             | EditCommand::DeleteHeaderFooter { .. }
             | EditCommand::HeaderFooter { .. }
             | EditCommand::Undo
+            | EditCommand::UnprotectAll
             | EditCommand::Redo => None,
         }
     }

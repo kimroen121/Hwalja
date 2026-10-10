@@ -172,6 +172,20 @@ pub(super) fn check(
         EditCommand::Paste { selection, .. } => return check_pasted(before, after, selection),
         // Each replacement is checked as it is made.
         EditCommand::ReplaceAll { .. } => return Ok(()),
+        // Only the objects' protection bits change.
+        EditCommand::UnprotectAll => {
+            let texts = |d: &Document| -> Vec<String> {
+                d.sections
+                    .iter()
+                    .flat_map(|s| s.paragraphs.iter().map(|p| p.text.clone()))
+                    .collect()
+            };
+            return if texts(before) == texts(after) {
+                Ok(())
+            } else {
+                Err(EditError::PreservationFailed)
+            };
+        }
         EditCommand::FormatText { selection, .. }
         | EditCommand::FormatParagraphs { selection, .. }
         | EditCommand::ApplyStyle { selection, .. } => {

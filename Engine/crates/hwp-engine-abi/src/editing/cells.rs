@@ -652,7 +652,7 @@ fn calculated(value: f64, format: u8, separators: bool) -> String {
         .iter()
         .enumerate()
         .flat_map(|(i, d)| {
-            let comma = i > 0 && (digits.len() - i) % 3 == 0;
+            let comma = i > 0 && (digits.len() - i).is_multiple_of(3);
             comma.then_some(',').into_iter().chain([*d])
         })
         .collect();

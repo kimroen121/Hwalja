@@ -186,6 +186,8 @@ enum EditCommand: Encodable, Sendable {
     case changeBookmark(EditTarget, control: UInt32, name: String?)
     /// 조판 부호 지우기 in the body, or in `selection`.
     case eraseCodes(EditSelection?, kinds: [CodeKind])
+    /// 모든 보호 개체 해제하기.
+    case unprotectAll
     case undo
     case redo
 
@@ -491,6 +493,7 @@ enum EditCommand: Encodable, Sendable {
             try c.encode(row, forKey: .row)
             try c.encode(line, forKey: .line)
             try c.encode(size, forKey: .size)
+        case .unprotectAll: try c.encode("unprotectAll", forKey: .kind)
         case .undo: try c.encode("undo", forKey: .kind)
         case .redo: try c.encode("redo", forKey: .kind)
         }
@@ -614,6 +617,8 @@ struct ObjectProps: PartialFormat {
     var contrast: Int32?
     /// RealPic, GrayScale, BlackWhite.
     var effect: String?
+    /// 개체 보호하기, for objects of the body.
+    var protect: Bool?
     var rotationAngle: Int32?
     var horzFlip: Bool?
     var vertFlip: Bool?
