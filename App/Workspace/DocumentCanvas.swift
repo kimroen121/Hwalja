@@ -30,6 +30,7 @@ final class DocumentCanvas: NSScrollView {
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(viewChanged), name: NSView.boundsDidChangeNotification, object: contentView)
         center.addObserver(self, selector: #selector(userMagnified), name: NSScrollView.didEndLiveMagnifyNotification, object: self)
+        center.addObserver(self, selector: #selector(startedMagnifying), name: NSScrollView.willStartLiveMagnifyNotification, object: self)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -44,6 +45,12 @@ final class DocumentCanvas: NSScrollView {
         }
     }
     @objc private func viewChanged() {
+        // AppKit can scale what was drawn at the old zoom instead of drawing it again,
+        // which blurs it until something redraws (as a click does).
+        if !magnifying, magnification != drawnMagnification {
+            drawnMagnification = magnification
+            editor.needsDisplay = true
+        }
         editor.placeCaret()
         if showsRuler { needsRulers() }
         onViewChange?()
@@ -172,7 +179,15 @@ final class DocumentCanvas: NSScrollView {
         guard p != setup.page else { return }
         model.edit(editor.undoManager) { _ in .setPage(section: setup.section, p) }
     }
-    @objc private func userMagnified() { fit = nil }
+    /// The zoom the pages were last drawn at, and whether a pinch is under way.
+    private var drawnMagnification: CGFloat = 0
+    private var magnifying = false
+    @objc private func startedMagnifying() { magnifying = true }
+    @objc private func userMagnified() {
+        fit = nil
+        magnifying = false
+        viewChanged()
+    }
 
     /// ⌘ or ⌃ with the scroll wheel zooms around the pointer.
     override func scrollWheel(with event: NSEvent) {
