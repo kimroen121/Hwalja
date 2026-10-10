@@ -672,6 +672,15 @@ impl EditSession {
             | EditCommand::SplitCells { .. }
             | EditCommand::EqualizeCells { .. }
             | EditCommand::CalculateBlock { .. } => self.validate_cells(command),
+            EditCommand::Flip { object, .. } => {
+                if object.cell.is_some()
+                    || object.note.is_some()
+                    || ![ObjectKind::Picture, ObjectKind::Shape].contains(&object.kind)
+                {
+                    return Err(EditError::UnsupportedTarget);
+                }
+                self.validate_object(object, &ObjectProps::default())
+            }
             EditCommand::Calculate {
                 position,
                 formula,
@@ -1797,6 +1806,10 @@ impl EditSession {
                 format,
                 separators,
             } => self.calculate(position, formula, *format, *separators),
+            EditCommand::Flip { object, vertical } => {
+                self.flip(object, *vertical)?;
+                Ok(self.kept(object.section))
+            }
             EditCommand::SetObject { object, props } => {
                 self.set_object(object, props)?;
                 Ok(self.kept(object.section))

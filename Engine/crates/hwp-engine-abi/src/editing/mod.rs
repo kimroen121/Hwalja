@@ -504,6 +504,7 @@ impl EditCommand {
             | EditCommand::DeleteObject { object }
             | EditCommand::Order { object, .. }
             | EditCommand::Ungroup { object }
+            | EditCommand::Flip { object, .. }
             | EditCommand::ReplacePicture { object, .. }
             | EditCommand::SetPictureLink { object, .. }
             | EditCommand::MoveLineEnd { object, .. }

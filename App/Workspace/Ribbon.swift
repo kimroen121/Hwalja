@@ -313,6 +313,7 @@ struct ToolRow: View {
             ToolTile("도형 속성", Icon.objectProps) { viewer.showObjectProperties() }
             RowDivider()
             Arrangement(document: document, viewer: viewer)
+            ToolTile("회전", Icon.rotate, choices: { viewer.rotationChoices })
             RowDivider()
             ToolTile("앞으로", Icon.front, action: { viewer.change { .order($0, .forward) } }, choices: {
                 [Choice(title: "맨 앞으로") { viewer.change { .order($0, .front) } },
@@ -344,6 +345,7 @@ struct ToolRow: View {
             ToolTile("색조 조정", Icon.pictureEffect, choices: { MenuItems.pictureEffects(viewer) })
             ToolTile("밝기", Icon.brightness, choices: { MenuItems.brightness(viewer) })
             ToolTile("대비", Icon.contrast, choices: { MenuItems.contrast(viewer) })
+            ToolTile("회전", Icon.rotate, choices: { viewer.rotationChoices })
         }
         .disabled(context.locked)
         RowDivider()
@@ -645,6 +647,7 @@ enum Icon {
     static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let blockCalculation = "sum"
     static let calculation = "function"
+    static let rotate = "rotate.right"
     static let newDocument = "doc.badge.plus", open = "folder", taskPane = "sidebar.right"
     static let columns = "rectangle.split.2x1", bullets = "list.bullet", numbering = "list.number"
     static let portrait = "rectangle.portrait", landscape = "rectangle", pageOutline = "doc.richtext"

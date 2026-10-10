@@ -375,6 +375,11 @@ pub enum EditCommand {
         selection: EditSelection,
         height: bool,
     },
+    /// 좌우 대칭 (or, `vertical`, 상하 대칭) of a picture or drawing object of the body.
+    Flip {
+        object: ObjectRef,
+        vertical: bool,
+    },
     /// 계산식: `formula` worked out over the table holding `position`, written into its
     /// cell in `format` (0 기본 형식, 1 정수형, 2–5 소수점 이하 한~네 자리), with
     /// `separators` 세 자리마다 쉼표로 자리 구분.

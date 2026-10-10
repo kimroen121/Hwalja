@@ -869,6 +869,52 @@ impl EditSession {
         }?;
         Ok(())
     }
+    /// 좌우 대칭 or 상하 대칭: a drawing object by rhwp's flip, which also turns its
+    /// matrix, and a picture by its flip property.
+    pub(super) fn flip(&mut self, o: &ObjectRef, vertical: bool) -> Result<(), EditError> {
+        if o.kind == ObjectKind::Picture {
+            let now = self.object_props(o)?;
+            let mut change = ObjectProps::default();
+            if vertical {
+                change.vert_flip = Some(!now.vert_flip.unwrap_or(false));
+            } else {
+                change.horz_flip = Some(!now.horz_flip.unwrap_or(false));
+            }
+            return self.set_object(o, &change);
+        }
+        // rhwp draws a 직선 from its ends, so its ends trade places across the box.
+        let still = EditCommand::MoveLineEnd {
+            object: o.clone(),
+            end: true,
+            dx: 0,
+            dy: 0,
+        };
+        if let Ok([x1, y1, x2, y2]) = self.line_ends(&still) {
+            let [a, b, c, d] = if vertical {
+                [x1, y2, x2, y1]
+            } else {
+                [x2, y1, x1, y2]
+            };
+            let (s, p, c0) = (o.section as usize, o.paragraph as usize, o.control as usize);
+            self.core.move_line_endpoint_native(s, p, c0, a, b, c, d)?;
+            return Ok(());
+        }
+        // rhwp counts the body's paragraphs across sections.
+        let before: usize = self.core.document().sections[..o.section as usize]
+            .iter()
+            .map(|s| s.paragraphs.len())
+            .sum();
+        let reply = self.core.set_control_flip_at(
+            before + o.paragraph as usize,
+            o.control as usize,
+            vertical,
+            false,
+        )?;
+        if reply.contains("\"ok\":false") {
+            return Err(EditError::UnsupportedTarget);
+        }
+        Ok(())
+    }
     pub(super) fn delete_object(&mut self, o: &ObjectRef) -> Result<(), EditError> {
         let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
         if o.note.is_some() {

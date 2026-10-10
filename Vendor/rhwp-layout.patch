@@ -1913,7 +1913,17 @@ diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queri
  use crate::model::shape::{Caption, ShapeObject, TextBox};
  use crate::model::style::{Alignment, HeadType, LineSpacingType, UnderlineType};
  
-@@ -1646,9 +1646,13 @@
+@@ -1339,6 +1339,9 @@
+         // 원본 바이트를 비워야 직렬화가 행렬을 다시 만든다 — `attr` 과 같은 덫이다.
+         sa.raw_rendering = Vec::new();
+         section.raw_stream = None;
++        // 그려 둔 쪽에 뒤집기가 보이게 한다.
++        self.mark_section_dirty(sec);
++        self.invalidate_page_tree_cache();
+         Ok(r#"{"ok":true,"moved":true}"#.to_string())
+     }
+ 
+@@ -1646,9 +1649,13 @@
              .paragraphs
              .get_mut(para_idx)
              .ok_or_else(|| HwpError::InvalidField(format!("문단 {} 없음", para_idx)))?;
@@ -1927,7 +1937,7 @@ diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queri
          let Some(drawing) = shape.drawing_mut() else {
              return Ok(r#"{"ok":false,"reason":"글상자를 담을 수 없는 개체다"}"#.to_string());
          };
-@@ -1656,9 +1660,41 @@
+@@ -1656,9 +1663,41 @@
              if drawing.text_box.is_some() {
                  false
              } else {
@@ -1971,7 +1981,7 @@ diff --git a/src/document_core/queries/hwpctrl_sets.rs b/src/document_core/queri
                  });
                  true
              }
-@@ -1667,6 +1703,7 @@
+@@ -1667,6 +1706,7 @@
          };
          if changed {
              section.raw_stream = None;

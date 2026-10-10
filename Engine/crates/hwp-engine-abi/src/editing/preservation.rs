@@ -406,6 +406,7 @@ pub(super) fn check(
         EditCommand::SetObject { object, .. }
         | EditCommand::DeleteObject { object }
         | EditCommand::Ungroup { object }
+        | EditCommand::Flip { object, .. }
         | EditCommand::MoveLineEnd { object, .. }
         | EditCommand::SetTextBox { object, .. }
         | EditCommand::ResizeTable { table: object, .. } => {

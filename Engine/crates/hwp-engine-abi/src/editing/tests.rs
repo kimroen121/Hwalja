@@ -3593,6 +3593,76 @@ fn formulas_are_worked_out_into_the_cell() {
 }
 
 #[test]
+fn drawing_objects_flip_and_undo() {
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertShape {
+        position: point(body(), 0),
+        shape: "arc".into(),
+        x: 10_000,
+        y: 20_000,
+        width: 14_000,
+        height: 6_000,
+        flip: false,
+    };
+    run(&mut s, insert).unwrap();
+    let object = held(&s)[0].object.clone();
+    let svg = |s: &EditSession| s.core.render_page_svg_native(0).unwrap();
+    let before = svg(&s);
+    let flip = |vertical| EditCommand::Flip {
+        object: object.clone(),
+        vertical,
+    };
+    run(&mut s, flip(false)).unwrap();
+    let flipped = svg(&s);
+    assert!(flipped != before);
+    run(&mut s, flip(true)).unwrap();
+    assert!(svg(&s) != flipped);
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert!(svg(&s) == flipped);
+    run(&mut s, EditCommand::Undo).unwrap();
+    assert!(svg(&s) == before);
+    // A 직선 trades its ends.
+    let line = EditCommand::InsertShape {
+        position: point(body(), 0),
+        shape: "line".into(),
+        x: 10_000,
+        y: 40_000,
+        width: 14_000,
+        height: 6_000,
+        flip: false,
+    };
+    run(&mut s, line).unwrap();
+    let line = held(&s).into_iter().find(|o| o.ends.is_some()).unwrap();
+    let [x1, y1, x2, y2] = line.ends.unwrap();
+    run(
+        &mut s,
+        EditCommand::Flip {
+            object: line.object.clone(),
+            vertical: false,
+        },
+    )
+    .unwrap();
+    let flipped = held(&s)
+        .into_iter()
+        .find(|o| o.ends.is_some())
+        .unwrap()
+        .ends
+        .unwrap();
+    assert!((flipped[0] - x2).abs() < 1.0 && (flipped[2] - x1).abs() < 1.0);
+    assert!((flipped[1] - y1).abs() < 1.0 && (flipped[3] - y2).abs() < 1.0);
+    let table = ObjectRef {
+        kind: ObjectKind::Table,
+        ..object
+    };
+    assert!(s
+        .validate_command(&EditCommand::Flip {
+            object: table,
+            vertical: false
+        })
+        .is_err());
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {

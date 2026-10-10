@@ -88,6 +88,23 @@ extension Viewer {
             setObject(placed.object, changed.changes(from: props))
         }
     }
+    /// 회전: 왼쪽으로·오른쪽으로 90도 회전 and 좌우·상하 대칭 of the selected picture or
+    /// drawing object. As in 한/글, one 글자처럼 취급 does not turn.
+    var rotationChoices: [Choice?] {
+        [Choice(title: "왼쪽으로 90도 회전") { self.rotate(by: -90) },
+         Choice(title: "오른쪽으로 90도 회전") { self.rotate(by: 90) }, nil,
+         Choice(title: "좌우 대칭") { self.change { .flip($0, vertical: false) } },
+         Choice(title: "상하 대칭") { self.change { .flip($0, vertical: true) } }]
+    }
+    private func rotate(by degrees: Int32) {
+        guard let document, let placed = document.object else { return }
+        Task {
+            guard let props = try? await document.objectProps(placed.object), props.treatAsChar != true else {
+                return NSSound.beep()
+            }
+            setObject(placed.object, ObjectProps(rotationAngle: ((props.rotationAngle ?? 0) + degrees + 360) % 360))
+        }
+    }
     /// The selected object, or the table holding the caret: what 캡션 and 배치 change.
     var arrangedObject: ObjectRef? {
         if let placed = document?.object { return placed.object }
@@ -206,6 +223,13 @@ struct ObjectSheet: View {
                     Toggle("크기 고정", isOn: flag(\.sizeProtect))
                 }
                 .padding(.leading, 12)
+                GroupTitle("개체 회전")
+                LabeledField("회전각") {
+                    SpinField(value: Binding { Double(props.rotationAngle ?? 0) } set: { props.rotationAngle = Int32($0) },
+                              unit: "°", range: -360...360, digits: 0)
+                }
+                .padding(.leading, 12)
+                .disabled(props.treatAsChar == true)
             }
             GroupTitle("위치")
             VStack(alignment: .leading, spacing: 10) {
