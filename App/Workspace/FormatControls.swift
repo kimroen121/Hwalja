@@ -133,7 +133,7 @@ struct StyleField: View {
     }
 }
 
-/// 글꼴 of `language`, picked from the installed families; a font that is not installed is shown as it is named.
+/// 글꼴 of `language`, picked from the installed families.
 struct FontField: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
@@ -141,14 +141,28 @@ struct FontField: View {
     var body: some View {
         let languages = document.format?.languages ?? []
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? document.format?.text.font
+        FontPicker(font: font, language: language) { editor.format(CharStyle(language: language, font: $0)) }
+            .equatable()
+            .frame(width: 120)
+    }
+}
+
+/// The installed families in a pop-up, a font that is not installed shown as it is named.
+/// Built again only when the font or 언어 changes: typing changes neither.
+struct FontPicker: View, @MainActor Equatable {
+    let font: String?
+    let language: Int?
+    let pick: (String) -> Void
+    static func == (a: Self, b: Self) -> Bool { a.font == b.font && a.language == b.language }
+
+    var body: some View {
         let family = font.map { font in FormatChoices.families.first { $0.name == font || $0.family == font }?.family ?? font }
-        Picker("글꼴", selection: Binding(get: { family ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
+        Picker("글꼴", selection: Binding(get: { family ?? "" }, set: pick)) {
             if let family, !FormatChoices.families.contains(where: { $0.family == family }) { Text(family).tag(family) }
             if family == nil { Text("글꼴").tag("") }
             ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
         }
         .labelsHidden()
-        .frame(width: 120)
         .help("글꼴")
     }
 }

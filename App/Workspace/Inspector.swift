@@ -310,12 +310,9 @@ private struct TextTab: View {
         let languages = document.format?.languages ?? []
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
         InspectorSection("글꼴") {
-            Picker("글꼴", selection: Binding(get: { font ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
-                if let font, !FormatChoices.families.contains(where: { $0.family == font }) { Text(font).tag(font) }
-                ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
-            }
-            .labelsHidden()
-            .flexibleButtons()
+            FontPicker(font: font, language: language) { editor.format(CharStyle(language: language, font: $0)) }
+                .equatable()
+                .flexibleButtons()
             HStack(spacing: 8) {
                 Picker("언어", selection: $language) {
                     Text("대표").tag(Int?.none)
