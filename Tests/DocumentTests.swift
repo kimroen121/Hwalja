@@ -110,6 +110,22 @@ struct DocumentTests {
         #expect(try await document.paragraph(body).text == "xyz" + text.dropFirst(3))
     }
 
+    /// 색상 보기's color goes to the selected text as 글자 색.
+    @Test func colorPanelColorsText() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: EditPosition(target: body, scalar: 3))
+        document.type("abc", nil)
+        document.select { _ in EditSelection(anchor: EditPosition(target: self.body, scalar: 0), focus: EditPosition(target: self.body, scalar: 3)) }
+        await document.settle()
+        let panel = NSColorPanel.shared
+        panel.color = NSColor(srgbRed: 0, green: 0.5, blue: 1, alpha: 1)
+        viewer.canvas.editor.changeColor(panel)
+        await document.settle()
+        #expect(document.format?.text.color == "#0080ff")
+    }
+
     /// A save that starts after an edit was accepted must not overtake that edit.
     @Test(arguments: ["hwp", "hwpx"])
     func immediateSaveIncludesQueuedTyping(ext: String) async throws {

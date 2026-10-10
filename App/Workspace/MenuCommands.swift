@@ -423,6 +423,9 @@ struct MenuItems {
             toggle("취소선", text?.strikethrough == true) { editor?.toggleStrikethrough() }
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Divider()
+            Button("서체 보기") { send(#selector(NSFontManager.orderFrontFontPanel(_:))) }.keyboardShortcut("t")
+            Button("색상 보기") { send(#selector(NSApplication.orderFrontColorPanel(_:))) }.keyboardShortcut("c", modifiers: [.command, .shift])
+            Divider()
             Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut("+")
             Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut("-")
         }

@@ -1560,6 +1560,45 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     func format(_ style: CharStyle) { model?.formatText(style, undoManager) }
     func format(_ style: ParaStyle) { model?.formatParagraphs(style, undoManager) }
 
+    // MARK: 서체 보기 and 색상 보기
+
+    /// The caret's font as the font panel shows it; a font this Mac lacks shows as the system's.
+    private var currentFont: NSFont? {
+        guard let text = model?.format?.text else { return nil }
+        let size = CGFloat(text.size ?? 10)
+        var font = text.font.flatMap { NSFontManager.shared.font(withFamily: $0, traits: [], weight: 5, size: size) ?? NSFont(name: $0, size: size) }
+            ?? NSFont.systemFont(ofSize: size)
+        if text.bold == true { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
+        if text.italic == true { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
+        return font
+    }
+    @objc func orderFrontFontPanel(_ sender: Any?) {
+        if let font = currentFont { NSFontManager.shared.setSelectedFont(font, isMultiple: false) }
+        NSFontManager.shared.orderFrontFontPanel(sender)
+    }
+    /// A face, family or size picked in the font panel.
+    @objc func changeFont(_ sender: Any?) {
+        guard let manager = sender as? NSFontManager, let old = currentFont, model?.context.canFormat == true else { return }
+        let new = manager.convert(old), traits = manager.traits(of: new), was = manager.traits(of: old)
+        var style = CharStyle()
+        if new.familyName != old.familyName { style.font = new.familyName }
+        if new.pointSize != old.pointSize { style.size = Double(new.pointSize) }
+        if traits.contains(.boldFontMask) != was.contains(.boldFontMask) { style.bold = traits.contains(.boldFontMask) }
+        if traits.contains(.italicFontMask) != was.contains(.italicFontMask) { style.italic = traits.contains(.italicFontMask) }
+        format(style)
+    }
+    @objc func orderFrontColorPanel(_ sender: Any?) {
+        let panel = NSColorPanel.shared
+        if let hex = model?.format?.text.color { panel.color = NSColor(HexColor.color(hex)) }
+        panel.orderFront(sender)
+    }
+    /// A color picked in the color panel, as 글자 색.
+    @objc func changeColor(_ sender: Any?) {
+        guard let color = (sender as? NSColorPanel)?.color.usingColorSpace(.sRGB), model?.context.canFormat == true else { return }
+        format(CharStyle(color: String(format: "#%02x%02x%02x", Int((color.redComponent * 255).rounded()),
+                                       Int((color.greenComponent * 255).rounded()), Int((color.blueComponent * 255).rounded()))))
+    }
+
     // MARK: NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {
