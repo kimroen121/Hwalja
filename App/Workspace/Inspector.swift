@@ -1,8 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The inspector at the window's right, as Pages' 포맷 and Xcode's: 글자, 문단 and 스타일 for
-/// the text at the caret, and the 개체 탭 and 상황 탭 of 한/글 (그림, 도형, 표 …) while they
+/// The inspector at the window's right, as Keynote's 포맷: 텍스트 and 스타일 for the text at the caret, and the 개체 탭 and 상황 탭 of 한/글 (그림, 도형, 표 …) while they
 /// apply, in macOS's own controls. What it changes applies at once; the full dialogs open from it.
 struct Inspector: View {
     @ObservedObject var document: HwpDocument
@@ -15,7 +14,7 @@ struct Inspector: View {
         (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab ?? viewer.inspectorTab))
     }
 
-    static let textTabs = ["글자", "문단", "스타일"]
+    static let textTabs = ["텍스트", "스타일"]
     /// The 개체 탭 and 상황 탭 for what is selected.
     static func contextTabs(_ context: EditingContext) -> [String] {
         switch context.object {
@@ -27,7 +26,7 @@ struct Inspector: View {
                 : context.inTable ? ["표 디자인", "표 레이아웃"] : []
         }
     }
-    /// A selected object has only its own tabs; text has 글자, 문단 and 스타일 before them.
+    /// A selected object has only its own tabs; text has 텍스트 and 스타일 before them.
     static func tabs(_ context: EditingContext) -> [String] {
         let extra = contextTabs(context)
         return [.picture, .shape].contains(context.object) ? extra : textTabs + extra
@@ -38,7 +37,7 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large) { .init(title: $0, help: $0) }
+                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large, capsule: true) { .init(title: $0, help: $0) }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             } else {
@@ -65,8 +64,7 @@ struct Inspector: View {
 
     @ViewBuilder private func content(_ tab: String, _ context: EditingContext) -> some View {
         switch tab {
-        case "글자": CharacterTab(document: document, viewer: viewer)
-        case "문단": ParagraphTab(document: document, viewer: viewer)
+        case "텍스트": TextTab(document: document, viewer: viewer)
         case "그림": picture(context)
         case "도형": shape(context)
         case "차트 디자인": chart(context)
@@ -104,7 +102,7 @@ struct Inspector: View {
     @ViewBuilder private func shape(_ context: EditingContext) -> some View {
         if let textBox = document.object?.textBox {
             InspectorSection {
-                Toggle("글자 넣기", isOn: Binding(get: { textBox }, set: { attach in viewer.change { .setTextBox($0, attach: attach) } }))
+                Toggle("글자 넣기", isOn: Binding(get: { textBox }, set: { attach in viewer.change { .setTextBox($0, attach: attach) } })).checkbox()
             }
         }
         arrangement(context, order: true)
@@ -138,7 +136,7 @@ struct Inspector: View {
     /// 글자처럼 취급, and 어울림, 자리 차지, 글 앞으로 or 글 뒤로 for an object out of the line.
     @ViewBuilder private var wrap: some View {
         let inLine = props?.treatAsChar == true
-        Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) }))
+        Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) })).checkbox()
         let wraps = ["Square": ("어울림", Icon.wrapSquare), "TopAndBottom": ("자리 차지", Icon.wrapTopAndBottom),
                      "InFrontOfText": ("글 앞으로", Icon.inFrontOfText), "BehindText": ("글 뒤로", Icon.behindText)]
         Segments(["Square", "TopAndBottom", "InFrontOfText", "BehindText"],
@@ -266,125 +264,337 @@ struct DialogButtons<Content: View>: View {
     }
 }
 
-/// 글자: font, size, character styles and colors, and 글자 모양 for the rest.
-private struct CharacterTab: View {
+/// 텍스트, as Keynote's: the paragraph's 스타일 over 스타일 (font, character styles, colors,
+/// alignment, spacing and lists) and 레이아웃 (margins, first line, line breaking, 테두리 and
+/// 배경). All of 글자 모양 and 문단 모양 is here, each change applied at once.
+private struct TextTab: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
+    @State private var layout: Bool
+    /// The 언어 the font and scales show and change; nil for 대표 (all of them).
     @State private var language: Int?
+    @State private var showsMore = false
+
+    init(document: HwpDocument, viewer: Viewer) {
+        (self.document, self.viewer, _layout) = (document, viewer, State(initialValue: viewer.textLayout))
+    }
+
+    private var editor: PageEditor { viewer.canvas.editor }
+    private var text: CharStyle? { document.format?.text }
+    private var paragraph: ParaStyle? { document.format?.paragraph }
 
     var body: some View {
-        let editor = viewer.canvas.editor, text = document.format?.text
+        Group {
+            InspectorSection {
+                Picker("스타일", selection: Binding(get: { document.format?.style }, set: { id in
+                    if let id { document.applyStyle(id, editor.undoManager) }
+                })) {
+                    if document.format == nil { Text("").tag(UInt32?.none) }
+                    ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
+                }
+                .labelsHidden()
+                .controlSize(.extraLarge)
+                .flexibleButtons()
+                .disabled(!document.context.canApplyStyle)
+                Segments([false, true], selection: $layout) { .init(title: $0 ? "레이아웃" : "스타일", help: $0 ? "레이아웃" : "스타일") }
+            }
+            Group { if layout { layoutPane } else { stylePane } }
+                .disabled(!document.context.canFormat)
+        }
+        .onChange(of: layout) { viewer.textLayout = layout }
+    }
+
+    // MARK: 스타일
+
+    @ViewBuilder private var stylePane: some View {
         let languages = document.format?.languages ?? []
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
-        Group {
-            InspectorSection("글꼴") {
-                Picker("글꼴", selection: Binding(get: { font ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
-                    ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
+        InspectorSection("글꼴") {
+            Picker("글꼴", selection: Binding(get: { font ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
+                if let font, !FormatChoices.families.contains(where: { $0.family == font }) { Text(font).tag(font) }
+                ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
+            }
+            .labelsHidden()
+            .flexibleButtons()
+            HStack(spacing: 8) {
+                Picker("언어", selection: $language) {
+                    Text("대표").tag(Int?.none)
+                    ForEach(CharShapeSheet.languageNames.indices, id: \.self) { Text(CharShapeSheet.languageNames[$0]).tag(Int?.some($0)) }
                 }
                 .labelsHidden()
                 .flexibleButtons()
-                HStack(spacing: 8) {
-                    let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void)] = [
-                        ("진하게", "bold", text?.bold, editor.toggleBold), ("기울임", "italic", text?.italic, editor.toggleItalic),
-                        ("밑줄", "underline", text?.underline, editor.toggleUnderline), ("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough),
-                    ]
-                    Segments(segments: styles.map { .init(symbol: $0.symbol, help: $0.title) }, on: styles.map { $0.on == true }, any: true) {
-                        styles[$0].toggle()
-                    }
-                    NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
+                .help("언어")
+                NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
+                    .help("기준 크기")
+            }
+            HStack(spacing: 8) {
+                let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void)] = [
+                    ("진하게", "bold", text?.bold, editor.toggleBold), ("기울임", "italic", text?.italic, editor.toggleItalic),
+                    ("밑줄", "underline", text?.underline, editor.toggleUnderline), ("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough),
+                ]
+                Segments(segments: styles.map { .init(symbol: $0.symbol, help: $0.title) }, on: styles.map { $0.on == true }, any: true) {
+                    styles[$0].toggle()
                 }
-                LabeledContent("언어") {
-                    Picker("언어", selection: $language) {
-                        Text("대표").tag(Int?.none)
-                        ForEach(CharShapeSheet.languageNames.indices, id: \.self) { Text(CharShapeSheet.languageNames[$0]).tag(Int?.some($0)) }
+                Button { showsMore = true } label: { Image(systemName: "gearshape") }
+                    .help("글자 모양")
+                    .accessibilityLabel("글자 모양")
+                    .popover(isPresented: $showsMore, arrowEdge: .bottom) { more }
+            }
+        }
+        InspectorSection {
+            LabeledContent("글자 색") { ColorWell(hex: char(\.color, "#000000")) }
+            LabeledContent("음영 색") { ColorWell(hex: char(\.shade, FormatChoices.none), none: FormatChoices.none) }
+        }
+        InspectorSection {
+            Segments(Alignment.allCases.map(Optional.some),
+                     selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
+                let label = FormatChoices.label($0!)
+                return .init(symbol: label.symbol, help: label.title)
+            }
+        }
+        InspectorSection {
+            DisclosureGroup {
+                LabeledContent("줄 간격") {
+                    Picker("줄 간격", selection: Binding(get: { paragraph?.lineSpacingKind ?? .percent }, set: { kind in
+                        guard kind != paragraph?.lineSpacingKind else { return }
+                        editor.format(ParaStyle(lineSpacing: kind == .percent ? 160 : 12, lineSpacingKind: kind))
+                    })) {
+                        Text("글자에 따라").tag(LineSpacingKind.percent)
+                        Text("고정 값").tag(LineSpacingKind.fixed)
+                        Text("여백만 지정").tag(LineSpacingKind.spaceOnly)
+                        Text("최소").tag(LineSpacingKind.minimum)
                     }
                     .labelsHidden()
                     .fixedSize()
                 }
-            }
-            InspectorSection {
-                LabeledContent("글자 색") {
-                    ColorPicker("글자 색", selection: color(text?.color ?? "#000000") { editor.format(CharStyle(color: $0)) }, supportsOpacity: false)
-                        .labelsHidden()
-                }
-                LabeledContent("형광펜") {
-                    ColorPicker("형광펜", selection: color(text?.shade ?? FormatChoices.none) { editor.format(CharStyle(shade: $0)) },
-                                supportsOpacity: false)
-                        .labelsHidden()
-                }
-            } footer: {
-                DialogButtons { Button("글자 모양…") { viewer.editingCharShape = true } }
+                LabeledContent("문단 위") { length(\.spacingBefore) }
+                LabeledContent("문단 아래") { length(\.spacingAfter) }
+            } label: {
+                LabeledContent {
+                    let percent = (paragraph?.lineSpacingKind ?? .percent) == .percent
+                    NumberStepper(value: paragraph?.lineSpacing, unit: percent ? "%" : "pt", range: percent ? 50...500 : 0...1000,
+                                  step: percent ? 10 : 1) { value in
+                        editor.format(ParaStyle(lineSpacing: value, lineSpacingKind: paragraph?.lineSpacingKind ?? .percent))
+                    }
+                } label: { Text("간격").font(.headline) }
             }
         }
-        .disabled(!document.context.canFormat)
+        InspectorSection { lists }
     }
 
-    private func color(_ hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
-        Binding(get: { HexColor.color(hex) }, set: { set(HexColor.hex($0)) })
+    /// 글머리표 및 문단 번호: the kind beside the title, its shapes, 수준 and 시작 번호 방식 under it.
+    @ViewBuilder private var lists: some View {
+        let head = paragraph?.head ?? "None"
+        DisclosureGroup {
+            if head == "Bullet" {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
+                    ForEach(FormatChoices.bullets, id: \.self) { bullet in
+                        Toggle(bullet, isOn: Binding(get: { paragraph?.bullet == bullet },
+                                                     set: { _ in editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }))
+                    }
+                }
+                .toggleStyle(.button)
+                .flexibleButtons()
+            } else if head == "Number" {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
+                    ForEach(FormatChoices.numberings.indices, id: \.self) { kind in
+                        Toggle(isOn: Binding(get: { paragraph?.numbering == kind },
+                                             set: { _ in editor.format(ParaStyle(head: "Number", numbering: kind)) })) {
+                            Text(FormatChoices.numberings[kind].prefix(3).joined(separator: " ")).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                    }
+                }
+                .toggleStyle(.button)
+                .flexibleButtons()
+            }
+            if head != "None" {
+                LabeledContent("수준") {
+                    Stepper("\((paragraph?.level ?? 0) + 1)", onIncrement: { editor.stepLevel(by: 1) }, onDecrement: { editor.stepLevel(by: -1) })
+                }
+            }
+            if head == "Number", document.context.inBody, let numbering = paragraph?.numbering {
+                Picker("시작 번호 방식", selection: Binding(get: { paragraph?.restart ?? 0 }, set: { restart in
+                    editor.format(ParaStyle(head: "Number", numbering: numbering, restart: restart,
+                                            startNumber: restart == 2 ? paragraph?.startNumber ?? 1 : nil))
+                })) {
+                    Text("앞 번호 목록에 이어").tag(0)
+                    Text("이전 번호 목록에 이어").tag(1)
+                    Text("새 번호 목록 시작").tag(2)
+                }
+                .pickerStyle(.radioGroup)
+                LabeledContent("1수준 시작 번호") {
+                    NumberStepper(value: paragraph.flatMap { $0.startNumber }.map(Double.init), unit: "", range: 1...65535) { start in
+                        editor.format(ParaStyle(head: "Number", numbering: numbering, restart: 2, startNumber: Int(start)))
+                    }
+                }
+                .disabled(paragraph?.restart != 2)
+            }
+        } label: {
+            LabeledContent {
+                Picker("글머리표 및 문단 번호", selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
+                    editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
+                                  : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
+                })) {
+                    Text("없음").tag("None")
+                    Text("글머리표").tag("Bullet")
+                    Text("문단 번호").tag("Number")
+                }
+                .labelsHidden()
+                .fixedSize()
+            } label: { Text("글머리표 및 문단 번호").font(.headline) }
+        }
+    }
+
+    /// The rest of 글자 모양: scales of the 언어, 첨자, the attributes, 밑줄, 취소선, 테두리 and 배경.
+    private var more: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                LabeledContent("장평") { lingual(\.ratio, range: 50...200) }
+                LabeledContent("자간") { lingual(\.spacing, range: -50...50) }
+                LabeledContent("상대 크기") { lingual(\.relativeSize, range: 10...250) }
+                LabeledContent("글자 위치") { lingual(\.offset, range: -100...100) }
+                Segments([0, 1, 2], selection: Binding(get: { text?.superscript == true ? 1 : text?.`subscript` == true ? 2 : 0 }, set: { place in
+                    editor.format(CharStyle(superscript: place == 1, subscript: place == 2))
+                })) { let title = ["보통", "위 첨자", "아래 첨자"][$0]; return .init(title: title, help: title) }
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    GridRow { Toggle("외곽선", isOn: char(\.outline, false)); Toggle("그림자", isOn: char(\.shadow, false)) }
+                    GridRow { Toggle("양각", isOn: char(\.emboss, false)); Toggle("음각", isOn: char(\.engrave, false)) }
+                }
+                .checkbox()
+                Divider()
+                Text("밑줄").font(.headline)
+                LabeledContent("위치") {
+                    Picker("위치", selection: Binding(get: { text?.underline != true ? 0 : text?.underlineTop == true ? 2 : 1 }, set: { place in
+                        editor.format(place == 0 ? CharStyle(underline: false) : CharStyle(underline: true, underlineTop: place == 2))
+                    })) { Text("없음").tag(0); Text("아래").tag(1); Text("위").tag(2) }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                Group {
+                    LabeledContent("모양") { ChoiceField(char(\.underlineShape, 0), LineShapes.names.indices.map { ($0, LineShapes.names[$0]) }, images: LineShapes.images) }
+                    LabeledContent("색") { ColorWell(hex: char(\.underlineColor, "#000000")) }
+                }
+                .disabled(text?.underline != true)
+                Text("취소선").font(.headline)
+                LabeledContent("모양") {
+                    ChoiceField(Binding(get: { text?.strikethrough == true ? (text?.strikeShape ?? 0) + 1 : 0 }, set: { kind in
+                        editor.format(kind == 0 ? CharStyle(strikethrough: false) : CharStyle(strikethrough: true, strikeShape: kind - 1))
+                    }), Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds)
+                }
+                LabeledContent("색") { ColorWell(hex: char(\.strikeColor, "#000000")) }
+                    .disabled(text?.strikethrough != true)
+                Divider()
+                BorderFillRows(style: Binding(get: { text ?? CharStyle() }, set: { new in
+                    if let old = text { send(new.changesWithBorderFill(from: old)) }
+                }))
+            }
+            .labeledContentStyle(RowStyle())
+            .padding(16)
+        }
+        .frame(width: 300, height: 520)
+    }
+
+    // MARK: 레이아웃
+
+    @ViewBuilder private var layoutPane: some View {
+        InspectorSection("여백") {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(spacing: 4) { length(\.marginLeft); Text("왼쪽").font(.caption) }
+                VStack(spacing: 4) { length(\.marginRight); Text("오른쪽").font(.caption) }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        InspectorSection("첫 줄") {
+            let indent = paragraph?.indent ?? 0
+            Segments([0, 1, -1], selection: Binding(get: { indent > 0 ? 1 : indent < 0 ? -1 : 0 }, set: { kind in
+                let amount = abs(indent) == 0 ? 10 : abs(indent)
+                editor.format(ParaStyle(indent: Double(kind) * amount))
+            })) { let title = [0: "보통", 1: "들여쓰기", -1: "내어쓰기"][$0]!; return .init(title: title, help: title) }
+            LabeledContent(indent < 0 ? "내어쓰기" : "들여쓰기") {
+                NumberStepper(value: paragraph.map { abs($0.indent ?? 0) }, unit: "pt", range: 0...1000) { amount in
+                    editor.format(ParaStyle(indent: indent < 0 ? -amount : amount))
+                }
+            }
+            .disabled(indent == 0)
+        }
+        InspectorSection("줄 나눔 기준") {
+            LabeledContent("한글 단위") {
+                Picker("한글 단위", selection: para(\.koreanBreakUnit, 1)) { Text("글자").tag(1); Text("어절").tag(0) }.labelsHidden().fixedSize()
+            }
+            LabeledContent("영어 단위") {
+                Picker("영어 단위", selection: para(\.englishBreakUnit, 0)) { Text("단어").tag(0); Text("하이픈").tag(1); Text("글자").tag(2) }
+                    .labelsHidden().fixedSize()
+            }
+        }
+        InspectorSection {
+            BorderFillRows(style: Binding(get: { paragraph ?? ParaStyle() }, set: { new in
+                if let old = paragraph { editor.format(new.changesWithBorderFill(from: old)) }
+            }))
+            Toggle("문단 테두리 연결", isOn: para(\.borderConnect, false)).checkbox()
+        }
+    }
+
+    // MARK: Values
+
+    /// A character value, applied as it is changed (테두리 and 배경 together, as the engine takes them).
+    private func char<T>(_ key: WritableKeyPath<CharStyle, T?>, _ fallback: T) -> Binding<T> {
+        Binding { text?[keyPath: key] ?? fallback } set: { value in
+            guard let old = text else { return }
+            var new = old
+            new[keyPath: key] = value
+            send(new.changesWithBorderFill(from: old))
+        }
+    }
+    private func send(_ change: CharStyle) {
+        if change != CharStyle() { editor.format(change) }
+    }
+    private func para<T>(_ key: WritableKeyPath<ParaStyle, T?>, _ fallback: T) -> Binding<T> {
+        Binding { paragraph?[keyPath: key] ?? fallback } set: { value in
+            guard let old = paragraph else { return }
+            var new = old
+            new[keyPath: key] = value
+            let change = new.changes(from: old)
+            if change != ParaStyle() { editor.format(change) }
+        }
+    }
+    /// A length of the paragraph in points.
+    private func length(_ key: WritableKeyPath<ParaStyle, Double?>) -> some View {
+        NumberStepper(value: paragraph?[keyPath: key], unit: "pt", range: 0...1000) { value in
+            var change = ParaStyle()
+            change[keyPath: key] = value
+            editor.format(change)
+        }
+    }
+    /// A percentage of the chosen 언어, or of all of them.
+    private func lingual(_ key: WritableKeyPath<CharStyle, Double?>, range: ClosedRange<Double>) -> some View {
+        let languages = document.format?.languages ?? []
+        let value = language.flatMap { languages.indices.contains($0) ? languages[$0][keyPath: key] : nil } ?? text?[keyPath: key]
+        return NumberStepper(value: value, unit: "%", range: range) { value in
+            var change = CharStyle(language: language)
+            change[keyPath: key] = value
+            editor.format(change)
+        }
     }
 }
 
-/// 문단: alignment, line spacing and lists, each choice in sight, and 문단 모양 for the rest.
-private struct ParagraphTab: View {
-    @ObservedObject var document: HwpDocument
-    let viewer: Viewer
-
+/// 테두리 and 배경 of the text or paragraph, one row each.
+private struct BorderFillRows<Style: BorderFillStyle>: View {
+    @Binding var style: Style
     var body: some View {
-        let editor = viewer.canvas.editor, paragraph = document.format?.paragraph
-        let head = paragraph?.head ?? "None"
-        Group {
-            InspectorSection("정렬") {
-                Segments(Alignment.allCases.map(Optional.some),
-                         selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
-                    let label = FormatChoices.label($0!)
-                    return .init(symbol: label.symbol, help: label.title)
-                }
-                LabeledContent("줄 간격") {
-                    NumberStepper(value: paragraph?.lineSpacing, unit: paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt",
-                                  range: 50...500, step: 10) {
-                        editor.format(ParaStyle(lineSpacing: $0, lineSpacingKind: .percent))
-                    }
-                }
-            }
-            InspectorSection("글머리표 및 문단 번호") {
-                Segments(["None", "Bullet", "Number"], selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
-                    editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
-                                  : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
-                })) { let title = ["None": "없음", "Bullet": "글머리표", "Number": "문단 번호"][$0]!; return .init(title: title, help: title) }
-                if head == "Bullet" {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
-                        ForEach(FormatChoices.bullets, id: \.self) { bullet in
-                            Toggle(bullet, isOn: Binding(get: { paragraph?.bullet == bullet },
-                                                         set: { _ in editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }))
-                        }
-                    }
-                    .toggleStyle(.button)
-                    .flexibleButtons()
-                } else if head == "Number" {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
-                        ForEach(FormatChoices.numberings.indices, id: \.self) { kind in
-                            Toggle(isOn: Binding(get: { paragraph?.numbering == kind },
-                                                 set: { _ in editor.format(ParaStyle(head: "Number", numbering: kind)) })) {
-                                Text(FormatChoices.numberings[kind].prefix(3).joined(separator: " ")).lineLimit(1).minimumScaleFactor(0.7)
-                            }
-                        }
-                    }
-                    .toggleStyle(.button)
-                    .flexibleButtons()
-                }
-                if head != "None" {
-                    LabeledContent("수준") {
-                        Stepper("\((paragraph?.level ?? 0) + 1)", onIncrement: { editor.stepLevel(by: 1) }, onDecrement: { editor.stepLevel(by: -1) })
-                    }
-                }
-            } footer: {
-                DialogButtons {
-                    Button("문단 번호 모양…") { viewer.editingList = "문단 번호" }
-                    Button("문단 모양…") { viewer.editingParaShape = true }
-                }
-            }
-        }
-        .disabled(!document.context.canFormat)
+        Text("테두리").font(.headline)
+        LabeledContent("종류") { ChoiceField(int(\.borderLine), Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds) }
+        LabeledContent("굵기") { ChoiceField(int(\.borderWidth), Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages) }
+        LabeledContent("색") { ColorWell(hex: text(\.borderColor, "#000000")) }
+        Text("배경").font(.headline)
+        LabeledContent("면 색") { ColorWell(hex: text(\.fillColor, "none"), none: "none") }
+        LabeledContent("무늬 색") { ColorWell(hex: text(\.patternColor, "#000000")) }
+        LabeledContent("무늬 모양") { ChoiceField(int(\.pattern), Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns) }
+    }
+    private func int(_ key: WritableKeyPath<Style, Int?>) -> Binding<Int> {
+        Binding { style[keyPath: key] ?? 0 } set: { style[keyPath: key] = $0 }
+    }
+    private func text(_ key: WritableKeyPath<Style, String?>, _ fallback: String) -> Binding<String> {
+        Binding { style[keyPath: key] ?? fallback } set: { style[keyPath: key] = $0 }
     }
 }
 
@@ -439,7 +649,7 @@ private struct PictureSlider: View {
 private struct TransparentLinesToggle: View {
     @ObservedObject var viewer: Viewer
     var body: some View {
-        Toggle("투명 선", isOn: $viewer.showsTransparentLines)
+        Toggle("투명 선", isOn: $viewer.showsTransparentLines).checkbox()
     }
 }
 
@@ -528,6 +738,7 @@ private struct InspectorScroll<Content: View>: View {
             VStack(alignment: .leading, spacing: 0) { content }
         }
         .labeledContentStyle(RowStyle())
+        .buttonBorderShape(.roundedRectangle)
     }
 }
 
@@ -643,6 +854,8 @@ private struct CaptionGrid: View {
 }
 
 extension View {
+    /// A checkbox before its name, as Keynote's, not spread as the inspector's rows are.
+    func checkbox() -> some View { toggleStyle(.checkbox).labeledContentStyle(.automatic) }
     /// Buttons and pop-ups as wide as their place, as macOS 26 sizes them; fitted before it.
     @ViewBuilder func flexibleButtons() -> some View {
         if #available(macOS 26, *) { buttonSizing(.flexible) } else { self }

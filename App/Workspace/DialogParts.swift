@@ -181,19 +181,52 @@ struct SpinField: View {
     }
 }
 
-/// A color: macOS's color well, and 없음 where `none` offers no color.
+/// A color: macOS's color well, its swatch beside the color wheel, and 없음 where `none`
+/// offers no color.
 struct ColorWell: View {
     @Binding var hex: String
     var none: String?
     @State private var last = "#000000"
     var body: some View {
         HStack(spacing: 10) {
-            ColorPicker("", selection: Binding { HexColor.color(hex) } set: { hex = HexColor.hex($0) }, supportsOpacity: false)
-                .labelsHidden()
+            SystemColorWell(hex: hex == none ? last : hex) { hex = $0 }
+                .fixedSize()
                 .disabled(hex == none)
-            if let none { Toggle("없음", isOn: Binding { hex == none } set: { hex = $0 ? none : last }) }
+            if let none { Toggle("없음", isOn: Binding { hex == none } set: { hex = $0 ? none : last }).fixedSize() }
         }
         .onChange(of: hex, initial: true) { if hex != none { last = hex } }
+    }
+}
+
+private struct SystemColorWell: NSViewRepresentable {
+    let hex: String
+    let set: (String) -> Void
+
+    func makeNSView(context: Context) -> NSColorWell {
+        let well = NSColorWell(style: .expanded)
+        well.supportsAlpha = false
+        well.target = context.coordinator
+        well.action = #selector(Coordinator.changed(_:))
+        return well
+    }
+    func updateNSView(_ well: NSColorWell, context: Context) {
+        context.coordinator.set = set
+        context.coordinator.hex = hex
+        well.isEnabled = context.environment.isEnabled
+        if HexColor.hex(Color(nsColor: well.color)) != hex { well.color = NSColor(HexColor.color(hex)) }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(hex: hex, set: set) }
+
+    final class Coordinator: NSObject {
+        var hex: String
+        var set: (String) -> Void
+        init(hex: String, set: @escaping (String) -> Void) { (self.hex, self.set) = (hex, set) }
+        @objc func changed(_ well: NSColorWell) {
+            let picked = HexColor.hex(Color(nsColor: well.color))
+            guard picked != hex else { return }
+            hex = picked
+            set(picked)
+        }
     }
 }
 

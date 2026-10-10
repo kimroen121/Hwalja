@@ -65,40 +65,46 @@ enum FormatChoices {
 }
 
 /// 서식 도구 상자, a thin bar as Scrivener's and TextEdit's: style, font, size, character
-/// styles with line shapes, colors, alignment, line spacing and lists, in macOS's own
-/// controls. It observes only the document's format and context, so typing never rebuilds it.
+/// styles with line shapes, colors, then alignment, line spacing and lists as far as the
+/// width allows, in macOS's own controls. It observes only the document's format and
+/// context, so typing never rebuilds it.
 struct FormatRow: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
-    /// The 언어 the font box shows and changes; nil for 대표 (all of them).
-    @State private var language: Int?
 
     var body: some View {
-        let context = document.context
         HStack(spacing: 6) {
             StyleField(document: document, editor: editor)
             Group {
-                LanguageField(language: $language)
-                FontField(document: document, editor: editor, language: language)
+                FontField(document: document, editor: editor, language: nil)
                 SizeField(size: document.format?.text.size, editor: editor)
                 RowDivider()
                 CharacterButtons(document: document, editor: editor)
+                // The colors and the paragraph's controls, those that fit.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { colors; alignment; spacing; lists }
+                    HStack(spacing: 6) { colors; alignment; lists }
+                    HStack(spacing: 6) { colors; alignment }
+                    colors
+                    Color.clear.frame(width: 0, height: 0)
+                }
             }
-            .disabled(!context.canFormat)
-            RowDivider()
-            Group {
-                AlignmentButtons(document: document, editor: editor)
-                RowDivider()
-                SpacingField(paragraph: document.format?.paragraph, editor: editor)
-                ListButtons(document: document, editor: editor)
-            }
-            .disabled(!context.canFormat)
+            .disabled(!document.context.canFormat)
             Spacer(minLength: 0)
         }
         .controlSize(.small)
         .padding(.horizontal, 8)
         .frame(height: 30)
     }
+
+    private var colors: some View {
+        ColorButtons(document: document, editor: editor)
+    }
+    private var alignment: some View {
+        HStack(spacing: 6) { RowDivider(); AlignmentButtons(document: document, editor: editor) }
+    }
+    private var spacing: some View { SpacingField(paragraph: document.format?.paragraph, editor: editor) }
+    private var lists: some View { ListButtons(document: document, editor: editor) }
 
     static func styles(_ document: HwpDocument, _ editor: PageEditor) -> [Choice?] {
         document.styles.map { style in
@@ -121,23 +127,9 @@ struct StyleField: View {
             ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
         }
         .labelsHidden()
-        .frame(width: 110)
+        .frame(width: 96)
         .help("스타일")
         .disabled(!document.context.canApplyStyle)
-    }
-}
-
-/// The 언어 the font field shows and changes: 대표 (all) or one.
-struct LanguageField: View {
-    @Binding var language: Int?
-    var body: some View {
-        Picker("언어", selection: $language) {
-            Text("대표").tag(Int?.none)
-            ForEach(CharShapeSheet.languageNames.indices, id: \.self) { Text(CharShapeSheet.languageNames[$0]).tag(Int?.some($0)) }
-        }
-        .labelsHidden()
-        .fixedSize()
-        .help("언어")
     }
 }
 
@@ -156,13 +148,13 @@ struct FontField: View {
             ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
         }
         .labelsHidden()
-        .frame(width: 140)
+        .frame(width: 120)
         .help("글꼴")
     }
 }
 
 /// 진하게, 기울임, 밑줄 and 취소선, 밑줄 and 취소선 holding their line shapes and colors in
-/// their menus, and 글자 색 and 형광펜.
+/// their menus.
 struct CharacterButtons: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
@@ -180,12 +172,6 @@ struct CharacterButtons: View {
             styles[$0].toggle()
         }
         .fixedSize()
-        ColorPicker("글자 색", selection: color(text?.color ?? "#000000") { editor.format(CharStyle(color: $0)) }, supportsOpacity: false)
-            .labelsHidden()
-            .help("글자 색")
-        ColorPicker("형광펜", selection: color(text?.shade ?? FormatChoices.none) { editor.format(CharStyle(shade: $0)) }, supportsOpacity: false)
-            .labelsHidden()
-            .help("형광펜")
     }
 
     /// Line shapes for underline or strikethrough, drawn as in the web editor, and the line's colors.
@@ -195,6 +181,23 @@ struct CharacterButtons: View {
             + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: FormatChoices.colors.map { hex in
                 Choice(title: "", image: FormatChoices.swatch(hex)) { editor.format(color(hex)) }
             })]
+    }
+}
+
+/// 글자 색 and 형광펜.
+struct ColorButtons: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var body: some View {
+        let text = document.format?.text
+        HStack(spacing: 6) {
+            ColorPicker("글자 색", selection: color(text?.color ?? "#000000") { editor.format(CharStyle(color: $0)) }, supportsOpacity: false)
+                .labelsHidden()
+                .help("글자 색")
+            ColorPicker("형광펜", selection: color(text?.shade ?? FormatChoices.none) { editor.format(CharStyle(shade: $0)) }, supportsOpacity: false)
+                .labelsHidden()
+                .help("형광펜")
+        }
     }
     private func color(_ hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
         Binding(get: { HexColor.color(hex) }, set: { set(HexColor.hex($0)) })

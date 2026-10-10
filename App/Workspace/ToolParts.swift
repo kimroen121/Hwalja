@@ -181,6 +181,7 @@ struct ShapeTiles: View {
             }
         }
         .padding(14)
+        .buttonBorderShape(.roundedRectangle)
     }
 }
 
@@ -200,6 +201,8 @@ struct Segments: NSViewRepresentable {
     var size: NSControl.ControlSize = .regular
     /// The selection in the accent color; off, in the gray of a selection out of focus.
     var emphasized = true
+    /// A capsule, as a pane's tabs; else a rounded rectangle, as the controls in a pane.
+    var capsule = false
     let pick: (Int) -> Void
 
     func makeNSView(context: Context) -> NSSegmentedControl {
@@ -211,21 +214,31 @@ struct Segments: NSViewRepresentable {
         control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return control
     }
+    /// Sets only what changed: setting a value again restarts the control's selection
+    /// animation, which made the tabs swell and shrink on a click.
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.segments = self
-        control.trackingMode = any ? .selectAny : .selectOne
-        control.controlSize = size
-        control.selectedSegmentBezelColor = emphasized ? nil : .unemphasizedSelectedContentBackgroundColor
-        control.isEnabled = context.environment.isEnabled
-        if #available(macOS 26, *) { control.borderShape = .capsule }
-        control.segmentCount = segments.count
+        func set<T: Equatable>(_ key: ReferenceWritableKeyPath<NSSegmentedControl, T>, _ value: T) {
+            if control[keyPath: key] != value { control[keyPath: key] = value }
+        }
+        set(\.trackingMode, any ? .selectAny : .selectOne)
+        set(\.controlSize, size)
+        set(\.selectedSegmentBezelColor, emphasized ? nil : .unemphasizedSelectedContentBackgroundColor)
+        set(\.isEnabled, context.environment.isEnabled)
+        if #available(macOS 26, *) { set(\.borderShape, capsule ? .capsule : .roundedRectangle) }
+        set(\.segmentCount, segments.count)
         for (index, segment) in segments.enumerated() {
-            control.setLabel(segment.title ?? "", forSegment: index)
-            control.setImage(segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
-            control.setToolTip(segment.help, forSegment: index)
-            control.setMenu(segment.menu.isEmpty ? nil : DropDown.menu(segment.menu), forSegment: index)
-            control.setShowsMenuIndicator(!segment.menu.isEmpty, forSegment: index)
-            control.setSelected(on.indices.contains(index) && on[index], forSegment: index)
+            if control.label(forSegment: index) ?? "" != segment.title ?? "" { control.setLabel(segment.title ?? "", forSegment: index) }
+            if (control.image(forSegment: index) == nil) != (segment.symbol == nil) || control.toolTip(forSegment: index) != segment.help {
+                control.setImage(segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
+                control.setToolTip(segment.help, forSegment: index)
+            }
+            if !segment.menu.isEmpty || control.menu(forSegment: index) != nil {
+                control.setMenu(segment.menu.isEmpty ? nil : DropDown.menu(segment.menu), forSegment: index)
+                control.setShowsMenuIndicator(!segment.menu.isEmpty, forSegment: index)
+            }
+            let on = on.indices.contains(index) && on[index]
+            if control.isSelected(forSegment: index) != on { control.setSelected(on, forSegment: index) }
         }
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
@@ -248,8 +261,9 @@ struct Segments: NSViewRepresentable {
 extension Segments {
     /// One of `values`, bound to `selection`.
     init<Value: Hashable>(_ values: [Value], selection: Binding<Value>, size: NSControl.ControlSize = .regular,
-                          emphasized: Bool = true, segment: (Value) -> Segment) {
-        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized) {
+                          emphasized: Bool = true, capsule: Bool = false, segment: (Value) -> Segment) {
+        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized,
+                  capsule: capsule) {
             selection.wrappedValue = values[$0]
         }
     }

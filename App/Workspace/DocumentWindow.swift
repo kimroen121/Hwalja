@@ -47,6 +47,8 @@ struct DocumentWindow: View {
                     StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
                 }
             }
+            // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
+            .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         }
         .inspector(isPresented: $viewer.showsInspector) {
             Group {
@@ -57,7 +59,6 @@ struct DocumentWindow: View {
             }
             .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
         }
-        .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
@@ -152,7 +153,7 @@ private struct StatusBar: View {
 }
 
 /// The toolbar, as Keynote's: the things put in, 수식 and 문자표, 찾기, and 서식 and 문서,
-/// each group in its own glass (macOS 26 joins items standing side by side). It is not
+/// each group in its own glass, parted by toolbar spacers. It is not
 /// customizable: SwiftUI's customizable toolbars share items between windows and throw when a
 /// second document opens.
 private struct DocumentToolbar: ToolbarContent {
@@ -291,7 +292,9 @@ final class Viewer: ObservableObject {
         didSet { UserDefaults.standard.set(inspectorPane.rawValue, forKey: "inspectorPane") }
     }
     /// The inspector's tab, kept while it is hidden.
-    var inspectorTab = "글자"
+    var inspectorTab = "텍스트"
+    /// 텍스트's 레이아웃 in place of its 스타일, kept while the inspector is hidden.
+    var textLayout = false
     func shows(_ pane: TaskPane) -> Bool { showsSidebar && sidebarPane == pane }
     /// Shows `pane`, or hides it when it shows.
     func toggle(_ pane: TaskPane) {
@@ -640,7 +643,7 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Segments(TaskPane.allCases, selection: $viewer.sidebarPane, size: .large, emphasized: false) { .init(symbol: $0.symbol, help: $0.rawValue) }
+            Segments(TaskPane.allCases, selection: $viewer.sidebarPane, size: .large, emphasized: false, capsule: true) { .init(symbol: $0.symbol, help: $0.rawValue) }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             switch viewer.sidebarPane {

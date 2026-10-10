@@ -1315,7 +1315,7 @@ struct DocumentTests {
         #expect(Inspector.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
         #expect(Inspector.contextTabs(EditingContext(inNote: true)) == ["주석"])
         #expect(Inspector.tabs(EditingContext(object: .picture)) == ["그림"])
-        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["글자", "문단", "스타일", "표 디자인", "표 레이아웃"])
+        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["텍스트", "스타일", "표 디자인", "표 레이아웃"])
     }
 
     /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
@@ -1760,6 +1760,10 @@ struct DocumentTests {
         let viewer = Viewer()
         viewer.canvas.bind(document)
         let format = try #require(document.format)
+        // 텍스트 with its 레이아웃 showing.
+        let layoutViewer = Viewer()
+        layoutViewer.canvas.bind(document)
+        layoutViewer.textLayout = true
         // A document with the caret in a 각주, for the 주석 탭.
         let noted = try HwpDocument(data: fixture("hwpx"))
         let notedViewer = Viewer()
@@ -1769,8 +1773,8 @@ struct DocumentTests {
         await noted.settle()
         let views: [(String, AnyView)] = [
             ("rows", AnyView(FormatRow(document: document, editor: viewer.canvas.editor).frame(width: 1100))),
-            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 520))),
-            ("paragraphTab", AnyView(Inspector(document: document, viewer: viewer, tab: "문단").frame(width: 270, height: 520))),
+            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 900))),
+            ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 270, height: 900))),
             ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),
             ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 270, height: 640))),
             ("shapes", AnyView(ShapeTiles(viewer: viewer))),
