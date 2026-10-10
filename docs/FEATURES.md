@@ -93,7 +93,7 @@
 | 안내선 | △ | `view/object_move_guideline/guideline(objectmoveguideline).htm` | 앱 쪽 작업 |
 | 문서 보기 색 | △ | `view/document_view_color.htm` | 앱 쪽 작업(표시만 바꿈). 사용자 색 △ |
 | 도구 상자 | ◐ | `view/toolbar/toolbar.htm#bc-1` | 2단계에서 2024 구성으로 바꿈. 사용자 설정은 범위 밖 |
-| 작업 창 | ◐ | `view/workwindow/workwindow.htm` | 오른쪽 작업 창과 세로 아이콘 줄: 쪽 모양 보기·스타일(목록과 적용, 추가·편집·지우기·위로·아래로 아이콘과 빠른 메뉴)·책갈피·개요 보기(수준별 트리, 실시간 반영, 누르면 그 문단으로 이동) ●. 클립보드 △, 나머지 범위 밖 |
+| 작업 창 | ◐ | `view/workwindow/workwindow.htm` | macOS처럼 왼쪽 사이드바(⌃⌘S)에 쪽 모양 보기·개요 보기(수준별 트리, 실시간 반영, 누르면 그 문단으로 이동)·책갈피, 오른쪽 작업 창에 스타일(목록과 적용, 추가·편집·지우기·위로·아래로 아이콘과 빠른 메뉴) ●. 클립보드 △, 나머지 범위 밖 |
 | 문서 창 | ◐ | `view/document_window.htm` | 가로 눈금자 ● (탭 표시 △), 상황 선 ◐, 세로 눈금자 △, 문서 탭은 macOS 창 탭 |
 | 편집 화면 나누기 | △ | `window/division/division.htm` | 앱 쪽 작업 |
 | 창 배열 | — | `window/arrange/arrange_windows.htm` | macOS 윈도우 메뉴 |

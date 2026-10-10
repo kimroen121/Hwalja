@@ -320,13 +320,15 @@ struct MenuItems {
                 toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
             } label: { Label("격자", systemImage: "grid") }
             Divider()
+            Button(viewer.showsSidebar ? "사이드바 가리기" : "사이드바 보기") { viewer.showsSidebar.toggle() }
+                .keyboardShortcut("s", modifiers: [.command, .control])
             Menu {
                 toggle("기본", viewer.showsTools) { viewer.showsTools.toggle() }
                 toggle("서식", viewer.showsFormat) { viewer.showsFormat.toggle() }
             } label: { Label("도구 상자", systemImage: "menubar.rectangle") }
             Menu {
                 ForEach(TaskPane.allCases, id: \.self) { pane in
-                    toggle(pane.rawValue, viewer.taskPane == pane) { viewer.taskPane = viewer.taskPane == pane ? nil : pane }
+                    toggle(pane.rawValue, viewer.shows(pane)) { viewer.toggle(pane) }
                 }
             } label: { Label("작업 창", systemImage: "sidebar.right") }
             Menu {

@@ -40,11 +40,15 @@ struct DocumentWindow: View {
             }
             if viewer.finding { FindBar(viewer: viewer) }
             HStack(spacing: 0) {
+                if viewer.showsSidebar {
+                    Sidebar(document: document, viewer: viewer)
+                    Divider()
+                }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minWidth: 480, minHeight: 400)
-                if let pane = viewer.taskPane {
+                if viewer.showsStyles {
                     Divider()
-                    TaskPaneView(pane: pane, document: document, viewer: viewer)
+                    StyleTaskPane(document: document, viewer: viewer)
                 }
             }
             if viewer.showsStatusBar {
@@ -239,9 +243,21 @@ final class Viewer: ObservableObject {
     }
     @Published var showsTools = true
     @Published var showsFormat = true
-    /// The 작업 창 shown at the right, if any; it stays as it was left.
-    @Published var taskPane: TaskPane? = UserDefaults.standard.string(forKey: "taskPane").map { TaskPane(rawValue: $0) } ?? .pages {
-        didSet { UserDefaults.standard.set(taskPane?.rawValue ?? "", forKey: "taskPane") }
+    /// The sidebar at the left and the 작업 창 it shows, and the 스타일 작업 창 at the right; they stay as they were left.
+    @Published var showsSidebar = UserDefaults.standard.object(forKey: "showsSidebar") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showsSidebar, forKey: "showsSidebar") }
+    }
+    @Published var sidebarPane = UserDefaults.standard.string(forKey: "sidebarPane").flatMap(TaskPane.init) ?? .pages {
+        didSet { UserDefaults.standard.set(sidebarPane.rawValue, forKey: "sidebarPane") }
+    }
+    @Published var showsStyles = UserDefaults.standard.bool(forKey: "showsStyles") {
+        didSet { UserDefaults.standard.set(showsStyles, forKey: "showsStyles") }
+    }
+    func shows(_ pane: TaskPane) -> Bool { pane == .styles ? showsStyles : showsSidebar && sidebarPane == pane }
+    /// Shows `pane`, or hides it when it shows.
+    func toggle(_ pane: TaskPane) {
+        if pane == .styles { return showsStyles.toggle() }
+        (showsSidebar, sidebarPane) = (!shows(pane), pane)
     }
     /// 표시/숨기기.
     @Published var showsControlCodes = false {
@@ -568,6 +584,8 @@ private struct Canvas: NSViewRepresentable {
 /// 작업 창 that work: 쪽 모양 보기, 스타일, 책갈피 and 개요 보기.
 enum TaskPane: String, CaseIterable {
     case pages = "쪽 모양 보기", styles = "스타일", bookmarks = "책갈피", outline = "개요 보기"
+    /// Those the sidebar shows, in its order.
+    static let sidebar: [TaskPane] = [.pages, .outline, .bookmarks]
     var symbol: String {
         switch self {
         case .pages: "doc.on.doc"
@@ -578,41 +596,47 @@ enum TaskPane: String, CaseIterable {
     }
 }
 
-/// 작업 창, as in 한/글 2024: its name and close button over it, and the 작업 창 tabs as a
-/// column of icons at the window's edge.
-private struct TaskPaneView: View {
-    let pane: TaskPane
+/// The sidebar, as in Preview: 쪽 모양 보기, 개요 보기 or 책갈피, chosen above it.
+private struct Sidebar: View {
     @ObservedObject var document: HwpDocument
     @ObservedObject var viewer: Viewer
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text(pane.rawValue).font(.headline)
-                    Spacer()
-                    ToolIcon("닫기", symbol: "xmark") { viewer.taskPane = nil }
-                }
-                .padding(.leading, 12)
-                .padding(.trailing, 6)
-                .frame(height: 34)
-                switch pane {
-                case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
-                case .styles: StylePane(document: document, viewer: viewer)
-                case .bookmarks: BookmarkPane(viewer: viewer)
-                case .outline: OutlinePane(document: document, viewer: viewer)
+        VStack(spacing: 0) {
+            Picker("작업 창", selection: $viewer.sidebarPane) {
+                ForEach(TaskPane.sidebar, id: \.self) { pane in
+                    Image(systemName: pane.symbol).help(pane.rawValue).accessibilityLabel(pane.rawValue).tag(pane)
                 }
             }
-            .frame(width: 200)
-            Divider()
-            VStack(spacing: 4) {
-                ForEach(TaskPane.allCases, id: \.self) { item in
-                    ToolIcon(item.rawValue, symbol: item.symbol, on: item == pane) { viewer.taskPane = item }
-                }
-                Spacer()
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(8)
+            switch viewer.sidebarPane {
+            case .pages, .styles: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
+            case .bookmarks: BookmarkPane(viewer: viewer)
+            case .outline: OutlinePane(document: document, viewer: viewer)
             }
-            .padding(.vertical, 6)
-            .frame(width: 36)
         }
+        .frame(width: 200)
+    }
+}
+
+/// [스타일] 작업 창 at the right, under its name and close button.
+private struct StyleTaskPane: View {
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(TaskPane.styles.rawValue).font(.headline)
+                Spacer()
+                ToolIcon("닫기", symbol: "xmark") { viewer.showsStyles = false }
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 6)
+            .frame(height: 34)
+            StylePane(document: document, viewer: viewer)
+        }
+        .frame(width: 200)
     }
 }
 

@@ -40,6 +40,7 @@ struct ToolRow: View {
         let tab = contextTab.flatMap { extra.contains($0) ? $0 : nil } ?? (Self.menuTabs.contains(menuTab) ? menuTab : "편집")
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
+                SidebarButton(viewer: viewer).padding(.trailing, 2)
                 ForEach(Self.menuTabs + extra, id: \.self) { name in
                     if name == extra.first { Divider().frame(height: 14).padding(.horizontal, 4) }
                     tabButton(name, selected: tab == name, object: extra.contains(name))
@@ -470,6 +471,13 @@ struct ToolRow: View {
 }
 
 /// A tab's 펼침 단추: opens the menu bar's menu of the same name below it.
+private struct SidebarButton: View {
+    @ObservedObject var viewer: Viewer
+    var body: some View {
+        ToolIcon(viewer.showsSidebar ? "사이드바 가리기" : "사이드바 보기", symbol: "sidebar.left") { viewer.showsSidebar.toggle() }
+    }
+}
+
 private struct MenuOpener: View {
     let title: String
     @State private var anchor = Anchor()
@@ -514,7 +522,7 @@ private struct ViewTiles: View {
         RowDivider()
         ToolTile("작업 창", Icon.taskPane, choices: {
             TaskPane.allCases.map { pane in
-                Choice(title: pane.rawValue, on: viewer.taskPane == pane) { viewer.taskPane = viewer.taskPane == pane ? nil : pane }
+                Choice(title: pane.rawValue, on: viewer.shows(pane)) { viewer.toggle(pane) }
             }
         })
         RowDivider()
