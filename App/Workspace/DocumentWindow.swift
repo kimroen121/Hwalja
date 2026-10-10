@@ -151,7 +151,7 @@ private struct StatusBar: View {
 
     var body: some View {
         let caret = status.caret, context = document.context
-        // 한/글 2024's order: 쪽, 단, 줄, 칸, 글자 수, 편집 상태, 구역, 삽입.
+        // 한/글 2024's order: 쪽, 단, 줄, 칸, 글자 수, 편집 상태, 구역.
         HStack(spacing: 14) {
             Button("\(caret?.page ?? UInt32(position.page + 1))/\(context.pageCount)쪽") { viewer.goingToPage = true }
                 .buttonStyle(.plain)
@@ -162,7 +162,6 @@ private struct StatusBar: View {
                 Text("\(caret.characters)글자")
                 Text(Self.state(context, cell: caret.cell))
                 Text("\(caret.section)/\(caret.sections) 구역")
-                Text("삽입")
             }
             Spacer()
             HStack(spacing: 4) {

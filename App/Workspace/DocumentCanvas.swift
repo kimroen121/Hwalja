@@ -356,7 +356,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         // Pages are white paper in any mode, so highlight and caret use light-mode colors.
         appearance = NSAppearance(named: .aqua)
         caret.wantsLayer = true
-        caret.layer?.backgroundColor = NSColor.black.cgColor
+        tintCaret()
+        // The insertion point takes the accent color the user chose, as text views do.
+        NotificationCenter.default.addObserver(self, selector: #selector(tintCaret), name: NSColor.systemColorsDidChangeNotification,
+                                               object: nil)
         caret.isHidden = true
         addSubview(caret)
         dropCaret.wantsLayer = true
@@ -365,6 +368,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         addSubview(dropCaret)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func tintCaret() {
+        appearance?.performAsCurrentDrawingAppearance { caret.layer?.backgroundColor = NSColor.textInsertionPointColor.cgColor }
+    }
 
     func bind(_ model: HwpDocument) {
         guard model !== self.model else { return }

@@ -121,7 +121,6 @@ struct MenuItems {
                 Choice(title: "문자표…", symbol: Icon.symbols, key: String(Character(UnicodeScalar(NSF10FunctionKey)!))) {
                     viewer.insertingSymbols = true
                 },
-                Choice(title: "프린트…", symbol: Icon.print, key: "p") { send(#selector(DocumentCanvas.printDocument(_:))) },
                 nil,
                 Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.editingCharShape = true },
                 Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.editingParaShape = true },
@@ -299,8 +298,8 @@ struct MenuItems {
     @ViewBuilder var view: some View {
         if let viewer {
             Menu {
-                Button("확대") { send(#selector(DocumentCanvas.zoomIn(_:))) }.keyboardShortcut("+")
-                Button("축소") { send(#selector(DocumentCanvas.zoomOut(_:))) }.keyboardShortcut("-")
+                Button("확대") { send(#selector(DocumentCanvas.zoomIn(_:))) }.keyboardShortcut(">")
+                Button("축소") { send(#selector(DocumentCanvas.zoomOut(_:))) }.keyboardShortcut("<")
                 Button("실제 크기") { send(#selector(DocumentCanvas.zoomToActualSize(_:))) }.keyboardShortcut("0")
                 Divider()
                 ZoomItems(viewer: viewer, position: viewer.position)
@@ -407,8 +406,8 @@ struct MenuItems {
         }
         .disabled(!context.canFormat)
         Group {
-            Button("한 수준 증가") { editor?.stepLevel(by: 1) }
-            Button("한 수준 감소") { editor?.stepLevel(by: -1) }
+            Button("한 수준 증가") { editor?.stepLevel(by: 1) }.keyboardShortcut("]")
+            Button("한 수준 감소") { editor?.stepLevel(by: -1) }.keyboardShortcut("[")
         }
         .disabled(!context.canFormat || !context.inList)
         item("스타일…", Icon.styles) { viewer?.editingStyles = true }
@@ -425,8 +424,8 @@ struct MenuItems {
             toggle("취소선", text?.strikethrough == true) { editor?.toggleStrikethrough() }
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Divider()
-            Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut("]")
-            Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut("[")
+            Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut("+")
+            Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut("-")
         }
         .disabled(!context.canFormat)
         Divider()
