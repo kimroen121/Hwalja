@@ -185,7 +185,7 @@ struct ShapeTiles: View {
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(84), spacing: 10), count: 3), spacing: 10) {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(100), spacing: 8), count: 3), spacing: 8) {
             ForEach(MenuItems.shapes, id: \.shape) { item in
                 Button {
                     dismiss()
@@ -197,7 +197,6 @@ struct ShapeTiles: View {
                     }
                     .frame(width: 84, height: 84)
                 }
-                .buttonStyle(TileStyle())
             }
         }
         .padding(14)
@@ -235,6 +234,7 @@ struct Segments: NSViewRepresentable {
         control.controlSize = size
         control.selectedSegmentBezelColor = emphasized ? nil : .unemphasizedSelectedContentBackgroundColor
         control.isEnabled = context.environment.isEnabled
+        if #available(macOS 26, *) { control.borderShape = .capsule }
         control.segmentCount = segments.count
         for (index, segment) in segments.enumerated() {
             control.setLabel(segment.title ?? "", forSegment: index)
@@ -267,27 +267,5 @@ extension Segments {
         self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized) {
             selection.wrappedValue = values[$0]
         }
-    }
-}
-
-/// A divider that resizes the column after it, as a split view's.
-struct ColumnDivider: View {
-    @Binding var width: Double
-    let range: ClosedRange<Double>
-    @State private var start: Double?
-
-    var body: some View {
-        Divider()
-            .overlay {
-                Color.clear.frame(width: 7).contentShape(Rectangle())
-                    .onHover { $0 ? NSCursor.resizeLeftRight.push() : NSCursor.pop() }
-                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                        .onChanged { drag in
-                            let from = start ?? width
-                            start = from
-                            width = min(max(from - drag.translation.width, range.lowerBound), range.upperBound)
-                        }
-                        .onEnded { _ in start = nil })
-            }
     }
 }

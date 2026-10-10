@@ -38,7 +38,7 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large, emphasized: false) { .init(title: $0, help: $0) }
+                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large) { .init(title: $0, help: $0) }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             } else {
@@ -246,7 +246,6 @@ struct Inspector: View {
     /// A command as a tile: its icon over its name.
     private func command(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { TileLabel(title: title, symbol: symbol) }
-            .buttonStyle(TileStyle())
     }
 
     /// 색조 as the picker reads it; 워터마크 is no effect at its brightness and contrast.
@@ -262,7 +261,8 @@ struct DialogButtons<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         VStack(spacing: 8) { content }
-            .buttonStyle(WideButtonStyle())
+            .controlSize(.large)
+            .flexibleButtons()
     }
 }
 
@@ -278,9 +278,11 @@ private struct CharacterTab: View {
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
         Group {
             InspectorSection("글꼴") {
-                PopUpField(title: font ?? "", items: FormatChoices.families.map { family in
-                    Choice(title: family.name, on: family.family == font) { editor.format(CharStyle(language: language, font: family.family)) }
-                })
+                Picker("글꼴", selection: Binding(get: { font ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
+                    ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
+                }
+                .labelsHidden()
+                .flexibleButtons()
                 HStack(spacing: 8) {
                     let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void)] = [
                         ("진하게", "bold", text?.bold, editor.toggleBold), ("기울임", "italic", text?.italic, editor.toggleItalic),
@@ -352,22 +354,23 @@ private struct ParagraphTab: View {
                 if head == "Bullet" {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
                         ForEach(FormatChoices.bullets, id: \.self) { bullet in
-                            Button(bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
-                                .buttonStyle(ChoiceStyle(on: paragraph?.bullet == bullet))
-                                .frame(height: 30)
+                            Toggle(bullet, isOn: Binding(get: { paragraph?.bullet == bullet },
+                                                         set: { _ in editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }))
                         }
                     }
-                    .buttonStyle(ChoiceStyle())
+                    .toggleStyle(.button)
+                    .flexibleButtons()
                 } else if head == "Number" {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
                         ForEach(FormatChoices.numberings.indices, id: \.self) { kind in
-                            Button { editor.format(ParaStyle(head: "Number", numbering: kind)) } label: {
+                            Toggle(isOn: Binding(get: { paragraph?.numbering == kind },
+                                                 set: { _ in editor.format(ParaStyle(head: "Number", numbering: kind)) })) {
                                 Text(FormatChoices.numberings[kind].prefix(3).joined(separator: " ")).lineLimit(1).minimumScaleFactor(0.7)
-                                    .frame(maxWidth: .infinity, minHeight: 30)
                             }
-                            .buttonStyle(ChoiceStyle(on: paragraph?.numbering == kind))
                         }
                     }
+                    .toggleStyle(.button)
+                    .flexibleButtons()
                 }
                 if head != "None" {
                     LabeledContent("수준") {
@@ -455,18 +458,17 @@ struct DocumentInspector: View {
             InspectorScroll {
                 InspectorSection("용지 종류") {
                     let paper = paper(section)
-                    PopUpField(title: paper.wrappedValue ?? "사용자 정의", items: PageSetupSheet.papers.map { item in
-                        Choice(title: item.name, on: item.name == paper.wrappedValue) { paper.wrappedValue = item.name }
-                    })
+                    Picker("용지 종류", selection: paper) {
+                        if paper.wrappedValue == nil { Text("사용자 정의").tag(String?.none) }
+                        ForEach(PageSetupSheet.papers, id: \.name) { Text($0.name).tag(String?.some($0.name)) }
+                    }
+                    .labelsHidden()
+                    .flexibleButtons()
                 }
                 InspectorSection("용지 방향") {
-                    HStack(spacing: 8) {
-                        ForEach([false, true], id: \.self) { landscape in
-                            Button { set(section) { $0.landscape = landscape } } label: {
-                                TileLabel(title: landscape ? "가로" : "세로", symbol: landscape ? Icon.landscape : Icon.portrait)
-                            }
-                            .buttonStyle(TileStyle(on: page?.landscape == landscape))
-                        }
+                    Segments([false, true], selection: Binding(get: { page?.landscape ?? false }, set: { landscape in set(section) { $0.landscape = landscape } }),
+                             size: .large) {
+                        .init(title: $0 ? "가로" : "세로", symbol: $0 ? Icon.landscape : Icon.portrait, help: $0 ? "가로" : "세로")
                     }
                 }
                 InspectorSection("용지 여백") {
@@ -584,6 +586,7 @@ struct Tiles<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) { content }
+            .flexibleButtons()
     }
 }
 
@@ -606,26 +609,6 @@ struct TileLabel: View {
     }
 }
 
-/// A pop-up as wide as the inspector, as Keynote's: the choice at the leading edge, the menu under it.
-private struct PopUpField: View {
-    let title: String
-    let items: [Choice?]
-    @State private var anchor = Anchor()
-    var body: some View {
-        Button { DropDown.show(items, below: anchor.view) } label: {
-            HStack {
-                Text(title).lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-        }
-        .buttonStyle(ChoiceStyle())
-        .background(AnchorView(anchor: anchor))
-    }
-}
-
 /// `Choice`s as buttons in sight, two to a row (or `columns`), in place of a menu.
 private struct ChoiceButtons: View {
     let items: [Choice?]
@@ -639,14 +622,12 @@ private struct ChoiceButtons: View {
                         if let image = item.image { Image(nsImage: image) } else if let symbol = item.symbol { Image(systemName: symbol) }
                         if !item.title.isEmpty { Text(item.title).lineLimit(1).minimumScaleFactor(0.75) }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 30)
-                    .padding(.horizontal, 4)
                 }
-                .buttonStyle(ChoiceStyle(on: item.on))
                 .disabled(!item.enabled)
                 .help(item.title)
             }
         }
+        .flexibleButtons()
     }
 }
 
@@ -658,61 +639,17 @@ private struct CaptionGrid: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
             ForEach(places, id: \.self) { place in
                 let title = Captions.all.first { $0.value == place }!.title
-                Button { insert(place) } label: {
-                    Text(title).font(.caption).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: 30)
-                }
-                .buttonStyle(ChoiceStyle())
-                .help(title)
+                Button { insert(place) } label: { Text(title).lineLimit(1).minimumScaleFactor(0.7) }
+                    .help(title)
             }
         }
+        .flexibleButtons()
     }
 }
 
-/// Keynote's tile: a rounded fill that brightens under the pointer and gives under a press.
-struct TileStyle: ButtonStyle {
-    var on = false
-    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 10) }
-}
-/// A button that shows a choice: filled with the accent color while it is on.
-struct ChoiceStyle: ButtonStyle {
-    var on = false
-    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 7) }
-}
-/// A dialog's button as wide as the inspector.
-struct WideButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Face(configuration: configuration, on: false, radius: 7) {
-            configuration.label.frame(maxWidth: .infinity).padding(.vertical, 6)
-        }
-    }
-}
-private struct Face<Label: View>: View {
-    let configuration: ButtonStyleConfiguration
-    let on: Bool
-    let radius: CGFloat
-    var label: Label
-    @State private var hovering = false
-    @Environment(\.isEnabled) private var enabled
-
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, label: () -> Label) {
-        (self.configuration, self.on, self.radius, self.label) = (configuration, on, radius, label())
-    }
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        label
-            .foregroundStyle(on ? AnyShapeStyle(.white) : enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-            .background {
-                if on { shape.fill(Color.accentColor) } else { shape.fill(hovering || configuration.isPressed ? .tertiary : .quaternary) }
-            }
-            .contentShape(shape)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.12), value: hovering)
-            .onHover { hovering = $0 && enabled }
-    }
-}
-extension Face where Label == ButtonStyleConfiguration.Label {
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat) {
-        self.init(configuration: configuration, on: on, radius: radius) { configuration.label }
+extension View {
+    /// Buttons and pop-ups as wide as their place, as macOS 26 sizes them; fitted before it.
+    @ViewBuilder func flexibleButtons() -> some View {
+        if #available(macOS 26, *) { buttonSizing(.flexible) } else { self }
     }
 }

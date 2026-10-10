@@ -29,33 +29,33 @@ struct DocumentWindow: View {
             Sidebar(document: document, viewer: viewer)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
-            // The inspector is a column of its own here: SwiftUI's `inspector` in a document
-            // window loops its layout until AppKit stops the app.
-            HStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    if viewer.showsFormat {
-                        FormatRow(document: document, editor: viewer.canvas.editor)
-                        Divider()
-                    }
-                    if viewer.finding { FindBar(viewer: viewer) }
-                    Canvas(canvas: viewer.canvas, document: document)
-                        .frame(minWidth: 400, minHeight: 300)
-                    if viewer.showsStatusBar {
-                        Divider()
-                        StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
-                    }
+            // Nothing here has a minimum width: beside an inspector, a detail wider than about
+            // 100pt at its least makes SwiftUI work out the split again and again until AppKit
+            // stops the app.
+            VStack(spacing: 0) {
+                if viewer.showsFormat {
+                    FormatRow(document: document, editor: viewer.canvas.editor)
+                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                        .clipped()
+                    Divider()
                 }
-                if viewer.showsInspector {
-                    ColumnDivider(width: $viewer.inspectorWidth, range: 240...480)
-                    Group {
-                        switch viewer.inspectorPane {
-                        case .format: Inspector(document: document, viewer: viewer)
-                        case .document: DocumentInspector(document: document, viewer: viewer)
-                        }
-                    }
-                    .frame(width: viewer.inspectorWidth)
+                if viewer.finding { FindBar(viewer: viewer) }
+                Canvas(canvas: viewer.canvas, document: document)
+                    .frame(minHeight: 300)
+                if viewer.showsStatusBar {
+                    Divider()
+                    StatusBar(document: document, viewer: viewer, position: viewer.position, status: viewer.status)
                 }
             }
+        }
+        .inspector(isPresented: $viewer.showsInspector) {
+            Group {
+                switch viewer.inspectorPane {
+                case .format: Inspector(document: document, viewer: viewer)
+                case .document: DocumentInspector(document: document, viewer: viewer)
+                }
+            }
+            .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
         }
         .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
@@ -286,9 +286,6 @@ final class Viewer: ObservableObject {
     }
     @Published var showsInspector = UserDefaults.standard.object(forKey: "showsInspector") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showsInspector, forKey: "showsInspector") }
-    }
-    @Published var inspectorWidth = UserDefaults.standard.object(forKey: "inspectorWidth") as? Double ?? 270 {
-        didSet { UserDefaults.standard.set(inspectorWidth, forKey: "inspectorWidth") }
     }
     @Published var inspectorPane = UserDefaults.standard.string(forKey: "inspectorPane").flatMap(InspectorPane.init) ?? .format {
         didSet { UserDefaults.standard.set(inspectorPane.rawValue, forKey: "inspectorPane") }
@@ -668,31 +665,33 @@ private struct Sidebar: View {
     }
 }
 
-/// Xcode's filter field: a capsule with the filter sign before the text and a clear button after it.
-private struct FilterField: View {
+/// Xcode's filter field: macOS's search field, filtering as it is typed.
+private struct FilterField: NSViewRepresentable {
     @Binding var text: String
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary)
-            TextField("필터", text: $text).textFieldStyle(.plain)
-            if !text.isEmpty {
-                Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("지우기")
-            }
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 28)
-        .glassCapsule()
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = "필터"
+        field.sendsSearchStringImmediately = true
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.changed(_:))
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.text = $text
+        if field.stringValue != text { field.stringValue = text }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject {
+        var text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+        @objc func changed(_ field: NSSearchField) { text.wrappedValue = field.stringValue }
     }
 }
 
 extension View {
-    /// Liquid Glass in a capsule on macOS 26 and later, a quiet fill before it.
-    @ViewBuilder func glassCapsule() -> some View {
-        if #available(macOS 26, *) { glassEffect(.regular, in: .capsule) } else { background(.quaternary, in: Capsule()) }
-    }
     /// The Liquid Glass button style on macOS 26 and later, a bordered one before it.
     @ViewBuilder func glassButton() -> some View {
         if #available(macOS 26, *) { buttonStyle(.glass).buttonBorderShape(.circle) } else { buttonStyle(.bordered) }
