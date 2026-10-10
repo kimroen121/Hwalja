@@ -98,6 +98,9 @@ final class EditSession: @unchecked Sendable {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await decode(send(.pageSetup(section: section)))
     }
+    func columns(section: UInt32) async throws -> ColumnSetup {
+        try await decode(send(.columns(section: section)))
+    }
     func styleFormat(_ style: UInt32) async throws -> Format {
         try await decode(send(.styleFormat(style)))
     }

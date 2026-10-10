@@ -430,11 +430,17 @@ pub enum EditCommand {
     DeleteHeaderFooter {
         target: EditTarget,
     },
-    /// 단 하나, 둘 or 셋: `count` columns of the same width for a section with one column
-    /// definition.
+    /// 단 설정 for a section with one column definition: `count` columns; 단 종류 (0 일반 단,
+    /// 1 배분 단, 2 평행 단), 단 너비 동일하게 and 간격 (HWPUNIT) keep theirs when left out.
     SetColumns {
         section: u32,
         count: u16,
+        #[serde(default, rename = "columnType")]
+        column_type: Option<u8>,
+        #[serde(default, rename = "sameWidth")]
+        same_width: Option<bool>,
+        #[serde(default)]
+        spacing: Option<i16>,
     },
     /// Replaces the header (or footer) shown on every page of a section with an empty
     /// one, or one holding the page number at `page_number`.
@@ -905,6 +911,15 @@ impl TableTurn {
         }
         at
     }
+}
+/// A section's 단 설정, as `SetColumns` takes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnSetup {
+    pub count: u16,
+    pub column_type: u8,
+    pub same_width: bool,
+    pub spacing: i16,
 }
 /// A section's paper in HWPUNIT (1/7200 inch). `width` and `height` describe the paper
 /// upright; `landscape` turns it.

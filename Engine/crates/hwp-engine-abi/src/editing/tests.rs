@@ -5084,14 +5084,37 @@ fn columns_change_for_the_section_and_save() {
     for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
         let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
         let count = |s: &EditSession| s.column_defs(0)[0].column_count;
-        let columns = |count| EditCommand::SetColumns { section: 0, count };
+        let columns = |count| EditCommand::SetColumns {
+            section: 0,
+            count,
+            column_type: None,
+            same_width: None,
+            spacing: None,
+        };
         run(&mut s, columns(2)).unwrap();
         assert_eq!(count(&s), 2);
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         assert_eq!(count(&reopened), 2, "{format:?}");
         run(&mut s, columns(1)).unwrap();
         assert_eq!(count(&s), 1);
-        assert!(s.validate_command(&columns(4)).is_err());
+        // 단 설정: 배분 단 of four with 8 mm between; no column under 10 mm.
+        let setup = EditCommand::SetColumns {
+            section: 0,
+            count: 4,
+            column_type: Some(1),
+            same_width: Some(true),
+            spacing: Some(2268),
+        };
+        run(&mut s, setup).unwrap();
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let expected = ColumnSetup {
+            count: 4,
+            column_type: 1,
+            same_width: true,
+            spacing: 2268,
+        };
+        assert_eq!(reopened.column_setup(0).unwrap(), expected, "{format:?}");
+        assert!(s.validate_command(&columns(60)).is_err());
     }
 }
 

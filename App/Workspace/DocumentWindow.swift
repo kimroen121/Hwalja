@@ -103,6 +103,9 @@ struct DocumentWindow: View {
         .sheet(isPresented: Binding(get: { viewer.sectionSetup != nil }, set: { if !$0 { viewer.sectionSetup = nil } })) {
             if let setup = viewer.sectionSetup { SectionSheet(section: setup.section, setup: setup.setup, viewer: viewer) }
         }
+        .sheet(isPresented: Binding(get: { viewer.columnSetup != nil }, set: { if !$0 { viewer.columnSetup = nil } })) {
+            if let setup = viewer.columnSetup { ColumnSheet(section: setup.section, setup: setup.setup, viewer: viewer) }
+        }
         .background(ClearTitleBar())
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
@@ -293,6 +296,7 @@ final class Viewer: ObservableObject {
     @Published var hyperlinkSheet: HyperlinkEditing?
     @Published var chartData: ChartEditing?
     @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
+    @Published var columnSetup: (section: UInt32, setup: ColumnSetup)?
     @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
     /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.
     @Published var editingStyles = false

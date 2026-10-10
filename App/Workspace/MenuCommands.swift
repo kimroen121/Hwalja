@@ -475,6 +475,8 @@ struct MenuItems {
             ForEach(Array(["하나", "둘", "셋"].enumerated()), id: \.offset) { index, title in
                 Button(title) { viewer?.setColumns(UInt16(index + 1)) }
             }
+            Divider()
+            Button("단 설정…") { viewer?.showColumns() }
         } label: { Label("단", systemImage: Icon.columns) }
         .disabled(viewer == nil || context.locked)
         item("구역 설정…", Icon.section) { viewer?.showSectionSetup() }

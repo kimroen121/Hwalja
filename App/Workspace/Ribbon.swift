@@ -415,6 +415,7 @@ struct ToolRow: View {
     private func columns(_ context: EditingContext) -> some View {
         ToolTile("단", Icon.columns, choices: {
             ["하나", "둘", "셋"].enumerated().map { index, title in Choice(title: title) { viewer.setColumns(UInt16(index + 1)) } }
+                + [nil, Choice(title: "단 설정…") { viewer.showColumns() }]
         })
         .disabled(!context.inBody)
     }

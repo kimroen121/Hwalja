@@ -132,6 +132,10 @@ pub(super) enum Request {
     PageSetup {
         section: u32,
     },
+    /// 단 설정 of a section.
+    Columns {
+        section: u32,
+    },
     /// 쪽 테두리/배경 of a section.
     PageBorder {
         section: u32,
@@ -356,6 +360,9 @@ fn handle(session: &mut EditSession, request: Request) -> Result<*mut HwpEditRes
         }
         Request::PageSetup { section } => {
             HwpEditResult::ok(session.page_setup(section)?, Vec::new())
+        }
+        Request::Columns { section } => {
+            HwpEditResult::ok(session.column_setup(section)?, Vec::new())
         }
         Request::PageBorder { section } => {
             HwpEditResult::ok(session.page_border(section)?, Vec::new())

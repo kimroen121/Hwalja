@@ -658,14 +658,39 @@ impl EditSession {
                 }
                 paragraphs(self.core.document(), target).map(|_| ())
             }
-            EditCommand::SetColumns { section, count } => {
+            EditCommand::SetColumns {
+                section,
+                count,
+                column_type,
+                spacing,
+                ..
+            } => {
                 self.section_exists(*section)?;
                 // rhwp lays every line of a section out at its first definition's width.
-                if (1..=3).contains(count) && self.column_defs(*section).len() == 1 {
-                    Ok(())
-                } else {
-                    Err(EditError::UnsupportedTarget)
+                if self.column_defs(*section).len() != 1 {
+                    return Err(EditError::UnsupportedTarget);
                 }
+                // As in 한/글, a column is at least 10 mm wide.
+                let page = self.page_setup(*section)?;
+                let paper = if page.landscape {
+                    page.height
+                } else {
+                    page.width
+                };
+                let body = paper as i64
+                    - page.margin_left as i64
+                    - page.margin_right as i64
+                    - page.margin_gutter as i64;
+                let gap = spacing.unwrap_or(self.column_defs(*section)[0].spacing) as i64;
+                let n = *count as i64;
+                if *count == 0
+                    || column_type.is_some_and(|t| t > 2)
+                    || gap < 0
+                    || body - gap * (n - 1) < CENTIMETER as i64 * n
+                {
+                    return Err(EditError::InvalidInput);
+                }
+                Ok(())
             }
             EditCommand::SetObject { object, props } => self.validate_object(object, props),
             EditCommand::MergeCells { .. }
@@ -837,6 +862,24 @@ impl EditSession {
         Ok(())
     }
     /// Paper and margins of a section.
+    /// 단 설정 of a section: its first column definition, or one column.
+    pub fn column_setup(&self, section: u32) -> Result<ColumnSetup, EditError> {
+        self.section_exists(section)?;
+        Ok(match self.column_defs(section).first() {
+            Some(d) => ColumnSetup {
+                count: d.column_count.max(1),
+                column_type: d.column_type as u8,
+                same_width: d.same_width,
+                spacing: d.spacing,
+            },
+            None => ColumnSetup {
+                count: 1,
+                column_type: 0,
+                same_width: true,
+                spacing: 0,
+            },
+        })
+    }
     pub fn page_setup(&self, section: u32) -> Result<PageSetup, EditError> {
         let json = self.core.get_page_def_native(section as usize)?;
         serde_json::from_str(&json).map_err(|_| EditError::InvalidInput)
@@ -1782,11 +1825,21 @@ impl EditSession {
                 }
                 Ok(self.kept(0))
             }
-            EditCommand::SetColumns { section, count } => {
-                let current = self.column_defs(*section)[0];
-                let (kind, spacing) = (current.column_type as u8, current.spacing);
-                self.core
-                    .set_column_def_native(*section as usize, *count, kind, true, spacing)?;
+            EditCommand::SetColumns {
+                section,
+                count,
+                column_type,
+                same_width,
+                spacing,
+            } => {
+                let now = self.column_setup(*section)?;
+                self.core.set_column_def_native(
+                    *section as usize,
+                    *count,
+                    column_type.unwrap_or(now.column_type),
+                    same_width.unwrap_or(true),
+                    spacing.unwrap_or(now.spacing),
+                )?;
                 Ok(self.kept(*section))
             }
             EditCommand::HeaderFooter {

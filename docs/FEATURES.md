@@ -165,7 +165,7 @@
 | 줄 번호 | △ | `view/line_number.htm` |  |
 | 쪽 나누기 | ● | `format/break/page_break.htm` |  |
 | 단 나누기 | ● | `format/break/column_break.htm` |  |
-| 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 다단 설정 대화 상자의 단 종류(일반·배분·평행)·너비 같게·간격 ○ `set_column_def_native`. 왼쪽·오른쪽(단 너비 따로)·구분선 △, rhwp가 구역의 줄을 첫 단 정의 너비로 나눔 |
+| 단 | ◐ | `format/columns/columns.htm` | 하나·둘·셋 ●. 단 설정 대화 상자(단 종류 일반·배분·평행 단, 자주 쓰이는 모양 하나·둘·셋, 단 개수, 간격, 단 너비 동일하게; 단 너비 10mm 이상) ●. 왼쪽·오른쪽(단 너비 따로)·구분선 △, rhwp가 구역의 줄을 첫 단 정의 너비로 나눔 |
 | 단 설정 나누기 | △ | `format/break/new_columns.htm` | 단 정의가 둘 이상인 구역의 조판부터 |
 | 구역 설정 | ● | `format/section/section.htm` | 시작 쪽 번호(홀수·짝수는 번호만 건너뛰고 빈 쪽은 넣지 않음), 개체 시작 번호, 첫 쪽에만 감추기, 빈 줄 감추기, 단 사이 간격, 기본 탭 간격. 적용 범위 「새 구역으로」는 구역 나누기와 함께 △ |
 | 구역 나누기 | △ | `format/break/section_break.htm` |  |

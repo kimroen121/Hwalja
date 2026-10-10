@@ -299,10 +299,81 @@ extension Viewer {
             .headerFooter(section: selection?.focus.target.section ?? 0, footer: footer, pageNumber: pageNumber)
         }
     }
+    /// Opens 단 설정 for the section holding the caret.
+    func showColumns() {
+        guard let document else { return }
+        let section = document.selection?.focus.target.section ?? 0
+        Task {
+            guard let setup = try? await document.columns(section: section) else { return NSSound.beep() }
+            columnSetup = (section, setup)
+        }
+    }
+    func setColumns(_ setup: ColumnSetup, section: UInt32) {
+        document?.edit(undoManager) { _ in
+            .setColumns(section: section, count: setup.count, columnType: setup.columnType, sameWidth: setup.sameWidth,
+                        spacing: setup.spacing)
+        }
+    }
     /// 단 하나, 둘 or 셋 for the section holding the caret.
     func setColumns(_ count: UInt16) {
         document?.edit(undoManager) { selection in
             .setColumns(section: selection?.focus.target.section ?? 0, count: count)
+        }
+    }
+}
+
+/// [단 설정]: 단 종류, 자주 쓰이는 모양 with 단 개수, and 너비 및 간격.
+struct ColumnSheet: View {
+    let section: UInt32
+    @ObservedObject var viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    @State private var setup: ColumnSetup
+
+    init(section: UInt32, setup: ColumnSetup, viewer: Viewer) {
+        (self.section, self.viewer) = (section, viewer)
+        _setup = State(initialValue: setup)
+    }
+
+    var body: some View {
+        DialogFrame("단 설정", confirmTitle: "설정") {
+            VStack(alignment: .leading, spacing: 14) {
+                GroupTitle("단 종류")
+                Picker("", selection: $setup.columnType) {
+                    Text("일반 단").tag(UInt8(0))
+                    Text("배분 단").tag(UInt8(1))
+                    Text("평행 단").tag(UInt8(2))
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                .padding(.leading, 12)
+                .disabled(setup.count < 2)
+                GroupTitle("자주 쓰이는 모양")
+                VStack(alignment: .leading, spacing: 8) {
+                    IconTiles(selection: $setup.count, options: [(UInt16(1), "하나"), (2, "둘"), (3, "셋")]) { count, on in
+                        PagePictogram.columns(Int(count), on: on)
+                    }
+                    LabeledField("단 개수") {
+                        SpinField(value: Binding { Double(setup.count) } set: { setup.count = UInt16($0) },
+                                  unit: "", range: 1...255, digits: 0)
+                    }
+                }
+                .padding(.leading, 12)
+                GroupTitle("너비 및 간격")
+                VStack(alignment: .leading, spacing: 8) {
+                    LabeledField("간격") {
+                        SpinField(value: Binding { Units.millimeters(UInt32(max(setup.spacing, 0))) }
+                                  set: { setup.spacing = Int16(clamping: Units.units($0) as Int) },
+                                  unit: "mm", range: 0...100)
+                    }
+                    Toggle("단 너비 동일하게", isOn: $setup.sameWidth)
+                }
+                .padding(.leading, 12)
+                .disabled(setup.count < 2)
+            }
+        } confirm: {
+            viewer.setColumns(setup, section: section)
+            dismiss()
         }
     }
 }
@@ -1213,6 +1284,22 @@ struct SectionSheet: View {
 /// 용지 방향 and 제본 as the web dialog draws them: a page with lines of text, and pages
 /// with 가 (and 나) by their bound edge.
 private enum PagePictogram {
+    /// A page with `count` columns of lines.
+    static func columns(_ count: Int, on: Bool) -> some View {
+        Canvas { context, size in
+            let ink: Color = on ? .accentColor : .secondary
+            let page = CGRect(x: size.width * 0.19, y: size.height * 0.05, width: size.width * 0.62, height: size.height * 0.9)
+            context.stroke(Path(page), with: .color(ink), lineWidth: 1)
+            let gap = 2.0, inner = page.insetBy(dx: 4, dy: 4)
+            let width = (inner.width - gap * Double(count - 1)) / Double(count)
+            for column in 0..<count {
+                let x = inner.minX + Double(column) * (width + gap)
+                for y in stride(from: inner.minY, to: inner.maxY, by: 3) {
+                    context.fill(Path(CGRect(x: x, y: y, width: width, height: 1)), with: .color(ink))
+                }
+            }
+        }
+    }
     static func orientation(_ landscape: Bool, on: Bool) -> some View {
         Canvas { context, size in
             let ink: Color = on ? .accentColor : .secondary

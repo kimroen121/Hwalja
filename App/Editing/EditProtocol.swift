@@ -176,7 +176,8 @@ enum EditCommand: Encodable, Sendable {
     /// 머리말/꼬리말 지우기: the definition `target` is in.
     case deleteHeaderFooter(EditTarget)
     /// 단 하나, 둘 or 셋 for a section with one column definition.
-    case setColumns(section: UInt32, count: UInt16)
+    /// 단 설정: `count` columns; 단 종류, 단 너비 동일하게 and 간격 keep theirs when nil.
+    case setColumns(section: UInt32, count: UInt16, columnType: UInt8? = nil, sameWidth: Bool? = nil, spacing: Int16? = nil)
     /// 새 번호로 시작 at a body position; a paragraph that already starts the kind anew changes its number.
     case newNumber(EditPosition, numbering: NumberKind, number: UInt16)
     /// 현재 쪽만 감추기 for the body paragraph `target`; nothing hidden takes it out.
@@ -196,7 +197,7 @@ enum EditCommand: Encodable, Sendable {
              naturalWidth, naturalHeight, `extension`, description, cell, change, section, page,
              footer, pageNumber, endnote, script, fontSize, color, object, props, equalHeight, mergeFirst, shape, x, y, flip, table, row, line, size, to, order, attach, function, count, target, copy, html, selections, end, dx, dy,
              numbering, number, hide, name, control, kinds, whole, treatAsChar, objects, turn, margins, border, setup, footnote, spec, replacement, up, language, from, all, one, path, guide, memo, formEditable, form, value, chart, uri, bookmark, code,
-             formula, format, separators, vertical
+             formula, format, separators, vertical, columnType, sameWidth, spacing
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
@@ -420,10 +421,13 @@ enum EditCommand: Encodable, Sendable {
         case let .deleteHeaderFooter(target):
             try c.encode("deleteHeaderFooter", forKey: .kind)
             try c.encode(target, forKey: .target)
-        case let .setColumns(section, count):
+        case let .setColumns(section, count, columnType, sameWidth, spacing):
             try c.encode("setColumns", forKey: .kind)
             try c.encode(section, forKey: .section)
             try c.encode(count, forKey: .count)
+            try c.encodeIfPresent(columnType, forKey: .columnType)
+            try c.encodeIfPresent(sameWidth, forKey: .sameWidth)
+            try c.encodeIfPresent(spacing, forKey: .spacing)
         case let .newNumber(position, numbering, number):
             try c.encode("newNumber", forKey: .kind)
             try c.encode(position, forKey: .position)
@@ -694,6 +698,14 @@ enum TableChange: String, Encodable, Sendable {
 /// 시계 방향 90도.
 enum TableTurn: String, Encodable, Sendable, CaseIterable {
     case rows, columns, diagonal, left, half, right
+}
+
+/// A section's 단 설정: 단 종류 0 일반 단, 1 배분 단, 2 평행 단; 간격 in HWPUNIT.
+struct ColumnSetup: Codable, Hashable, Sendable {
+    var count: UInt16
+    var columnType: UInt8
+    var sameWidth: Bool
+    var spacing: Int16
 }
 
 /// A section's paper in HWPUNIT (1/7200 inch); `width` and `height` describe it upright.
@@ -1290,6 +1302,7 @@ enum EngineRequest: Encodable, Sendable {
     case navigate(revision: UInt64, EditPosition, Motion, goalX: Double?)
     case find(query: String, FindOptions)
     case pageSetup(section: UInt32)
+    case columns(section: UInt32)
     case pageBorder(section: UInt32)
     case styleFormat(UInt32)
     case sectionSetup(section: UInt32)
@@ -1385,6 +1398,9 @@ enum EngineRequest: Encodable, Sendable {
             try c.encode(options.wholeWord, forKey: .wholeWord)
         case let .pageSetup(section):
             try c.encode("pageSetup", forKey: .op)
+            try c.encode(section, forKey: .section)
+        case let .columns(section):
+            try c.encode("columns", forKey: .op)
             try c.encode(section, forKey: .section)
         case let .styleFormat(style):
             try c.encode("styleFormat", forKey: .op)

@@ -586,6 +586,9 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     func pageSetup(section: UInt32) async throws -> PageSetup {
         try await session.pageSetup(section: section)
     }
+    func columns(section: UInt32) async throws -> ColumnSetup {
+        try await session.columns(section: section)
+    }
     func pageBorder(section: UInt32) async throws -> PageBorder {
         try await session.pageBorder(section: section)
     }
