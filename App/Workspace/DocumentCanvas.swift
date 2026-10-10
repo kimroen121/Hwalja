@@ -1150,7 +1150,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 return nil
             }
             // 일부분 선택만으로 개체 전체 선택: an object the drag touches.
-            let partial = UserDefaults.standard.bool(forKey: Saving.partialKey)
+            let partial = UserDefaults.standard.bool(forKey: Options.partialKey)
             let chosen = all.filter {
                 let rect = CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height)
                 return ![.table, .equation].contains($0.object.kind) && (partial ? area.intersects(rect) : area.contains(rect))
@@ -1284,19 +1284,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     // MARK: Keyboard
 
-    /// 쉴 때 자동 저장's wait, restarted by each key.
-    private var resting: Task<Void, Never>?
-
     override func keyDown(with event: NSEvent) {
         guard model?.selection != nil || model?.object != nil else { return super.keyDown(with: event) }
         NSCursor.setHiddenUntilMouseMoves(true)
-        resting?.cancel()
-        resting = Saving.idle.map { seconds in
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(seconds))
-                if !Task.isCancelled { Saving.rested(self?.window) }
-            }
-        }
         if onKey?(event) == true { return }
         // <F11> 개체 선택: the object at the caret, or the one before it in turn.
         if event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),

@@ -35,7 +35,7 @@
 | PDF를 오피스 문서로 변환하기 | — | `file/open/open(pdf).htm` | 한컴 변환 서비스 |
 | 그림을 오피스 문서로 변환하기 | — | `file/open/open(picture)_ocr.htm` | 한컴 OCR |
 | XML 문서 | — | `file/xml_document.htm` |  |
-| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 파일은 저장하기로만 바뀐다(한/글처럼 자동 저장은 복구용 임시 파일). 그림으로 저장하기(파일 › 그림으로 저장하기: 폴더·파일 이름·BMP/GIF/PNG/JPG·해상도 72~300DPI, 쪽마다 001·002…) ●, WMF·색 지정 △ |
+| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. macOS 자동 저장과 버전(파일 › 복귀 › 모든 버전 탐색…). 그림으로 저장하기(파일 › 그림으로 저장하기: 폴더·파일 이름·BMP/GIF/PNG/JPG·해상도 72~300DPI, 쪽마다 001·002…) ●, WMF·색 지정 △ |
 | 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 파일 › 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt, 문자 코드 유니코드(UTF-8)·유니코드·유니코드(Big-Endian)·한국(KS))·서식 있는 인터넷 문서(*.html, 쪽 배치 그대로) ●. HWPML(HWPML로 연 문서만) ●. 저장 설정·한/글 97·DOCX·ODT·RTF △, 블록 저장(파일 › 블록 저장…, HWPX·HWP로 스타일·편집 용지·문서 암호를 지킴) ●, 구역이 여럿인 문서의 블록 저장 △ |
 | PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
@@ -227,7 +227,7 @@
 | 글자판 | — | `insert/keyboard/keyboard.htm` | macOS 입력기 |
 | COM 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |
 | 사용자 설정 | — | `view/toolbar/toolbar(edit).htm#bc-1` | 도구 상자 사용자 설정 |
-| 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 파일 탭의 복구용 임시 파일 자동 저장(무조건 자동 저장 1~60분, 쉴 때 자동 저장 1~360초) ●. 나머지는 필요한 항목만 |
+| 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 개체 탭의 일부분 선택만으로 개체 전체 선택 ●. 저장은 macOS 자동 저장을 따른다. 나머지는 필요한 항목만 |
 | 스킨 설정 | — | `tools/skin.htm` | macOS 다크 모드 |
 
 ## 표

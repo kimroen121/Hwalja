@@ -119,7 +119,6 @@ struct DocumentWindow: View {
 
 /// Makes the title bar clear and drops its line, so the window's color runs on from it into
 /// the tool box. SwiftUI sets the title bar up again now and then, so this keeps it clear.
-/// It also makes the document save only when told (`Saving`).
 private struct ClearTitleBar: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { Watcher() }
     func updateNSView(_ view: NSView, context: Context) {}
@@ -136,7 +135,6 @@ private struct ClearTitleBar: NSViewRepresentable {
                 window.observe(\.styleMask) { window, _ in Self.clear(window) },
                 window.observe(\.titlebarSeparatorStyle) { window, _ in Self.clear(window) },
             ]
-            Saving.adopt(window)
         }
         private static func clear(_ window: NSWindow) {
             if !window.styleMask.contains(.fullSizeContentView) { window.styleMask.insert(.fullSizeContentView) }
