@@ -175,7 +175,7 @@ private struct InspectorButton: View {
             Label(pane.rawValue, systemImage: pane.symbol)
         }
         .toggleStyle(.button)
-        .tint(.gray)
+        .tint(.gray.opacity(0.4))
         .help(pane.rawValue)
     }
 }
@@ -848,4 +848,8 @@ private struct Thumbnail: View {
 private struct Drawn: @unchecked Sendable {
     let image: CGImage?
     init(_ image: CGImage?) { self.image = image }
+}
+
+#Preview {
+    DocumentWindow(document: HwpDocument())
 }

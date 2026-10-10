@@ -206,7 +206,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
                         .onEnded { drag in select(at: drag.location.x, width: geometry.size.width) }
                 )
         }
-        .frame(height: 34)
+        .frame(height: 24)
     }
 
     private func select(at x: CGFloat, width: CGFloat) {
@@ -226,7 +226,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
                     label(value)
                         .font(.system(size: 12, weight: selection == value ? .semibold : .regular))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 28)
+                        .frame(height: 24)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -336,4 +336,8 @@ extension Segments {
             selection.wrappedValue = values[$0]
         }
     }
+}
+
+#Preview {
+    TableGrid(viewer: Viewer())
 }

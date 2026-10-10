@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import Hwalja
+@testable import HwaljaKit
 
 func fixture(_ ext: String) throws -> Data {
     try Data(contentsOf: #require(Bundle.module.url(forResource: "generated", withExtension: ext, subdirectory: "Fixtures")))

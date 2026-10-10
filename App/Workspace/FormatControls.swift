@@ -111,3 +111,7 @@ extension View {
 struct RowDivider: View {
     var body: some View { Divider().frame(height: 18).padding(.horizontal, 4) }
 }
+
+#Preview {
+    FontPicker(font: nil, language: nil, pick: { _ in }).padding()
+}

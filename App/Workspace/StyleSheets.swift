@@ -264,3 +264,7 @@ struct StyleReplaceSheet: View {
         }
     }
 }
+
+#Preview {
+    StyleSheet(document: HwpDocument(), viewer: Viewer())
+}

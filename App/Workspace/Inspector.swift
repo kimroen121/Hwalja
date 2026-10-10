@@ -862,3 +862,8 @@ extension View {
         if #available(macOS 26, *) { buttonSizing(.flexible) } else { self }
     }
 }
+
+#Preview {
+    Inspector(document: HwpDocument(), viewer: Viewer())
+        .frame(width: 280, height: 700)
+}

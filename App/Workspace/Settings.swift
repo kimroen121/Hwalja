@@ -19,3 +19,7 @@ struct SettingsView: View {
         .frame(width: 420, alignment: .topLeading)
     }
 }
+
+#Preview {
+    SettingsView()
+}

@@ -647,3 +647,7 @@ private struct SampleLines: View {
         }
     }
 }
+
+#Preview {
+    CharShapeSheet(style: CharStyle(), languages: [], viewer: Viewer())
+}

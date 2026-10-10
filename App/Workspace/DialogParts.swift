@@ -460,3 +460,7 @@ func listTool(_ title: String, _ symbol: String, action: @escaping () -> Void) -
         .help(title)
         .accessibilityLabel(title)
 }
+
+#Preview {
+    ColorWell(hex: .constant("FF0000")).padding()
+}
