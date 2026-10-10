@@ -11,8 +11,8 @@ struct Inspector: View {
     /// The selected object's (or the caret's table's) properties, read again after every edit.
     @State private var props: ObjectProps?
 
-    init(document: HwpDocument, viewer: Viewer, tab: String = "글자") {
-        (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab))
+    init(document: HwpDocument, viewer: Viewer, tab: String? = nil) {
+        (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab ?? viewer.inspectorTab))
     }
 
     static let textTabs = ["글자", "문단", "스타일"]
@@ -38,11 +38,7 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                Picker("", selection: Binding(get: { tab }, set: { chosen = $0 })) {
-                    ForEach(tabs, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                SegmentedChoice(tabs, selection: Binding(get: { tab }, set: { chosen = $0 })) { Text($0) }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             } else {
@@ -58,6 +54,7 @@ struct Inspector: View {
             }
         }
         .controlSize(.small)
+        .onChange(of: chosen) { viewer.inspectorTab = chosen }
         .onChange(of: Self.contextTabs(context)) { old, new in
             // A selected object, 머리말/꼬리말 or 주석 brings its tab up; a table's do not, so typing in cells keeps the tab.
             if let first = new.first, !old.contains(first), !first.hasPrefix("표") { chosen = first }
@@ -372,14 +369,11 @@ private struct ParagraphTab: View {
         let editor = viewer.canvas.editor, paragraph = document.format?.paragraph
         Group {
             Section("정렬") {
-                Picker("정렬", selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
-                    ForEach(Alignment.allCases, id: \.self) { alignment in
-                        let label = FormatChoices.label(alignment)
-                        Image(systemName: label.symbol).help(label.title).accessibilityLabel(label.title).tag(Alignment?.some(alignment))
-                    }
+                SegmentedChoice(Alignment.allCases.map(Optional.some),
+                                selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) { alignment in
+                    let label = FormatChoices.label(alignment!)
+                    Image(systemName: label.symbol).help(label.title).accessibilityLabel(label.title)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 LabeledContent("줄 간격") {
                     NumberStepper(value: paragraph?.lineSpacing, unit: paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt",
                                   range: 50...500, step: 10) {
@@ -389,16 +383,10 @@ private struct ParagraphTab: View {
             }
             Section {
                 let head = paragraph?.head ?? "None"
-                Picker("", selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
+                SegmentedChoice(["None", "Bullet", "Number"], selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
                     editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
                                   : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
-                })) {
-                    Text("없음").tag("None")
-                    Text("글머리표").tag("Bullet")
-                    Text("문단 번호").tag("Number")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                })) { Text(["None": "없음", "Bullet": "글머리표", "Number": "문단 번호"][$0]!) }
                 if head == "Bullet" {
                     LabeledContent("글머리표 모양") {
                         Menu(paragraph?.bullet ?? "") {

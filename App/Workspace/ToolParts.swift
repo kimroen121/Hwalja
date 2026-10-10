@@ -179,3 +179,67 @@ struct TableGrid: View {
         .padding(10)
     }
 }
+
+/// One of several, as the inspector's and sidebar's segmented controls: the segments share the
+/// width, and the selection slides to the one picked.
+struct SegmentedChoice<Value: Hashable, Label: View>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    @ViewBuilder let label: (Value) -> Label
+    @Namespace private var namespace
+    /// White over the track in light mode, a lighter gray in dark mode, as macOS's segmented controls.
+    private static var selectionFill: Color {
+        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.22) : .white })
+    }
+
+    init(_ values: [Value], selection: Binding<Value>, @ViewBuilder label: @escaping (Value) -> Label) {
+        (self.values, _selection, self.label) = (values, selection, label)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(values, id: \.self) { value in
+                let selected = value == selection
+                Button { selection = value } label: {
+                    label(value)
+                        .frame(maxWidth: .infinity, minHeight: 22)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selected ? .primary : .secondary)
+                .background {
+                    if selected {
+                        Capsule().fill(Self.selectionFill).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                            .matchedGeometryEffect(id: "selection", in: namespace)
+                    }
+                }
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: Capsule())
+        .animation(.snappy(duration: 0.25), value: selection)
+    }
+}
+
+/// A divider that resizes the column after it, as a split view's.
+struct ColumnDivider: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    @State private var start: Double?
+
+    var body: some View {
+        Divider()
+            .overlay {
+                Color.clear.frame(width: 7).contentShape(Rectangle())
+                    .onHover { $0 ? NSCursor.resizeLeftRight.push() : NSCursor.pop() }
+                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { drag in
+                            let from = start ?? width
+                            start = from
+                            width = min(max(from - drag.translation.width, range.lowerBound), range.upperBound)
+                        }
+                        .onEnded { _ in start = nil })
+            }
+    }
+}

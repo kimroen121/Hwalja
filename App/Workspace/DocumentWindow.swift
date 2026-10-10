@@ -46,8 +46,8 @@ struct DocumentWindow: View {
                     }
                 }
                 if viewer.showsInspector {
-                    Divider()
-                    Inspector(document: document, viewer: viewer).frame(width: 270)
+                    ColumnDivider(width: $viewer.inspectorWidth, range: 240...480)
+                    Inspector(document: document, viewer: viewer).frame(width: viewer.inspectorWidth)
                 }
             }
         }
@@ -285,6 +285,11 @@ final class Viewer: ObservableObject {
     @Published var showsInspector = UserDefaults.standard.object(forKey: "showsInspector") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showsInspector, forKey: "showsInspector") }
     }
+    @Published var inspectorWidth = UserDefaults.standard.object(forKey: "inspectorWidth") as? Double ?? 270 {
+        didSet { UserDefaults.standard.set(inspectorWidth, forKey: "inspectorWidth") }
+    }
+    /// The inspector's tab, kept while it is hidden.
+    var inspectorTab = "글자"
     func shows(_ pane: TaskPane) -> Bool { showsSidebar && sidebarPane == pane }
     /// Shows `pane`, or hides it when it shows.
     func toggle(_ pane: TaskPane) {
@@ -633,15 +638,9 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("작업 창", selection: $viewer.sidebarPane) {
-                ForEach(TaskPane.allCases, id: \.self) { pane in
-                    Image(systemName: pane.symbol).help(pane.rawValue).accessibilityLabel(pane.rawValue).tag(pane)
-                }
+            SegmentedChoice(TaskPane.allCases, selection: $viewer.sidebarPane) { pane in
+                Image(systemName: pane.symbol).help(pane.rawValue).accessibilityLabel(pane.rawValue)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             switch viewer.sidebarPane {
