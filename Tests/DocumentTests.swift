@@ -1769,8 +1769,9 @@ struct DocumentTests {
         await noted.settle()
         let views: [(String, AnyView)] = [
             ("rows", AnyView(FormatRow(document: document, editor: viewer.canvas.editor).frame(width: 1100))),
-            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 250, height: 520))),
-            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer).frame(width: 250, height: 400))),
+            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 520))),
+            ("paragraphTab", AnyView(Inspector(document: document, viewer: viewer, tab: "문단").frame(width: 270, height: 520))),
+            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),

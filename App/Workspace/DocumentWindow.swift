@@ -47,7 +47,7 @@ struct DocumentWindow: View {
                 }
                 if viewer.showsInspector {
                     Divider()
-                    Inspector(document: document, viewer: viewer).frame(width: 250)
+                    Inspector(document: document, viewer: viewer).frame(width: 270)
                 }
             }
         }
