@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Combine
 import PDFKit
 
@@ -337,6 +338,12 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     var onContextMenu: (() async -> [Choice?])?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
+    /// The text of the paragraph holding the caret, and of the selection, as of a revision, for
+    /// the system's text services and VoiceOver, which ask without waiting.
+    private var paragraphText: (target: EditTarget, revision: UInt64, text: String)?
+    private var selectedText: (selection: EditSelection, revision: UInt64, text: String)?
+    private var reading: Task<Void, Never>?
+    private let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
     /// Latest drag point waiting for the hit test in flight.
     private var pendingDrag: NSPoint?
     /// Last pointer position whose hit belongs to the selection anchor's container.
@@ -670,6 +677,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             linesGeneration += 1
         }
         if oldObject != objectRect { updateCursor() }
+        readText()
+        NSAccessibility.post(element: self, notification: .selectedTextChanged)
         placeCaret()
         // A selected object's caret is at its anchor, which may be far from it: the view
         // moves only when none of the object shows.
@@ -782,7 +791,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         }
         Task { [weak self] in
             await model.settle()
-            guard let self, let choices = await onContextMenu?(), !choices.isEmpty else { return }
+            guard let self, var choices = await onContextMenu?(), !choices.isEmpty else { return }
+            if let lookUp = await lookUpChoice() { choices = [lookUp, nil] + choices }
             NSMenu.popUpContextMenu(DropDown.menu(choices), with: event, for: self)
         }
     }
@@ -1564,6 +1574,10 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     func insertText(_ string: Any, replacementRange: NSRange) {
         let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
+        if markedText.isEmpty, let range = selection(of: replacementRange) {
+            model?.select { _ in range }
+            return replaceSelection(with: text)
+        }
         if !markedText.isEmpty {
             markedText = ""
             model?.compose(text, commit: true, undoManager)
@@ -1574,6 +1588,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
         guard text != markedText else { return }
+        // 한자 바꾸기 composes over the characters it was given.
+        if markedText.isEmpty, let range = selection(of: replacementRange) { model?.select { _ in range } }
         markedText = text
         model?.compose(text, commit: text.isEmpty, undoManager)
     }
@@ -1582,12 +1598,21 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     func markedRange() -> NSRange {
         markedText.isEmpty ? NSRange(location: NSNotFound, length: 0) : NSRange(location: 0, length: markedText.utf16.count)
     }
-    func selectedRange() -> NSRange { NSRange(location: markedText.utf16.count, length: 0) }
+    /// Outside a composition, ranges count UTF-16 units in the paragraph holding the caret.
+    func selectedRange() -> NSRange {
+        markedText.isEmpty ? textSelection()?.range ?? NSRange(location: 0, length: 0) : NSRange(location: markedText.utf16.count, length: 0)
+    }
     func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
-    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? { nil }
+    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
+        guard markedText.isEmpty, let text = currentText().map({ $0 as NSString }) else { return nil }
+        let clamped = NSIntersectionRange(range, NSRange(location: 0, length: text.length))
+        guard clamped.length > 0 || range.length == 0 else { return nil }
+        actualRange?.pointee = clamped
+        return NSAttributedString(string: text.substring(with: clamped))
+    }
     func characterIndex(for point: NSPoint) -> Int { NSNotFound }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        guard let window, let rect = caretRect else { return .zero }
+        guard let window, let rect = highlightRects.first ?? caretRect else { return .zero }
         return window.convertToScreen(convert(rect, to: nil))
     }
 
@@ -1642,4 +1667,190 @@ private extension NSRect {
     init(points a: NSPoint, _ b: NSPoint) {
         self.init(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
+}
+
+// MARK: Text services
+
+extension PageEditor: @preconcurrency NSServicesMenuRequestor {
+    /// Reads the caret's paragraph, and the selection's text once it rests, after a presentation.
+    private func readText() {
+        guard let model, let selection = model.selection, model.object == nil else {
+            (paragraphText, selectedText) = (nil, nil)
+            return
+        }
+        let revision = model.revision, target = selection.focus.target
+        let paragraphRead = paragraphText.map { $0.target == target && $0.revision == revision } ?? false
+        let ranged = selection.anchor != selection.focus && !selection.isCellBlock
+        if !ranged { selectedText = nil }
+        guard !paragraphRead || ranged && selectedText.map({ $0.selection != selection || $0.revision != revision }) ?? true
+        else { return }
+        reading?.cancel()
+        reading = Task { [weak self] in
+            if !paragraphRead, let text = try? await model.paragraph(target).text {
+                guard !Task.isCancelled, model.revision == revision, let self else { return }
+                paragraphText = (target, revision, text)
+                NSAccessibility.post(element: self, notification: .valueChanged)
+            }
+            guard ranged else { return }
+            // A selection being dragged is read once it rests.
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, let text = try? await model.text(of: selection),
+                  !Task.isCancelled, model.revision == revision, let self else { return }
+            selectedText = (selection, revision, text)
+        }
+    }
+
+    /// The caret's paragraph, while it is current.
+    private func currentText() -> String? {
+        guard let model, let read = paragraphText, read.revision == model.revision,
+              read.target == model.selection?.focus.target else { return nil }
+        return read.text
+    }
+    /// The selection as a UTF-16 range of the caret's paragraph, when it lies in it.
+    private func textSelection() -> (text: String, range: NSRange)? {
+        guard let text = currentText(), let selection = model?.selection, selection.anchor.target == selection.focus.target
+        else { return nil }
+        let (start, end) = selection.ordered
+        let lower = Self.utf16(start.scalar, in: text)
+        return (text, NSRange(location: lower, length: Self.utf16(end.scalar, in: text) - lower))
+    }
+    /// A UTF-16 range of the caret's paragraph as a selection.
+    private func selection(of range: NSRange) -> EditSelection? {
+        guard range.location != NSNotFound, let text = currentText(), let target = model?.selection?.focus.target,
+              NSMaxRange(range) <= text.utf16.count else { return nil }
+        let at = { EditPosition(target: target, scalar: Self.scalar($0, in: text)) }
+        return EditSelection(anchor: at(range.location), focus: at(NSMaxRange(range)))
+    }
+    private static func utf16(_ scalar: UInt32, in text: String) -> Int {
+        text.unicodeScalars.prefix(Int(scalar)).reduce(0) { $0 + $1.utf16.count }
+    }
+    private static func scalar(_ utf16: Int, in text: String) -> UInt32 {
+        var units = 0, scalars: UInt32 = 0
+        for scalar in text.unicodeScalars where units < utf16 {
+            units += scalar.utf16.count
+            scalars += 1
+        }
+        return scalars
+    }
+    /// The selected text as copied, while it is current.
+    private var currentSelectedText: String? {
+        guard let model, let read = selectedText, read.revision == model.revision, read.selection == model.selection,
+              !read.text.isEmpty else { return nil }
+        return read.text
+    }
+
+    // 서비스 and 글쓰기 도구.
+    override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?,
+                                 returnType: NSPasteboard.PasteboardType?) -> Any? {
+        let sends = sendType == nil || sendType == .string && currentSelectedText != nil
+        let takes = returnType == nil || returnType == .string && model?.selection != nil && model?.context.locked == false
+        return sends && takes && (sendType != nil || returnType != nil) ? self : super.validRequestor(forSendType: sendType, returnType: returnType)
+    }
+    func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        guard types.contains(.string), let text = currentSelectedText else { return false }
+        pboard.clearContents()
+        return pboard.setString(text, forType: .string)
+    }
+    func readSelection(from pboard: NSPasteboard) -> Bool {
+        guard let text = pboard.string(forType: .string), model?.context.locked == false else { return false }
+        replaceSelection(with: text)
+        return true
+    }
+
+    // 사전에서 찾아보기: a force click or three-finger tap, and the 빠른 메뉴.
+    override func quickLook(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let model, let hit = enginePoint(point) else { return }
+        Task {
+            guard let position = try? await model.hitTest(page: hit.page, x: hit.point.x, y: hit.point.y),
+                  let text = try? await model.paragraph(position.target).text else { return }
+            let units = text as NSString, at = Self.utf16(position.scalar, in: text)
+            var found: NSRange?
+            units.enumerateSubstrings(in: NSRange(location: 0, length: units.length), options: .byWords) { _, range, _, stop in
+                if NSLocationInRange(at, range) || NSMaxRange(range) == at { (found, stop.pointee) = (range, true) }
+            }
+            guard let found else { return }
+            let start = EditPosition(target: position.target, scalar: Self.scalar(found.location, in: text))
+            await showDefinition(units.substring(with: found), at: start)
+        }
+    }
+    /// `“word” 찾아보기` for a selection of a few words.
+    fileprivate func lookUpChoice() async -> Choice? {
+        guard let model, let selection = model.selection, selection.anchor != selection.focus,
+              selection.anchor.target == selection.focus.target,
+              let text = try? await model.text(of: selection).trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty, text.count <= 40, !text.contains(where: \.isNewline) else { return nil }
+        let start = selection.ordered.start
+        return Choice(title: "“\(text)” 찾아보기") { [weak self] in Task { await self?.showDefinition(text, at: start) } }
+    }
+    private func showDefinition(_ word: String, at start: EditPosition) async {
+        guard let rect = try? await model?.caret(at: start), let view = viewRect(rect) else { return }
+        let size = max(9, view.height * 0.8)
+        showDefinition(for: NSAttributedString(string: word, attributes: [.font: NSFont.systemFont(ofSize: size)]),
+                       at: NSPoint(x: view.minX, y: view.maxY - view.height * 0.2))
+    }
+
+    // 맞춤법 및 문법: 지금 문서 검사 finds the next misspelled word from the selection on, in its container.
+    @objc func checkSpelling(_ sender: Any?) {
+        guard let model, let from = model.selection?.ordered.end else { return }
+        commitComposition()
+        let checker = NSSpellChecker.shared, tag = spellTag
+        model.select { model in
+            var (target, scalar) = (from.target, from.scalar)
+            while true {
+                let paragraph = try await model.paragraph(target)
+                let found = checker.checkSpelling(of: paragraph.text, startingAt: Self.utf16(scalar, in: paragraph.text), language: nil,
+                                                  wrap: false, inSpellDocumentWithTag: tag, wordCount: nil)
+                if found.location != NSNotFound {
+                    checker.updateSpellingPanel(withMisspelledWord: (paragraph.text as NSString).substring(with: found))
+                    let at = { EditPosition(target: target, scalar: Self.scalar($0, in: paragraph.text)) }
+                    return EditSelection(anchor: at(found.location), focus: at(NSMaxRange(found)))
+                }
+                guard target.index + 1 < paragraph.count else { break }
+                (target, scalar) = (target.offset(by: 1), 0)
+            }
+            checker.updateSpellingPanel(withMisspelledWord: "")
+            return nil
+        }
+    }
+    @objc func showGuessPanel(_ sender: Any?) {
+        NSSpellChecker.shared.spellingPanel.orderFront(sender)
+        checkSpelling(sender)
+    }
+    /// The 맞춤법 panel's 변경 and 무시.
+    @objc func changeSpelling(_ sender: Any?) {
+        guard let word = (sender as? NSControl)?.selectedCell()?.stringValue, model?.context.locked == false else { return }
+        replaceSelection(with: word)
+    }
+    @objc func ignoreSpelling(_ sender: Any?) {
+        guard let word = (sender as? NSControl)?.selectedCell()?.stringValue else { return }
+        NSSpellChecker.shared.ignoreWord(word, inSpellDocumentWithTag: spellTag)
+    }
+
+    // 말하기: the selection, or the caret's paragraph.
+    private static let speech = AVSpeechSynthesizer()
+    @objc func startSpeaking(_ sender: Any?) {
+        guard let text = currentSelectedText ?? currentText() else { return NSSound.beep() }
+        Self.speech.stopSpeaking(at: .immediate)
+        Self.speech.speak(AVSpeechUtterance(string: text))
+    }
+    @objc func stopSpeaking(_ sender: Any?) { Self.speech.stopSpeaking(at: .immediate) }
+
+    // VoiceOver reads the caret's paragraph as a text area.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
+    override func accessibilityValue() -> Any? { currentText() ?? "" }
+    override func accessibilityNumberOfCharacters() -> Int { currentText()?.utf16.count ?? 0 }
+    override func accessibilitySelectedTextRange() -> NSRange { textSelection()?.range ?? NSRange(location: 0, length: 0) }
+    override func accessibilitySelectedText() -> String? {
+        textSelection().map { ($0.text as NSString).substring(with: $0.range) }
+    }
+    override func accessibilityVisibleCharacterRange() -> NSRange { NSRange(location: 0, length: accessibilityNumberOfCharacters()) }
+    override func accessibilityInsertionPointLineNumber() -> Int { 0 }
+    override func accessibilityLine(for index: Int) -> Int { 0 }
+    override func accessibilityRange(forLine line: Int) -> NSRange { accessibilityVisibleCharacterRange() }
+    override func accessibilityString(for range: NSRange) -> String? {
+        attributedSubstring(forProposedRange: range, actualRange: nil)?.string
+    }
+    override func accessibilityFrame(for range: NSRange) -> NSRect { firstRect(forCharacterRange: range, actualRange: nil) }
 }

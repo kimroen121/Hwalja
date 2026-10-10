@@ -570,6 +570,14 @@ struct MenuBarCommands: Commands {
         }
         CommandGroup(replacing: .textEditing) {
             Menu { items.find } label: { Label("찾기", systemImage: Icon.find) }
+            Menu("맞춤법 및 문법") {
+                Button("맞춤법 및 문법 보기") { send(#selector(NSText.showGuessPanel(_:))) }.keyboardShortcut(":")
+                Button("지금 문서 검사") { send(#selector(NSText.checkSpelling(_:))) }.keyboardShortcut(";")
+            }
+            Menu("말하기") {
+                Button("말하기 시작") { send(#selector(NSTextView.startSpeaking(_:))) }
+                Button("말하기 중단") { send(#selector(NSTextView.stopSpeaking(_:))) }
+            }
         }
         CommandGroup(after: .toolbar) {
             items.view

@@ -88,6 +88,28 @@ struct DocumentTests {
         #expect(try await document.paragraph(body).text == text)
     }
 
+    /// The system's text services see the caret's paragraph, and replace a range of it.
+    @Test func textServicesReadAndReplace() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        let editor = viewer.canvas.editor
+        document.selection = .caret(EditPosition(target: body, scalar: 0))
+        document.type("abc ", nil)
+        await document.settle()
+        let text = try await document.paragraph(body).text
+        let first = NSRange(location: 0, length: 3)
+        for _ in 0..<100 where editor.attributedSubstring(forProposedRange: first, actualRange: nil) == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(editor.attributedSubstring(forProposedRange: first, actualRange: nil)?.string == "abc")
+        #expect(editor.selectedRange() == NSRange(location: 4, length: 0))
+        #expect(editor.accessibilityRole() == .textArea && editor.accessibilityValue() as? String == text)
+        editor.insertText("xyz", replacementRange: first)
+        await document.settle()
+        #expect(try await document.paragraph(body).text == "xyz" + text.dropFirst(3))
+    }
+
     /// A save that starts after an edit was accepted must not overtake that edit.
     @Test(arguments: ["hwp", "hwpx"])
     func immediateSaveIncludesQueuedTyping(ext: String) async throws {

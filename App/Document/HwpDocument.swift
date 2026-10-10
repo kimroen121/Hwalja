@@ -259,6 +259,7 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
     /// still running join one edit, so typing never falls behind the engine.
     func type(_ text: String, _ undoManager: UndoManager?) {
         defer {
+            replaceTypedText(after: text, undoManager)
             linkTypedAddress(after: text, undoManager)
             formatTypedList(after: text, undoManager)
         }
@@ -272,6 +273,32 @@ final class HwpDocument: @preconcurrency ReferenceFileDocument {
             return selection.map { .replace($0, text: typed.text) }
         }
         typing = (queued, typed)
+    }
+
+    /// The system's 텍스트 대치 (키보드 설정): a phrase just ended by a space or punctuation
+    /// becomes its replacement, as its own edit, so one undo gives the typed phrase back.
+    func replaceTypedText(after typed: String, _ undoManager: UndoManager?) {
+        guard let last = typed.unicodeScalars.last, typed.unicodeScalars.count == 1,
+              CharacterSet.whitespaces.union(.punctuationCharacters).contains(last),
+              NSSpellChecker.isAutomaticTextReplacementEnabled else { return }
+        let replacements = NSSpellChecker.shared.userReplacementsDictionary
+        guard !replacements.isEmpty else { return }
+        enqueue { document in
+            guard let caret = document.selection?.focus, caret == document.selection?.anchor, caret.scalar > 0 else { return }
+            let text = try await document.paragraph(caret.target).text
+            let before = text.scalars(0..<caret.scalar - 1)
+            // The longest phrase that starts the paragraph or follows a space.
+            guard let (phrase, replacement) = replacements.filter({ phrase, _ in
+                before.hasSuffix(phrase) && (before.dropLast(phrase.count).last?.isWhitespace ?? true)
+            }).max(by: { $0.key.count < $1.key.count }) else { return }
+            let length = UInt32(phrase.unicodeScalars.count)
+            let start = EditPosition(target: caret.target, scalar: caret.scalar - 1 - length)
+            try await document.run(.replace(EditSelection(anchor: start, focus: EditPosition(target: caret.target, scalar: caret.scalar - 1)),
+                                            text: replacement))
+            document.selection = .caret(EditPosition(target: caret.target,
+                                                     scalar: caret.scalar - length + UInt32(replacement.unicodeScalars.count)))
+            document.registerHistory(.undo, undoManager)
+        }
     }
 
     /// 웹 주소 자동 연결: a web address just ended by a space or Enter becomes a 하이퍼링크,

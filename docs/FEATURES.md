@@ -209,12 +209,12 @@
 
 | 기능 | 상태 | 도움말 | 메모 |
 |---|---|---|---|
-| 맞춤법 | △ | `tools/speller/spelling.htm` | macOS 맞춤법 검사(NSSpellChecker)로 |
-| 한컴 사전 | — | `tools/dictionary/dictionary(haandictionary).htm` | macOS 사전 찾아보기로 대신 |
+| 맞춤법 | ◐ | `tools/speller/spelling.htm` | macOS 편집 › 맞춤법 및 문법: 맞춤법 및 문법 보기(⌘:)·지금 문서 검사(⌘;)가 캐럿의 문단부터 그 영역 끝까지 ●. 입력하는 동안 맞춤법 검사는 아직 |
+| 한컴 사전 | — | `tools/dictionary/dictionary(haandictionary).htm` | macOS 사전 찾아보기(강한 클릭·세 손가락 탭, 빠른 메뉴의 「찾아보기」)로 대신 ● |
 | 한자 사전 | — | `tools/chinese_dictionary.htm` |  |
 | 유의어/반의어 사전 | — | `tools/thesaurus/thesaurus.htm` |  |
 | 번역 | — | `view/workwindow/workwindow(translation).htm#bc-1` | macOS 번역 서비스 |
-| 빠른 교정 | △ | `tools/qcorrect/qcorrect.htm` | macOS 텍스트 대치로 |
+| 빠른 교정 | — | `tools/qcorrect/qcorrect.htm` | macOS 텍스트 대치(키보드 설정)로 대신 ●. 서비스·글쓰기 도구·말하기·VoiceOver는 캐럿의 문단과 선택한 글자를 읽는다 |
 | 한컴 애셋 | — | `tools/asset.htm` |  |
 | 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` | 메일 머지 필드({{1}}) 넣기 △(rhwp가 메일 머지 필드를 만들지 못함; 있는 함수 `set_field_value_by_name`·`fill_template_native`·`repeat_and_fill_table_rows_native`는 누름틀과 표 줄 채우기라 이 흐름에 맞지 않음), 자료 파일(한/글·DBF·한/셀·CSV) 읽기와 출력 방향 △ |
 | 스크립트 매크로 | — | `tools/macro/macro.htm` |  |
