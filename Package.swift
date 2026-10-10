@@ -18,7 +18,8 @@ let package = Package(
             dependencies: ["CHwpEngine", "SwiftMath"],
             path: "App",
             exclude: ["Resources"],
-            linkerSettings: [.unsafeFlags(["-L\(root)/build"])]
+            // Info.plist in the binary too, so a run without the bundle (Xcode, swift run) still has its document types.
+            linkerSettings: [.unsafeFlags(["-L\(root)/build", "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "\(root)/Config/Info.plist"])]
         ),
         // Quick Look preview extension; shares the app's engine and page drawing (Preview/Editing).
         .executableTarget(
