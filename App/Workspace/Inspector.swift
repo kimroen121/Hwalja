@@ -38,9 +38,9 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                SegmentedChoice(tabs, selection: Binding(get: { tab }, set: { chosen = $0 })) { Text($0) }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                SegmentedChoice(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), height: 30) { Text($0).font(.body) }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
             } else {
                 Text(tab).font(.headline).foregroundStyle(.secondary).frame(height: 44)
             }
@@ -82,28 +82,20 @@ struct Inspector: View {
 
     @ViewBuilder private func picture(_ context: EditingContext) -> some View {
         InspectorSection("효과") {
-            LabeledContent("색조") {
-                Picker("색조", selection: Binding(get: { Self.effect(props) }, set: { effect in
-                    viewer.adjustPicture { props in
-                        if effect == "Watermark" { (props.effect, props.brightness, props.contrast) = ("RealPic", 70, -50) } else { props.effect = effect }
-                    }
-                })) {
-                    Text("효과 없음").tag("RealPic")
-                    Text("회색조").tag("GrayScale")
-                    Text("흑백").tag("BlackWhite")
-                    Text("워터마크").tag("Watermark")
+            SegmentedChoice(["RealPic", "GrayScale", "BlackWhite", "Watermark"], selection: Binding(get: { Self.effect(props) }, set: { effect in
+                viewer.adjustPicture { props in
+                    if effect == "Watermark" { (props.effect, props.brightness, props.contrast) = ("RealPic", 70, -50) } else { props.effect = effect }
                 }
-                .labelsHidden()
-                .fixedSize()
-            }
+            })) { Text(["RealPic": "효과 없음", "GrayScale": "회색조", "BlackWhite": "흑백", "Watermark": "워터마크"][$0]!).lineLimit(1).minimumScaleFactor(0.8) }
             PictureSlider(title: "밝기", value: props?.brightness) { value in viewer.adjustPicture { $0.brightness = value } }
             PictureSlider(title: "대비", value: props?.contrast) { value in viewer.adjustPicture { $0.contrast = value } }
         }
-        InspectorSection {
+        InspectorSection("그림") {
             Tiles {
                 command("그림 바꾸기…", Icon.replacePicture) { viewer.replacePicture() }
                 command("삽입 그림 저장하기…", Icon.saveAs) { viewer.savePicture() }
                 command("원본 그림으로", Icon.originalPicture) { MenuItems.restorePicture(viewer) }
+                command("개체 선택", Icon.selectObjects) { viewer.draw("select") }
             }
         }
         arrangement(context, order: false)
@@ -116,52 +108,54 @@ struct Inspector: View {
             }
         }
         arrangement(context, order: true)
+        InspectorSection { Tiles { command("개체 선택", Icon.selectObjects) { viewer.draw("select") } } }
         properties("도형 속성…")
     }
     @ViewBuilder private func chart(_ context: EditingContext) -> some View {
-        InspectorSection {
-            Tiles {
-                command("데이터 편집…", Icon.chartData) { viewer.editChartData() }
-                captions(context)
-            }
-        }
+        InspectorSection { Tiles { command("데이터 편집…", Icon.chartData) { viewer.editChartData() } } }
         InspectorSection("배치") { wrap }
+        captions(context)
     }
-    /// 본문과의 배치, 회전, 순서, 그룹, 개체 보호 and 캡션 of a selected picture or shape.
+    /// 본문과의 배치, 회전, 순서, 그룹, 개체 보호 and 캡션 of a selected picture or shape, each
+    /// shown as its buttons.
     @ViewBuilder private func arrangement(_ context: EditingContext, order: Bool) -> some View {
         InspectorSection("배치") { wrap }
-        InspectorSection("정렬") {
-            Tiles {
-            choices("회전", Icon.rotate, viewer.rotationChoices)
-            if order {
-                choices("순서", Icon.front, [
-                    Choice(title: "맨 앞으로") { viewer.change { .order($0, .front) } },
+        InspectorSection("회전") { ChoiceButtons(items: viewer.rotationChoices) }
+        if order {
+            InspectorSection("순서") {
+                ChoiceButtons(items: [
+                    Choice(title: "맨 앞으로", symbol: Icon.front) { viewer.change { .order($0, .front) } },
                     Choice(title: "앞으로") { viewer.change { .order($0, .forward) } },
                     Choice(title: "뒤로") { viewer.change { .order($0, .backward) } },
-                    Choice(title: "맨 뒤로") { viewer.change { .order($0, .back) } },
+                    Choice(title: "맨 뒤로", symbol: Icon.back) { viewer.change { .order($0, .back) } },
                 ])
             }
-            choices("그룹", Icon.group, viewer.groupChoices)
-            choices("개체 보호", Icon.protect, viewer.protectionChoices)
-            captions(context)
-            command("개체 선택", Icon.selectObjects) { viewer.draw("select") }
-            }
         }
+        InspectorSection("그룹") { ChoiceButtons(items: viewer.groupChoices) }
+        InspectorSection("개체 보호") { ChoiceButtons(items: viewer.protectionChoices, columns: 1) }
+        captions(context)
     }
     /// 글자처럼 취급, and 어울림, 자리 차지, 글 앞으로 or 글 뒤로 for an object out of the line.
     @ViewBuilder private var wrap: some View {
         let inLine = props?.treatAsChar == true
         Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) }))
-        let wraps = [("어울림", "Square", Icon.wrapSquare), ("자리 차지", "TopAndBottom", Icon.wrapTopAndBottom),
-                     ("글 앞으로", "InFrontOfText", Icon.inFrontOfText), ("글 뒤로", "BehindText", Icon.behindText)]
-        PopUpField(title: inLine ? "" : wraps.first { $0.1 == props?.textWrap }?.0 ?? "", items: wraps.map { title, wrap, symbol in
-            Choice(title: title, symbol: symbol, on: !inLine && props?.textWrap == wrap) { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: wrap)) }
-        })
+        let wraps = ["Square": ("어울림", Icon.wrapSquare), "TopAndBottom": ("자리 차지", Icon.wrapTopAndBottom),
+                     "InFrontOfText": ("글 앞으로", Icon.inFrontOfText), "BehindText": ("글 뒤로", Icon.behindText)]
+        SegmentedChoice(["Square", "TopAndBottom", "InFrontOfText", "BehindText"],
+                        selection: Binding(get: { inLine ? "" : props?.textWrap ?? "" }, set: { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: $0)) })) { wrap in
+            VStack(spacing: 3) {
+                Image(systemName: wraps[wrap]!.1)
+                Text(wraps[wrap]!.0).font(.caption).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .padding(.vertical, 4)
+        }
         .disabled(inLine || props == nil)
     }
     private func captions(_ context: EditingContext) -> some View {
-        choices("캡션", Icon.caption, Captions.all.map { caption in Choice(title: caption.title) { viewer.insertCaption(caption.value) } })
-            .disabled(!context.canCaption)
+        InspectorSection("캡션") {
+            CaptionGrid { viewer.insertCaption($0) }
+        }
+        .disabled(!context.canCaption)
     }
     /// The object's own dialog, under the last group.
     private func properties(_ title: String) -> some View {
@@ -169,43 +163,41 @@ struct Inspector: View {
     }
 
     @ViewBuilder private func tableDesign(_ context: EditingContext) -> some View {
-        InspectorSection {
-            Tiles {
-                choices("셀 테두리/배경", Icon.cellBorder, [
-                    Choice(title: "각 셀마다 적용…") { viewer.showCellBorder(one: false) },
-                    Choice(title: "하나의 셀처럼 적용…") { viewer.showCellBorder(one: true) },
-                ])
-                captions(context)
-            }
+        InspectorSection("셀 테두리/배경") {
+            ChoiceButtons(items: [
+                Choice(title: "각 셀마다 적용…") { viewer.showCellBorder(one: false) },
+                Choice(title: "하나의 셀처럼 적용…") { viewer.showCellBorder(one: true) },
+            ], columns: 1)
             TransparentLinesToggle(viewer: viewer)
         }
         InspectorSection("배치") { wrap }
+        captions(context)
         properties("표 속성…")
     }
     @ViewBuilder private func tableLayout(_ context: EditingContext) -> some View {
-        InspectorSection("줄/칸") {
-            Tiles {
-            choices("줄/칸 추가하기", Icon.insertRow, [
-                Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
-                Choice(title: "아래쪽에 줄 추가하기") { viewer.editTable(.insertRowBelow) }, nil,
-                Choice(title: "왼쪽에 칸 추가하기") { viewer.editTable(.insertColumnLeft) },
-                Choice(title: "오른쪽에 칸 추가하기") { viewer.editTable(.insertColumnRight) },
+        InspectorSection("줄/칸 추가하기") {
+            ChoiceButtons(items: [
+                Choice(title: "위쪽에 줄", symbol: "arrow.up.to.line") { viewer.editTable(.insertRowAbove) },
+                Choice(title: "아래쪽에 줄", symbol: "arrow.down.to.line") { viewer.editTable(.insertRowBelow) },
+                Choice(title: "왼쪽에 칸", symbol: "arrow.left.to.line") { viewer.editTable(.insertColumnLeft) },
+                Choice(title: "오른쪽에 칸", symbol: "arrow.right.to.line") { viewer.editTable(.insertColumnRight) },
             ])
-            choices("줄/칸 지우기", Icon.deleteRow, [
-                Choice(title: "줄 지우기") { viewer.editTable(.deleteRow) }, nil,
-                Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) },
+        }
+        InspectorSection("줄/칸 지우기") {
+            ChoiceButtons(items: [
+                Choice(title: "줄 지우기", symbol: Icon.deleteRow) { viewer.editTable(.deleteRow) },
+                Choice(title: "칸 지우기", symbol: Icon.deleteRow) { viewer.editTable(.deleteColumn) },
             ])
-            }
         }
         InspectorSection("셀") {
             Tiles {
-            command("셀 나누기…", Icon.splitCells) { viewer.splittingCells = true }
-            Group {
-                command("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
-                command("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
-                command("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
-            }
-            .disabled(!context.cellBlock)
+                command("셀 나누기…", Icon.splitCells) { viewer.splittingCells = true }
+                Group {
+                    command("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
+                    command("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
+                    command("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
+                }
+                .disabled(!context.cellBlock)
             }
         }
         InspectorSection("표") {
@@ -216,31 +208,24 @@ struct Inspector: View {
             }
         }
         InspectorSection("계산식") {
-            Tiles {
-            choices("블록 계산식", Icon.blockCalculation, MenuItems.blockFunctions.map { function in
-                Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
-            })
-            .disabled(!context.cellBlock)
-            command("계산식…", Icon.calculation) { viewer.calculating = true }
-                .disabled(context.cellBlock)
-            }
+            ChoiceButtons(items: MenuItems.blockFunctions.map { function in
+                Choice(title: function.title, enabled: context.cellBlock) { viewer.editCells { .calculateBlock($0, function.function) } }
+            } + [Choice(title: "계산식…", symbol: Icon.calculation, enabled: !context.cellBlock) { viewer.calculating = true }])
         }
     }
 
     @ViewBuilder private func headerFooter(_ context: EditingContext) -> some View {
-        InspectorSection {
-            Tiles {
-            choices("머리말", Icon.header, MenuItems.headerChoices(viewer, footer: false))
-            choices("꼬리말", Icon.footer, MenuItems.headerChoices(viewer, footer: true))
-            choices("상용구", Icon.autoText, [("전체 쪽수", PageCode.total), ("현재 쪽 번호", .page), ("현재 쪽/전체 쪽수", .pageOfTotal)]
+        InspectorSection("머리말") { ChoiceButtons(items: MenuItems.headerChoices(viewer, footer: false)) }
+        InspectorSection("꼬리말") { ChoiceButtons(items: MenuItems.headerChoices(viewer, footer: true)) }
+        InspectorSection("상용구") {
+            ChoiceButtons(items: [("전체 쪽수", PageCode.total), ("현재 쪽 번호", .page), ("현재 쪽/전체 쪽수", .pageOfTotal)]
                 .map { title, code in Choice(title: title) { viewer.insertPageCode(code) } })
-            command("편집 용지…", Icon.pageSetup) { viewer.showPageSetup() }
-            }
         }
         InspectorSection {
             Tiles {
                 command("이전 머리말/꼬리말", Icon.previous) { viewer.goTo(.previousHeaderFooter) }
                 command("다음 머리말/꼬리말", Icon.next) { viewer.goTo(.nextHeaderFooter) }
+                command("편집 용지…", Icon.pageSetup) { viewer.showPageSetup() }
                 command("지우기", Icon.eraseCodes) { document.deleteHeaderFooter(viewer.undoManager) }
             }
         } footer: {
@@ -267,10 +252,6 @@ struct Inspector: View {
         Button(action: action) { TileLabel(title: title, symbol: symbol) }
             .buttonStyle(TileStyle())
     }
-    /// A tile opening a menu of `items`.
-    private func choices(_ title: String, _ symbol: String, _ items: [Choice?]) -> some View {
-        MenuTile(title: title, symbol: symbol, items: items)
-    }
 
     /// 색조 as the picker reads it; 워터마크 is no effect at its brightness and contrast.
     private static func effect(_ props: ObjectProps?) -> String {
@@ -289,30 +270,6 @@ struct DialogButtons<Content: View>: View {
     }
 }
 
-/// `Choice`s as SwiftUI menu items: buttons, checked ones, submenus and separators.
-struct ChoiceItems: View {
-    let items: [Choice?]
-    var body: some View {
-        ForEach(items.indices, id: \.self) { index in
-            if let item = items[index] {
-                if !item.submenu.isEmpty {
-                    Menu(item.title) { ChoiceItems(items: item.submenu) }
-                } else if item.on {
-                    Toggle(item.title, isOn: Binding(get: { true }, set: { _ in item.action() }))
-                        .disabled(!item.enabled)
-                } else {
-                    Button(action: item.action) {
-                        if let image = item.image { Label { Text(item.title) } icon: { Image(nsImage: image) } } else { Text(item.title) }
-                    }
-                    .disabled(!item.enabled)
-                }
-            } else {
-                Divider()
-            }
-        }
-    }
-}
-
 /// 글자: font, size, character styles and colors, and 글자 모양 for the rest.
 private struct CharacterTab: View {
     @ObservedObject var document: HwpDocument
@@ -328,6 +285,15 @@ private struct CharacterTab: View {
                 PopUpField(title: font ?? "", items: FormatChoices.families.map { family in
                     Choice(title: family.name, on: family.family == font) { editor.format(CharStyle(language: language, font: family.family)) }
                 })
+                HStack(spacing: 8) {
+                    JoinedButtons(items: [
+                        ("진하게", "bold", text?.bold == true, { editor.toggleBold() }),
+                        ("기울임", "italic", text?.italic == true, { editor.toggleItalic() }),
+                        ("밑줄", "underline", text?.underline == true, { editor.toggleUnderline() }),
+                        ("취소선", "strikethrough", text?.strikethrough == true, { editor.toggleStrikethrough() }),
+                    ])
+                    NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
+                }
                 LabeledContent("언어") {
                     Picker("언어", selection: $language) {
                         Text("대표").tag(Int?.none)
@@ -336,17 +302,8 @@ private struct CharacterTab: View {
                     .labelsHidden()
                     .fixedSize()
                 }
-                LabeledContent("크기") {
-                    NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
-                }
             }
-            InspectorSection("모양") {
-                HStack(spacing: 6) {
-                    flag("진하게", "bold", text?.bold) { editor.toggleBold() }
-                    flag("기울임", "italic", text?.italic) { editor.toggleItalic() }
-                    flag("밑줄", "underline", text?.underline) { editor.toggleUnderline() }
-                    flag("취소선", "strikethrough", text?.strikethrough) { editor.toggleStrikethrough() }
-                }
+            InspectorSection {
                 LabeledContent("글자 색") {
                     ColorPicker("글자 색", selection: color(text?.color ?? "#000000") { editor.format(CharStyle(color: $0)) }, supportsOpacity: false)
                         .labelsHidden()
@@ -363,24 +320,19 @@ private struct CharacterTab: View {
         .disabled(!document.context.canFormat)
     }
 
-    private func flag(_ title: String, _ symbol: String, _ on: Bool?, toggle: @escaping () -> Void) -> some View {
-        Button(action: toggle) { Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(maxWidth: .infinity, minHeight: 30) }
-            .buttonStyle(ChoiceStyle(on: on == true))
-            .help(title)
-            .accessibilityLabel(title)
-    }
     private func color(_ hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
         Binding(get: { HexColor.color(hex) }, set: { set(HexColor.hex($0)) })
     }
 }
 
-/// 문단: alignment, line spacing and lists, and 문단 모양 for the rest.
+/// 문단: alignment, line spacing and lists, each choice in sight, and 문단 모양 for the rest.
 private struct ParagraphTab: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
 
     var body: some View {
         let editor = viewer.canvas.editor, paragraph = document.format?.paragraph
+        let head = paragraph?.head ?? "None"
         Group {
             InspectorSection("정렬") {
                 SegmentedChoice(Alignment.allCases.map(Optional.some),
@@ -395,31 +347,29 @@ private struct ParagraphTab: View {
                     }
                 }
             }
-            InspectorSection {
-                let head = paragraph?.head ?? "None"
+            InspectorSection("글머리표 및 문단 번호") {
                 SegmentedChoice(["None", "Bullet", "Number"], selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
                     editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
                                   : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
                 })) { Text(["None": "없음", "Bullet": "글머리표", "Number": "문단 번호"][$0]!) }
                 if head == "Bullet" {
-                    LabeledContent("글머리표 모양") {
-                        Menu(paragraph?.bullet ?? "") {
-                            ForEach(FormatChoices.bullets, id: \.self) { bullet in
-                                Button(bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
-                            }
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
+                        ForEach(FormatChoices.bullets, id: \.self) { bullet in
+                            Button(bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
+                                .buttonStyle(ChoiceStyle(on: paragraph?.bullet == bullet))
+                                .frame(height: 30)
                         }
-                        .fixedSize()
                     }
+                    .buttonStyle(ChoiceStyle())
                 } else if head == "Number" {
-                    LabeledContent("문단 번호 모양") {
-                        Menu(paragraph?.numbering.map { FormatChoices.numberings[$0][0] } ?? "") {
-                            ForEach(FormatChoices.numberings.indices, id: \.self) { kind in
-                                Button(FormatChoices.numberings[kind].joined(separator: " ")) {
-                                    editor.format(ParaStyle(head: "Number", numbering: kind))
-                                }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
+                        ForEach(FormatChoices.numberings.indices, id: \.self) { kind in
+                            Button { editor.format(ParaStyle(head: "Number", numbering: kind)) } label: {
+                                Text(FormatChoices.numberings[kind].prefix(3).joined(separator: " ")).lineLimit(1).minimumScaleFactor(0.7)
+                                    .frame(maxWidth: .infinity, minHeight: 30)
                             }
+                            .buttonStyle(ChoiceStyle(on: paragraph?.numbering == kind))
                         }
-                        .fixedSize()
                     }
                 }
                 if head != "None" {
@@ -427,8 +377,6 @@ private struct ParagraphTab: View {
                         Stepper("\((paragraph?.level ?? 0) + 1)", onIncrement: { editor.stepLevel(by: 1) }, onDecrement: { editor.stepLevel(by: -1) })
                     }
                 }
-            } header: {
-                Text("글머리표 및 문단 번호")
             } footer: {
                 DialogButtons {
                     Button("문단 번호 모양…") { viewer.editingList = "문단 번호" }
@@ -681,16 +629,65 @@ private struct PopUpField: View {
     }
 }
 
-/// A tile opening a menu of `items` under it.
-private struct MenuTile: View {
-    let title: String
-    let symbol: String
+/// `Choice`s as buttons in sight, two to a row (or `columns`), in place of a menu.
+private struct ChoiceButtons: View {
     let items: [Choice?]
-    @State private var anchor = Anchor()
+    var columns = 2
     var body: some View {
-        Button { DropDown.show(items, below: anchor.view) } label: { TileLabel(title: title, symbol: symbol, menu: true) }
-            .buttonStyle(TileStyle())
-            .background(AnchorView(anchor: anchor))
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columns), spacing: 6) {
+            ForEach(items.compactMap { $0 }.indices, id: \.self) { index in
+                let item = items.compactMap { $0 }[index]
+                Button(action: item.action) {
+                    HStack(spacing: 6) {
+                        if let image = item.image { Image(nsImage: image) } else if let symbol = item.symbol { Image(systemName: symbol) }
+                        if !item.title.isEmpty { Text(item.title).lineLimit(1).minimumScaleFactor(0.75) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                    .padding(.horizontal, 4)
+                }
+                .buttonStyle(ChoiceStyle(on: item.on))
+                .disabled(!item.enabled)
+                .help(item.title)
+            }
+        }
+    }
+}
+
+/// 캡션: the nine places around the object as a grid, 캡션 없음 at its middle.
+private struct CaptionGrid: View {
+    let insert: (String) -> Void
+    var body: some View {
+        let places = ["LeftTop", "Top", "RightTop", "LeftCenter", "None", "RightCenter", "LeftBottom", "Bottom", "RightBottom"]
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+            ForEach(places, id: \.self) { place in
+                let title = Captions.all.first { $0.value == place }!.title
+                Button { insert(place) } label: {
+                    Text(title).font(.caption).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(ChoiceStyle())
+                .help(title)
+            }
+        }
+    }
+}
+
+/// Toggles joined in one bar, as Keynote's 진하게, 기울임, 밑줄 and 취소선: those on in the accent color.
+private struct JoinedButtons: View {
+    let items: [(title: String, symbol: String, on: Bool, action: () -> Void)]
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items.indices, id: \.self) { index in
+                if index > 0 { Divider().frame(height: 14).opacity(items[index].on || items[index - 1].on ? 0 : 1) }
+                Button(action: items[index].action) {
+                    Image(systemName: items[index].symbol).font(.system(size: 14, weight: .medium)).frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .buttonStyle(ChoiceStyle(on: items[index].on, quiet: true))
+                .help(items[index].title)
+                .accessibilityLabel(items[index].title)
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 
@@ -702,7 +699,9 @@ struct TileStyle: ButtonStyle {
 /// A button that shows a choice: filled with the accent color while it is on.
 struct ChoiceStyle: ButtonStyle {
     var on = false
-    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 7) }
+    /// No fill until the pointer is over it, for buttons on a bar of their own.
+    var quiet = false
+    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 7, quiet: quiet) }
 }
 /// A dialog's button as wide as the inspector.
 struct WideButtonStyle: ButtonStyle {
@@ -716,19 +715,20 @@ private struct Face<Label: View>: View {
     let configuration: ButtonStyleConfiguration
     let on: Bool
     let radius: CGFloat
+    var quiet = false
     var label: Label
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
 
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, label: () -> Label) {
-        (self.configuration, self.on, self.radius, self.label) = (configuration, on, radius, label())
+    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, quiet: Bool = false, label: () -> Label) {
+        (self.configuration, self.on, self.radius, self.quiet, self.label) = (configuration, on, radius, quiet, label())
     }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         label
             .foregroundStyle(on ? AnyShapeStyle(.white) : enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
             .background {
-                if on { shape.fill(Color.accentColor) } else { shape.fill(hovering || configuration.isPressed ? .tertiary : .quaternary) }
+                if on { shape.fill(Color.accentColor) } else if hovering || configuration.isPressed { shape.fill(.tertiary) } else if !quiet { shape.fill(.quaternary) }
             }
             .contentShape(shape)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
@@ -738,7 +738,7 @@ private struct Face<Label: View>: View {
     }
 }
 extension Face where Label == ButtonStyleConfiguration.Label {
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat) {
-        self.init(configuration: configuration, on: on, radius: radius) { configuration.label }
+    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, quiet: Bool = false) {
+        self.init(configuration: configuration, on: on, radius: radius, quiet: quiet) { configuration.label }
     }
 }

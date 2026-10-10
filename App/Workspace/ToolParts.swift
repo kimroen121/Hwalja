@@ -209,11 +209,12 @@ struct ShapeTiles: View {
 struct SegmentedChoice<Value: Hashable, Label: View>: View {
     let values: [Value]
     @Binding var selection: Value
+    var height: CGFloat = 24
     @ViewBuilder let label: (Value) -> Label
     @Namespace private var namespace
 
-    init(_ values: [Value], selection: Binding<Value>, @ViewBuilder label: @escaping (Value) -> Label) {
-        (self.values, _selection, self.label) = (values, selection, label)
+    init(_ values: [Value], selection: Binding<Value>, height: CGFloat = 24, @ViewBuilder label: @escaping (Value) -> Label) {
+        (self.values, _selection, self.height, self.label) = (values, selection, height, label)
     }
 
     var body: some View {
@@ -222,23 +223,33 @@ struct SegmentedChoice<Value: Hashable, Label: View>: View {
                 let selected = value == selection
                 Button { selection = value } label: {
                     label(value)
-                        .frame(maxWidth: .infinity, minHeight: 24)
+                        .frame(maxWidth: .infinity, minHeight: height)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                 .background {
                     if selected {
-                        Capsule().fill(Color.accentColor).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
-                            .matchedGeometryEffect(id: "selection", in: namespace)
+                        Capsule().accentGlass().matchedGeometryEffect(id: "selection", in: namespace)
                     }
                 }
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .padding(2)
-        .background(.quaternary, in: Capsule())
-        .animation(.snappy(duration: 0.25), value: selection)
+        .glassCapsule()
+        .animation(.snappy(duration: 0.3), value: selection)
+    }
+}
+
+extension Shape {
+    /// The selection in Liquid Glass tinted with the accent color on macOS 26 and later, the accent color before it.
+    @ViewBuilder func accentGlass() -> some View {
+        if #available(macOS 26, *) {
+            fill(.clear).glassEffect(.regular.tint(.accentColor).interactive(), in: self)
+        } else {
+            fill(Color.accentColor).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+        }
     }
 }
 

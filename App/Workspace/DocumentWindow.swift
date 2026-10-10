@@ -57,7 +57,7 @@ struct DocumentWindow: View {
                 }
             }
         }
-        .toolbar { DocumentToolbar(document: document, viewer: viewer) }
+        .modifier(DocumentToolbarModifier(items: DocumentToolbar(document: document, viewer: viewer)))
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
@@ -159,22 +159,101 @@ private struct DocumentToolbar: ToolbarContent {
     let viewer: Viewer
 
     var body: some ToolbarContent {
-        // One group, so macOS 26 draws them in one capsule of glass as Keynote's.
+        inserts
+        objects
+        find
+        format
+        documentPane
+    }
+
+    @ToolbarContentBuilder var inserts: some ToolbarContent {
         ToolbarItemGroup {
             InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
             InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
+        }
+    }
+    @ToolbarContentBuilder var objects: some ToolbarContent {
+        ToolbarItemGroup {
             InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
             InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
         }
-        ToolbarItem(placement: .primaryAction) {
+    }
+    @ToolbarContentBuilder var find: some ToolbarContent {
+        ToolbarItem {
             Button { viewer.showFind(replace: false) } label: { Label("찾기", systemImage: Icon.find) }.help("찾기")
         }
-        // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
-        ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(InspectorPane.allCases, id: \.self) { InspectorButton(viewer: viewer, pane: $0) }
+    }
+    // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
+    @ToolbarContentBuilder var format: some ToolbarContent {
+        ToolbarItem { InspectorButton(viewer: viewer, pane: .format) }
+    }
+    @ToolbarContentBuilder var documentPane: some ToolbarContent {
+        ToolbarItem { InspectorButton(viewer: viewer, pane: .document) }
+    }
+}
+
+/// The same toolbar on macOS 26 and later, each group in a capsule of glass of its own as
+/// Keynote's (the toolbar puts items side by side into one capsule).
+@available(macOS 26, *)
+private struct GlassToolbar: ToolbarContent {
+    let items: DocumentToolbar
+    var body: some ToolbarContent {
+        let document = items.document, viewer = items.viewer
+        ToolbarItem {
+            GlassGroup {
+                InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
+                InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
+                InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
+                InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
+            }
         }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem {
+            GlassGroup {
+                InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
+                InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
+            }
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem {
+            GlassGroup {
+                Button { viewer.showFind(replace: false) } label: { Label("찾기", systemImage: Icon.find) }.help("찾기")
+            }
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem {
+            GlassGroup {
+                InspectorButton(viewer: viewer, pane: .format)
+                InspectorButton(viewer: viewer, pane: .document)
+            }
+        }
+        .sharedBackgroundVisibility(.hidden)
+    }
+}
+
+/// Toolbar buttons in one capsule of glass.
+@available(macOS 26, *)
+private struct GlassGroup<Content: View>: View {
+    @ViewBuilder let content: Content
+    var body: some View {
+        HStack(spacing: 10) { content }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .toggleStyle(.button)
+            .imageScale(.large)
+            .controlSize(.large)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .glassEffect(.regular.interactive(), in: .capsule)
+    }
+}
+
+private struct DocumentToolbarModifier: ViewModifier {
+    let items: DocumentToolbar
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) { content.toolbar { GlassToolbar(items: items) } } else { content.toolbar { items } }
     }
 }
 
