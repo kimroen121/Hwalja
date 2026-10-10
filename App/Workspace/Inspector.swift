@@ -590,19 +590,14 @@ struct Tiles<Content: View>: View {
     }
 }
 
-/// A tile's face: a large icon over the name, with ⌄ when it opens a menu.
+/// A tile's face: a large icon over the name.
 struct TileLabel: View {
     let title: String
     let symbol: String
-    var menu = false
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: symbol).font(.system(size: 19)).frame(height: 22)
-            HStack(spacing: 2) {
-                Text(title).lineLimit(2).multilineTextAlignment(.center)
-                if menu { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary) }
-            }
-            .font(.callout)
+            Text(title).lineLimit(2).multilineTextAlignment(.center).font(.callout)
         }
         .frame(maxWidth: .infinity, minHeight: 66)
         .padding(.horizontal, 4)

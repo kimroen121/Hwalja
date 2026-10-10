@@ -82,28 +82,9 @@ struct Choice {
     var action: () -> Void = {}
 }
 
-/// The view a drop-down opens below.
-final class Anchor {
-    weak var view: NSView?
-}
-struct AnchorView: NSViewRepresentable {
-    let anchor: Anchor
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        anchor.view = view
-        return view
-    }
-    func updateNSView(_ view: NSView, context: Context) { anchor.view = view }
-}
-
-/// Native pop-up menus for the tool rows.
+/// Native menus made of `Choice`s.
 @MainActor
 enum DropDown {
-    static func show(_ choices: [Choice?], below view: NSView?) {
-        guard let view else { return }
-        let y = view.isFlipped ? view.bounds.maxY + 2 : -2
-        menu(choices).popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: view)
-    }
     static func menu(_ choices: [Choice?]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -210,6 +191,8 @@ struct Segments: NSViewRepresentable {
         var title: String?
         var symbol: String?
         var help: String
+        /// Choices the segment holds, shown by its menu arrow.
+        var menu: [Choice?] = []
     }
     let segments: [Segment]
     let on: [Bool]
@@ -240,6 +223,8 @@ struct Segments: NSViewRepresentable {
             control.setLabel(segment.title ?? "", forSegment: index)
             control.setImage(segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
             control.setToolTip(segment.help, forSegment: index)
+            control.setMenu(segment.menu.isEmpty ? nil : DropDown.menu(segment.menu), forSegment: index)
+            control.setShowsMenuIndicator(!segment.menu.isEmpty, forSegment: index)
             control.setSelected(on.indices.contains(index) && on[index], forSegment: index)
         }
     }
@@ -266,6 +251,47 @@ extension Segments {
                           emphasized: Bool = true, segment: (Value) -> Segment) {
         self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized) {
             selection.wrappedValue = values[$0]
+        }
+    }
+}
+
+/// macOS's combo box: a value typed, or picked from `items`; `commit` takes either.
+struct ComboField: NSViewRepresentable {
+    let value: String
+    let items: [String]
+    let commit: (String) -> Void
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let box = NSComboBox()
+        box.completes = false
+        box.numberOfVisibleItems = 15
+        box.alignment = .right
+        box.target = context.coordinator
+        box.action = #selector(Coordinator.committed(_:))
+        box.delegate = context.coordinator
+        return box
+    }
+    func updateNSView(_ box: NSComboBox, context: Context) {
+        context.coordinator.commit = commit
+        box.controlSize = context.environment.controlSize == .small || context.environment.controlSize == .mini ? .small : .regular
+        box.font = .systemFont(ofSize: NSFont.systemFontSize(for: box.controlSize))
+        box.isEnabled = context.environment.isEnabled
+        if box.objectValues as? [String] != items {
+            box.removeAllItems()
+            box.addItems(withObjectValues: items)
+        }
+        if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(commit: commit) }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate {
+        var commit: (String) -> Void
+        init(commit: @escaping (String) -> Void) { self.commit = commit }
+        @objc func committed(_ box: NSComboBox) { commit(box.stringValue) }
+        func comboBoxSelectionDidChange(_ notification: Notification) {
+            guard let box = notification.object as? NSComboBox, box.indexOfSelectedItem >= 0,
+                  let item = box.itemObjectValue(at: box.indexOfSelectedItem) as? String else { return }
+            commit(item)
         }
     }
 }

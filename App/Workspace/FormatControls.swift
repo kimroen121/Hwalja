@@ -65,8 +65,8 @@ enum FormatChoices {
 }
 
 /// 서식 도구 상자, a thin bar as Scrivener's and TextEdit's: style, font, size, character
-/// styles with line shapes, colors, alignment, line spacing and lists. It observes only the
-/// document's format and context, so typing never rebuilds it.
+/// styles with line shapes, colors, alignment, line spacing and lists, in macOS's own
+/// controls. It observes only the document's format and context, so typing never rebuilds it.
 struct FormatRow: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
@@ -75,11 +75,11 @@ struct FormatRow: View {
 
     var body: some View {
         let context = document.context
-        HStack(spacing: 3) {
+        HStack(spacing: 6) {
             StyleField(document: document, editor: editor)
             Group {
                 LanguageField(language: $language)
-                FontField(document: document, editor: editor, language: language, width: 128)
+                FontField(document: document, editor: editor, language: language)
                 SizeField(size: document.format?.text.size, editor: editor)
                 RowDivider()
                 CharacterButtons(document: document, editor: editor)
@@ -113,12 +113,16 @@ struct FormatRow: View {
 struct StyleField: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
-    var width: CGFloat = 84
     var body: some View {
-        FieldBox(title: "스타일", opensWhenClicked: true, choices: { FormatRow.styles(document, editor) }) {
-            Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
-                .lineLimit(1).frame(width: width, alignment: .leading)
+        Picker("스타일", selection: Binding(get: { document.format?.style }, set: { id in
+            if let id { document.applyStyle(id, editor.undoManager) }
+        })) {
+            if document.format == nil { Text("스타일").tag(UInt32?.none) }
+            ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
         }
+        .labelsHidden()
+        .frame(width: 110)
+        .help("스타일")
         .disabled(!document.context.canApplyStyle)
     }
 }
@@ -127,92 +131,105 @@ struct StyleField: View {
 struct LanguageField: View {
     @Binding var language: Int?
     var body: some View {
-        FieldBox(title: "언어", opensWhenClicked: true, choices: {
-            ([nil] + CharShapeSheet.languageNames.indices.map { $0 }).map { index in
-                Choice(title: index.map { CharShapeSheet.languageNames[$0] } ?? "대표", on: index == language) {
-                    language = index
-                }
-            }
-        }) {
-            Text(language.map { CharShapeSheet.languageNames[$0] } ?? "대표").lineLimit(1).frame(width: 44, alignment: .leading)
+        Picker("언어", selection: $language) {
+            Text("대표").tag(Int?.none)
+            ForEach(CharShapeSheet.languageNames.indices, id: \.self) { Text(CharShapeSheet.languageNames[$0]).tag(Int?.some($0)) }
         }
+        .labelsHidden()
+        .fixedSize()
+        .help("언어")
     }
 }
 
-/// 글꼴 of `language`, picked from the installed families, built only when the menu opens.
+/// 글꼴 of `language`, picked from the installed families; a font that is not installed is shown as it is named.
 struct FontField: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
     let language: Int?
-    var width: CGFloat?
     var body: some View {
         let languages = document.format?.languages ?? []
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? document.format?.text.font
-        FieldBox(title: "글꼴", opensWhenClicked: true, choices: {
-            FormatChoices.families.map { family in
-                Choice(title: family.name, on: family.name == font || family.family == font) {
-                    editor.format(CharStyle(language: language, font: family.family))
-                }
-            }
-        }) {
-            Text(font ?? "글꼴").lineLimit(1).frame(maxWidth: width ?? .infinity, alignment: .leading)
+        let family = font.map { font in FormatChoices.families.first { $0.name == font || $0.family == font }?.family ?? font }
+        Picker("글꼴", selection: Binding(get: { family ?? "" }, set: { editor.format(CharStyle(language: language, font: $0)) })) {
+            if let family, !FormatChoices.families.contains(where: { $0.family == family }) { Text(family).tag(family) }
+            if family == nil { Text("글꼴").tag("") }
+            ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }
         }
+        .labelsHidden()
+        .frame(width: 140)
+        .help("글꼴")
     }
 }
 
-/// 진하게, 기울임, 밑줄 and 취소선 with their line shapes, 글자 색 and 형광펜.
+/// 진하게, 기울임, 밑줄 and 취소선, 밑줄 and 취소선 holding their line shapes and colors in
+/// their menus, and 글자 색 and 형광펜.
 struct CharacterButtons: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
     var body: some View {
         let text = document.format?.text
-        ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
-        ToolIcon("기울임", glyph: Text("가").italic(), on: text?.italic == true) { editor.toggleItalic() }
-        ToolIcon("밑줄", glyph: Text("가").underline(), on: text?.underline == true) { editor.toggleUnderline() }
-        ShapeMenu(title: "밑줄", colorTitle: "밑줄 색", pick: editor.format,
-                  shape: { CharStyle(underline: true, underlineShape: $0) },
-                  color: { CharStyle(underline: true, underlineColor: $0) })
-        ToolIcon("취소선", glyph: Text("가").strikethrough(), on: text?.strikethrough == true) { editor.toggleStrikethrough() }
-        ShapeMenu(title: "취소선", colorTitle: "취소선 색", pick: editor.format,
-                  shape: { CharStyle(strikethrough: true, strikeShape: $0) },
-                  color: { CharStyle(strikethrough: true, strikeColor: $0) })
-        ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
-                  colors: FormatChoices.colors, initial: "#ff0000") { editor.format(CharStyle(color: $0)) }
-        ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
-                  colors: FormatChoices.highlights, initial: FormatChoices.highlights[0], clears: true) { editor.format(CharStyle(shade: $0)) }
+        let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void, menu: [Choice?])] = [
+            ("진하게", "bold", text?.bold, editor.toggleBold, []),
+            ("기울임", "italic", text?.italic, editor.toggleItalic, []),
+            ("밑줄", "underline", text?.underline, editor.toggleUnderline,
+             lines("밑줄 색", { CharStyle(underline: true, underlineShape: $0) }, { CharStyle(underline: true, underlineColor: $0) })),
+            ("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough,
+             lines("취소선 색", { CharStyle(strikethrough: true, strikeShape: $0) }, { CharStyle(strikethrough: true, strikeColor: $0) })),
+        ]
+        Segments(segments: styles.map { .init(symbol: $0.symbol, help: $0.title, menu: $0.menu) }, on: styles.map { $0.on == true }, any: true) {
+            styles[$0].toggle()
+        }
+        .fixedSize()
+        ColorPicker("글자 색", selection: color(text?.color ?? "#000000") { editor.format(CharStyle(color: $0)) }, supportsOpacity: false)
+            .labelsHidden()
+            .help("글자 색")
+        ColorPicker("형광펜", selection: color(text?.shade ?? FormatChoices.none) { editor.format(CharStyle(shade: $0)) }, supportsOpacity: false)
+            .labelsHidden()
+            .help("형광펜")
+    }
+
+    /// Line shapes for underline or strikethrough, drawn as in the web editor, and the line's colors.
+    private func lines(_ colorTitle: String, _ shape: @escaping (Int) -> CharStyle,
+                       _ color: @escaping (String) -> CharStyle) -> [Choice?] {
+        LineShapes.names.indices.map { index in Choice(title: "", image: LineShapes.images[index]) { editor.format(shape(index)) } }
+            + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: FormatChoices.colors.map { hex in
+                Choice(title: "", image: FormatChoices.swatch(hex)) { editor.format(color(hex)) }
+            })]
+    }
+    private func color(_ hex: String, set: @escaping (String) -> Void) -> Binding<Color> {
+        Binding(get: { HexColor.color(hex) }, set: { set(HexColor.hex($0)) })
     }
 }
 
-/// The paragraph alignments, the caret's lit.
+/// The paragraph alignments, the caret's picked.
 struct AlignmentButtons: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
     var body: some View {
-        ForEach(Alignment.allCases, id: \.self) { alignment in
-            let label = FormatChoices.label(alignment)
-            ToolIcon(label.title, symbol: label.symbol, on: document.format?.paragraph.alignment == alignment) {
-                editor.format(ParaStyle(alignment: alignment))
-            }
+        Segments(Alignment.allCases.map(Optional.some),
+                 selection: Binding(get: { document.format?.paragraph.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
+            let label = FormatChoices.label($0!)
+            return .init(symbol: label.symbol, help: label.title)
         }
+        .fixedSize()
     }
 }
 
-/// 글머리표 and 문단 번호, each turned on or off, its shapes beside it.
+/// 글머리표 and 문단 번호, each turned on or off, its shapes in its menu.
 struct ListButtons: View {
     @ObservedObject var document: HwpDocument
     let editor: PageEditor
     var body: some View {
         let head = document.format?.paragraph.head
-        ToolIcon("글머리표", symbol: Icon.bullets, on: head == "Bullet") { MenuItems.toggleList(editor, head: head, bullet: true) }
-        MenuArrow(title: "글머리표") {
-            FormatChoices.bullets.map { bullet in Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) } }
+        let bullets = FormatChoices.bullets.map { bullet in Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) } }
+        let numberings = FormatChoices.numberings.indices.map { kind in
+            Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) { editor.format(ParaStyle(head: "Number", numbering: kind)) }
         }
-        ToolIcon("문단 번호", symbol: Icon.numbering, on: head == "Number") { MenuItems.toggleList(editor, head: head, bullet: false) }
-        MenuArrow(title: "문단 번호") {
-            FormatChoices.numberings.indices.map { kind in
-                Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) { editor.format(ParaStyle(head: "Number", numbering: kind)) }
-            }
+        Segments(segments: [.init(symbol: Icon.bullets, help: "글머리표", menu: bullets), .init(symbol: Icon.numbering, help: "문단 번호", menu: numberings)],
+                 on: [head == "Bullet", head == "Number"], any: true) {
+            MenuItems.toggleList(editor, head: head, bullet: $0 == 0)
         }
+        .fixedSize()
     }
 }
 
@@ -220,29 +237,20 @@ struct ListButtons: View {
 struct SizeField: View {
     let size: Double?
     let editor: PageEditor
-    @State private var text = ""
-
     var body: some View {
-        FieldBox(title: "글자 크기", choices: {
-            FormatChoices.sizes.map { value in
-                Choice(title: FormatChoices.points(value), on: value == size) { editor.format(CharStyle(size: value)) }
+        HStack(spacing: 2) {
+            ComboField(value: size.map(Self.label) ?? "", items: FormatChoices.sizes.map(Self.label)) { text in
+                if let value = Double(text), value != size { editor.format(CharStyle(size: min(max(value, 1), 4096))) }
             }
-        }) {
-            HStack(spacing: 2) {
-                NumberField(text: $text) { Double($0).map { editor.format(CharStyle(size: min(max($0, 1), 4096))) } }
-                    .frame(width: 34)
-                Text("pt").foregroundStyle(.secondary)
-                VStack(spacing: 0) {
-                    StepArrow(symbol: "chevron.up") { editor.stepFontSize(by: 1) }
-                    StepArrow(symbol: "chevron.down") { editor.stepFontSize(by: -1) }
-                }
-            }
+            .frame(width: 58)
+            Text("pt").foregroundStyle(.secondary)
+            Stepper("글자 크기", onIncrement: { editor.stepFontSize(by: 1) }, onDecrement: { editor.stepFontSize(by: -1) })
+                .labelsHidden()
         }
-        .onAppear { text = Self.label(size) }
-        .onChange(of: size) { text = Self.label(size) }
+        .help("글자 크기")
     }
-    private static func label(_ size: Double?) -> String {
-        size.map { String(format: "%.1f", $0) } ?? ""
+    private static func label(_ size: Double) -> String {
+        size.rounded() == size ? "\(Int(size))" : String(format: "%.1f", size)
     }
 }
 
@@ -250,226 +258,45 @@ struct SizeField: View {
 struct SpacingField: View {
     let paragraph: ParaStyle?
     let editor: PageEditor
-    @State private var text = ""
-
     var body: some View {
-        FieldBox(title: "줄 간격", choices: {
-            FormatChoices.lineSpacings.map { percent in
-                Choice(title: "\(Int(percent)) %", on: paragraph?.lineSpacingKind == .percent && paragraph?.lineSpacing == percent) {
-                    editor.format(ParaStyle(lineSpacing: percent, lineSpacingKind: .percent))
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.up.and.down.text.horizontal").foregroundStyle(.secondary)
+            ComboField(value: paragraph?.lineSpacing.map(Self.label) ?? "", items: FormatChoices.lineSpacings.map(Self.label)) { text in
+                if let value = Double(text), value != paragraph?.lineSpacing || paragraph?.lineSpacingKind != .percent {
+                    editor.format(ParaStyle(lineSpacing: min(max(value, 50), 500), lineSpacingKind: .percent))
                 }
             }
-        }) {
-            HStack(spacing: 3) {
-                Image(systemName: "arrow.up.and.down.text.horizontal").font(.system(size: 12, weight: .light))
-                NumberField(text: $text) { Double($0).map { editor.format(ParaStyle(lineSpacing: min(max($0, 50), 500), lineSpacingKind: .percent)) } }
-                    .frame(width: 30)
-                Text(paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt").foregroundStyle(.secondary)
-            }
+            .frame(width: 58)
+            Text(paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt").foregroundStyle(.secondary)
         }
-        .onAppear { text = Self.label(paragraph) }
-        .onChange(of: paragraph?.lineSpacing) { text = Self.label(paragraph) }
+        .help("줄 간격")
     }
-    private static func label(_ paragraph: ParaStyle?) -> String {
-        guard let value = paragraph?.lineSpacing else { return "" }
-        return value.rounded() == value ? "\(Int(value))" : String(format: "%.1f", value)
+    private static func label(_ value: Double) -> String {
+        value.rounded() == value ? "\(Int(value))" : String(format: "%.1f", value)
     }
 }
 
-/// A borderless number field for a `FieldBox`.
-private struct NumberField: View {
-    @Binding var text: String
-    let submit: (String) -> Void
-    var body: some View {
-        TextField("", text: $text)
-            .textFieldStyle(.plain)
-            .multilineTextAlignment(.trailing)
-            .monospacedDigit()
-            .onSubmit { submit(text) }
-    }
-}
-
-/// A small arrow of a size stepper.
-struct StepArrow: View {
-    let symbol: String, action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 6, weight: .semibold)).frame(width: 12, height: 9)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(ToolButtonStyle())
-    }
-}
-
-/// A value in a rounded box with a ▾ that opens its choices, shared by 글꼴, 글자 크기
-/// and 줄 간격 so they read as one family. `opensWhenClicked` makes the whole box open them.
-private struct FieldBox<Content: View>: View {
-    let title: String
-    var opensWhenClicked = false
-    let choices: () -> [Choice?]
-    @ViewBuilder let content: Content
-    @State private var anchor = Anchor()
-
-    var body: some View {
-        HStack(spacing: 0) {
-            if opensWhenClicked {
-                Button(action: open) { HStack(spacing: 0) { content.padding(.leading, 7); Chevron() }.contentShape(Rectangle()) }
-                    .buttonStyle(.plain)
-            } else {
-                content.padding(.leading, 5)
-                Button(action: open) { Chevron().contentShape(Rectangle()) }.buttonStyle(.plain)
-            }
-        }
-        .fieldBox()
-        .background(AnchorView(anchor: anchor))
-        .help(title)
-    }
-    private func open() { DropDown.show(choices(), below: anchor.view) }
-}
-
-/// Line shapes for underline or strikethrough, drawn as in the web editor, with the
-/// line's color below them.
-private struct ShapeMenu: View {
-    let title: String, colorTitle: String
-    let pick: (CharStyle) -> Void
-    let shape: (Int) -> CharStyle, color: (String) -> CharStyle
-    var body: some View {
-        MenuArrow(title: title) {
-            let shapes: [Choice?] = LineShapes.names.indices.map { index in
-                Choice(title: "", image: LineShapes.images[index]) { pick(shape(index)) }
-            }
-            let colors: [Choice?] = FormatChoices.colors.map { hex in
-                Choice(title: "", image: FormatChoices.swatch(hex)) { pick(self.color(hex)) }
-            }
-            return shapes + [nil, Choice(title: colorTitle, symbol: "paintbrush.pointed", submenu: colors)]
-        }
-    }
-}
-
-/// The small arrow beside a format button that opens its choices.
-private struct MenuArrow: View {
-    let title: String
-    let choices: () -> [Choice?]
-    @State private var anchor = Anchor()
-    var body: some View {
-        Button { DropDown.show(choices(), below: anchor.view) } label: { Chevron() }
-            .buttonStyle(ToolButtonStyle())
-            .background(AnchorView(anchor: anchor))
-            .help(title)
-    }
-}
-
-/// The small arrow that opens a button's choices.
-struct Chevron: View {
-    var body: some View {
-        Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).frame(width: 14, height: 22)
-    }
-}
-
-/// A color button, as 한/글's: the symbol over a bar of the color last picked, which the
-/// button applies; the arrow beside it opens the palette.
-struct ColorMenu: View {
-    let title: String, symbol: String, current: String
-    let colors: [String]
-    /// Offers `FormatChoices.none` after the colors.
-    var clears = false
-    let pick: (String) -> Void
-    @AppStorage private var last: String
-    @State private var open = false
-
-    init(title: String, symbol: String, current: String, colors: [String], initial: String, clears: Bool = false,
-         pick: @escaping (String) -> Void) {
-        (self.title, self.symbol, self.current, self.colors, self.clears, self.pick) = (title, symbol, current, colors, clears, pick)
-        _last = AppStorage(wrappedValue: initial, "lastColor.\(title)")
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Button { pick(last) } label: {
-                VStack(spacing: 1) {
-                    Image(systemName: symbol).font(.system(size: 12, weight: .light))
-                    Rectangle().fill(HexColor.color(last)).frame(width: 14, height: 3)
-                }
-                .frame(width: 20, height: 22)
-            }
-            .buttonStyle(ToolButtonStyle())
-            .help(title)
-            Button { open = true } label: { Chevron() }
-                .buttonStyle(ToolButtonStyle(on: open))
-                .help(title)
-                .popover(isPresented: $open, arrowEdge: .bottom) {
-                    HStack(spacing: 4) {
-                        ForEach(colors + (clears ? [FormatChoices.none] : []), id: \.self) { hex in
-                            Button {
-                                open = false
-                                last = hex
-                                pick(hex)
-                            } label: {
-                                Image(nsImage: FormatChoices.swatch(hex, none: clears && hex == FormatChoices.none))
-                                    .padding(3)
-                            }
-                            .buttonStyle(ToolButtonStyle(on: hex == current))
-                        }
-                    }
-                    .padding(8)
-                }
-        }
-    }
-}
-
-/// A small icon (or glyph) button for the format row; `on` keeps it highlighted.
+/// A small icon (or glyph) button, borderless as a bar's.
 struct ToolIcon: View {
-    let title: String, icon: AnyView, on: Bool, action: () -> Void
-    init(_ title: String, symbol: String, on: Bool = false, action: @escaping () -> Void) {
-        self.init(title, icon: AnyView(Image(systemName: symbol).font(.system(size: 13, weight: .light))), on: on, action: action)
+    let title: String, icon: AnyView, action: () -> Void
+    init(_ title: String, symbol: String, action: @escaping () -> Void) {
+        self.init(title, icon: AnyView(Image(systemName: symbol)), action: action)
     }
-    init(_ title: String, glyph: Text, on: Bool = false, action: @escaping () -> Void) {
-        self.init(title, icon: AnyView(glyph.font(.system(size: 14))), on: on, action: action)
-    }
-    private init(_ title: String, icon: AnyView, on: Bool, action: @escaping () -> Void) {
-        (self.title, self.icon, self.on, self.action) = (title, icon, on, action)
+    private init(_ title: String, icon: AnyView, action: @escaping () -> Void) {
+        (self.title, self.icon, self.action) = (title, icon, action)
     }
     var body: some View {
-        Button(action: action) {
-            icon.frame(width: 24, height: 22)
-        }
-        .buttonStyle(ToolButtonStyle(on: on))
-        .help(title)
-        .accessibilityLabel(title)
-    }
-}
-
-/// Flat button that shows a background on hover, press and when on.
-struct ToolButtonStyle: ButtonStyle {
-    var on = false
-    func makeBody(configuration: Configuration) -> some View {
-        Styled(configuration: configuration, on: on)
-    }
-    private struct Styled: View {
-        let configuration: Configuration
-        let on: Bool
-        @State private var hovering = false
-        @Environment(\.isEnabled) private var enabled
-        var body: some View {
-            configuration.label
-                .foregroundStyle(enabled ? .primary : .tertiary)
-                .background(RoundedRectangle(cornerRadius: 5).fill(fill))
-                .contentShape(Rectangle())
-                .onHover { hovering = $0 }
-        }
-        private var fill: Color {
-            if on || configuration.isPressed { return Color.primary.opacity(0.14) }
-            return hovering && enabled ? Color.primary.opacity(0.07) : .clear
-        }
+        Button(action: action) { icon }
+            .buttonStyle(.borderless)
+            .help(title)
+            .accessibilityLabel(title)
     }
 }
 
 extension View {
-    /// The rounded box of the format row's fields and the dialogs' number fields.
-    func fieldBox() -> some View {
-        frame(height: 22)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+    /// A button that shows a choice: bordered, and in the accent color while it is on.
+    @ViewBuilder func choice(_ on: Bool) -> some View {
+        if on { buttonStyle(.borderedProminent).accessibilityAddTraits(.isSelected) } else { buttonStyle(.bordered) }
     }
 }
 

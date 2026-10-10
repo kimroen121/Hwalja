@@ -962,7 +962,7 @@ struct PageBorderSheet: View {
         } label: {
             SideIcon(sides: sides)
         }
-        .buttonStyle(ToolButtonStyle(on: down))
+        .choice(down)
         .help(title)
         .accessibilityLabel(title)
     }
@@ -1321,10 +1321,7 @@ struct NoteShapeSheet: View {
     /// One character, as 기호 모양 and the 장식 문자 take.
     private func character(_ text: Binding<String>) -> some View {
         TextField("", text: Binding { text.wrappedValue } set: { text.wrappedValue = String($0.suffix(1)) })
-            .textFieldStyle(.plain)
-            .padding(.leading, 6)
             .frame(width: 44)
-            .fieldBox()
     }
     @ViewBuilder private func margin(_ title: String, _ value: Binding<Int32>) -> some View {
         FieldLabel(title)
@@ -1828,7 +1825,7 @@ struct CellBorderSheet: View {
         } label: {
             SideIcon(sides: which)
         }
-        .buttonStyle(ToolButtonStyle(on: down))
+        .choice(down)
         .help(title)
         .accessibilityLabel(title)
     }
@@ -1892,7 +1889,7 @@ struct CellBorderSheet: View {
             .frame(width: 22, height: 22)
             .padding(3)
         }
-        .buttonStyle(ToolButtonStyle(on: on))
+        .choice(on)
         .help(title)
         .accessibilityLabel(title)
     }

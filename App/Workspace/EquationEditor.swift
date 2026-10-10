@@ -183,7 +183,7 @@ struct PaletteGrid: View {
                                 .padding(.vertical, symbols ? 2 : 4)
                                 .frame(minWidth: symbols ? 22 : 30, minHeight: symbols ? 22 : 30)
                         }
-                        .buttonStyle(ToolButtonStyle())
+                        .buttonStyle(.borderless)
                         .help(item.script)
                     }
                 }
@@ -241,7 +241,7 @@ private struct PaletteButton: View {
             .padding(.horizontal, 4)
             .frame(height: 30)
         }
-        .buttonStyle(ToolButtonStyle(on: open))
+        .choice(open)
         .help(name)
         .accessibilityLabel(name)
         .background {

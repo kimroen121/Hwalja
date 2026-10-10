@@ -161,7 +161,7 @@ struct LabeledField<Content: View>: View {
     var body: some View { HStack(spacing: 10) { Text(title); content } }
 }
 
-/// A number with its unit and step arrows in a box, clamped to `range`.
+/// A number with its unit and a stepper, clamped to `range`.
 struct SpinField: View {
     @Binding var value: Double
     let unit: String
@@ -169,74 +169,36 @@ struct SpinField: View {
     var step = 1.0
     var digits = 1
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             TextField("", value: Binding { value } set: { value = min(max($0, range.lowerBound), range.upperBound) },
                       format: .number.precision(.fractionLength(0...digits)))
-                .textFieldStyle(.plain)
+                .multilineTextAlignment(.trailing)
                 .monospacedDigit()
-                .frame(width: 56)
+                .frame(width: 64)
             Text(unit).foregroundStyle(.secondary).frame(minWidth: 18, alignment: .leading).fixedSize()
-            VStack(spacing: 0) {
-                StepArrow(symbol: "chevron.up") { value = min(value + step, range.upperBound) }
-                StepArrow(symbol: "chevron.down") { value = max(value - step, range.lowerBound) }
-            }
+            Stepper("", value: $value, in: range, step: step).labelsHidden()
         }
-        .padding(.leading, 6)
-        .fieldBox()
     }
 }
 
-/// A color as a drop-down like the others: the color in a box with ▾, opening the
-/// palette and the system colors. `none` offers no color, drawn slashed.
+/// A color: macOS's color well, and 없음 where `none` offers no color.
 struct ColorWell: View {
     @Binding var hex: String
     var none: String?
-    @State private var open = false
+    @State private var last = "#000000"
     var body: some View {
-        Button { open = true } label: {
-            HStack(spacing: 0) {
-                Image(nsImage: Swatches.bar(hex, none: hex == none)).padding(.leading, 7)
-                    .frame(minWidth: 100, alignment: .leading)
-                Chevron()
-            }
-            .contentShape(Rectangle())
+        HStack(spacing: 10) {
+            ColorPicker("", selection: Binding { HexColor.color(hex) } set: { hex = HexColor.hex($0) }, supportsOpacity: false)
+                .labelsHidden()
+                .disabled(hex == none)
+            if let none { Toggle("없음", isOn: Binding { hex == none } set: { hex = $0 ? none : last }) }
         }
-        .buttonStyle(.plain)
-        .fieldBox()
-        .popover(isPresented: $open, arrowEdge: .bottom) {
-            HStack(spacing: 4) {
-                ForEach(([none].compactMap { $0 }) + FormatChoices.colors, id: \.self) { color in
-                    Button {
-                        open = false
-                        hex = color
-                    } label: {
-                        Image(nsImage: FormatChoices.swatch(color, none: color == none)).padding(3)
-                    }
-                    .buttonStyle(ToolButtonStyle(on: color == hex))
-                }
-                ColorPicker("", selection: Binding { HexColor.color(hex) } set: { hex = HexColor.hex($0) },
-                            supportsOpacity: false)
-                    .labelsHidden()
-            }
-            .padding(8)
-        }
+        .onChange(of: hex, initial: true) { if hex != none { last = hex } }
     }
 }
 
 /// Pictures for the line, width, color and pattern drop-downs, as the web dialogs draw them.
 enum Swatches {
-    /// A wide box of a color; no color is white with a red slash.
-    static func bar(_ hex: String, none: Bool = false) -> NSImage {
-        NSImage(size: NSSize(width: 56, height: 12), flipped: true) { rect in
-            let box = rect.insetBy(dx: 0.5, dy: 0.5)
-            (none ? NSColor.white : NSColor(HexColor.color(hex))).setFill()
-            box.fill()
-            NSColor.secondaryLabelColor.setStroke()
-            NSBezierPath(rect: box).stroke()
-            if none { slash(box) }
-            return true
-        }
-    }
     private static func slash(_ box: NSRect) {
         let path = NSBezierPath()
         path.move(to: NSPoint(x: box.minX, y: box.maxY))
@@ -413,14 +375,12 @@ enum Units {
     }
 }
 
-/// A drop-down in a dialog, drawn like the format row's boxes (글꼴, 글자 크기): the
-/// current choice in a rounded box with ▾, opening a native menu with it checked.
+/// A drop-down in a dialog: macOS's pop-up button, its choices as names or pictures.
 struct ChoiceField<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
     var images: [NSImage]?
     var minWidth: CGFloat = 0
-    @State private var anchor = Anchor()
 
     init(_ selection: Binding<Value>, _ options: [(value: Value, title: String)],
          images: [NSImage]? = nil, minWidth: CGFloat = 0) {
@@ -428,36 +388,17 @@ struct ChoiceField<Value: Hashable>: View {
     }
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: 0) {
-                label.padding(.leading, 7).frame(minWidth: minWidth, alignment: .leading)
-                Spacer(minLength: 4)
-                Chevron()
+        Picker("", selection: $selection) {
+            ForEach(options.indices, id: \.self) { i in
+                Group {
+                    if let images { Image(nsImage: images[i]).accessibilityLabel(options[i].title) } else { Text(options[i].title) }
+                }
+                .tag(options[i].value)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .labelsHidden()
+        .frame(minWidth: minWidth)
         .fixedSize()
-        .fieldBox()
-        .background(AnchorView(anchor: anchor))
-        .accessibilityLabel(current?.title ?? "")
-    }
-
-    private var index: Int? { options.firstIndex { $0.value == selection } }
-    private var current: (value: Value, title: String)? { index.map { options[$0] } }
-    @ViewBuilder private var label: some View {
-        if let images, let index {
-            Image(nsImage: images[index])
-        } else {
-            Text(current?.title ?? "").lineLimit(1)
-        }
-    }
-    private func open() {
-        DropDown.show(options.indices.map { i in
-            Choice(title: images == nil ? options[i].title : "", image: images?[i], on: options[i].value == selection) {
-                selection = options[i].value
-            }
-        }, below: anchor.view)
     }
 }
 
@@ -472,8 +413,7 @@ struct IconTiles<Value: Hashable, Picture: View>: View {
                 Button { selection = option.value } label: {
                     picture(option.value, selection == option.value).frame(width: 30, height: 30).padding(4)
                 }
-                .buttonStyle(ToolButtonStyle(on: selection == option.value))
-                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                .choice(selection == option.value)
                 .help(option.title)
                 .accessibilityLabel(option.title)
             }
@@ -484,7 +424,7 @@ struct IconTiles<Value: Hashable, Picture: View>: View {
 /// A small icon button beside a list, named by its help tag.
 func listTool(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
     Button(action: action) { Image(systemName: symbol).frame(width: 22, height: 20) }
-        .buttonStyle(ToolButtonStyle())
+        .buttonStyle(.borderless)
         .help(title)
         .accessibilityLabel(title)
 }

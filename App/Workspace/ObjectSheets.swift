@@ -208,7 +208,7 @@ struct ObjectSheet: View {
                 }
             }
             .dialogTabs()
-            .frame(height: 420)
+            .frame(height: 470)
         } confirm: {
             viewer.setObject(state.object, props.changes(from: state.props))
             if let original = state.cell { viewer.setCell(original.target, cell.changes(from: original.props)) }
@@ -402,7 +402,7 @@ struct ObjectSheet: View {
                 HStack(spacing: 4) {
                     ForEach([(UInt32(0), "직각"), (20, "둥근 모양"), (50, "반원")], id: \.0) { rate, title in
                         Button { props.roundRate = rate } label: { Pictogram.corner(rate) }
-                            .buttonStyle(ToolButtonStyle(on: props.roundRate == rate))
+                            .choice(props.roundRate == rate)
                             .help(title)
                             .accessibilityLabel(title)
                     }
@@ -475,7 +475,7 @@ struct ObjectSheet: View {
     private var shadow: some View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("종류")
-            HStack(spacing: 4) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(48), spacing: 4), count: 6), alignment: .leading, spacing: 4) {
                 ForEach(Self.shadows, id: \.type) { kind in
                     Button {
                         props.shadowType = kind.type
@@ -483,7 +483,7 @@ struct ObjectSheet: View {
                         props.shadowOffsetY = kind.y * 567
                         if kind.type != 0, props.shadowColor == nil { props.shadowColor = 0xb2b2b2 }
                     } label: { Pictogram.shadow(kind.type) }
-                        .buttonStyle(ToolButtonStyle(on: (props.shadowType ?? 0) == kind.type))
+                        .choice((props.shadowType ?? 0) == kind.type)
                         .help(kind.title)
                         .accessibilityLabel(kind.title)
                 }
@@ -703,8 +703,7 @@ private struct CaptionGrid: View {
                 GridRow {
                     ForEach(row, id: \.self) { place in
                         Button { selection = place } label: { Pictogram.caption(place, on: selection == place).frame(width: 40, height: 34).padding(3) }
-                            .buttonStyle(ToolButtonStyle(on: selection == place))
-                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                            .choice(selection == place)
                             .help(Captions.all.first { $0.value == place }?.title ?? "")
                     }
                 }
@@ -959,7 +958,7 @@ private struct TableSides: View {
                 }
             }
         } label: { SideIcon(sides: which) }
-            .buttonStyle(ToolButtonStyle(on: down))
+            .choice(down)
             .help(title)
             .accessibilityLabel(title)
     }
@@ -1080,11 +1079,11 @@ struct ChartDataSheet: View {
         HStack(spacing: 2) {
             Text(title).foregroundStyle(.secondary).padding(.trailing, 4)
             Button(action: add) { Image(systemName: "plus").frame(width: 22, height: 20) }
-                .buttonStyle(ToolButtonStyle())
+                .buttonStyle(.borderless)
                 .help("\(title) 추가하기")
                 .accessibilityLabel("\(title) 추가하기")
             Button { remove?() } label: { Image(systemName: "minus").frame(width: 22, height: 20) }
-                .buttonStyle(ToolButtonStyle())
+                .buttonStyle(.borderless)
                 .disabled(remove == nil)
                 .help("\(title) 지우기")
                 .accessibilityLabel("\(title) 지우기")

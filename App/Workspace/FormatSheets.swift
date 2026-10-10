@@ -342,8 +342,7 @@ struct CharShapeSheet: View {
         } label: {
             glyph().font(.system(size: 15)).frame(width: 32, height: 32)
         }
-        .buttonStyle(ToolButtonStyle(on: on))
-        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+        .choice(on)
         .help(title)
         .accessibilityLabel(title)
     }
@@ -405,8 +404,7 @@ struct ParaShapeSheet: View {
                     Button { style.alignment = alignment } label: {
                         Image(systemName: label.symbol).font(.system(size: 15, weight: .light)).frame(width: 32, height: 32)
                     }
-                    .buttonStyle(ToolButtonStyle(on: (style.alignment ?? .justify) == alignment))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+                    .choice((style.alignment ?? .justify) == alignment)
                     .help(label.title)
                 }
             }
