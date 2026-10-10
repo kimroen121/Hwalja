@@ -734,7 +734,7 @@ struct PageSetupSheet: View {
     }
 
     /// 용지 종류, in Hancom's names and order.
-    private static let papers: [(name: String, width: Double, height: Double)] = [
+    static let papers: [(name: String, width: Double, height: Double)] = [
         ("프린트 132", 335.3, 279.4), ("레터", 215.9, 279.4), ("B5(46배판)", 182, 257), ("B4(타블로이드판)", 257, 364),
         ("A4(국배판)", 210, 297), ("A3(국배배판)", 297, 420), ("리갈", 215.9, 355.6), ("A6(문고판)", 105, 148),
         ("A5(국판)", 148, 210), ("신국판", 148, 225), ("크라운판", 176, 248), ("Executive", 184.1, 266.7),

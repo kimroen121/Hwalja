@@ -180,17 +180,37 @@ struct TableGrid: View {
     }
 }
 
+/// 도형: the shapes as large tiles, as Keynote's shape popover.
+struct ShapeTiles: View {
+    let viewer: Viewer
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(84), spacing: 10), count: 3), spacing: 10) {
+            ForEach(MenuItems.shapes, id: \.shape) { item in
+                Button {
+                    dismiss()
+                    viewer.draw(item.shape)
+                } label: {
+                    VStack(spacing: 8) {
+                        Image(systemName: item.symbol).symbolVariant(.fill).font(.system(size: 30)).frame(height: 36)
+                        Text(item.title).font(.callout)
+                    }
+                    .frame(width: 84, height: 84)
+                }
+                .buttonStyle(TileStyle())
+            }
+        }
+        .padding(14)
+    }
+}
+
 /// One of several, as the inspector's and sidebar's segmented controls: the segments share the
-/// width, and the selection slides to the one picked.
+/// width, and the selection, in the accent color as Keynote's, slides to the one picked.
 struct SegmentedChoice<Value: Hashable, Label: View>: View {
     let values: [Value]
     @Binding var selection: Value
     @ViewBuilder let label: (Value) -> Label
     @Namespace private var namespace
-    /// White over the track in light mode, a lighter gray in dark mode, as macOS's segmented controls.
-    private static var selectionFill: Color {
-        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.22) : .white })
-    }
 
     init(_ values: [Value], selection: Binding<Value>, @ViewBuilder label: @escaping (Value) -> Label) {
         (self.values, _selection, self.label) = (values, selection, label)
@@ -202,14 +222,14 @@ struct SegmentedChoice<Value: Hashable, Label: View>: View {
                 let selected = value == selection
                 Button { selection = value } label: {
                     label(value)
-                        .frame(maxWidth: .infinity, minHeight: 22)
+                        .frame(maxWidth: .infinity, minHeight: 24)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(selected ? .primary : .secondary)
+                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                 .background {
                     if selected {
-                        Capsule().fill(Self.selectionFill).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+                        Capsule().fill(Color.accentColor).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
                             .matchedGeometryEffect(id: "selection", in: namespace)
                     }
                 }

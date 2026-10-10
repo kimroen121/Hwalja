@@ -1772,6 +1772,8 @@ struct DocumentTests {
             ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 520))),
             ("paragraphTab", AnyView(Inspector(document: document, viewer: viewer, tab: "문단").frame(width: 270, height: 520))),
             ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),
+            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 270, height: 640))),
+            ("shapes", AnyView(ShapeTiles(viewer: viewer))),
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),

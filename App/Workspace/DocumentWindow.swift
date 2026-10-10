@@ -47,7 +47,13 @@ struct DocumentWindow: View {
                 }
                 if viewer.showsInspector {
                     ColumnDivider(width: $viewer.inspectorWidth, range: 240...480)
-                    Inspector(document: document, viewer: viewer).frame(width: viewer.inspectorWidth)
+                    Group {
+                        switch viewer.inspectorPane {
+                        case .format: Inspector(document: document, viewer: viewer)
+                        case .document: DocumentInspector(document: document, viewer: viewer)
+                        }
+                    }
+                    .frame(width: viewer.inspectorWidth)
                 }
             }
         }
@@ -153,29 +159,21 @@ private struct DocumentToolbar: ToolbarContent {
     let viewer: Viewer
 
     var body: some ToolbarContent {
-        ToolbarItem {
+        // One group, so macOS 26 draws them in one capsule of glass as Keynote's.
+        ToolbarItemGroup {
             InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
-        }
-        ToolbarItem {
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
-        }
-        ToolbarItem {
-            DrawMenu(document: document, viewer: viewer)
-        }
-        ToolbarItem {
+            InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
-        }
-        ToolbarItem {
             InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
-        }
-        ToolbarItem {
             InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
         }
         ToolbarItem(placement: .primaryAction) {
             Button { viewer.showFind(replace: false) } label: { Label("찾기", systemImage: Icon.find) }.help("찾기")
         }
-        ToolbarItem(placement: .primaryAction) {
-            InspectorButton(viewer: viewer)
+        // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
+        ToolbarItemGroup(placement: .primaryAction) {
+            ForEach(InspectorPane.allCases, id: \.self) { InspectorButton(viewer: viewer, pane: $0) }
         }
     }
 }
@@ -203,27 +201,23 @@ extension InsertButton where Panel == EmptyView {
     }
 }
 
-/// 도형: the shapes to draw.
-private struct DrawMenu: View {
-    @ObservedObject var document: HwpDocument
-    let viewer: Viewer
+private struct InspectorButton: View {
+    @ObservedObject var viewer: Viewer
+    let pane: InspectorPane
     var body: some View {
-        Menu {
-            ForEach(MenuItems.shapes, id: \.shape) { item in
-                Button { viewer.draw(item.shape) } label: { Label(item.title, systemImage: item.symbol) }
-            }
-        } label: { Label("도형", systemImage: Icon.shape) }
-        .help("도형")
-        .disabled(!document.context.inBody || document.context.locked)
+        Toggle(isOn: Binding(get: { viewer.showsInspector && viewer.inspectorPane == pane },
+                             set: { on in (viewer.inspectorPane, viewer.showsInspector) = (pane, on) })) {
+            Label(pane.rawValue, systemImage: pane.symbol)
+        }
+        .toggleStyle(.button)
+        .help(pane.rawValue)
     }
 }
 
-private struct InspectorButton: View {
-    @ObservedObject var viewer: Viewer
-    var body: some View {
-        Button { viewer.showsInspector.toggle() } label: { Label("인스펙터", systemImage: Icon.taskPane) }
-            .help(viewer.showsInspector ? "인스펙터 가리기" : "인스펙터 보기")
-    }
+/// The inspector's panes, chosen from the toolbar.
+enum InspectorPane: String, CaseIterable {
+    case format = "서식", document = "문서"
+    var symbol: String { self == .format ? "paintbrush" : "doc.text" }
 }
 
 /// Zoom choices shared by the status bar and the View menu.
@@ -287,6 +281,9 @@ final class Viewer: ObservableObject {
     }
     @Published var inspectorWidth = UserDefaults.standard.object(forKey: "inspectorWidth") as? Double ?? 270 {
         didSet { UserDefaults.standard.set(inspectorWidth, forKey: "inspectorWidth") }
+    }
+    @Published var inspectorPane = UserDefaults.standard.string(forKey: "inspectorPane").flatMap(InspectorPane.init) ?? .format {
+        didSet { UserDefaults.standard.set(inspectorPane.rawValue, forKey: "inspectorPane") }
     }
     /// The inspector's tab, kept while it is hidden.
     var inspectorTab = "글자"
