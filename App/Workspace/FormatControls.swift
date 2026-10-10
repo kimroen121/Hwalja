@@ -64,8 +64,8 @@ enum FormatChoices {
     }
 }
 
-/// 서식 도구 상자, as in Hancom Office Web: undo, font, size, character styles with line
-/// shapes, text color, highlight, alignment and line spacing. It observes only the
+/// 서식 도구 상자, a thin bar as Scrivener's and TextEdit's: style, font, size, character
+/// styles with line shapes, colors, alignment, line spacing and lists. It observes only the
 /// document's format and context, so typing never rebuilds it.
 struct FormatRow: View {
     @ObservedObject var document: HwpDocument
@@ -74,64 +74,23 @@ struct FormatRow: View {
     @State private var language: Int?
 
     var body: some View {
-        let text = document.format?.text, paragraph = document.format?.paragraph, context = document.context
+        let context = document.context
         HStack(spacing: 3) {
-            // 한/글 2024's order: 새 문서·불러오기·저장하기, 인쇄, 되돌리기·다시 실행, 스타일 … 줄 간격.
-            ToolIcon("새 문서", symbol: Icon.newDocument) { NSDocumentController.shared.newDocument(nil) }
-            ToolIcon("불러오기", symbol: Icon.open) { NSDocumentController.shared.openDocument(nil) }
-            ToolIcon("저장하기", symbol: Icon.save) { send(#selector(NSDocument.save(_:))) }
-            RowDivider()
-            ToolIcon("인쇄", symbol: Icon.print) { send(#selector(DocumentCanvas.printDocument(_:))) }
-            RowDivider()
-            ToolIcon("되돌리기", symbol: Icon.undo) { send(Selector(("undo:"))) }
-                .disabled(!context.canUndo)
-            ToolIcon("다시 실행", symbol: Icon.redo) { send(Selector(("redo:"))) }
-                .disabled(!context.canRedo)
-            RowDivider()
-            FieldBox(title: "스타일", opensWhenClicked: true, choices: { Self.styles(document, editor) }) {
-                Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
-                    .lineLimit(1).frame(width: 84, alignment: .leading)
-            }
-            .disabled(!context.canApplyStyle)
+            StyleField(document: document, editor: editor)
             Group {
-                FieldBox(title: "언어", opensWhenClicked: true, choices: {
-                    ([nil] + CharShapeSheet.languageNames.indices.map { $0 }).map { index in
-                        Choice(title: index.map { CharShapeSheet.languageNames[$0] } ?? "대표", on: index == language) {
-                            language = index
-                        }
-                    }
-                }) {
-                    Text(language.map { CharShapeSheet.languageNames[$0] } ?? "대표").lineLimit(1).frame(width: 44, alignment: .leading)
-                }
-                let languages = document.format?.languages ?? []
-                let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
-                FieldBox(title: "글꼴", opensWhenClicked: true, choices: { Self.fonts(font, language, editor) }) {
-                    Text(font ?? "글꼴").lineLimit(1).frame(width: 128, alignment: .leading)
-                }
-                SizeField(size: text?.size, editor: editor)
+                LanguageField(language: $language)
+                FontField(document: document, editor: editor, language: language, width: 128)
+                SizeField(size: document.format?.text.size, editor: editor)
                 RowDivider()
-                ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
-                ToolIcon("기울임", glyph: Text("가").italic(), on: text?.italic == true) { editor.toggleItalic() }
-                ToolIcon("밑줄", glyph: Text("가").underline(), on: text?.underline == true) { editor.toggleUnderline() }
-                ShapeMenu(title: "밑줄", colorTitle: "밑줄 색", pick: editor.format,
-                          shape: { CharStyle(underline: true, underlineShape: $0) },
-                          color: { CharStyle(underline: true, underlineColor: $0) })
-                ToolIcon("취소선", glyph: Text("가").strikethrough(), on: text?.strikethrough == true) { editor.toggleStrikethrough() }
-                ShapeMenu(title: "취소선", colorTitle: "취소선 색", pick: editor.format,
-                          shape: { CharStyle(strikethrough: true, strikeShape: $0) },
-                          color: { CharStyle(strikethrough: true, strikeColor: $0) })
-                ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
-                          colors: FormatChoices.colors, initial: "#ff0000") { editor.format(CharStyle(color: $0)) }
+                CharacterButtons(document: document, editor: editor)
             }
             .disabled(!context.canFormat)
             RowDivider()
             Group {
-                ForEach(Alignment.allCases, id: \.self) { alignment in
-                    let label = FormatChoices.label(alignment)
-                    ToolIcon(label.title, symbol: label.symbol, on: paragraph?.alignment == alignment) { editor.format(ParaStyle(alignment: alignment)) }
-                }
+                AlignmentButtons(document: document, editor: editor)
                 RowDivider()
-                SpacingField(paragraph: paragraph, editor: editor)
+                SpacingField(paragraph: document.format?.paragraph, editor: editor)
+                ListButtons(document: document, editor: editor)
             }
             .disabled(!context.canFormat)
             Spacer(minLength: 0)
@@ -141,7 +100,6 @@ struct FormatRow: View {
         .frame(height: 30)
     }
 
-    /// Every installed family, built only when the menu opens.
     static func styles(_ document: HwpDocument, _ editor: PageEditor) -> [Choice?] {
         document.styles.map { style in
             Choice(title: style.name, on: style.id == document.format?.style) {
@@ -149,17 +107,117 @@ struct FormatRow: View {
             }
         }
     }
-    private static func fonts(_ current: String?, _ language: Int?, _ editor: PageEditor) -> [Choice?] {
-        FormatChoices.families.map { font in
-            Choice(title: font.name, on: font.name == current || font.family == current) {
-                editor.format(CharStyle(language: language, font: font.family))
+}
+
+/// 스타일 of the caret's paragraph, picked from the document's styles.
+struct StyleField: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var width: CGFloat = 84
+    var body: some View {
+        FieldBox(title: "스타일", opensWhenClicked: true, choices: { FormatRow.styles(document, editor) }) {
+            Text(document.styles.first { $0.id == document.format?.style }?.name ?? "스타일")
+                .lineLimit(1).frame(width: width, alignment: .leading)
+        }
+        .disabled(!document.context.canApplyStyle)
+    }
+}
+
+/// The 언어 the font field shows and changes: 대표 (all) or one.
+struct LanguageField: View {
+    @Binding var language: Int?
+    var body: some View {
+        FieldBox(title: "언어", opensWhenClicked: true, choices: {
+            ([nil] + CharShapeSheet.languageNames.indices.map { $0 }).map { index in
+                Choice(title: index.map { CharShapeSheet.languageNames[$0] } ?? "대표", on: index == language) {
+                    language = index
+                }
+            }
+        }) {
+            Text(language.map { CharShapeSheet.languageNames[$0] } ?? "대표").lineLimit(1).frame(width: 44, alignment: .leading)
+        }
+    }
+}
+
+/// 글꼴 of `language`, picked from the installed families, built only when the menu opens.
+struct FontField: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    let language: Int?
+    var width: CGFloat?
+    var body: some View {
+        let languages = document.format?.languages ?? []
+        let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? document.format?.text.font
+        FieldBox(title: "글꼴", opensWhenClicked: true, choices: {
+            FormatChoices.families.map { family in
+                Choice(title: family.name, on: family.name == font || family.family == font) {
+                    editor.format(CharStyle(language: language, font: family.family))
+                }
+            }
+        }) {
+            Text(font ?? "글꼴").lineLimit(1).frame(maxWidth: width ?? .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// 진하게, 기울임, 밑줄 and 취소선 with their line shapes, 글자 색 and 형광펜.
+struct CharacterButtons: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var body: some View {
+        let text = document.format?.text
+        ToolIcon("진하게", glyph: Text("가").bold(), on: text?.bold == true) { editor.toggleBold() }
+        ToolIcon("기울임", glyph: Text("가").italic(), on: text?.italic == true) { editor.toggleItalic() }
+        ToolIcon("밑줄", glyph: Text("가").underline(), on: text?.underline == true) { editor.toggleUnderline() }
+        ShapeMenu(title: "밑줄", colorTitle: "밑줄 색", pick: editor.format,
+                  shape: { CharStyle(underline: true, underlineShape: $0) },
+                  color: { CharStyle(underline: true, underlineColor: $0) })
+        ToolIcon("취소선", glyph: Text("가").strikethrough(), on: text?.strikethrough == true) { editor.toggleStrikethrough() }
+        ShapeMenu(title: "취소선", colorTitle: "취소선 색", pick: editor.format,
+                  shape: { CharStyle(strikethrough: true, strikeShape: $0) },
+                  color: { CharStyle(strikethrough: true, strikeColor: $0) })
+        ColorMenu(title: "글자 색", symbol: "character", current: text?.color ?? "#000000",
+                  colors: FormatChoices.colors, initial: "#ff0000") { editor.format(CharStyle(color: $0)) }
+        ColorMenu(title: "형광펜", symbol: "highlighter", current: text?.shade ?? "#ffffff",
+                  colors: FormatChoices.highlights, initial: FormatChoices.highlights[0], clears: true) { editor.format(CharStyle(shade: $0)) }
+    }
+}
+
+/// The paragraph alignments, the caret's lit.
+struct AlignmentButtons: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var body: some View {
+        ForEach(Alignment.allCases, id: \.self) { alignment in
+            let label = FormatChoices.label(alignment)
+            ToolIcon(label.title, symbol: label.symbol, on: document.format?.paragraph.alignment == alignment) {
+                editor.format(ParaStyle(alignment: alignment))
+            }
+        }
+    }
+}
+
+/// 글머리표 and 문단 번호, each turned on or off, its shapes beside it.
+struct ListButtons: View {
+    @ObservedObject var document: HwpDocument
+    let editor: PageEditor
+    var body: some View {
+        let head = document.format?.paragraph.head
+        ToolIcon("글머리표", symbol: Icon.bullets, on: head == "Bullet") { MenuItems.toggleList(editor, head: head, bullet: true) }
+        MenuArrow(title: "글머리표") {
+            FormatChoices.bullets.map { bullet in Choice(title: bullet) { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) } }
+        }
+        ToolIcon("문단 번호", symbol: Icon.numbering, on: head == "Number") { MenuItems.toggleList(editor, head: head, bullet: false) }
+        MenuArrow(title: "문단 번호") {
+            FormatChoices.numberings.indices.map { kind in
+                Choice(title: FormatChoices.numberings[kind].joined(separator: " ")) { editor.format(ParaStyle(head: "Number", numbering: kind)) }
             }
         }
     }
 }
 
 /// The size in points: typed, stepped by one, or picked.
-private struct SizeField: View {
+struct SizeField: View {
     let size: Double?
     let editor: PageEditor
     @State private var text = ""
@@ -189,7 +247,7 @@ private struct SizeField: View {
 }
 
 /// 줄 간격: the value of the caret's paragraph, typed or picked as a percentage.
-private struct SpacingField: View {
+struct SpacingField: View {
     let paragraph: ParaStyle?
     let editor: PageEditor
     @State private var text = ""

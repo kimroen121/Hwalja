@@ -6,7 +6,11 @@ struct HwaljaApp: App {
         DocumentGroup(newDocument: { HwpDocument() }) { file in
             DocumentWindow(document: file.document)
         }
-        .commands { MenuBarCommands() }
+        .commands {
+            MenuBarCommands()
+            SidebarCommands()
+            ToolbarCommands()
+        }
         Settings { SettingsView() }
     }
 }

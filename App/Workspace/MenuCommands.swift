@@ -320,12 +320,9 @@ struct MenuItems {
                 toggle("격자 보기", viewer.showsGrid) { viewer.showsGrid.toggle() }
             } label: { Label("격자", systemImage: "grid") }
             Divider()
-            Button(viewer.showsSidebar ? "사이드바 가리기" : "사이드바 보기") { viewer.showsSidebar.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
-            Menu {
-                toggle("기본", viewer.showsTools) { viewer.showsTools.toggle() }
-                toggle("서식", viewer.showsFormat) { viewer.showsFormat.toggle() }
-            } label: { Label("도구 상자", systemImage: "menubar.rectangle") }
+            Button(viewer.showsInspector ? "인스펙터 가리기" : "인스펙터 보기") { viewer.showsInspector.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+            toggle("서식 도구 상자", viewer.showsFormat) { viewer.showsFormat.toggle() }
             Menu {
                 ForEach(TaskPane.allCases, id: \.self) { pane in
                     toggle(pane.rawValue, viewer.shows(pane)) { viewer.toggle(pane) }

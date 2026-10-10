@@ -1288,15 +1288,18 @@ struct DocumentTests {
         #expect(try await document.status(at: caret).cell == "B1")
     }
 
-    /// 개체 탭 and 상황 탭 follow the selection, as in 한/글 2024.
+    /// The inspector's 개체 탭 and 상황 탭 follow the selection, as in 한/글 2024; a selected
+    /// object has only its own.
     @Test func objectAndStateTabsFollowTheSelection() {
-        #expect(ToolRow.contextTabs(EditingContext()) == [])
-        #expect(ToolRow.contextTabs(EditingContext(inTable: true)) == ["표 디자인", "표 레이아웃"])
-        #expect(ToolRow.contextTabs(EditingContext(inTable: true, object: .picture)) == ["그림"])
-        #expect(ToolRow.contextTabs(EditingContext(object: .shape)) == ["도형"])
-        #expect(ToolRow.contextTabs(EditingContext(object: .equation)) == [])
-        #expect(ToolRow.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
-        #expect(ToolRow.contextTabs(EditingContext(inNote: true)) == ["주석"])
+        #expect(Inspector.contextTabs(EditingContext()) == [])
+        #expect(Inspector.contextTabs(EditingContext(inTable: true)) == ["표 디자인", "표 레이아웃"])
+        #expect(Inspector.contextTabs(EditingContext(inTable: true, object: .picture)) == ["그림"])
+        #expect(Inspector.contextTabs(EditingContext(object: .shape)) == ["도형"])
+        #expect(Inspector.contextTabs(EditingContext(object: .equation)) == [])
+        #expect(Inspector.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
+        #expect(Inspector.contextTabs(EditingContext(inNote: true)) == ["주석"])
+        #expect(Inspector.tabs(EditingContext(object: .picture)) == ["그림"])
+        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["글자", "문단", "스타일", "표 디자인", "표 레이아웃"])
     }
 
     /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
@@ -1749,12 +1752,9 @@ struct DocumentTests {
         notedViewer.insertNote(endnote: false)
         await noted.settle()
         let views: [(String, AnyView)] = [
-            ("rows", AnyView(VStack(spacing: 0) {
-                ToolRow(document: document, viewer: viewer)
-                Divider()
-                FormatRow(document: document, editor: viewer.canvas.editor)
-            }.frame(width: 1400))),
-            ("annotations", AnyView(ToolRow(document: noted, viewer: notedViewer, contextTab: "주석").frame(width: 1400))),
+            ("rows", AnyView(FormatRow(document: document, editor: viewer.canvas.editor).frame(width: 1100))),
+            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 250, height: 520))),
+            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer).frame(width: 250, height: 400))),
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),
