@@ -37,14 +37,9 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                Picker("", selection: Binding(get: { tab }, set: { chosen = $0 }).animation()) {
-                    ForEach(tabs, id: \.self) { Text($0).tag($0) }
+                PaneTabs(values: tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), title: { $0 }) {
+                    Text($0)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.large)
-                .flexibleButtons()
-                .tint(.accentColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             } else {
@@ -303,7 +298,9 @@ private struct TextTab: View {
                 .controlSize(.extraLarge)
                 .flexibleButtons()
                 .disabled(!document.context.canApplyStyle)
-                Segments([false, true], selection: $layout, accent: true) { .init(title: $0 ? "레이아웃" : "스타일", help: $0 ? "레이아웃" : "스타일") }
+                PaneTabs(values: [false, true], selection: $layout, title: { $0 ? "레이아웃" : "스타일" }) {
+                    Text($0 ? "레이아웃" : "스타일")
+                }
             }
             Group { if layout { layoutPane } else { stylePane } }
                 .disabled(!document.context.canFormat)

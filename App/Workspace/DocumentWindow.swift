@@ -595,13 +595,9 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("작업 창", selection: $viewer.sidebarPane.animation()) {
-                ForEach(TaskPane.allCases, id: \.self) { Image(systemName: $0.symbol).help($0.rawValue).tag($0) }
+            PaneTabs(values: TaskPane.allCases, selection: $viewer.sidebarPane, title: { $0.rawValue }) {
+                Image(systemName: $0.symbol)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.large)
-            .flexibleButtons()
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             switch viewer.sidebarPane {

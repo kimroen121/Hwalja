@@ -185,6 +185,52 @@ struct ShapeTiles: View {
     }
 }
 
+/// Pane navigation keeps one selection surface alive as it moves between tabs.
+struct PaneTabs<Value: Hashable, Content: View>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
+    @ViewBuilder let label: (Value) -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var indicator
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(values, id: \.self) { value in
+                Button {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { selection = value }
+                } label: {
+                    label(value)
+                        .font(.system(size: 12, weight: selection == value ? .semibold : .regular))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    if selection == value {
+                        selectionSurface
+                            .matchedGeometryEffect(id: "selection", in: indicator)
+                    }
+                }
+                .accessibilityLabel(title(value))
+                .accessibilityAddTraits(selection == value ? [.isSelected] : [])
+                .help(title(value))
+            }
+        }
+        .padding(3)
+        .background(.quaternary.opacity(0.5), in: Capsule())
+    }
+
+    @ViewBuilder private var selectionSurface: some View {
+        if #available(macOS 26, *) {
+            Capsule().fill(.clear).glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            Capsule().fill(.regularMaterial)
+        }
+    }
+}
+
 /// macOS's segmented control as wide as it is given, the segments sharing the width: one
 /// picked, or with `any` each on or off as a toggle.
 struct Segments: NSViewRepresentable {
