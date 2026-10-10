@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="docs/brand/wordmark-transparent.svg" width="200">
+    <img src="docs/brand/wordmark-transparent.svg" width="200" />
 </p>
 
 <h1 align="center">Hwalja</h1>
