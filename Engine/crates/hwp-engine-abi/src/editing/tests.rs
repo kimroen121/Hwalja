@@ -3815,6 +3815,105 @@ fn f11_goes_back_through_the_objects() {
 }
 
 #[test]
+fn text_boxes_write_down_and_arcs_close() {
+    for format in [SaveFormat::Hwp, SaveFormat::Hwpx] {
+        let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+        for (i, shape) in ["textbox", "arc"].iter().enumerate() {
+            let insert = EditCommand::InsertShape {
+                position: point(body(), 0),
+                shape: shape.to_string(),
+                x: 10_000,
+                y: 20_000 + i as i32 * 10_000,
+                width: 14_000,
+                height: 6_000,
+                flip: false,
+            };
+            run(&mut s, insert).unwrap();
+        }
+        let placed = held(&s);
+        let text_box = placed
+            .iter()
+            .find(|o| o.text_box == Some(true))
+            .unwrap()
+            .object
+            .clone();
+        let arc = placed
+            .iter()
+            .find(|o| o.text_box != Some(true))
+            .unwrap()
+            .object
+            .clone();
+        let svg = |s: &EditSession| s.core.render_page_svg_native(0).unwrap();
+        let before = svg(&s);
+        let set = |o: &ObjectRef, props| EditCommand::SetObject {
+            object: o.clone(),
+            props,
+        };
+        run(
+            &mut s,
+            set(
+                &text_box,
+                ObjectProps {
+                    tb_text_direction: Some(2),
+                    ..Default::default()
+                },
+            ),
+        )
+        .unwrap();
+        run(
+            &mut s,
+            set(
+                &arc,
+                ObjectProps {
+                    arc_type: Some(1),
+                    ..Default::default()
+                },
+            ),
+        )
+        .unwrap();
+        assert!(svg(&s) != before);
+        let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
+        let placed = held(&reopened);
+        let find = |text: bool| {
+            placed
+                .iter()
+                .find(|o| (o.text_box == Some(true)) == text)
+                .unwrap()
+                .object
+                .clone()
+        };
+        // HWP keeps 세로 but not 영문 세움 (rhwp writes both as one code).
+        let direction = if format == SaveFormat::Hwp { 1 } else { 2 };
+        assert_eq!(
+            reopened
+                .object_props(&find(true))
+                .unwrap()
+                .tb_text_direction,
+            Some(direction),
+            "{format:?}"
+        );
+        assert_eq!(
+            reopened.object_props(&find(false)).unwrap().arc_type,
+            Some(1),
+            "{format:?}"
+        );
+        let table = ObjectRef {
+            kind: ObjectKind::Table,
+            ..arc
+        };
+        assert!(s
+            .validate_command(&set(
+                &table,
+                ObjectProps {
+                    arc_type: Some(1),
+                    ..Default::default()
+                }
+            ))
+            .is_err());
+    }
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {

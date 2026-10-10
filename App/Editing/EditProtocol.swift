@@ -646,6 +646,10 @@ struct ObjectProps: PartialFormat {
     var tbMarginTop: Int32?
     var tbMarginBottom: Int32?
     var tbVerticalAlign: String?
+    /// 글상자's 글자 방향: 0 가로, 1 세로 with 영문 눕힘, 2 세로 with 영문 세움.
+    var tbTextDirection: UInt8?
+    /// 호 테두리: 0 호, 1 부채꼴, 2 활 모양.
+    var arcType: UInt8?
     /// Rectangles: 사각형 모서리 곡률, 0–50 %.
     var roundRate: UInt32?
     var script: String?

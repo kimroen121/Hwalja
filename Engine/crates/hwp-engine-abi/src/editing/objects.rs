@@ -625,7 +625,9 @@ impl EditSession {
         {
             return Err(EditError::InvalidInput);
         }
-        if props.shadow_type.is_some_and(|v| v > 10)
+        if props.tb_text_direction.is_some_and(|v| v > 2)
+            || props.arc_type.is_some_and(|v| v > 2)
+            || props.shadow_type.is_some_and(|v| v > 10)
             || props.shadow_alpha.is_some_and(|v| v > 255)
             || props.round_rate.is_some_and(|v| v > 50)
             || props
@@ -739,6 +741,8 @@ impl EditSession {
                     && props.tb_margin_top.is_none()
                     && props.tb_margin_bottom.is_none()
                     && props.tb_vertical_align.is_none()
+                    && props.tb_text_direction.is_none()
+                    && props.arc_type.is_none()
                     && props.round_rate.is_none()))
             && props.original_width.is_none()
             && props.original_height.is_none();

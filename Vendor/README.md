@@ -45,6 +45,7 @@
 - adds `insert_auto_number_in_hf_native` for 머리말/꼬리말 › 코드 넣기's 현재 쪽 번호 and 전체 쪽수 (a placeholder space and an auto number, as the 쪽 번호 모양 make), and lets typing at a 머리말/꼬리말 caret go in at the character offset after the controls `set_insert_skip` names (splitting counted a 쪽 번호 as a position and put text one place early).
 - reads a page's text layout from the cached page tree the page was drawn from, as the control layout does (it built the tree again for every caret query after an edit);
 - skips the bold ExtraLight check for SVG text runs that name no weight (it lowercased a copy of every run).
+- reads and writes a 글상자's 글자 방향 (`tbTextDirection`) and an arc's 호 테두리 (`arcType`) in the shape properties.
 - marks the section for drawing again after `set_control_flip_at`, so a flipped drawing object shows flipped.
 - gives the table 계산식 the 시트 함수 of the 한/글 help: `LOG` is the common logarithm, `LN` the natural one, and `RADTODEG` and `DEGTORAD` turn angles.
 

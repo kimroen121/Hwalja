@@ -385,6 +385,18 @@ struct ObjectSheet: View {
                 .padding(.leading, 12)
                 .disabled(!state.line)
             }
+            if props.arcType != nil {
+                GroupTitle("호 테두리")
+                Picker("", selection: Binding { props.arcType ?? 0 } set: { props.arcType = $0 }) {
+                    Text("호").tag(UInt8(0))
+                    Text("부채꼴").tag(UInt8(1))
+                    Text("활 모양").tag(UInt8(2))
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                .padding(.leading, 12)
+            }
             if props.roundRate != nil {
                 GroupTitle("사각형 모서리 곡률")
                 HStack(spacing: 4) {
@@ -407,7 +419,7 @@ struct ObjectSheet: View {
         .padding(16)
     }
 
-    /// 글상자: 안쪽 여백 (with 모두) and 세로 정렬.
+    /// 글상자: 안쪽 여백 (with 모두), 세로 정렬 and 글자 방향.
     private var textBoxTab: some View {
         VStack(alignment: .leading, spacing: 14) {
             GroupTitle("안쪽 여백")
@@ -435,6 +447,19 @@ struct ObjectSheet: View {
                 .labelsHidden()
             }
             .padding(.leading, 12)
+            if props.tbTextDirection != nil {
+                LabeledField("글자 방향") {
+                    Picker("", selection: Binding { props.tbTextDirection ?? 0 } set: { props.tbTextDirection = $0 }) {
+                        Text("가로").tag(UInt8(0))
+                        Text("영문 눕힘").tag(UInt8(1))
+                        Text("영문 세움").tag(UInt8(2))
+                    }
+                    .pickerStyle(.radioGroup)
+                    .horizontalRadioGroupLayout()
+                    .labelsHidden()
+                }
+                .padding(.leading, 12)
+            }
             Spacer(minLength: 0)
         }
         .padding(16)

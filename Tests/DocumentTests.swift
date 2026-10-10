@@ -1784,7 +1784,8 @@ struct DocumentTests {
                 textBox: true), viewer: viewer, tab: "그림자"))),
             ("shapeTextBox", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141, tbVerticalAlign: "Center"),
+                props: ObjectProps(tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141, tbVerticalAlign: "Center",
+                                   tbTextDirection: 1),
                 textBox: true), viewer: viewer, tab: "글상자"))),
             ("shapeLine", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),

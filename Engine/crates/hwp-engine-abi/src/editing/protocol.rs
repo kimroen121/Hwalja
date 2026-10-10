@@ -821,6 +821,10 @@ pub struct ObjectProps {
     pub tb_margin_top: Option<i32>,
     pub tb_margin_bottom: Option<i32>,
     pub tb_vertical_align: Option<String>,
+    /// 글상자's 글자 방향: 0 가로, 1 세로 with 영문 눕힘, 2 세로 with 영문 세움.
+    pub tb_text_direction: Option<u8>,
+    /// 호 테두리: 0 호, 1 부채꼴, 2 활 모양.
+    pub arc_type: Option<u8>,
     /// Rectangles: 사각형 모서리 곡률, 0–50 %.
     pub round_rate: Option<u32>,
     pub script: Option<String>,
