@@ -473,7 +473,11 @@ struct PageSetupSheet: View {
                         } + [(nil, "사용자 정의")], minWidth: 300)
                         .gridCellColumns(3)
                     }
-                    GridRow { field("폭", \.width); field("길이", \.height) }
+                    // The paper is kept upright; 가로 shows it turned.
+                    GridRow {
+                        field("폭", page.landscape ? \.height : \.width)
+                        field("길이", page.landscape ? \.width : \.height)
+                    }
                 }
                 .padding(.leading, 12)
                 HStack(alignment: .top, spacing: 48) {

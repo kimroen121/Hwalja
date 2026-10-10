@@ -589,6 +589,8 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             cursor = .arrow
         } else if let line = border(at: point) {
             cursor = Self.borderCursor(row: line.line.row)
+        } else if object(at: point) != nil {
+            cursor = .arrow
         } else {
             cursor = pageClips.contains { $0.contains(point) } ? .iBeam : .arrow
         }
@@ -636,18 +638,24 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if shown.reflowed {
             layoutPages(force: true)
         } else {
-            // A changed page may have a new body.
-            if !showsOutline { layoutPages() }
+            // A changed page may have a new size (용지 방향) or body.
+            layoutPages()
             shown.changedPages.forEach { index in clip(ofPage: index).map { setNeedsDisplay($0) } }
         }
         (old + highlightRects + otherRects + [objectRect].compactMap { $0 }).forEach { setNeedsDisplay($0.insetBy(dx: -6, dy: -6)) }
         if shown.reflowed || !shown.changedPages.isEmpty {
-            (tableLines, loadingLines) = ([:], [])
+            (tableLines, pageObjects, loadingLines) = ([:], [:], [])
             linesGeneration += 1
         }
         if oldObject != objectRect { updateCursor() }
         placeCaret()
-        if let caretRect { scrollToVisible(caretRect.insetBy(dx: -24, dy: -24)) }
+        // A selected object's caret is at its anchor, which may be far from it: the view
+        // moves only when none of the object shows.
+        if let objectRect {
+            if !visibleRect.intersects(objectRect) { scrollToVisible(objectRect) }
+        } else if let caretRect {
+            scrollToVisible(caretRect.insetBy(dx: -24, dy: -24))
+        }
         onPresent?()
     }
 
@@ -771,12 +779,13 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 self?.work(form, model)
                 return nil
             }
-            // A click on an object selects it, except inside a 글상자, away from its edge,
-            // where it places the caret in the box's text.
+            // A click on an object selects it, except inside a table or a 글상자, away from
+            // its edge, where it places the caret in the cell or the box's text.
             // With <Shift>, a click on another object chooses it too.
             if position?.target.isHeaderFooter != true, !extend || model.object != nil,
                let object = try? await model.objectAt(page: hit.page, x: hit.point.x, y: hit.point.y),
-               !(Self.inside(object.rect, hit.point) && position.map { Self.holds(object.object, $0) } == true) {
+               !(self?.inside(object.rect, hit.point) == true
+                   && (object.object.kind == .table || position.map { Self.holds(object.object, $0) } == true)) {
                 if extend {
                     model.choose(object)
                     return nil
@@ -785,7 +794,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
                 if clicks == 2 { self?.onOpenObject?(object) }
                 // Still pressed: the drag that follows moves it.
                 if clicks == 1, let self, let point, drag == nil, NSEvent.pressedMouseButtons & 1 == 1,
-                   [.picture, .shape, .equation].contains(object.object.kind), let rect = viewRect(object.rect) {
+                   [.picture, .shape, .equation, .table].contains(object.object.kind), let rect = viewRect(object.rect) {
                     drag = .move(start: point, from: rect, moved: false, click: nil)
                 }
                 return nil
@@ -839,9 +848,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         object.kind == .shape && position.target.paragraph == object.paragraph
             && position.target.cell?.control == object.control
     }
-    /// Whether a point is inside a frame, away from its edge.
-    private static func inside(_ rect: PageRect, _ point: CGPoint) -> Bool {
-        let edge = 6.0
+    /// Whether a point is inside a frame, away from its edge: 5 points on screen, at least 6 page pixels.
+    private func inside(_ rect: PageRect, _ point: CGPoint) -> Bool {
+        let edge = max(6, 5 / (enclosingScrollView?.magnification ?? 1) / PageGeometry.pointsPerPixel)
         return point.x > rect.x + edge && point.x < rect.x + rect.width - edge
             && point.y > rect.y + edge && point.y < rect.y + rect.height - edge
     }
@@ -863,17 +872,19 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     private var drag: Drag?
     /// Table borders by page, loaded when the pointer first comes near; cleared on each change.
     private var tableLines: [Int: [TableLine]] = [:]
+    /// Objects by page, loaded with the borders.
+    private var pageObjects: [Int: [PlacedObject]] = [:]
     private var loadingLines: Set<Int> = []
     /// Bumped when the borders are cleared, so a load started before then is dropped.
     private var linesGeneration = 0
 
-    /// Pictures and 그리기 개체 have sizing handles; tables and equations size to their content.
+    /// Pictures, 그리기 개체 and tables have sizing handles; equations size to their content.
     private var resizable: Bool {
-        [.picture, .shape].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true && lineEnds == nil
+        [.picture, .shape, .table].contains(model?.object?.object.kind) && model?.presentation.objectLocked != true && lineEnds == nil
     }
     /// An equation in a 미주 has only its properties to change.
     private var movable: Bool {
-        [.picture, .shape, .equation].contains(model?.object?.object.kind) && model?.object?.object.note == nil
+        [.picture, .shape, .equation, .table].contains(model?.object?.object.kind) && model?.object?.object.note == nil
     }
 
     private func handle(at point: NSPoint, of rect: NSRect) -> (x: Int, y: Int)? {
@@ -926,12 +937,26 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         let extent = origin + same.map(\.from).min()! * scale...origin + same.map(\.to).max()! * scale
         return (line, page, extent)
     }
+    /// The object a press would choose under a point: not one of a table's cells or a
+    /// 글상자's text, away from the edge. Answers nil until the page's objects arrive.
+    private func object(at point: NSPoint) -> PlacedObject? {
+        guard !pageFrames.isEmpty else { return nil }
+        let page = page(near: point), frame = pageFrames[page]
+        guard frame.contains(point), let objects = pageObjects[page] else { return nil }
+        let at = PageGeometry.enginePoint(point, in: frame)
+        guard let object = objects.last(where: {
+            CGRect(x: $0.rect.x, y: $0.rect.y, width: $0.rect.width, height: $0.rect.height).contains(at)
+        }) else { return nil }
+        let holdsText = object.object.kind == .table || object.textBox == true
+        return holdsText && inside(object.rect, at) ? nil : object
+    }
     private func loadLines(_ page: Int, cursorAt point: NSPoint) {
         guard let model, !loadingLines.contains(page) else { return }
         loadingLines.insert(page)
         let generation = linesGeneration
         Task { [weak self] in
             let lines = (try? await model.tableLines(page: page)) ?? []
+            let objects = (try? await model.objects(page: page)) ?? []
             // Borders read before an edit landed would drag the wrong place.
             guard let self else { return }
             guard generation == linesGeneration else {
@@ -940,6 +965,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             }
             loadingLines.remove(page)
             tableLines[page] = lines
+            pageObjects[page] = objects
             updateCursor()
         }
     }
@@ -1224,9 +1250,19 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
 
     // MARK: Keyboard
 
+    /// 쉴 때 자동 저장's wait, restarted by each key.
+    private var resting: Task<Void, Never>?
+
     override func keyDown(with event: NSEvent) {
-        guard model?.selection != nil else { return super.keyDown(with: event) }
+        guard model?.selection != nil || model?.object != nil else { return super.keyDown(with: event) }
         NSCursor.setHiddenUntilMouseMoves(true)
+        resting?.cancel()
+        resting = Saving.idle.map { seconds in
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(seconds))
+                if !Task.isCancelled { Saving.rested(self?.window) }
+            }
+        }
         if onKey?(event) == true { return }
         // Home and End go to the line's ends, as in 한글, where macOS would scroll.
         if event.modifierFlags.isDisjoint(with: [.command, .control, .option]),

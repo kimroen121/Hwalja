@@ -30,6 +30,12 @@ fn plain_document(format: &str, table: bool) -> Vec<u8> {
         core.export_hwpx_native().unwrap()
     }
 }
+/// The pictures, equations and drawing objects on the first page, tables left out.
+fn held(s: &EditSession) -> Vec<PlacedObject> {
+    let mut placed = s.placed(0).unwrap();
+    placed.retain(|o| o.object.kind != ObjectKind::Table);
+    placed
+}
 fn body() -> EditTarget {
     EditTarget {
         section: 0,
@@ -1280,7 +1286,7 @@ fn objects_are_found_changed_and_deleted() {
     };
     run(&mut s, equation).unwrap();
 
-    let placed = s.placed(0).unwrap();
+    let placed = held(&s);
     let kinds: Vec<_> = placed.iter().map(|o| o.object.kind).collect();
     assert_eq!(kinds, [ObjectKind::Equation, ObjectKind::Picture]);
     for o in &placed {
@@ -1422,9 +1428,9 @@ fn objects_are_found_changed_and_deleted() {
         },
     )
     .unwrap();
-    assert_eq!(s.placed(0).unwrap().len(), 1);
+    assert_eq!(held(&s).len(), 1);
     run(&mut s, EditCommand::Undo).unwrap();
-    assert_eq!(s.placed(0).unwrap().len(), 2);
+    assert_eq!(held(&s).len(), 2);
 
     let preview = s.equation_preview("sqrt {x over 2}", 1_000, 0xff).unwrap();
     assert!(preview.width > 0.0 && preview.height > 0.0 && !preview.ops.is_empty());
@@ -3460,6 +3466,95 @@ fn table_borders_are_found_and_dragged() {
 }
 
 #[test]
+fn tables_are_objects_sized_whole_and_deleted() {
+    for format in ["hwp", "hwpx"] {
+        let mut s = EditSession::open(&plain_document(format, false)).unwrap();
+        let insert = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 2,
+            columns: 2,
+            width: None,
+            height: None,
+            treat_as_char: false,
+        };
+        let caret = run(&mut s, insert).unwrap().selection.unwrap().focus;
+        let placed = s.objects(s.revision, 0).unwrap();
+        let table = placed
+            .iter()
+            .find(|o| o.object.kind == ObjectKind::Table)
+            .unwrap();
+        let rect = table.rect.clone();
+        let hit = s
+            .object_at(s.revision, 0, rect.x + 1.0, rect.y + 1.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(hit.object, table.object);
+        let table = table.object.clone();
+        let sizes = |s: &EditSession| {
+            let t = commands::table(s.core.document(), &caret.target).unwrap();
+            (t.get_column_widths(), t.get_row_heights())
+        };
+        let (widths, heights) = sizes(&s);
+        let (width, height) = (widths.iter().sum::<u32>(), heights.iter().sum::<u32>());
+        let half = EditCommand::SetObject {
+            object: table.clone(),
+            props: ObjectProps {
+                width: Some(width / 2),
+                height: Some(height * 2),
+                ..Default::default()
+            },
+        };
+        run(&mut s, half).unwrap();
+        let (w, h) = sizes(&s);
+        assert!(w.iter().zip(&widths).all(|(n, o)| n.abs_diff(o / 2) <= 1));
+        assert!(h.iter().zip(&heights).all(|(n, o)| n.abs_diff(o * 2) <= 1));
+        run(&mut s, EditCommand::DeleteObject { object: table }).unwrap();
+        // A table in the line moves in the body text, not into a cell.
+        let inline = EditCommand::InsertTable {
+            position: point(body(), 0),
+            rows: 1,
+            columns: 1,
+            width: None,
+            height: None,
+            treat_as_char: true,
+        };
+        let cell = run(&mut s, inline).unwrap().selection.unwrap().focus;
+        let table = ObjectRef {
+            kind: ObjectKind::Table,
+            section: 0,
+            paragraph: cell.target.paragraph,
+            control: cell.target.cell.as_ref().unwrap().control,
+            cell: None,
+            note: None,
+        };
+        let before = s.paragraph(&EditSession::host(&table)).unwrap().text;
+        let end = before.chars().count() as u32;
+        let into_cell = EditCommand::MoveObject {
+            object: table.clone(),
+            to: cell.clone(),
+        };
+        assert!(run(&mut s, into_cell).is_err());
+        let to_end = EditCommand::MoveObject {
+            object: table.clone(),
+            to: point(EditSession::host(&table), end),
+        };
+        run(&mut s, to_end).unwrap();
+        assert!(s
+            .paragraph(&EditSession::host(&table))
+            .unwrap()
+            .text
+            .ends_with('\u{FFFC}'));
+        run(&mut s, EditCommand::Undo).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert!(s
+            .objects(s.revision, 0)
+            .unwrap()
+            .iter()
+            .all(|o| o.object.kind != ObjectKind::Table));
+    }
+}
+
+#[test]
 fn line_break_units_are_set_and_read() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     let style = ParaStyle {
@@ -3766,7 +3861,7 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
         };
         run(&mut s, insert).unwrap_or_else(|e| panic!("{shape}: {e:?}"));
     }
-    let placed = s.placed(0).unwrap();
+    let placed = held(&s);
     assert_eq!(placed.len(), shapes.len());
     assert!(placed.iter().all(|o| o.object.kind == ObjectKind::Shape));
     // 20 000 HWPUNIT from the paper's top is 266.7 px at 96 dpi.
@@ -3867,7 +3962,7 @@ fn shapes_are_drawn_selected_changed_and_deleted() {
         assert_eq!(below, rank, "{order:?} {:?}", z(&s));
     }
     run(&mut s, EditCommand::DeleteObject { object: shape }).unwrap();
-    assert_eq!(s.placed(0).unwrap().len(), shapes.len() - 1);
+    assert_eq!(held(&s).len(), shapes.len() - 1);
     let bad = EditCommand::InsertShape {
         position: point(body(), 0),
         shape: "star".into(),
@@ -3934,7 +4029,7 @@ fn text_boxes_take_text() {
         flip: false,
     };
     run(&mut s, insert).unwrap();
-    let placed = s.placed(0).unwrap().remove(0);
+    let placed = held(&s).remove(0);
     let inside = EditTarget {
         section: 0,
         paragraph: placed.object.paragraph,
@@ -4029,7 +4124,7 @@ fn pictures_and_equations_go_into_a_table_cell() {
     let after = run(&mut s, equation).unwrap().selection.unwrap().focus;
     assert_eq!(after, point(caret.target.clone(), 2));
     assert_eq!(s.paragraph(&caret.target).unwrap().text, "\u{FFFC}\u{FFFC}");
-    let placed: Vec<_> = s.placed(0).unwrap().into_iter().map(|o| o.object).collect();
+    let placed: Vec<_> = held(&s).into_iter().map(|o| o.object).collect();
     assert_eq!(placed.len(), 2);
     assert!(placed.iter().all(|o| o.cell == caret.target.cell));
     // Typing after both objects stays after them.
@@ -4046,7 +4141,7 @@ fn pictures_and_equations_go_into_a_table_cell() {
     for _ in 0..3 {
         run(&mut s, EditCommand::Undo).unwrap();
     }
-    assert!(s.placed(0).unwrap().is_empty());
+    assert!(held(&s).is_empty());
 }
 
 #[test]
@@ -4102,7 +4197,7 @@ fn a_table_cell_picture_resizes_deletes_undoes_and_round_trips_both_formats() {
             },
         )
         .unwrap();
-        assert!(s.placed(0).unwrap().is_empty(), "{format:?}");
+        assert!(held(&s).is_empty(), "{format:?}");
         run(&mut s, EditCommand::Undo).unwrap();
 
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
@@ -4200,7 +4295,7 @@ fn an_equation_in_a_table_cell_is_an_object() {
     paragraphs.remove(0);
     core.set_document(doc);
     let mut s = EditSession::open(&core.export_hwpx_native().unwrap()).unwrap();
-    let placed = s.placed(0).unwrap();
+    let placed = held(&s);
     let object = placed
         .iter()
         .find(|o| o.object.cell.is_some())
@@ -4225,7 +4320,7 @@ fn an_equation_in_a_table_cell_is_an_object() {
         object: object.clone(),
     };
     run(&mut s, delete).unwrap();
-    assert!(s.placed(0).unwrap().is_empty());
+    assert!(held(&s).is_empty());
     run(&mut s, EditCommand::Undo).unwrap();
     run(&mut s, EditCommand::Undo).unwrap();
     assert_eq!(s.object_props(&object).unwrap().font_size, Some(1000));
@@ -4439,7 +4534,7 @@ fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
     let pictures = |s: &EditSession| s.core.document().bin_data_content.len();
     run(&mut s, picture_at(point(body(), 1))).unwrap();
     let stored = pictures(&s);
-    let object = s.placed(0).unwrap()[0].object.clone();
+    let object = held(&s)[0].object.clone();
     // 가[그림]👨‍👩‍👧‍👦é 끝 → before 끝.
     let to = run(
         &mut s,
@@ -4469,7 +4564,7 @@ fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
         note: None,
         header_footer: None,
     };
-    let object = s.placed(0).unwrap()[0].object.clone();
+    let object = held(&s)[0].object.clone();
     run(
         &mut s,
         EditCommand::MoveObject {
@@ -4480,7 +4575,7 @@ fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
     .unwrap();
     assert_eq!(s.paragraph(&cell).unwrap().text, "표\u{FFFC} 내용");
     assert_eq!(s.paragraph(&body()).unwrap().text, "가👨‍👩‍👧‍👦e\u{301} 끝");
-    assert_eq!(s.placed(0).unwrap()[0].object.cell, cell.cell);
+    assert_eq!(held(&s)[0].object.cell, cell.cell);
     // The picture keeps its one copy of the image.
     assert_eq!(pictures(&s), stored);
     let reopened = EditSession::open(&s.export(SaveFormat::Hwp).unwrap()).unwrap();
@@ -4497,7 +4592,7 @@ fn a_picture_in_the_line_moves_within_the_text_and_into_a_cell() {
 fn captions_are_written_and_edited() {
     let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
     run(&mut s, picture_at(point(second(), 0))).unwrap();
-    let object = s.placed(0).unwrap()[0].object.clone();
+    let object = held(&s)[0].object.clone();
     let props = ObjectProps {
         caption: Some("Bottom".into()),
         ..Default::default()
@@ -4523,7 +4618,7 @@ fn captions_are_written_and_edited() {
     replace(&mut s, caption.clone(), 4, 4, "꽃").unwrap();
     assert_eq!(s.paragraph(&caption).unwrap().text, "그림  꽃");
     // A click on it reaches it.
-    let r = s.placed(0).unwrap()[0].rect.clone();
+    let r = held(&s)[0].rect.clone();
     let rect = s.caret(s.revision, &point(caption.clone(), 4)).unwrap();
     assert!(rect.y > r.y + r.height);
     let hit = s
@@ -4694,7 +4789,7 @@ fn the_caret_passes_an_equation_in_a_cell() {
         color: 0,
     };
     run(&mut s, equation).unwrap();
-    let r = s.placed(0).unwrap()[0].rect.clone();
+    let r = held(&s)[0].rect.clone();
     let before = s.caret(s.revision, &point(cell.clone(), 1)).unwrap();
     let after = s.caret(s.revision, &point(cell.clone(), 2)).unwrap();
     assert!((before.x - r.x).abs() < 1.0 && (after.x - (r.x + r.width)).abs() < 1.0);
@@ -4725,7 +4820,7 @@ fn text_goes_into_drawing_objects_and_groups_come_apart() {
             )
             .unwrap();
         }
-        let rectangle = s.placed(0).unwrap()[0].object.clone();
+        let rectangle = held(&s)[0].object.clone();
         // 도형 안에 글자 넣기: the caret goes into the new text, which saves.
         let caret = run(
             &mut s,
@@ -4771,7 +4866,7 @@ fn text_goes_into_drawing_objects_and_groups_come_apart() {
         };
         assert!(s.validate_command(&ungroup(&rectangle)).is_err());
         // 개체 묶기 takes two or more, each once.
-        let members: Vec<ObjectRef> = s.placed(0).unwrap().into_iter().map(|o| o.object).collect();
+        let members: Vec<ObjectRef> = held(&s).into_iter().map(|o| o.object).collect();
         let group_of = |objects: &[ObjectRef]| EditCommand::Group {
             objects: objects.to_vec(),
         };
@@ -4780,11 +4875,11 @@ fn text_goes_into_drawing_objects_and_groups_come_apart() {
             .validate_command(&group_of(&[members[0].clone(), members[0].clone()]))
             .is_err());
         run(&mut s, group_of(&members)).unwrap();
-        let group = s.placed(0).unwrap()[0].object.clone();
-        assert_eq!(s.placed(0).unwrap().len(), 1);
+        let group = held(&s)[0].object.clone();
+        assert_eq!(held(&s).len(), 1);
         assert!(s.object_props(&group).unwrap().width.is_some());
         run(&mut s, ungroup(&group)).unwrap();
-        assert_eq!(s.placed(0).unwrap().len(), 2);
+        assert_eq!(held(&s).len(), 2);
         let reopened = EditSession::open(&s.export(format).unwrap()).unwrap();
         assert_eq!(reopened.placed(0).unwrap().len(), 2, "{format:?}");
     }
@@ -5108,8 +5203,8 @@ fn line_ends_move_one_at_a_time() {
         };
         run(&mut s, line).unwrap();
     }
-    let placed = s.placed(0).unwrap();
-    let ends = |s: &EditSession, i: usize| s.placed(0).unwrap()[i].ends.unwrap();
+    let placed = held(&s);
+    let ends = |s: &EditSession, i: usize| held(s)[i].ends.unwrap();
     // 10 000 HWPUNIT is 133.3 px; 15 000 is 200.
     let [x1, y1, x2, y2] = ends(&s, 0);
     assert!(
@@ -5681,7 +5776,7 @@ fn shadows_text_boxes_corners_and_picture_lines() {
             flip: false,
         };
         run(&mut s, insert).unwrap();
-        let rectangle = s.placed(0).unwrap()[0].object.clone();
+        let rectangle = held(&s)[0].object.clone();
         run(
             &mut s,
             EditCommand::SetTextBox {

@@ -8,7 +8,7 @@ import SwiftUI
 struct ToolRow: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
-    @AppStorage("toolTab") private var menuTab = "편집"
+    @SceneStorage("toolTab") private var menuTab = "편집"
     /// The 개체 탭 or 상황 탭 shown instead of `menuTab` while it is there.
     @State private var contextTab: String?
     @State private var hovered: String?

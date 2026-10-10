@@ -7,5 +7,6 @@ struct HwaljaApp: App {
             DocumentWindow(document: file.document)
         }
         .commands { MenuBarCommands() }
+        Settings { SettingsView() }
     }
 }

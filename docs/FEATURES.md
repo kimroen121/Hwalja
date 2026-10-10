@@ -35,7 +35,7 @@
 | PDF를 오피스 문서로 변환하기 | — | `file/open/open(pdf).htm` | 한컴 변환 서비스 |
 | 그림을 오피스 문서로 변환하기 | — | `file/open/open(picture)_ocr.htm` | 한컴 OCR |
 | XML 문서 | — | `file/xml_document.htm` |  |
-| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 그림으로 저장하기(파일 › 그림으로 저장하기: 폴더·파일 이름·BMP/GIF/PNG/JPG·해상도 72~300DPI, 쪽마다 001·002…) ●, WMF·색 지정 △ |
+| 저장하기 | ● | `file/save/save.htm` | 원자적 저장, 저장 전 재파싱 검증. 파일은 저장하기로만 바뀐다(한/글처럼 자동 저장은 복구용 임시 파일). 그림으로 저장하기(파일 › 그림으로 저장하기: 폴더·파일 이름·BMP/GIF/PNG/JPG·해상도 72~300DPI, 쪽마다 001·002…) ●, WMF·색 지정 △ |
 | 다른 이름으로 저장하기 | ◐ | `file/save_as/save_as.htm` | HWP·HWPX ●. 파일 › 다른 파일 형식으로 저장하기: 텍스트 문서(*.txt, 문자 코드 유니코드(UTF-8)·유니코드·유니코드(Big-Endian)·한국(KS))·서식 있는 인터넷 문서(*.html, 쪽 배치 그대로) ●. HWPML ○ `export_hml_native`(HML에서 연 문서만). 저장 설정·한/글 97·DOCX·ODT·RTF △, 블록 저장하기 ○ `export_selection_html_native`(HTML만) |
 | PDF로 저장하기 | ● | `file/to_pdf.htm` |  |
 | 모바일 최적화 문서로 저장하기 | — | `file/to_mobile.htm` |  |
@@ -227,7 +227,7 @@
 | 글자판 | — | `insert/keyboard/keyboard.htm` | macOS 입력기 |
 | COM 추가 기능 설정 | — | `tools/add-in/add-in.htm` |  |
 | 사용자 설정 | — | `view/toolbar/toolbar(edit).htm#bc-1` | 도구 상자 사용자 설정 |
-| 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 필요한 항목만 |
+| 환경 설정 | △ | `file/options/options.htm` | macOS 설정 창(⌘,). 파일 탭의 복구용 임시 파일 자동 저장(무조건 자동 저장 1~60분, 쉴 때 자동 저장 1~360초) ●. 나머지는 필요한 항목만 |
 | 스킨 설정 | — | `tools/skin.htm` | macOS 다크 모드 |
 
 ## 표
@@ -256,7 +256,7 @@
 | 계산식 | ○ | `table/calculation/calculation.htm` | `evaluate_table_formula`. 계산식 필드 넣기 △ |
 | 1,000 단위 구분 쉼표 | △ | `table/table(threedigits).htm` | 자릿점 넣기·빼기 |
 | 셀 블록 | ● | `table/table(cell).htm` |  |
-| 표 크기 조절 | ◐ | `table/table(size).htm` | 테두리 끌기 ●. 바깥 왼쪽·위 테두리, 셀 안의 표 △(`resize_table_cells`, `move_table_offset`) |
+| 표 크기 조절 | ◐ | `table/table(size).htm` | 테두리 끌기 ●. 바깥 테두리를 눌러 표를 개체로 고르고, 조절점으로 표 전체 크기를 비율대로 조절·끌어서 이동·Delete로 지우기 ●. 셀 안의 표 △ |
 | 표의 편집 | ◐ | `table/table(edit).htm` | 중첩 표 셀 편집 △(읽기 전용) |
 | 표에서 세로쓰기 | △ | `table/table(write_vertically).htm` | 세로쓰기 셀은 읽기 전용 |
 | 셀 붙이기 | ◐ | `table/table(paste).htm#bc-1` |  |

@@ -517,6 +517,53 @@ impl EditSession {
         }
         Ok(changes)
     }
+    /// Sizes a table of the body to `width` × `height` (HWPUNIT), each column and row
+    /// in proportion.
+    pub(super) fn scale_table(
+        &mut self,
+        o: &ObjectRef,
+        width: Option<u32>,
+        height: Option<u32>,
+    ) -> Result<(), EditError> {
+        let t = self.table_of(o)?;
+        let ratio = |to: Option<u32>, sizes: Vec<u32>| {
+            let total: u32 = sizes.iter().sum();
+            to.filter(|_| total > 0).map(|to| to as f64 / total as f64)
+        };
+        let (across, down) = (
+            ratio(width, t.get_column_widths()),
+            ratio(height, t.get_row_heights()),
+        );
+        let changes: Vec<(usize, String)> = t
+            .cells
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let mut json = serde_json::Map::new();
+                let scaled = |v: u32, r: f64| Value::from(((v as f64 * r).round() as u32).max(200));
+                if let Some(r) = across {
+                    json.insert("width".into(), scaled(c.width, r));
+                }
+                if let Some(r) = down {
+                    json.insert("height".into(), scaled(c.height, r));
+                }
+                (i, Value::Object(json).to_string())
+            })
+            .collect();
+        if across.is_none() && down.is_none() {
+            return Ok(());
+        }
+        let (s, p, c) = (o.section as usize, o.paragraph as usize, o.control as usize);
+        self.core.begin_batch_native()?;
+        let scaled = changes.iter().try_for_each(|(i, json)| {
+            self.core
+                .set_cell_properties_native(s, p, c, *i, json)
+                .map(|_| ())
+        });
+        self.core.end_batch_native()?;
+        scaled?;
+        Ok(())
+    }
     pub(super) fn validate_resize(&self, command: &EditCommand) -> Result<(), EditError> {
         self.resized_cells(command).map(|_| ())
     }

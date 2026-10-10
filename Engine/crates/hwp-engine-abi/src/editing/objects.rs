@@ -216,8 +216,8 @@ impl EditSession {
             _ => None,
         }
     }
-    /// Pictures and equations laid out on `page`, bottom first: those of the body, and
-    /// those in a table cell or 글상자 of the body.
+    /// Objects laid out on `page`, bottom first: those of the body, and pictures and
+    /// equations in a table cell or 글상자 of the body.
     pub(super) fn placed(&self, page: u32) -> Result<Vec<PlacedObject>, EditError> {
         let layout: Value = parse(self.core.get_page_control_layout_native(page))?;
         let controls = layout["controls"]
@@ -242,6 +242,8 @@ impl EditSession {
                     "image" => ObjectKind::Picture,
                     "equation" => ObjectKind::Equation,
                     "shape" | "line" | "group" => ObjectKind::Shape,
+                    // Tables of the body; those nested in a cell are not chosen.
+                    "table" if c.get("cellIdx").is_none() => ObjectKind::Table,
                     // An OLE object is chosen only when it is a 차트.
                     "ole"
                         if charts.contains_key(&(
@@ -703,6 +705,11 @@ impl EditSession {
             )?;
             return Ok(());
         }
+        if o.kind == ObjectKind::Table {
+            json.remove("width");
+            json.remove("height");
+            self.scale_table(o, props.width, props.height)?;
+        }
         let core = &mut self.core;
         match (o.kind, &o.cell) {
             (ObjectKind::Picture, Some(cell)) => core.set_cell_picture_properties_by_path_native(
@@ -766,8 +773,9 @@ impl EditSession {
     }
     /// An object in the line (글자처럼 취급) moves to another place in the text.
     pub(super) fn validate_move(&self, o: &ObjectRef, to: &EditPosition) -> Result<(), EditError> {
+        // A table goes into the body text only.
         if !self.control(o)?.is_treat_as_char_object()
-            || o.kind == ObjectKind::Table
+            || (o.kind == ObjectKind::Table && to.target.cell.is_some())
             || o.note.is_some()
         {
             return Err(EditError::UnsupportedTarget);
