@@ -216,9 +216,9 @@
 | 번역 | — | `view/workwindow/workwindow(translation).htm#bc-1` | macOS 번역 서비스 |
 | 빠른 교정 | △ | `tools/qcorrect/qcorrect.htm` | macOS 텍스트 대치로 |
 | 한컴 애셋 | — | `tools/asset.htm` |  |
-| 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` | 누름틀 값 채우기 ○ `set_field_value_by_name`·`fill_template_native`, 표 줄 반복 채우기 ○ `repeat_and_fill_table_rows_native`. 자료 파일(DBF·한/셀·CSV) 읽기와 출력 방향 △ |
+| 메일 머지 | △ | `tools/mail_merge/mail_merge.htm` | 메일 머지 필드({{1}}) 넣기 △(rhwp가 메일 머지 필드를 만들지 못함; 있는 함수 `set_field_value_by_name`·`fill_template_native`·`repeat_and_fill_table_rows_native`는 누름틀과 표 줄 채우기라 이 흐름에 맞지 않음), 자료 파일(한/글·DBF·한/셀·CSV) 읽기와 출력 방향 △ |
 | 스크립트 매크로 | — | `tools/macro/macro.htm` |  |
-| 차례/색인 | △ | `tools/index/index.htm` | 개요 탐색 ○ `get_outline_navigation_native`가 시작점 |
+| 차례/색인 | △ | `tools/index/index.htm` | 차례 만들기 △. 개요 문단 목록은 개요 보기와 같은 `get_outline_navigation_native`에서 얻을 수 있음 |
 | 참고 문헌 | △ | `tools/bibliography/bibliography.htm` |  |
 | 블록 계산 | △ | `tools/blocksum/blocksum.htm` | 본문 블록의 합계·평균. 표 블록 계산식은 됨 |
 | 문서 찾기 | — | `file/finding_files/finding_files.htm` | Spotlight |
