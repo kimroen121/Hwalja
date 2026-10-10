@@ -38,7 +38,7 @@ struct Inspector: View {
         let tab = tabs.contains(chosen) ? chosen : tabs[0]
         VStack(spacing: 0) {
             if tabs.count > 1 {
-                SegmentedChoice(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), height: 30) { Text($0).font(.body) }
+                Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), size: .large, emphasized: false) { .init(title: $0, help: $0) }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             } else {
@@ -82,11 +82,11 @@ struct Inspector: View {
 
     @ViewBuilder private func picture(_ context: EditingContext) -> some View {
         InspectorSection("효과") {
-            SegmentedChoice(["RealPic", "GrayScale", "BlackWhite", "Watermark"], selection: Binding(get: { Self.effect(props) }, set: { effect in
+            Segments(["RealPic", "GrayScale", "BlackWhite", "Watermark"], selection: Binding(get: { Self.effect(props) }, set: { effect in
                 viewer.adjustPicture { props in
                     if effect == "Watermark" { (props.effect, props.brightness, props.contrast) = ("RealPic", 70, -50) } else { props.effect = effect }
                 }
-            })) { Text(["RealPic": "효과 없음", "GrayScale": "회색조", "BlackWhite": "흑백", "Watermark": "워터마크"][$0]!).lineLimit(1).minimumScaleFactor(0.8) }
+            })) { let title = ["RealPic": "효과 없음", "GrayScale": "회색조", "BlackWhite": "흑백", "Watermark": "워터마크"][$0]!; return .init(title: title, help: title) }
             PictureSlider(title: "밝기", value: props?.brightness) { value in viewer.adjustPicture { $0.brightness = value } }
             PictureSlider(title: "대비", value: props?.contrast) { value in viewer.adjustPicture { $0.contrast = value } }
         }
@@ -141,13 +141,9 @@ struct Inspector: View {
         Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) }))
         let wraps = ["Square": ("어울림", Icon.wrapSquare), "TopAndBottom": ("자리 차지", Icon.wrapTopAndBottom),
                      "InFrontOfText": ("글 앞으로", Icon.inFrontOfText), "BehindText": ("글 뒤로", Icon.behindText)]
-        SegmentedChoice(["Square", "TopAndBottom", "InFrontOfText", "BehindText"],
-                        selection: Binding(get: { inLine ? "" : props?.textWrap ?? "" }, set: { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: $0)) })) { wrap in
-            VStack(spacing: 3) {
-                Image(systemName: wraps[wrap]!.1)
-                Text(wraps[wrap]!.0).font(.caption).lineLimit(1).minimumScaleFactor(0.8)
-            }
-            .padding(.vertical, 4)
+        Segments(["Square", "TopAndBottom", "InFrontOfText", "BehindText"],
+                 selection: Binding(get: { inLine ? "" : props?.textWrap ?? "" }, set: { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: $0)) })) {
+            .init(title: wraps[$0]!.0, help: wraps[$0]!.0)
         }
         .disabled(inLine || props == nil)
     }
@@ -286,12 +282,13 @@ private struct CharacterTab: View {
                     Choice(title: family.name, on: family.family == font) { editor.format(CharStyle(language: language, font: family.family)) }
                 })
                 HStack(spacing: 8) {
-                    JoinedButtons(items: [
-                        ("진하게", "bold", text?.bold == true, { editor.toggleBold() }),
-                        ("기울임", "italic", text?.italic == true, { editor.toggleItalic() }),
-                        ("밑줄", "underline", text?.underline == true, { editor.toggleUnderline() }),
-                        ("취소선", "strikethrough", text?.strikethrough == true, { editor.toggleStrikethrough() }),
-                    ])
+                    let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void)] = [
+                        ("진하게", "bold", text?.bold, editor.toggleBold), ("기울임", "italic", text?.italic, editor.toggleItalic),
+                        ("밑줄", "underline", text?.underline, editor.toggleUnderline), ("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough),
+                    ]
+                    Segments(segments: styles.map { .init(symbol: $0.symbol, help: $0.title) }, on: styles.map { $0.on == true }, any: true) {
+                        styles[$0].toggle()
+                    }
                     NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
                 }
                 LabeledContent("언어") {
@@ -335,10 +332,10 @@ private struct ParagraphTab: View {
         let head = paragraph?.head ?? "None"
         Group {
             InspectorSection("정렬") {
-                SegmentedChoice(Alignment.allCases.map(Optional.some),
-                                selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) { alignment in
-                    let label = FormatChoices.label(alignment!)
-                    Image(systemName: label.symbol).help(label.title).accessibilityLabel(label.title)
+                Segments(Alignment.allCases.map(Optional.some),
+                         selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
+                    let label = FormatChoices.label($0!)
+                    return .init(symbol: label.symbol, help: label.title)
                 }
                 LabeledContent("줄 간격") {
                     NumberStepper(value: paragraph?.lineSpacing, unit: paragraph?.lineSpacingKind == .percent || paragraph == nil ? "%" : "pt",
@@ -348,10 +345,10 @@ private struct ParagraphTab: View {
                 }
             }
             InspectorSection("글머리표 및 문단 번호") {
-                SegmentedChoice(["None", "Bullet", "Number"], selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
+                Segments(["None", "Bullet", "Number"], selection: Binding(get: { ["Bullet", "Number"].contains(head) ? head : "None" }, set: { kind in
                     editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
                                   : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
-                })) { Text(["None": "없음", "Bullet": "글머리표", "Number": "문단 번호"][$0]!) }
+                })) { let title = ["None": "없음", "Bullet": "글머리표", "Number": "문단 번호"][$0]!; return .init(title: title, help: title) }
                 if head == "Bullet" {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
                         ForEach(FormatChoices.bullets, id: \.self) { bullet in
@@ -671,26 +668,6 @@ private struct CaptionGrid: View {
     }
 }
 
-/// Toggles joined in one bar, as Keynote's 진하게, 기울임, 밑줄 and 취소선: those on in the accent color.
-private struct JoinedButtons: View {
-    let items: [(title: String, symbol: String, on: Bool, action: () -> Void)]
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items.indices, id: \.self) { index in
-                if index > 0 { Divider().frame(height: 14).opacity(items[index].on || items[index - 1].on ? 0 : 1) }
-                Button(action: items[index].action) {
-                    Image(systemName: items[index].symbol).font(.system(size: 14, weight: .medium)).frame(maxWidth: .infinity, minHeight: 28)
-                }
-                .buttonStyle(ChoiceStyle(on: items[index].on, quiet: true))
-                .help(items[index].title)
-                .accessibilityLabel(items[index].title)
-            }
-        }
-        .padding(2)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-    }
-}
-
 /// Keynote's tile: a rounded fill that brightens under the pointer and gives under a press.
 struct TileStyle: ButtonStyle {
     var on = false
@@ -699,9 +676,7 @@ struct TileStyle: ButtonStyle {
 /// A button that shows a choice: filled with the accent color while it is on.
 struct ChoiceStyle: ButtonStyle {
     var on = false
-    /// No fill until the pointer is over it, for buttons on a bar of their own.
-    var quiet = false
-    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 7, quiet: quiet) }
+    func makeBody(configuration: Configuration) -> some View { Face(configuration: configuration, on: on, radius: 7) }
 }
 /// A dialog's button as wide as the inspector.
 struct WideButtonStyle: ButtonStyle {
@@ -715,20 +690,19 @@ private struct Face<Label: View>: View {
     let configuration: ButtonStyleConfiguration
     let on: Bool
     let radius: CGFloat
-    var quiet = false
     var label: Label
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
 
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, quiet: Bool = false, label: () -> Label) {
-        (self.configuration, self.on, self.radius, self.quiet, self.label) = (configuration, on, radius, quiet, label())
+    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, label: () -> Label) {
+        (self.configuration, self.on, self.radius, self.label) = (configuration, on, radius, label())
     }
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         label
             .foregroundStyle(on ? AnyShapeStyle(.white) : enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
             .background {
-                if on { shape.fill(Color.accentColor) } else if hovering || configuration.isPressed { shape.fill(.tertiary) } else if !quiet { shape.fill(.quaternary) }
+                if on { shape.fill(Color.accentColor) } else { shape.fill(hovering || configuration.isPressed ? .tertiary : .quaternary) }
             }
             .contentShape(shape)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
@@ -738,7 +712,7 @@ private struct Face<Label: View>: View {
     }
 }
 extension Face where Label == ButtonStyleConfiguration.Label {
-    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat, quiet: Bool = false) {
-        self.init(configuration: configuration, on: on, radius: radius, quiet: quiet) { configuration.label }
+    init(configuration: ButtonStyleConfiguration, on: Bool, radius: CGFloat) {
+        self.init(configuration: configuration, on: on, radius: radius) { configuration.label }
     }
 }

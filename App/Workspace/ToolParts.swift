@@ -204,51 +204,68 @@ struct ShapeTiles: View {
     }
 }
 
-/// One of several, as the inspector's and sidebar's segmented controls: the segments share the
-/// width, and the selection, in the accent color as Keynote's, slides to the one picked.
-struct SegmentedChoice<Value: Hashable, Label: View>: View {
-    let values: [Value]
-    @Binding var selection: Value
-    var height: CGFloat = 24
-    @ViewBuilder let label: (Value) -> Label
-    @Namespace private var namespace
-
-    init(_ values: [Value], selection: Binding<Value>, height: CGFloat = 24, @ViewBuilder label: @escaping (Value) -> Label) {
-        (self.values, _selection, self.height, self.label) = (values, selection, height, label)
+/// macOS's segmented control as wide as it is given, the segments sharing the width: one
+/// picked, or with `any` each on or off as a toggle.
+struct Segments: NSViewRepresentable {
+    struct Segment {
+        var title: String?
+        var symbol: String?
+        var help: String
     }
+    let segments: [Segment]
+    let on: [Bool]
+    var any = false
+    var size: NSControl.ControlSize = .regular
+    /// The selection in the accent color; off, in the gray of a selection out of focus.
+    var emphasized = true
+    let pick: (Int) -> Void
 
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(values, id: \.self) { value in
-                let selected = value == selection
-                Button { selection = value } label: {
-                    label(value)
-                        .frame(maxWidth: .infinity, minHeight: height)
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-                .background {
-                    if selected {
-                        Capsule().accentGlass().matchedGeometryEffect(id: "selection", in: namespace)
-                    }
-                }
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl()
+        control.segmentDistribution = .fillEqually
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.changed(_:))
+        control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return control
+    }
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.segments = self
+        control.trackingMode = any ? .selectAny : .selectOne
+        control.controlSize = size
+        control.selectedSegmentBezelColor = emphasized ? nil : .unemphasizedSelectedContentBackgroundColor
+        control.isEnabled = context.environment.isEnabled
+        control.segmentCount = segments.count
+        for (index, segment) in segments.enumerated() {
+            control.setLabel(segment.title ?? "", forSegment: index)
+            control.setImage(segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
+            control.setToolTip(segment.help, forSegment: index)
+            control.setSelected(on.indices.contains(index) && on[index], forSegment: index)
         }
-        .padding(2)
-        .glassCapsule()
-        .animation(.snappy(duration: 0.3), value: selection)
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject {
+        var segments: Segments
+        init(_ segments: Segments) { self.segments = segments }
+        @objc func changed(_ control: NSSegmentedControl) {
+            // With `any`, the segment whose state now differs is the one clicked.
+            let index = segments.any
+                ? (0..<control.segmentCount).first { control.isSelected(forSegment: $0) != (segments.on.indices.contains($0) && segments.on[$0]) }
+                : control.selectedSegment
+            if let index, index >= 0 { segments.pick(index) }
+        }
     }
 }
-
-extension Shape {
-    /// The selection in Liquid Glass tinted with the accent color on macOS 26 and later, the accent color before it.
-    @ViewBuilder func accentGlass() -> some View {
-        if #available(macOS 26, *) {
-            fill(.clear).glassEffect(.regular.tint(.accentColor).interactive(), in: self)
-        } else {
-            fill(Color.accentColor).shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+extension Segments {
+    /// One of `values`, bound to `selection`.
+    init<Value: Hashable>(_ values: [Value], selection: Binding<Value>, size: NSControl.ControlSize = .regular,
+                          emphasized: Bool = true, segment: (Value) -> Segment) {
+        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, emphasized: emphasized) {
+            selection.wrappedValue = values[$0]
         }
     }
 }
