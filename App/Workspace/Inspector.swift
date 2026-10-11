@@ -6,6 +6,8 @@ import SwiftUI
 struct Inspector: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
+    /// The revision the properties were last read for, so an edit reads them again.
+    @State private var shownRevision: UInt64 = 0
     /// The tab shown; nil for the one last chosen among these tabs.
     @State private var chosen: String?
     /// The selected object's (or the caret's table's) properties, read again after every edit.
@@ -76,7 +78,12 @@ struct Inspector: View {
             let showing = shown(old)
             chosen = viewer.inspectorTabs[new.joined(separator: " ")] == nil && new.contains(showing) ? showing : nil
         }
-        .task(id: Self.readKey(document, viewer)) {
+        // The revision is not published: a change to the chosen object alone (글자처럼 취급,
+        // 본문과의 배치 …) moves nothing the view watches, so the read would wait for another click.
+        .onReceive(document.presented) {
+            if viewer.arrangedObject != nil, document.revision != shownRevision { shownRevision = document.revision }
+        }
+        .task(id: "\(shownRevision) " + Self.readKey(document, viewer)) {
             var read: (cell: CellProps?, fill: PageFill?)?
             if let target = document.selection?.focus.target, target.cell != nil, document.object == nil {
                 read = (try? await document.cellProps(target), (try? await document.cellBorder(target))?.fill)
@@ -84,7 +91,6 @@ struct Inspector: View {
             let object = viewer.arrangedObject
             let objectProps = object == nil ? nil : try? await document.objectProps(object!)
             // A read overtaken by a newer one keeps what that one shows: cancelled, it reads nothing.
-            print("DEBUGREAD", Self.readKey(document, viewer), object as Any, objectProps as Any, Task.isCancelled)
             guard !Task.isCancelled else { return }
             if let read { (cell, cellFill) = read }
             props = objectProps
@@ -197,14 +203,14 @@ struct Inspector: View {
     /// 보호와 묶기 and 캡션, then 개체 선택 and 개체 속성. What a table cannot do is there but off.
     @ViewBuilder private func object(_ context: EditingContext) -> some View {
         let inLine = props?.treatAsChar == true, table = context.object == nil
-        // As 개체 속성's: 글자처럼 취급, then 본문과의 배치 for an object out of the line.
+        // 본문과의 배치 for an object out of the line, then 글자처럼 취급.
         InspectorSection("본문과의 배치") {
-            Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) })).checkbox()
             IconTiles(selection: Binding(get: { inLine ? "" : props?.textWrap ?? "" }, set: { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: $0)) }),
                       options: [("Square", "어울림"), ("TopAndBottom", "자리 차지"), ("BehindText", "글 뒤로"), ("InFrontOfText", "글 앞으로")],
                       fill: true) { Pictogram.wrap($0, on: $1) }
                 .flexibleButtons()
                 .disabled(inLine)
+            Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) })).checkbox()
         }
         .disabled(props == nil)
         InspectorSection {

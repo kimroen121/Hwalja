@@ -294,10 +294,34 @@ extension InspectorTests {
         #expect(same)
     }
 
+    /// What the inspector's own controls change shows in it at once, with the picture still
+    /// chosen: 글자처럼 취급 off, then 글 뒤로.
+    @Test func inspectorFollowsEditsToTheChosenPicture() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        _ = try await insertedPicture(document)
+        let open = hosted(Inspector(document: document, viewer: viewer, tab: "개체"))
+        try await Task.sleep(for: .milliseconds(300))
+        for change in [ObjectProps(treatAsChar: false, textWrap: "Square"), ObjectProps(treatAsChar: false, textWrap: "BehindText")] {
+            viewer.arrange(change)
+            await document.settle()
+            let fresh = hosted(Inspector(document: document, viewer: viewer, tab: "개체"))
+            var same = false
+            for _ in 0..<50 where !same {
+                try await Task.sleep(for: .milliseconds(40))
+                same = pixels(open) == pixels(fresh)
+            }
+            #expect(same, "after \(change.textWrap ?? "")")
+        }
+    }
+
     private func hosted(_ view: Inspector) -> NSHostingView<some View> {
         let host = NSHostingView(rootView: view.frame(width: 280, height: 1100).background(Color(nsColor: .windowBackgroundColor)))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 280, height: 1100), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 280, height: 1100), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
+        // Ordered in, as the app's is (SwiftUI starts a view's tasks again only then), out of sight.
+        window.orderFrontRegardless()
         host.layoutSubtreeIfNeeded()
         return host
     }
