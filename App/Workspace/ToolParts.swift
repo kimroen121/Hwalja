@@ -206,7 +206,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
                         .onEnded { drag in select(at: drag.location.x, width: geometry.size.width) }
                 )
         }
-        .frame(height: 24)
+        .frame(height: 34)
     }
 
     private func select(at x: CGFloat, width: CGFloat) {
@@ -226,7 +226,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
                     label(value)
                         .font(.system(size: 12, weight: selection == value ? .semibold : .regular))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 24)
+                        .frame(height: 28)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)

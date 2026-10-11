@@ -27,6 +27,8 @@ struct DocumentWindow: View {
         NavigationSplitView(columnVisibility: Binding(get: { viewer.showsSidebar ? .all : .detailOnly },
                                                       set: { viewer.showsSidebar = $0 != .detailOnly })) {
             Sidebar(document: document, viewer: viewer)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .padding(6)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             // Nothing here has a minimum width: beside an inspector, a detail wider than about
@@ -36,6 +38,11 @@ struct DocumentWindow: View {
                 if viewer.finding { FindBar(viewer: viewer) }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minHeight: 300)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        FloatingFormatBar(document: document, viewer: viewer)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                    }
             }
             // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
             .toolbar { DocumentToolbar(document: document, viewer: viewer) }
@@ -47,6 +54,8 @@ struct DocumentWindow: View {
                 case .document: DocumentInspector(document: document, viewer: viewer)
                 }
             }
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .padding(6)
             .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
@@ -106,6 +115,83 @@ struct DocumentWindow: View {
         }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
+    }
+}
+
+/// Compact formatting island; all actions use the same editor/undo path as the inspector.
+private struct FloatingFormatBar: View {
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
+    private var editor: PageEditor { viewer.canvas.editor }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            controls(full: true)
+            controls(full: false)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .floatingSurface()
+        .disabled(!document.context.canFormat || document.context.locked)
+    }
+
+    private func controls(full: Bool) -> some View {
+        HStack(spacing: 10) {
+            if full {
+                Picker("스타일", selection: Binding(get: { document.format?.style }, set: { id in
+                    if let id { document.applyStyle(id, editor.undoManager) }
+                })) {
+                    if document.format == nil { Text("스타일").tag(UInt32?.none) }
+                    ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
+                }
+                .labelsHidden().frame(width: 100)
+                FontPicker(font: document.format?.text.font, language: nil) { editor.format(CharStyle(font: $0)) }
+                    .equatable().frame(width: 140)
+                Picker("글자 크기", selection: Binding(get: { document.format?.text.size ?? 10 }, set: { editor.format(CharStyle(size: $0)) })) {
+                    let size = document.format?.text.size ?? 10
+                    ForEach(Array(Set(FormatChoices.sizes + [size])).sorted(), id: \.self) { Text(FormatChoices.points($0)).tag($0) }
+                }
+                .labelsHidden().frame(width: 72)
+                Divider().frame(height: 18)
+            }
+            formatButton("진하게", symbol: "bold", selected: document.format?.text.bold == true, action: editor.toggleBold)
+            formatButton("기울임", symbol: "italic", selected: document.format?.text.italic == true, action: editor.toggleItalic)
+            formatButton("밑줄", symbol: "underline", selected: document.format?.text.underline == true, action: editor.toggleUnderline)
+            if full {
+                formatButton("취소선", symbol: "strikethrough", selected: document.format?.text.strikethrough == true, action: editor.toggleStrikethrough)
+            }
+            Menu {
+                ForEach(Alignment.allCases, id: \.self) { alignment in
+                    let item = FormatChoices.label(alignment)
+                    Button(item.title, systemImage: item.symbol) { editor.format(ParaStyle(alignment: alignment)) }
+                }
+            } label: { Image(systemName: "text.alignleft") }
+            .help("문단 정렬").accessibilityLabel("문단 정렬")
+            Button { viewer.editingCharShape = true } label: { Image(systemName: "ellipsis") }
+                .help("글자 모양").accessibilityLabel("글자 모양")
+        }
+        .controlSize(.small)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func formatButton(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).frame(width: 24, height: 24)
+                .background(selected ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain).help(title).accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+private extension View {
+    @ViewBuilder func floatingSurface() -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        } else {
+            background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.08)) }
+        }
     }
 }
 
