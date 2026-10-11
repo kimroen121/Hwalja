@@ -349,7 +349,7 @@ struct Inspector: View {
                 viewer.arrange(ObjectProps(tableBorder: CellBorder(sides: [new, new, new, new, nil, nil])))
             })
             // The kind beside the title, its color and width under it.
-            LabeledContent { LineRow.kind(line) } label: { Text("표 윤곽").font(.headline) }
+            LabeledContent { LineRow.kind(line) } label: { Text("표 윤곽").font(.headline.weight(.semibold)) }
             LineRow(line: line)
         }
         .disabled(props == nil)
@@ -652,7 +652,7 @@ private struct TextTab: View {
                                   step: percent ? 10 : 1) { value in
                         editor.format(ParaStyle(lineSpacing: value, lineSpacingKind: paragraph?.lineSpacingKind ?? .percent))
                     }
-                } label: { Text("간격").font(.headline) }
+                } label: { Text("간격").font(.headline.weight(.semibold)) }
             }
         }
         InspectorSection { lists }
@@ -749,14 +749,14 @@ private struct TextTab: View {
             }
             .labelsHidden()
             .fixedSize()
-        } label: { Text("글머리표 및 문단 번호").font(.headline) }
+        } label: { Text("글머리표 및 문단 번호").font(.headline.weight(.semibold)) }
     }
 
     /// The rest of 글자 모양: scales of the 언어, 첨자, the attributes, 밑줄, 취소선, 테두리 and 배경.
     private var more: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("추가 텍스트 옵션").font(.headline).frame(maxWidth: .infinity)
+                Text("추가 텍스트 옵션").font(.headline.weight(.semibold)).frame(maxWidth: .infinity)
                 LabeledContent("장평") { lingual(\.ratio, range: 50...200) }
                 LabeledContent("자간") { lingual(\.spacing, range: -50...50) }
                 LabeledContent("상대 크기") { lingual(\.relativeSize, range: 10...250) }
@@ -808,7 +808,7 @@ private struct TextTab: View {
                     VStack(spacing: 4) { length(\.marginRight); Text("오른쪽").font(.caption) }
                 }
                 .frame(maxWidth: .infinity)
-            } label: { Text("여백").font(.headline) }
+            } label: { Text("여백").font(.headline.weight(.semibold)) }
         }
         // 들여쓰기 (positive) and 내어쓰기 (negative) are one value of the paragraph.
         InspectorSection {
@@ -829,7 +829,7 @@ private struct TextTab: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-            } label: { Text("들여쓰기").font(.headline) }
+            } label: { Text("들여쓰기").font(.headline.weight(.semibold)) }
         }
         InspectorSection {
             BorderFillRows(style: paragraphBorderFill, fill: false)
@@ -960,7 +960,7 @@ private struct OpeningRows<Choice: View, Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            LabeledContent { choice } label: { Text(title).fontWeight(open ? .bold : .regular) }
+            LabeledContent { choice } label: { Text(title).fontWeight(open ? .semibold : .regular) }
             if open { rows }
         }
         .padding(.vertical, open ? 6 : 0)
@@ -1173,6 +1173,8 @@ struct DocumentInspector: View {
                         Rectangle()
                             .fill(.white)
                             .frame(width: (lying ? long : short) * scale, height: (lying ? short : long) * scale)
+                            // As the pages: white paper stands out from a light inspector too.
+                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                             .overlay(alignment: .bottomTrailing) {
                                 if lying == landscape {
                                     Image(systemName: "checkmark").font(.title3.weight(.bold)).foregroundStyle(.black).padding(8)
@@ -1342,7 +1344,7 @@ struct InspectorSection<Header: View, Content: View, Footer: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header.font(.headline)
+            header.font(.headline.weight(.semibold))
             content
             footer
         }

@@ -144,10 +144,7 @@ private struct DocumentToolbar: ToolbarContent {
         ToolbarItem { ZoomMenu(viewer: viewer, position: viewer.position) }
         if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
         // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
-        ToolbarItemGroup {
-            InspectorButton(viewer: viewer, pane: .format)
-            InspectorButton(viewer: viewer, pane: .document)
-        }
+        ToolbarItem { InspectorButtons(viewer: viewer) }
     }
 }
 
@@ -186,18 +183,19 @@ private struct MoreMenu: View {
     }
 }
 
-private struct InspectorButton: View {
+/// 서식 and 문서 as Pages's: one segmented control, the pane showing selected, none while the
+/// inspector is hidden; the one showing, clicked, hides it. Selecting one, a toolbar control
+/// is selected in gray; selecting any or toggled, in the accent color.
+private struct InspectorButtons: View {
     @ObservedObject var viewer: Viewer
-    let pane: InspectorPane
     var body: some View {
-        // The pane showing is on in gray, not in the accent color.
-        Toggle(isOn: Binding(get: { viewer.showsInspector && viewer.inspectorPane == pane },
-                             set: { on in (viewer.inspectorPane, viewer.showsInspector) = (pane, on) })) {
-            Label(pane.rawValue, systemImage: pane.symbol)
+        let panes = InspectorPane.allCases
+        Segments(segments: panes.map { .init(symbol: $0.symbol, help: $0.rawValue) },
+                 on: panes.map { viewer.showsInspector && viewer.inspectorPane == $0 }, capsule: true) { index in
+            let on = !(viewer.showsInspector && viewer.inspectorPane == panes[index])
+            (viewer.inspectorPane, viewer.showsInspector) = (panes[index], on)
         }
-        .toggleStyle(.button)
-        .tint(.gray.opacity(0.4))
-        .help(pane.rawValue)
+        .fixedSize()
     }
 }
 
@@ -254,10 +252,9 @@ private struct CountPicker: View {
         }
         .labelsHidden()
         .fixedSize()
-        // Dark under it whatever lies beneath, as Pages's count over the page.
+        // As Pages's count over the page, in the window's appearance.
         .padding(4)
         .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .environment(\.colorScheme, .dark)
         .task(id: document.revision) {
             // Counted again once typing pauses, not on every key.
             try? await Task.sleep(for: .milliseconds(300))
