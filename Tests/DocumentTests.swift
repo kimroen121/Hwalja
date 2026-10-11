@@ -1315,7 +1315,9 @@ struct DocumentTests {
         #expect(Inspector.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
         #expect(Inspector.contextTabs(EditingContext(inNote: true)) == ["주석"])
         #expect(Inspector.tabs(EditingContext(object: .picture)) == ["그림"])
-        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["텍스트", "스타일", "표 디자인", "표 레이아웃"])
+        #expect(Inspector.tabs(EditingContext()) == ["텍스트"])
+        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["텍스트", "표 디자인", "표 레이아웃"])
+        #expect(InspectorPane.allCases.map(\.rawValue) == ["서식", "스타일", "문서"])
     }
 
     /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.

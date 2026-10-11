@@ -44,8 +44,8 @@ struct DocumentWindow: View {
                             .padding(.top, 14)
                             .padding(.bottom, 10)
                             .frame(maxWidth: .infinity)
-                            .background(Color(nsColor: .underPageBackgroundColor))
                     }
+                    .background(Color(nsColor: .underPageBackgroundColor))
                 WorkspaceStatus(document: document, viewer: viewer, position: viewer.position)
             }
             // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
@@ -59,6 +59,7 @@ struct DocumentWindow: View {
                 .padding(10)
                 switch viewer.inspectorPane {
                 case .format: Inspector(document: document, viewer: viewer)
+                case .style: StylePane(document: document, viewer: viewer)
                 case .document: DocumentInspector(document: document, viewer: viewer)
                 }
             }
@@ -315,8 +316,14 @@ private struct WorkspaceStatus: View {
 
 /// The inspector's panes, chosen from the toolbar.
 enum InspectorPane: String, CaseIterable {
-    case format = "서식", document = "문서"
-    var symbol: String { self == .format ? "paintbrush" : "doc.text" }
+    case format = "서식", style = "스타일", document = "문서"
+    var symbol: String {
+        switch self {
+        case .format: "paintbrush"
+        case .style: "textformat"
+        case .document: "doc.text"
+        }
+    }
 }
 
 /// Zoom choices of the View menu.

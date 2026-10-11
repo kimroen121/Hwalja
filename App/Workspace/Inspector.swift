@@ -14,7 +14,7 @@ struct Inspector: View {
         (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab ?? viewer.inspectorTab))
     }
 
-    static let textTabs = ["텍스트", "스타일"]
+    static let textTabs = ["텍스트"]
     /// The 개체 탭 and 상황 탭 for what is selected.
     static func contextTabs(_ context: EditingContext) -> [String] {
         switch context.object {
@@ -42,16 +42,9 @@ struct Inspector: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
-            } else {
-                Text(tab).font(.headline).foregroundStyle(.secondary).frame(height: 44)
             }
-            Divider().padding(.horizontal, 16)
-            if tab == "스타일" {
-                StylePane(document: document, viewer: viewer)
-            } else {
-                InspectorScroll { content(tab, context) }
-                    .disabled(context.locked)
-            }
+            InspectorScroll { content(tab, context) }
+                .disabled(context.locked)
         }
         .onChange(of: chosen) { viewer.inspectorTab = chosen }
         .onChange(of: Self.contextTabs(context)) { old, new in
