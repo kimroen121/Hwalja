@@ -27,8 +27,8 @@ struct DocumentWindow: View {
         NavigationSplitView(columnVisibility: Binding(get: { viewer.showsSidebar ? .all : .detailOnly },
                                                       set: { viewer.showsSidebar = $0 != .detailOnly })) {
             Sidebar(document: document, viewer: viewer)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .padding(6)
+                .workspacePanel()
+                .padding(8)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {
             // Nothing here has a minimum width: beside an inspector, a detail wider than about
@@ -60,8 +60,8 @@ struct DocumentWindow: View {
                 case .document: DocumentInspector(document: document, viewer: viewer)
                 }
             }
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .padding(6)
+            .workspacePanel()
+            .padding(8)
             .inspectorColumnWidth(min: 250, ideal: 290, max: 480)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
@@ -189,6 +189,23 @@ private struct FloatingFormatBar: View {
 }
 
 private extension View {
+    func workspacePanel() -> some View {
+        background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.025))
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.primary.opacity(0.06), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+    }
+
     @ViewBuilder func floatingSurface() -> some View {
         if #available(macOS 26, *) {
             glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
@@ -699,6 +716,17 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                Text("탐색").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Button { viewer.showFind(replace: false) } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .buttonStyle(.plain).help("문서에서 찾기")
+                .accessibilityLabel("문서에서 찾기")
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
             PaneTabs(values: TaskPane.allCases, selection: $viewer.sidebarPane, title: { $0.rawValue }) {
                 Text($0.rawValue).font(.system(size: 11, weight: .medium))
             }

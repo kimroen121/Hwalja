@@ -225,6 +225,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
                 } label: {
                     label(value)
                         .font(.system(size: 12, weight: selection == value ? .semibold : .regular))
+                        .foregroundStyle(selection == value ? Color.accentColor : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 28)
                         .contentShape(Capsule())
@@ -242,7 +243,7 @@ struct PaneTabs<Value: Hashable, Content: View>: View {
             }
         }
         .padding(3)
-        .background(.quaternary.opacity(0.5), in: Capsule())
+        .background(.primary.opacity(0.045), in: Capsule())
     }
 
     @ViewBuilder private var selectionSurface: some View {

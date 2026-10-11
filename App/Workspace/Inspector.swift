@@ -751,13 +751,19 @@ struct InspectorSection<Header: View, Content: View, Footer: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header.font(.headline)
+            header.font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             content
             footer
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .overlay(alignment: .bottom) { Divider().padding(.horizontal, 16) }
+        .padding(14)
+        .background(.background.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.045), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
     }
 }
 extension InspectorSection where Header == EmptyView, Footer == EmptyView {
