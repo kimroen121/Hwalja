@@ -1,6 +1,9 @@
 .PHONY: engine test test-rust test-swift fmt-check compare-pages app run dist clean
-SWIFT_ARCHS ?= arm64
-SWIFT_FLAGS = -c release $(foreach a,$(SWIFT_ARCHS),--arch $(a))
+# The host's architecture unless given: --arch takes SwiftPM's slower build system.
+SWIFT_ARCHS ?=
+# Optimized, but file by file, so a change rebuilds in seconds; dist optimizes the whole module.
+SWIFT_OPT ?= -Xswiftc -no-whole-module-optimization
+SWIFT_FLAGS = -c release $(SWIFT_OPT) $(foreach a,$(SWIFT_ARCHS),--arch $(a))
 
 engine:
 	./scripts/build-engine.sh
@@ -26,7 +29,7 @@ run: app
 # Universal, Developer ID-signed, notarized zip. Needs SIGN_IDENTITY and a
 # notarytool profile: xcrun notarytool store-credentials hwalja
 dist:
-	HWP_ENGINE_TARGETS="aarch64-apple-darwin x86_64-apple-darwin" $(MAKE) app SWIFT_ARCHS="arm64 x86_64"
+	HWP_ENGINE_TARGETS="aarch64-apple-darwin x86_64-apple-darwin" $(MAKE) app SWIFT_ARCHS="arm64 x86_64" SWIFT_OPT=
 	ditto -c -k --keepParent build/hwalja.app build/hwalja.zip
 	xcrun notarytool submit build/hwalja.zip --keychain-profile hwalja --wait
 	xcrun stapler staple build/hwalja.app

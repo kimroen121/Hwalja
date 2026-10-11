@@ -88,29 +88,12 @@ extension Viewer {
             setObject(placed.object, changed.changes(from: props))
         }
     }
-    /// 개체 보호: 개체 보호하기 for the selected object, and 모든 보호 개체 해제하기.
+    /// 개체 보호 for the selected object, and 모든 보호 개체 해제.
     var protectionChoices: [Choice?] {
-        [Choice(title: "개체 보호하기", enabled: document?.object?.object.cell == nil) {
+        [Choice(title: "개체 보호", enabled: document?.object?.object.cell == nil) {
             self.change { .setObject($0, ObjectProps(protect: true)) }
          },
-         Choice(title: "모든 보호 개체 해제하기") { self.document?.edit(self.undoManager) { _ in .unprotectAll } }]
-    }
-    /// 회전: 왼쪽으로·오른쪽으로 90도 회전 and 좌우·상하 대칭 of the selected picture or
-    /// drawing object. As in 한/글, one 글자처럼 취급 does not turn.
-    var rotationChoices: [Choice?] {
-        [Choice(title: "왼쪽으로 90도 회전") { self.rotate(by: -90) },
-         Choice(title: "오른쪽으로 90도 회전") { self.rotate(by: 90) }, nil,
-         Choice(title: "좌우 대칭") { self.change { .flip($0, vertical: false) } },
-         Choice(title: "상하 대칭") { self.change { .flip($0, vertical: true) } }]
-    }
-    private func rotate(by degrees: Int32) {
-        guard let document, let placed = document.object else { return }
-        Task {
-            guard let props = try? await document.objectProps(placed.object), props.treatAsChar != true else {
-                return NSSound.beep()
-            }
-            setObject(placed.object, ObjectProps(rotationAngle: ((props.rotationAngle ?? 0) + degrees + 360) % 360))
-        }
+         Choice(title: "모든 보호 개체 해제") { self.document?.edit(self.undoManager) { _ in .unprotectAll } }]
     }
     /// The selected object, or the table holding the caret: what 캡션 and 배치 change.
     var arrangedObject: ObjectRef? {
@@ -125,17 +108,9 @@ extension Viewer {
     }
     /// 캡션 넣기: for the selected object, or the table holding the caret.
     func insertCaption(_ position: String) {
-        guard let document, let object = arrangedObject else { return }
+        // The object stays selected; the caption is written when it is clicked.
+        guard let object = arrangedObject else { return }
         setObject(object, ObjectProps(caption: position))
-        // As in Hancom, the caret goes to the end of the caption, to write it.
-        guard position != "None", object.cell == nil, [.picture, .table].contains(object.kind) else { return }
-        let caption = EditTarget(section: object.section, paragraph: object.paragraph,
-                                 cell: CellTarget(control: object.control, cell: object.kind == .table ? CellTarget.caption : 0,
-                                                  paragraph: 0))
-        document.select { document in
-            let end = try await document.paragraph(caption).text.unicodeScalars.count
-            return .caret(EditPosition(target: caption, scalar: UInt32(end)))
-        }
     }
     /// Starts drawing a 그리기 개체 with the next drag on a page.
     func draw(_ shape: String) {
@@ -189,7 +164,7 @@ struct ObjectSheet: View {
 
     var body: some View {
         DialogFrame(state.cell == nil ? "개체 속성" : "표/셀 속성", confirmTitle: "설정") {
-            DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["선", "그림"] : [])
+            DialogTabs(selection: $tab, titles: ["기본", "여백/캡션"] + (kind == .picture ? ["그림"] : [])
                        + (kind == .table ? ["테두리", "배경"] : [])
                        + (kind == .table ? ["표", "셀"] : []) + (kind == .shape ? ["선", "채우기"] : [])
                        + (state.textBox ? ["글상자"] : []) + (kind == .shape ? ["그림자"] : [])) { tab in
@@ -220,34 +195,13 @@ struct ObjectSheet: View {
 
     private var basic: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // 크기, 회전, 글자처럼 취급 and 본문과의 배치 are the inspector's 개체.
             if kind == .picture || kind == .shape {
-                GroupTitle("크기")
-                VStack(alignment: .leading, spacing: 8) {
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                        GridRow { length("너비", \.width, range: 1...10_000) }
-                        GridRow { length("높이", \.height, range: 1...10_000) }
-                    }
-                    Toggle("크기 고정", isOn: flag(\.sizeProtect))
-                }
-                .padding(.leading, 12)
-                GroupTitle("개체 회전")
-                LabeledField("회전각") {
-                    SpinField(value: Binding { Double(props.rotationAngle ?? 0) } set: { props.rotationAngle = Int32($0) },
-                              unit: "°", range: -360...360, digits: 0)
-                }
-                .padding(.leading, 12)
-                .disabled(props.treatAsChar == true)
+                Toggle("크기 고정", isOn: flag(\.sizeProtect))
             }
             GroupTitle("위치")
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("글자처럼 취급", isOn: flag(\.treatAsChar))
                 Group {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("본문과의 배치")
-                        IconTiles(selection: text(\.textWrap, "Square"), options: [
-                            ("Square", "어울림"), ("TopAndBottom", "자리 차지"), ("BehindText", "글 뒤로"), ("InFrontOfText", "글 앞으로"),
-                        ]) { Pictogram.wrap($0, on: $1) }
-                    }
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
                         GridRow {
                             FieldLabel("가로")
@@ -274,7 +228,7 @@ struct ObjectSheet: View {
             }
             .padding(.leading, 12)
             if props.protect != nil {
-                Toggle("개체 보호하기", isOn: flag(\.protect))
+                Toggle("개체 보호", isOn: flag(\.protect))
             }
             Spacer(minLength: 0)
         }
@@ -286,21 +240,19 @@ struct ObjectSheet: View {
             GroupTitle("바깥 여백")
             sides(\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom)
             if kind == .picture || kind == .table {
+                // Where the caption goes is the inspector's 개체.
                 GroupTitle("캡션")
-                HStack(alignment: .top, spacing: 24) {
-                    CaptionGrid(selection: text(\.caption, "None"))
-                    VStack(alignment: .leading, spacing: 8) {
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                            GridRow { length("크기", \.captionWidth) }
-                            GridRow { length("개체와의 간격", \.captionSpacing) }
-                        }
-                        if kind == .picture {
-                            Toggle("여백 부분까지 너비 확대", isOn: flag(\.captionIncludeMargin))
-                        }
+                VStack(alignment: .leading, spacing: 8) {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                        GridRow { length("크기", \.captionWidth) }
+                        GridRow { length("개체와의 간격", \.captionSpacing) }
                     }
-                    .disabled((props.caption ?? "None") == "None")
+                    if kind == .picture {
+                        Toggle("여백 부분까지 너비 확대", isOn: flag(\.captionIncludeMargin))
+                    }
                 }
                 .padding(.leading, 12)
+                .disabled((props.caption ?? "None") == "None")
             }
             Spacer(minLength: 0)
         }
@@ -313,21 +265,6 @@ struct ObjectSheet: View {
             sides(\.cropLeft, \.cropRight, \.cropTop, \.cropBottom)
             GroupTitle("그림 여백")
             sides(\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom)
-            GroupTitle("그림 효과")
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    FieldLabel("색조 조정")
-                    ChoiceField(text(\.effect, "RealPic"), [("RealPic", "효과 없음"), ("GrayScale", "회색조"), ("BlackWhite", "흑백")])
-                        .gridCellColumns(3)
-                }
-                GridRow {
-                    FieldLabel("밝기")
-                    SpinField(value: number(\.brightness), unit: "%", range: -100...100)
-                    FieldLabel("대비")
-                    SpinField(value: number(\.contrast), unit: "%", range: -100...100)
-                }
-            }
-            .padding(.leading, 12)
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -660,9 +597,6 @@ struct ObjectSheet: View {
     private func text(_ key: WritableKeyPath<ObjectProps, String?>, _ fallback: String) -> Binding<String> {
         Binding { props[keyPath: key] ?? fallback } set: { props[keyPath: key] = $0 }
     }
-    private func number<T: BinaryInteger>(_ key: WritableKeyPath<ObjectProps, T?>) -> Binding<Double> {
-        Binding { Double(props[keyPath: key] ?? 0) } set: { props[keyPath: key] = T(clamping: Int($0.rounded())) }
-    }
     private func millimeters<T: BinaryInteger>(_ key: WritableKeyPath<ObjectProps, T?>) -> Binding<Double> {
         Binding { Units.millimeters(props[keyPath: key] ?? 0) } set: { props[keyPath: key] = Units.units($0) }
     }
@@ -670,10 +604,9 @@ struct ObjectSheet: View {
                         _ options: [(value: String, title: String)]) -> some View {
         ChoiceField(text(key, fallback), options, minWidth: 40)
     }
-    @ViewBuilder private func length<T: BinaryInteger>(_ title: String, _ key: WritableKeyPath<ObjectProps, T?>,
-                                                       range: ClosedRange<Double> = 0...1000) -> some View {
+    @ViewBuilder private func length<T: BinaryInteger>(_ title: String, _ key: WritableKeyPath<ObjectProps, T?>) -> some View {
         FieldLabel(title)
-        SpinField(value: millimeters(key), unit: "mm", range: range)
+        SpinField(value: millimeters(key), unit: "mm", range: 0...1000)
     }
     @ViewBuilder private func cellLength<T: BinaryInteger>(_ title: String, _ key: WritableKeyPath<CellProps, T?>) -> some View {
         FieldLabel(title)
@@ -691,31 +624,10 @@ struct ObjectSheet: View {
     }
 }
 
-/// 캡션: the nine places around the object, drawn as the web dialog draws them; the
-/// middle is no caption.
-private struct CaptionGrid: View {
-    @Binding var selection: String
-    private static let places = [["LeftTop", "Top", "RightTop"], ["LeftCenter", "None", "RightCenter"],
-                                 ["LeftBottom", "Bottom", "RightBottom"]]
-    var body: some View {
-        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-            ForEach(Self.places, id: \.self) { row in
-                GridRow {
-                    ForEach(row, id: \.self) { place in
-                        Button { selection = place } label: { Pictogram.caption(place, on: selection == place).frame(width: 40, height: 34).padding(3) }
-                            .choice(selection == place)
-                            .help(Captions.all.first { $0.value == place }?.title ?? "")
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// Small drawings for the picture choices: text as gray lines and the object as a box,
 /// in the accent color only when chosen.
-private enum Pictogram {
-    static func ink(_ on: Bool) -> Color { on ? .accentColor : .secondary }
+enum Pictogram {
+    static func ink(_ on: Bool) -> Color { on ? .white : .secondary }
     /// 사각형 모서리 곡률: a rectangle with corners `rate` % round.
     static func corner(_ rate: UInt32) -> some View {
         Canvas { context, size in
@@ -810,26 +722,6 @@ private enum Pictogram {
             default:
                 row(cut + 3, cut - 6)
             }
-        }
-    }
-    static func caption(_ place: String, on: Bool) -> some View {
-        Canvas { context, size in
-            let c = context, ink = ink(on)
-            guard place != "None" else {
-                let box = CGRect(x: size.width / 2 - 8, y: size.height / 2 - 8, width: 16, height: 16)
-                c.fill(Path(box), with: .color(ink.opacity(0.35)))
-                c.stroke(Path(box), with: .color(ink), lineWidth: 1)
-                return
-            }
-            let box = CGRect(x: size.width / 2 - 7, y: size.height / 2 - 7, width: 14, height: 14)
-            var label = CGPoint(x: size.width / 2, y: size.height / 2)
-            if place.hasPrefix("Left") { label.x = box.minX - 8 } else if place.hasPrefix("Right") { label.x = box.maxX + 8 }
-            if place == "Top" { label.y = box.minY - 6 } else if place == "Bottom" { label.y = box.maxY + 6 }
-            if place.hasSuffix("Top") && place != "Top" { label.y = box.minY + 4 }
-            if place.hasSuffix("Bottom") && place != "Bottom" { label.y = box.maxY - 4 }
-            c.fill(Path(box), with: .color(ink.opacity(0.3)))
-            c.stroke(Path(box), with: .color(ink), lineWidth: 1)
-            c.draw(Text("#1").font(.system(size: 8)).foregroundStyle(ink), at: label)
         }
     }
 }

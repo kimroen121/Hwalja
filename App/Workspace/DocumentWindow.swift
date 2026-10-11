@@ -4,7 +4,7 @@ import SwiftUI
 /// One document window, laid out like Hancom Office Web below the macOS menu bar: the
 /// toolbar, then page thumbnails beside the pages and the inspector.
 struct DocumentWindow: View {
-    @ObservedObject var document: HwpDocument
+    let document: HwpDocument
     @StateObject private var viewer = Viewer()
 
     var body: some View {
@@ -27,45 +27,33 @@ struct DocumentWindow: View {
         NavigationSplitView(columnVisibility: Binding(get: { viewer.showsSidebar ? .all : .detailOnly },
                                                       set: { viewer.showsSidebar = $0 != .detailOnly })) {
             Sidebar(document: document, viewer: viewer)
-                .workspacePanel()
-                .padding(8)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
+                .toolbar(removing: .sidebarToggle)
+                .toolbar {
+                    // At the sidebar's trailing edge, where macOS puts the sidebar button.
+                    if #available(macOS 26, *) { ToolbarSpacer(.flexible) }
+                    ToolbarItem { SidebarMenu(viewer: viewer) }
+                }
+                .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             // Nothing here has a minimum width: beside an inspector, a detail wider than about
             // 100pt at its least makes SwiftUI work out the split again and again until AppKit
             // stops the app.
             VStack(spacing: 0) {
                 if viewer.finding { FindBar(viewer: viewer) }
-                Canvas(canvas: viewer.canvas, document: document)
+                Canvas(canvas: viewer.canvas, document: document, showsCount: viewer.showsCount)
                     .frame(minHeight: 300)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        FloatingFormatBar(document: document, viewer: viewer)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 14)
-                            .padding(.bottom, 10)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .background(Color(nsColor: .underPageBackgroundColor))
-                WorkspaceStatus(document: document, viewer: viewer, position: viewer.position)
             }
             // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
             .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         }
         .inspector(isPresented: $viewer.showsInspector) {
-            VStack(spacing: 0) {
-                PaneTabs(values: InspectorPane.allCases, selection: $viewer.inspectorPane, title: { $0.rawValue }) {
-                    Text($0.rawValue).font(.system(size: 12, weight: .medium))
-                }
-                .padding(10)
+            Group {
                 switch viewer.inspectorPane {
                 case .format: Inspector(document: document, viewer: viewer)
-                case .style: StylePane(document: document, viewer: viewer)
                 case .document: DocumentInspector(document: document, viewer: viewer)
                 }
             }
-            .workspacePanel()
-            .padding(8)
-            .inspectorColumnWidth(min: 250, ideal: 290, max: 480)
+            .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
@@ -127,132 +115,38 @@ struct DocumentWindow: View {
     }
 }
 
-/// Compact formatting island; all actions use the same editor/undo path as the inspector.
-private struct FloatingFormatBar: View {
-    @ObservedObject var document: HwpDocument
-    let viewer: Viewer
-    private var editor: PageEditor { viewer.canvas.editor }
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            controls(full: true, includesFont: true)
-            controls(full: true, includesFont: false)
-            controls(full: false, includesFont: false)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .floatingSurface()
-        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-        .disabled(!document.context.canFormat || document.context.locked)
-    }
-
-    private func controls(full: Bool, includesFont: Bool) -> some View {
-        HStack(spacing: 10) {
-            if full {
-                Picker("스타일", selection: Binding(get: { document.format?.style }, set: { id in
-                    if let id { document.applyStyle(id, editor.undoManager) }
-                })) {
-                    if document.format == nil { Text("스타일").tag(UInt32?.none) }
-                    ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
-                }
-                .labelsHidden().frame(width: 100)
-                if includesFont {
-                    FontPicker(font: document.format?.text.font, language: nil) { editor.format(CharStyle(font: $0)) }
-                        .equatable().frame(width: 130)
-                }
-                Picker("글자 크기", selection: Binding(get: { document.format?.text.size ?? 10 }, set: { editor.format(CharStyle(size: $0)) })) {
-                    let size = document.format?.text.size ?? 10
-                    ForEach(Array(Set(FormatChoices.sizes + [size])).sorted(), id: \.self) { Text(FormatChoices.points($0)).tag($0) }
-                }
-                .labelsHidden().frame(width: 72)
-                Divider().frame(height: 18)
-            }
-            formatButton("진하게", symbol: "bold", selected: document.format?.text.bold == true, action: editor.toggleBold)
-            formatButton("기울임", symbol: "italic", selected: document.format?.text.italic == true, action: editor.toggleItalic)
-            formatButton("밑줄", symbol: "underline", selected: document.format?.text.underline == true, action: editor.toggleUnderline)
-            if full {
-                formatButton("취소선", symbol: "strikethrough", selected: document.format?.text.strikethrough == true, action: editor.toggleStrikethrough)
-            }
-            Menu {
-                ForEach(Alignment.allCases, id: \.self) { alignment in
-                    let item = FormatChoices.label(alignment)
-                    Button(item.title, systemImage: item.symbol) { editor.format(ParaStyle(alignment: alignment)) }
-                }
-            } label: { Image(systemName: "text.alignleft") }
-            .help("문단 정렬").accessibilityLabel("문단 정렬")
-            Button { viewer.editingCharShape = true } label: { Image(systemName: "ellipsis") }
-                .help("글자 모양").accessibilityLabel("글자 모양")
-        }
-        .controlSize(.small)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func formatButton(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).frame(width: 24, height: 24)
-                .background(selected ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain).help(title).accessibilityLabel(title)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-}
-
-private extension View {
-    func workspacePanel() -> some View {
-        background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.025))
-                }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(.primary.opacity(0.06), lineWidth: 0.5)
-                .allowsHitTesting(false)
-        }
-    }
-
-    @ViewBuilder func floatingSurface() -> some View {
-        if #available(macOS 26, *) {
-            glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-        } else {
-            background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.08)) }
-        }
-    }
-}
-
 /// The toolbar, as Keynote's: the things put in, 수식 and 문자표, 찾기, and 서식 and 문서,
 /// each group in its own glass, parted by toolbar spacers. It is not
 /// customizable: SwiftUI's customizable toolbars share items between windows and throw when a
 /// second document opens.
 private struct DocumentToolbar: ToolbarContent {
     let document: HwpDocument
-    @ObservedObject var viewer: Viewer
+    let viewer: Viewer
 
     var body: some ToolbarContent {
+        // In the sidebar's own bar while it shows; here, where macOS puts the sidebar button, while it is hidden.
+        if !viewer.showsSidebar {
+            ToolbarItem(placement: .navigation) { SidebarMenu(viewer: viewer) }
+        }
+        // The things put in, in the middle of the window.
         ToolbarItemGroup(placement: .principal) {
             InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
             InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
             InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
-            InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
+            MoreMenu(document: document, viewer: viewer)
         }
-        if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
         ToolbarItem {
             Button { viewer.showFind(replace: false) } label: { Label("찾기", systemImage: Icon.find) }.help("찾기")
         }
         if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
+        ToolbarItem { ZoomMenu(viewer: viewer, position: viewer.position) }
+        if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
         // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
-        ToolbarItem {
-            Toggle(isOn: $viewer.showsInspector) {
-                Label("상세 설정", systemImage: "sidebar.right")
-            }
-            .help("상세 설정 보기 / 가리기")
+        ToolbarItemGroup {
+            InspectorButton(viewer: viewer, pane: .format)
+            InspectorButton(viewer: viewer, pane: .document)
         }
     }
 }
@@ -268,15 +162,8 @@ private struct InsertButton<Panel: View>: View {
     @State private var showsPanel = false
 
     var body: some View {
-        Button { if panel != nil { showsPanel = true } else { action() } } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 15, weight: .regular))
-                Text(title).font(.system(size: 11, weight: .medium))
-            }
-            .fixedSize()
-        }
+        Button { if panel != nil { showsPanel = true } else { action() } } label: { Label(title, systemImage: symbol) }
             .help(title)
-            .accessibilityLabel(title)
             .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel?() }
             .disabled(!document.context[keyPath: when] || document.context.locked)
     }
@@ -287,42 +174,115 @@ extension InsertButton where Panel == EmptyView {
     }
 }
 
-private struct WorkspaceStatus: View {
+/// Pages's 미디어 menu: the rest of 입력, each with its icon.
+private struct MoreMenu: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
-    @ObservedObject var position: ViewPosition
-
     var body: some View {
-        HStack(spacing: 12) {
-            Button { viewer.goingToPage = true } label: {
-                Text("\(min(position.page + 1, max(1, document.context.pageCount))) / \(max(1, document.context.pageCount))쪽")
-                    .monospacedDigit()
-            }
-            .buttonStyle(.plain).help("쪽으로 이동")
-            Spacer(minLength: 0)
-            Menu {
-                ZoomItems(viewer: viewer, position: position)
-            } label: {
-                Text("\(position.zoomPercent)%").monospacedDigit()
-            }
-            .fixedSize()
+        Menu { MenuItems(document: document, viewer: viewer).more.labelStyle(.titleAndIcon) } label: { Label("추가", systemImage: "paperclip") }
+            .menuIndicator(.hidden)
+            .help("추가")
+            .disabled(document.context.locked)
+    }
+}
+
+private struct InspectorButton: View {
+    @ObservedObject var viewer: Viewer
+    let pane: InspectorPane
+    var body: some View {
+        // The pane showing is on in gray, not in the accent color.
+        Toggle(isOn: Binding(get: { viewer.showsInspector && viewer.inspectorPane == pane },
+                             set: { on in (viewer.inspectorPane, viewer.showsInspector) = (pane, on) })) {
+            Label(pane.rawValue, systemImage: pane.symbol)
         }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 18).padding(.vertical, 8)
-        .background(.bar)
+        .toggleStyle(.button)
+        .tint(.gray.opacity(0.4))
+        .help(pane.rawValue)
     }
 }
 
 /// The inspector's panes, chosen from the toolbar.
 enum InspectorPane: String, CaseIterable {
-    case format = "서식", style = "스타일", document = "문서"
-    var symbol: String {
-        switch self {
-        case .format: "paintbrush"
-        case .style: "textformat"
-        case .document: "doc.text"
+    case format = "서식", document = "문서"
+    var symbol: String { self == .format ? "paintbrush" : "doc.text" }
+}
+
+/// Pages's 보기 menu in place of the sidebar button: the 작업 창, or the document alone.
+private struct SidebarMenu: View {
+    @ObservedObject var viewer: Viewer
+
+    var body: some View {
+        Menu {
+            menuItems.labelStyle(.titleAndIcon)
+        } label: {
+            Label("사이드바", systemImage: "sidebar.left")
         }
+        .menuIndicator(.hidden)
+        .help("사이드바")
+    }
+
+    @ViewBuilder private var menuItems: some View {
+        Picker("사이드바", selection: Binding(get: { viewer.showsSidebar ? viewer.sidebarPane : nil }, set: { pane in
+            if let pane { viewer.sidebarPane = pane }
+            withAnimation { viewer.showsSidebar = pane != nil }
+        })) {
+            ForEach(TaskPane.allCases, id: \.self) { Label($0.rawValue, systemImage: $0.symbol).tag(TaskPane?.some($0)) }
+            Label("문서 전용", systemImage: "doc.plaintext").tag(TaskPane?.none)
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+        Divider()
+        Button(viewer.showsCount ? "글자 수 가리기" : "글자 수 보기", systemImage: "number.square") { viewer.showsCount.toggle() }
+        Button(viewer.showsHorizontalRuler ? "눈금자 가리기" : "눈금자 보기") { viewer.showsHorizontalRuler.toggle() }
+    }
+}
+
+/// Pages's 단어 수 over the bottom of the pages: the count chosen from 문서 정보's 문서 통계.
+private struct CountPicker: View {
+    @ObservedObject var document: HwpDocument
+    @AppStorage("countKind") private var kind = 0
+    @State private var statistics: Statistics?
+
+    var body: some View {
+        let n = statistics
+        Picker("글자 수", selection: $kind) {
+            Text("\((n?.characters ?? 0).formatted()) 글자(공백 포함)").tag(0)
+            Text("\((n?.charactersWithoutSpaces ?? 0).formatted()) 글자(공백 제외)").tag(1)
+            Text("\((n?.words ?? 0).formatted()) 낱말").tag(2)
+            Text("\((n?.paragraphs ?? 0).formatted()) 문단").tag(3)
+            Text("\((n?.pages ?? 0).formatted()) 쪽").tag(4)
+        }
+        .labelsHidden()
+        .fixedSize()
+        // Dark under it whatever lies beneath, as Pages's count over the page.
+        .padding(4)
+        .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .environment(\.colorScheme, .dark)
+        .task(id: document.revision) {
+            // Counted again once typing pauses, not on every key.
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let counted = try? await document.statistics() else { return }
+            statistics = counted
+        }
+    }
+}
+
+/// The zoom in the toolbar, as Pages's: the percent, with the View menu's zoom choices.
+private struct ZoomMenu: View {
+    let viewer: Viewer
+    @ObservedObject var position: ViewPosition
+
+    var body: some View {
+        Menu {
+            Button("확대") { viewer.canvas.zoomIn(nil) }
+            Button("축소") { viewer.canvas.zoomOut(nil) }
+            Button("실제 크기") { viewer.canvas.zoomToActualSize(nil) }
+            Divider()
+            ZoomItems(viewer: viewer, position: position)
+        } label: {
+            Text("\(position.zoomPercent)%").font(.system(size: 13)).monospacedDigit().padding(.horizontal, 4)
+        }
+        .help("확대/축소")
     }
 }
 
@@ -386,8 +346,8 @@ final class Viewer: ObservableObject {
     }
     /// The inspector's tab, kept while it is hidden.
     var inspectorTab = "텍스트"
-    /// 텍스트's 레이아웃 in place of its 스타일, kept while the inspector is hidden.
-    var textLayout = false
+    /// 텍스트's 스타일 (0), 레이아웃 (1) or 기타 (2), kept while the inspector is hidden.
+    var textLayout = 0
     func shows(_ pane: TaskPane) -> Bool { showsSidebar && sidebarPane == pane }
     /// Shows `pane`, or hides it when it shows.
     func toggle(_ pane: TaskPane) {
@@ -403,6 +363,8 @@ final class Viewer: ObservableObject {
     @Published var showsTransparentLines = false {
         didSet { showMarks() }
     }
+    /// Pages's 단어 수: the count over the bottom of the pages.
+    @Published var showsCount = false
     @Published var showsGrid = false {
         didSet { canvas.editor.showsGrid = showsGrid }
     }
@@ -490,6 +452,9 @@ final class Viewer: ObservableObject {
         }
         canvas.editor.onPresent = { [weak self] in self?.documentPresented() }
         canvas.editor.onOpenObject = { [weak self] in self?.open($0) }
+        canvas.editor.quickMenu = { [unowned self] in
+            NSHostingView(rootView: QuickMenu(document: document!, viewer: self))
+        }
         canvas.editor.onContextMenu = { [weak self] in
             guard let self, let document else { return [] }
             var link: Hyperlink?
@@ -709,8 +674,34 @@ extension EditPosition {
 private struct Canvas: NSViewRepresentable {
     let canvas: DocumentCanvas
     let document: HwpDocument
-    func makeNSView(context: Context) -> DocumentCanvas { canvas }
-    func updateNSView(_ view: DocumentCanvas, context: Context) { view.bind(document) }
+    let showsCount: Bool
+    /// The pages in a plain view, so the count can lie over them: a SwiftUI overlay is drawn
+    /// under AppKit's views, and the scroll view lays out its own subviews.
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+        canvas.frame = container.bounds
+        canvas.autoresizingMask = [.width, .height]
+        container.addSubview(canvas)
+        return container
+    }
+    func updateNSView(_ container: NSView, context: Context) {
+        canvas.bind(document)
+        if showsCount, context.coordinator.count == nil {
+            let count = NSHostingView(rootView: CountPicker(document: document))
+            count.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(count)
+            NSLayoutConstraint.activate([
+                count.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                count.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16),
+            ])
+            context.coordinator.count = count
+        } else if !showsCount, let count = context.coordinator.count {
+            count.removeFromSuperview()
+            context.coordinator.count = nil
+        }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator { var count: NSView? }
 }
 
 /// Page thumbnails; a page's image is redrawn only when the engine replaced that page.
@@ -726,7 +717,7 @@ enum TaskPane: String, CaseIterable {
     }
 }
 
-/// The sidebar, as Xcode's navigator: the 작업 창 chosen in a row of icons over it, and a
+/// The sidebar, as Xcode's navigator: the 작업 창 chosen from the toolbar's sidebar menu, and a
 /// filter under the lists, in Liquid Glass where macOS has it.
 private struct Sidebar: View {
     @ObservedObject var document: HwpDocument
@@ -735,22 +726,6 @@ private struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("탐색").font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Button { viewer.showFind(replace: false) } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .buttonStyle(.plain).help("문서에서 찾기")
-                .accessibilityLabel("문서에서 찾기")
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
-            PaneTabs(values: TaskPane.allCases, selection: $viewer.sidebarPane, title: { $0.rawValue }) {
-                Text($0.rawValue).font(.system(size: 11, weight: .medium))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
             switch viewer.sidebarPane {
             case .pages: PageThumbnails(document: document, viewer: viewer, position: viewer.position)
             case .outline: OutlinePane(document: document, viewer: viewer, filter: filter)
@@ -877,20 +852,42 @@ struct OutlineNode: Identifiable {
     }
 }
 
-/// [스타일] 작업 창: the styles, the caret's marked; a click applies one. The tools below
-/// work on the caret's style; a style's quick menu on that style.
+/// The 문단 스타일 popover under the inspector's style, as Pages's: the styles, the caret's
+/// checked; a click applies one, + adds one, and a style's quick menu works on that style.
 struct StylePane: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
+    /// Called once a style is applied or a dialog opens, to close the popover.
+    var done: () -> Void = {}
+
     var body: some View {
         let current = document.styles.first { $0.id == document.format?.style }
         VStack(spacing: 0) {
+            ZStack {
+                Text("문단 스타일").font(.headline)
+                HStack {
+                    Spacer()
+                    Button { done(); viewer.styleEditor = viewer.newStyle() } label: { Image(systemName: "plus") }
+                        .buttonStyle(.borderless)
+                        .help("스타일 추가")
+                        .accessibilityLabel("스타일 추가")
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            Divider()
             List(document.styles, id: \.id) { style in
-                Button { document.applyStyle(style.id, viewer.undoManager) } label: {
-                    Label(style.name, systemImage: style.id == current?.id
-                        ? "checkmark" : style.paragraphStyle ? "paragraphsign" : "textformat")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                Button {
+                    document.applyStyle(style.id, viewer.undoManager)
+                    done()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark").opacity(style.id == current?.id ? 1 : 0)
+                        Text(style.name).font(.title3)
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!document.context.canApplyStyle)
@@ -898,30 +895,25 @@ struct StylePane: View {
                     Button("스타일 추가/편집") { edit(style) }
                     Button("커서 위치의 스타일로 바꾸기") { viewer.restyleFromCaret(style.id) }
                     Button("스타일 지우기") { delete(style) }.disabled(style.id == 0)
+                    Divider()
+                    Button("스타일 위로") { viewer.moveStyle(style.id, up: true) }.disabled(style.id < 2)
+                    Button("스타일 아래로") { viewer.moveStyle(style.id, up: false) }
+                        .disabled(style.id == 0 || Int(style.id) + 1 >= document.styles.count)
                 }
                 .disabled(document.context.locked)
             }
             .listStyle(.plain)
-            Divider()
-            HStack(spacing: 2) {
-                listTool("스타일 추가", "plus") { viewer.styleEditor = viewer.newStyle() }
-                listTool("스타일 편집", "pencil") { if let current { edit(current) } }.disabled(current == nil)
-                listTool("스타일 지우기", "minus") { if let current { delete(current) } }.disabled((current?.id ?? 0) == 0)
-                listTool("스타일 위로", "arrow.up") { if let current { viewer.moveStyle(current.id, up: true) } }
-                    .disabled((current?.id ?? 0) < 2)
-                listTool("스타일 아래로", "arrow.down") { if let current { viewer.moveStyle(current.id, up: false) } }
-                    .disabled(current.map { $0.id == 0 || Int($0.id) + 1 >= document.styles.count } ?? true)
-                Spacer()
-            }
-            .padding(4)
-            .disabled(document.context.locked)
+            .scrollContentBackground(.hidden)
         }
+        .frame(width: 280, height: 420)
         .task { await document.loadStyles() }
     }
     private func edit(_ style: StyleInfo) {
+        done()
         Task { viewer.styleEditor = await viewer.styleEditor(style) }
     }
     private func delete(_ style: StyleInfo) {
+        done()
         viewer.deleteStyle(style) { viewer.replacingStyle = $0 }
     }
 }

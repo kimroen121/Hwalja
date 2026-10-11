@@ -180,78 +180,9 @@ struct ShapeTiles: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 4)
         .buttonBorderShape(.roundedRectangle)
-    }
-}
-
-/// Pane navigation keeps one selection surface alive as it moves between tabs.
-struct PaneTabs<Value: Hashable, Content: View>: View {
-    let values: [Value]
-    @Binding var selection: Value
-    let title: (Value) -> String
-    @ViewBuilder let label: (Value) -> Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var indicator
-
-    var body: some View {
-        GeometryReader { geometry in
-            tabs
-                .contentShape(Capsule())
-                // Once dragging starts, consume the button's click so mouse-up cannot
-                // reselect the tab where the drag began.
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 4)
-                        .onChanged { drag in select(at: drag.location.x, width: geometry.size.width) }
-                        .onEnded { drag in select(at: drag.location.x, width: geometry.size.width) }
-                )
-        }
-        .frame(height: 34)
-    }
-
-    private func select(at x: CGFloat, width: CGFloat) {
-        guard !values.isEmpty, width > 6 else { return }
-        let fraction = min(max((x - 3) / (width - 6), 0), 1)
-        let index = min(Int(fraction * CGFloat(values.count)), values.count - 1)
-        guard selection != values[index] else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.15)) { selection = values[index] }
-    }
-
-    private var tabs: some View {
-        HStack(spacing: 0) {
-            ForEach(values, id: \.self) { value in
-                Button {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { selection = value }
-                } label: {
-                    label(value)
-                        .font(.system(size: 12, weight: selection == value ? .semibold : .regular))
-                        .foregroundStyle(selection == value ? Color.accentColor : Color.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 28)
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .background {
-                    if selection == value {
-                        selectionSurface
-                            .matchedGeometryEffect(id: "selection", in: indicator)
-                    }
-                }
-                .accessibilityLabel(title(value))
-                .accessibilityAddTraits(selection == value ? [.isSelected] : [])
-                .help(title(value))
-            }
-        }
-        .padding(3)
-        .background(.primary.opacity(0.045), in: Capsule())
-    }
-
-    @ViewBuilder private var selectionSurface: some View {
-        if #available(macOS 26, *) {
-            Capsule().fill(.clear).glassEffect(.regular.interactive(), in: Capsule())
-        } else {
-            Capsule().fill(.regularMaterial)
-        }
     }
 }
 
@@ -268,7 +199,6 @@ struct Segments: NSViewRepresentable {
     let segments: [Segment]
     let on: [Bool]
     var any = false
-    var size: NSControl.ControlSize = .regular
     /// The selection in the accent color, as tabs.
     var accent = false
     /// A capsule, as a pane's tabs; else a rounded rectangle, as the controls in a pane.
@@ -292,7 +222,8 @@ struct Segments: NSViewRepresentable {
             if control[keyPath: key] != value { control[keyPath: key] = value }
         }
         set(\.trackingMode, any ? .selectAny : .selectOne)
-        set(\.controlSize, size)
+        // Its size comes from SwiftUI's controlSize, which SwiftUI also sets on the control it
+        // hosts: setting another here, the two took turns and the control grew and shrank.
         set(\.selectedSegmentBezelColor, accent ? .controlAccentColor : nil)
         set(\.isEnabled, context.environment.isEnabled)
         if #available(macOS 26, *) { set(\.borderShape, capsule ? .capsule : .roundedRectangle) }
@@ -330,9 +261,9 @@ struct Segments: NSViewRepresentable {
 }
 extension Segments {
     /// One of `values`, bound to `selection`.
-    init<Value: Hashable>(_ values: [Value], selection: Binding<Value>, size: NSControl.ControlSize = .regular,
+    init<Value: Hashable>(_ values: [Value], selection: Binding<Value>,
                           accent: Bool = false, capsule: Bool = false, segment: (Value) -> Segment) {
-        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, size: size, accent: accent,
+        self.init(segments: values.map(segment), on: values.map { $0 == selection.wrappedValue }, accent: accent,
                   capsule: capsule) {
             selection.wrappedValue = values[$0]
         }

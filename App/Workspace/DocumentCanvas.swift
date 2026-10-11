@@ -53,6 +53,7 @@ final class DocumentCanvas: NSScrollView {
             editor.needsDisplay = true
         }
         editor.placeCaret()
+        editor.updateQuickMenu()
         if showsRuler { needsRulers() }
         onViewChange?()
     }
@@ -103,6 +104,7 @@ final class DocumentCanvas: NSScrollView {
         guard let page = editor.frame(ofPage: editor.page(near: NSPoint(x: visible.midX, y: visible.midY))) else { return }
         // Markers need the view they measure.
         if let across, across.clientView !== editor { across.clientView = editor }
+        if let across, across.measurementUnits != .init("Centimeters") { across.measurementUnits = .init("Centimeters") }
         if let down, down.clientView !== editor { down.clientView = editor }
         across?.originOffset = page.minX
         down?.originOffset = page.minY
@@ -124,8 +126,10 @@ final class DocumentCanvas: NSScrollView {
         let p = setup.page
         let left = page.minX + points(p.marginLeft + p.marginGutter), right = page.maxX - points(p.marginRight)
         func marker(_ ruler: NSRulerView, _ at: CGFloat, _ symbol: String, _ mark: RulerMark) -> NSRulerMarker? {
+            // In the accent color, as Pages's.
             guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 8, weight: .regular)) else { return nil }
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .regular)
+                    .applying(NSImage.SymbolConfiguration(paletteColors: [.controlAccentColor]))) else { return nil }
             let marker = NSRulerMarker(rulerView: ruler, markerLocation: at, image: image,
                                        imageOrigin: NSPoint(x: image.size.width / 2, y: 0))
             marker.isMovable = !model.context.locked && (showsMargins || ![.left, .right, .top, .bottom].contains(mark))
@@ -336,6 +340,9 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     var onKey: ((NSEvent) -> Bool)?
     /// The 빠른 메뉴 for the selection, shown on a right click.
     var onContextMenu: (() async -> [Choice?])?
+    /// The 퀵 메뉴 shown over selected text, as Freeform's.
+    var quickMenu: (() -> NSView)?
+    private var quickBar: NSView?
     /// The input method's composing text as last reported; the document already shows it.
     private var markedText = ""
     /// The text of the paragraph holding the caret, and of the selection, as of a revision, for
@@ -687,7 +694,37 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         } else if let caretRect {
             scrollToVisible(caretRect.insetBy(dx: -24, dy: -24))
         }
+        updateQuickMenu()
         onPresent?()
+    }
+
+    /// Shows the 퀵 메뉴 over the selected text once the mouse is let go, and closes it
+    /// when nothing is selected. It lies over the scroll view, so it keeps its size at any zoom.
+    func updateQuickMenu() {
+        let rects = highlightRects
+        guard let first = rects.first, shown.object == nil, NSEvent.pressedMouseButtons == 0,
+              let container = enclosingScrollView?.superview, let quickMenu else {
+            // Fades out, as it came.
+            if let bar = quickBar {
+                NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 0 } completionHandler: { bar.removeFromSuperview() }
+            }
+            quickBar = nil
+            return
+        }
+        let bar = quickBar ?? quickMenu()
+        if bar.superview !== container {
+            bar.alphaValue = 0
+            container.addSubview(bar)
+            NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 1 }
+        }
+        quickBar = bar
+        let rect = container.convert(rects.reduce(first) { $0.union($1) }, from: self)
+        let size = bar.fittingSize
+        // Above the selection, or under it when there is no room above.
+        let above = rect.maxY + 8
+        let y = above + size.height <= container.bounds.maxY ? above : rect.minY - 8 - size.height
+        let x = min(max(rect.midX - size.width / 2, 8), container.bounds.maxX - size.width - 8)
+        bar.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
     /// Shows the caret where the presentation puts it, solid for a moment, then blinking.
@@ -1078,6 +1115,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     }
 
     override func mouseUp(with event: NSEvent) {
+        defer { updateQuickMenu() }
         let point = convert(event.locationInWindow, from: nil)
         if let current = drag {
             drag = nil
@@ -1560,7 +1598,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     func format(_ style: CharStyle) { model?.formatText(style, undoManager) }
     func format(_ style: ParaStyle) { model?.formatParagraphs(style, undoManager) }
 
-    // MARK: 서체 보기 and 색상 보기
+    // MARK: 서체 보기
 
     /// The caret's font as the font panel shows it; a font this Mac lacks shows as the system's.
     private var currentFont: NSFont? {
@@ -1586,17 +1624,6 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
         if traits.contains(.boldFontMask) != was.contains(.boldFontMask) { style.bold = traits.contains(.boldFontMask) }
         if traits.contains(.italicFontMask) != was.contains(.italicFontMask) { style.italic = traits.contains(.italicFontMask) }
         format(style)
-    }
-    @objc func orderFrontColorPanel(_ sender: Any?) {
-        let panel = NSColorPanel.shared
-        if let hex = model?.format?.text.color { panel.color = NSColor(HexColor.color(hex)) }
-        panel.orderFront(sender)
-    }
-    /// A color picked in the color panel, as 글자 색.
-    @objc func changeColor(_ sender: Any?) {
-        guard let color = (sender as? NSColorPanel)?.color.usingColorSpace(.sRGB), model?.context.canFormat == true else { return }
-        format(CharStyle(color: String(format: "#%02x%02x%02x", Int((color.redComponent * 255).rounded()),
-                                       Int((color.greenComponent * 255).rounded()), Int((color.blueComponent * 255).rounded()))))
     }
 
     // MARK: NSTextInputClient

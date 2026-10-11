@@ -388,6 +388,40 @@ struct MenuItems {
         }
     }
 
+    /// The toolbar's 추가 menu: what is put in less often than the toolbar's own buttons.
+    @ViewBuilder var more: some View {
+        item("문자표…", Icon.symbols) { viewer?.insertingSymbols = true }
+            .disabled(!context.hasSelection)
+        item("하이퍼링크…", Icon.hyperlink) { viewer?.showHyperlink() }
+            .disabled(!context.canHyperlink)
+        item("책갈피…", Icon.bookmark) { viewer?.bookmarking = true }
+            .disabled(!context.inBody)
+        item("필드 입력…", Icon.field) { viewer?.fieldSheet = FieldEditing() }
+            .disabled(!context.hasSelection || context.locked || context.inNote || context.inHeaderFooter)
+        Divider()
+        Group {
+            item("각주", Icon.footnote) { viewer?.insertNote(endnote: false) }
+            item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
+        }
+        .disabled(!context.inBody)
+        Menu {
+            ForEach(Captions.all, id: \.value) { caption in
+                if caption.value == "None" { Divider() }
+                Button(caption.title) { viewer?.insertCaption(caption.value) }
+            }
+        } label: { Label("캡션 넣기", systemImage: Icon.caption) }
+            .disabled(!context.canCaption)
+        Divider()
+        Group {
+            item("쪽 나누기", Icon.pageBreak) { viewer?.insertBreak(column: false) }
+            item("단 나누기", Icon.columnBreak) { viewer?.insertBreak(column: true) }
+        }
+        .disabled(!context.inBody)
+        Divider()
+        item("문서 끼워 넣기…", Icon.insertFile) { viewer?.insertDocuments() }
+            .disabled(!context.inBody || context.locked)
+    }
+
     @ViewBuilder var format: some View {
         let text = document?.format?.text
         Group {
@@ -422,7 +456,6 @@ struct MenuItems {
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Divider()
             Button("서체 보기") { send(#selector(NSFontManager.orderFrontFontPanel(_:))) }.keyboardShortcut("t")
-            Button("색상 보기") { send(#selector(NSApplication.orderFrontColorPanel(_:))) }.keyboardShortcut("c", modifiers: [.command, .shift])
             Divider()
             Button("글씨 크게") { editor?.stepFontSize(by: 1) }.keyboardShortcut("+")
             Button("글씨 작게") { editor?.stepFontSize(by: -1) }.keyboardShortcut("-")

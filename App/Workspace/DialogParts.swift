@@ -186,19 +186,32 @@ struct SpinField: View {
 struct ColorWell: View {
     @Binding var hex: String
     var none: String?
+    /// As wide as its place.
+    var flexible = false
+    /// Only the swatch, as a circle: a click shows the swatches, as the expanded well's left part.
+    var circle = false
     var body: some View {
-        SystemColorWell(hex: hex == none ? nil : hex, clearable: none != nil) { hex = $0 ?? none ?? hex }
-            .fixedSize()
+        let well = SystemColorWell(hex: hex == none ? nil : hex, clearable: none != nil, minimal: circle) { hex = $0 ?? none ?? hex }
+        if circle {
+            well.frame(width: 18, height: 18).clipShape(Circle())
+        } else {
+            well.fixedSize(horizontal: !flexible, vertical: true)
+        }
     }
 }
 
 private struct SystemColorWell: NSViewRepresentable {
     let hex: String?
     let clearable: Bool
+    var minimal = false
     let set: (String?) -> Void
 
     func makeNSView(context: Context) -> NSColorWell {
-        let well = NSColorWell(style: .expanded)
+        let well = NSColorWell(style: minimal ? .minimal : .expanded)
+        if minimal {
+            well.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            well.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        }
         well.supportsAlpha = clearable
         well.target = context.coordinator
         well.action = #selector(Coordinator.changed(_:))
@@ -438,12 +451,15 @@ struct ChoiceField<Value: Hashable>: View {
 struct IconTiles<Value: Hashable, Picture: View>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
+    /// The tiles share the width they are given, as the inspector's rows do.
+    var fill = false
     @ViewBuilder let picture: (Value, Bool) -> Picture
     var body: some View {
         HStack(spacing: 6) {
             ForEach(options, id: \.value) { option in
                 Button { selection = option.value } label: {
                     picture(option.value, selection == option.value).frame(width: 30, height: 30).padding(4)
+                        .frame(maxWidth: fill ? .infinity : nil)
                 }
                 .choice(selection == option.value)
                 .help(option.title)

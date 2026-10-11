@@ -1434,11 +1434,11 @@ struct SectionSheet: View {
 
 /// 용지 방향 and 제본 as the web dialog draws them: a page with lines of text, and pages
 /// with 가 (and 나) by their bound edge.
-private enum PagePictogram {
+enum PagePictogram {
     /// A page with `count` columns of lines.
     static func columns(_ count: Int, on: Bool) -> some View {
         Canvas { context, size in
-            let ink: Color = on ? .accentColor : .secondary
+            let ink: Color = on ? .white : .secondary
             let page = CGRect(x: size.width * 0.19, y: size.height * 0.05, width: size.width * 0.62, height: size.height * 0.9)
             context.stroke(Path(page), with: .color(ink), lineWidth: 1)
             let gap = 2.0, inner = page.insetBy(dx: 4, dy: 4)
@@ -1453,7 +1453,7 @@ private enum PagePictogram {
     }
     static func orientation(_ landscape: Bool, on: Bool) -> some View {
         Canvas { context, size in
-            let ink: Color = on ? .accentColor : .secondary
+            let ink: Color = on ? .white : .secondary
             let (w, h) = landscape ? (size.width * 0.9, size.height * 0.62) : (size.width * 0.62, size.height * 0.9)
             let page = CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
             context.stroke(Path(page), with: .color(ink), lineWidth: 1)
@@ -1464,7 +1464,7 @@ private enum PagePictogram {
     }
     static func binding(_ binding: UInt8, on: Bool) -> some View {
         Canvas { context, size in
-            let ink: Color = on ? .accentColor : .secondary
+            let ink: Color = on ? .white : .secondary
             let font = Font.system(size: binding == 1 ? 8 : 13, weight: .medium)
             let page = CGRect(x: size.width * 0.18, y: size.height * 0.05, width: size.width * 0.64, height: size.height * 0.9)
             switch binding {

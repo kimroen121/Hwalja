@@ -110,22 +110,6 @@ struct DocumentTests {
         #expect(try await document.paragraph(body).text == "xyz" + text.dropFirst(3))
     }
 
-    /// 색상 보기's color goes to the selected text as 글자 색.
-    @Test func colorPanelColorsText() async throws {
-        let document = try HwpDocument(data: fixture("hwpx"))
-        let viewer = Viewer()
-        viewer.canvas.bind(document)
-        document.selection = EditSelection(anchor: EditPosition(target: body, scalar: 0), focus: EditPosition(target: body, scalar: 3))
-        document.type("abc", nil)
-        document.select { _ in EditSelection(anchor: EditPosition(target: self.body, scalar: 0), focus: EditPosition(target: self.body, scalar: 3)) }
-        await document.settle()
-        let panel = NSColorPanel.shared
-        panel.color = NSColor(srgbRed: 0, green: 0.5, blue: 1, alpha: 1)
-        viewer.canvas.editor.changeColor(panel)
-        await document.settle()
-        #expect(document.format?.text.color == "#0080ff")
-    }
-
     /// A save that starts after an edit was accepted must not overtake that edit.
     @Test(arguments: ["hwp", "hwpx"])
     func immediateSaveIncludesQueuedTyping(ext: String) async throws {
@@ -1308,15 +1292,15 @@ struct DocumentTests {
     /// object has only its own.
     @Test func objectAndStateTabsFollowTheSelection() {
         #expect(Inspector.contextTabs(EditingContext()) == [])
-        #expect(Inspector.contextTabs(EditingContext(inTable: true)) == ["표 디자인", "표 레이아웃"])
-        #expect(Inspector.contextTabs(EditingContext(inTable: true, object: .picture)) == ["그림"])
-        #expect(Inspector.contextTabs(EditingContext(object: .shape)) == ["도형"])
-        #expect(Inspector.contextTabs(EditingContext(object: .equation)) == [])
+        #expect(Inspector.contextTabs(EditingContext(inTable: true)) == ["표", "셀", "개체"])
+        #expect(Inspector.contextTabs(EditingContext(inTable: true, object: .picture)) == ["스타일", "이미지", "개체"])
+        #expect(Inspector.contextTabs(EditingContext(object: .shape)) == ["도형", "개체"])
+        #expect(Inspector.contextTabs(EditingContext(object: .equation)) == ["수식", "개체"])
         #expect(Inspector.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
         #expect(Inspector.contextTabs(EditingContext(inNote: true)) == ["주석"])
-        #expect(Inspector.tabs(EditingContext(object: .picture)) == ["그림"])
+        #expect(Inspector.tabs(EditingContext(object: .picture)) == ["스타일", "이미지", "개체"])
         #expect(Inspector.tabs(EditingContext()) == ["텍스트"])
-        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["텍스트", "표 디자인", "표 레이아웃"])
+        #expect(Inspector.tabs(EditingContext(inTable: true)) == ["표", "셀", "텍스트", "개체"])
         #expect(InspectorPane.allCases.map(\.rawValue) == ["서식", "스타일", "문서"])
     }
 
@@ -1800,20 +1784,6 @@ struct DocumentTests {
                                                        tab: "배경"))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),
-            ("symbols", AnyView(VStack(alignment: .leading) {
-                ForEach(EquationPalette.symbols.indices, id: \.self) { index in
-                    PaletteGrid(items: EquationPalette.symbols[index].items, renderer: EquationRenderer(document: document),
-                                symbols: true) { _ in }
-                    Divider()
-                }
-            })),
-            ("templates", AnyView(VStack(alignment: .leading) {
-                ForEach(EquationPalette.templates.indices, id: \.self) { index in
-                    PaletteGrid(items: EquationPalette.templates[index].items,
-                                renderer: EquationRenderer(document: document), symbols: false) { _ in }
-                    Divider()
-                }
-            })),
             ("object", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
                                                                    props: ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
                                                                                       textWrap: "Square", caption: "None")),
@@ -1864,9 +1834,6 @@ struct DocumentTests {
             ("shapeLine", AnyView(ObjectSheet(state: ObjectSheetState(
                 object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
                 props: ObjectProps(roundRate: 20, borderColor: 0, borderWidth: 33, lineType: 1)), viewer: viewer, tab: "선"))),
-            ("pictureLine", AnyView(ObjectSheet(state: ObjectSheetState(
-                object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(borderColor: 0xff, borderWidth: 100, lineType: 2)), viewer: viewer, tab: "선"))),
             ("goTo", AnyView(GoToSheet(viewer: viewer, pageCount: 7))),
             ("hyperlink", AnyView(HyperlinkSheet(viewer: viewer, editing: HyperlinkEditing(
                 existing: nil, text: "한컴 홈페이지", uri: "https://www.hancom.com")))),
