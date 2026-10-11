@@ -38,11 +38,13 @@ struct DocumentWindow: View {
                 if viewer.finding { FindBar(viewer: viewer) }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minHeight: 300)
-                    .overlay(alignment: .bottom) {
-                        if document.context.hasRange && !viewer.showsInspector && !document.context.locked {
-                            FloatingFormatBar(document: document, viewer: viewer)
-                                .padding(16)
-                        }
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        FloatingFormatBar(document: document, viewer: viewer)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 14)
+                            .padding(.bottom, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(nsColor: .underPageBackgroundColor))
                     }
                 WorkspaceStatus(document: document, viewer: viewer, position: viewer.position)
             }
@@ -132,16 +134,18 @@ private struct FloatingFormatBar: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            controls(full: true)
-            controls(full: false)
+            controls(full: true, includesFont: true)
+            controls(full: true, includesFont: false)
+            controls(full: false, includesFont: false)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .floatingSurface()
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
         .disabled(!document.context.canFormat || document.context.locked)
     }
 
-    private func controls(full: Bool) -> some View {
+    private func controls(full: Bool, includesFont: Bool) -> some View {
         HStack(spacing: 10) {
             if full {
                 Picker("스타일", selection: Binding(get: { document.format?.style }, set: { id in
@@ -151,6 +155,10 @@ private struct FloatingFormatBar: View {
                     ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
                 }
                 .labelsHidden().frame(width: 100)
+                if includesFont {
+                    FontPicker(font: document.format?.text.font, language: nil) { editor.format(CharStyle(font: $0)) }
+                        .equatable().frame(width: 130)
+                }
                 Picker("글자 크기", selection: Binding(get: { document.format?.text.size ?? 10 }, set: { editor.format(CharStyle(size: $0)) })) {
                     let size = document.format?.text.size ?? 10
                     ForEach(Array(Set(FormatChoices.sizes + [size])).sorted(), id: \.self) { Text(FormatChoices.points($0)).tag($0) }
