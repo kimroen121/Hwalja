@@ -247,7 +247,7 @@ struct Segments: NSViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var segments: Segments
         init(_ segments: Segments) { self.segments = segments }
         @objc func changed(_ control: NSSegmentedControl) {

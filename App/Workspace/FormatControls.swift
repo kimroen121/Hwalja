@@ -74,7 +74,7 @@ struct FontPicker: View, @MainActor Equatable {
 
     var body: some View {
         let family = font.map { font in FormatChoices.families.first { $0.name == font || $0.family == font }?.family ?? font }
-        Picker("글꼴", selection: Binding(get: { family ?? "" }, set: pick)) {
+        Picker("글꼴", selection: Binding(get: { family ?? "" }, set: { pick($0) })) {
             if let family, !FormatChoices.families.contains(where: { $0.family == family }) { Text(family).tag(family) }
             if family == nil { Text("글꼴").tag("") }
             ForEach(FormatChoices.families, id: \.family) { Text($0.name).tag($0.family) }

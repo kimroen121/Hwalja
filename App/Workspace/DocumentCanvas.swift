@@ -709,7 +709,7 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
               let quickMenu else {
             // Fades out, as it came.
             if let bar = quickBar {
-                NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 0 } completionHandler: { bar.removeFromSuperview() }
+                NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 0 } completionHandler: { MainActor.assumeIsolated { bar.removeFromSuperview() } }
             }
             quickBar = nil
             return

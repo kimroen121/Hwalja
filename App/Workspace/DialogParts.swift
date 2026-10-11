@@ -225,7 +225,7 @@ private struct SystemColorWell: NSViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator(hex: hex, set: set) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var hex: String?
         var set: (String?) -> Void
         init(hex: String?, set: @escaping (String?) -> Void) { (self.hex, self.set) = (hex, set) }
