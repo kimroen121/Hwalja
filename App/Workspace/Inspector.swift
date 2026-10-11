@@ -298,9 +298,11 @@ private struct TextTab: View {
                 .controlSize(.extraLarge)
                 .flexibleButtons()
                 .disabled(!document.context.canApplyStyle)
-                PaneTabs(values: [false, true], selection: $layout, title: { $0 ? "레이아웃" : "스타일" }) {
-                    Text($0 ? "레이아웃" : "스타일")
-                }
+                Toggle("고급 문단 레이아웃", isOn: $layout)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
             Group { if layout { layoutPane } else { stylePane } }
                 .disabled(!document.context.canFormat)

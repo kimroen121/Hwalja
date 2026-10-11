@@ -225,14 +225,11 @@ private struct DocumentToolbar: ToolbarContent {
     @ObservedObject var viewer: Viewer
 
     var body: some ToolbarContent {
-        ToolbarItemGroup {
+        ToolbarItemGroup(placement: .principal) {
             InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
             InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
-        }
-        if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
-        ToolbarItemGroup {
             InsertButton(document: document, title: "수식", symbol: Icon.equation, when: \.canPicture, action: { viewer.newEquation() })
             InsertButton(document: document, title: "문자표", symbol: Icon.symbols, when: \.hasSelection, action: { viewer.insertingSymbols = true })
         }
@@ -262,8 +259,15 @@ private struct InsertButton<Panel: View>: View {
     @State private var showsPanel = false
 
     var body: some View {
-        Button { if panel != nil { showsPanel = true } else { action() } } label: { Label(title, systemImage: symbol) }
+        Button { if panel != nil { showsPanel = true } else { action() } } label: {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 15, weight: .regular))
+                Text(title).font(.system(size: 11, weight: .medium))
+            }
+            .fixedSize()
+        }
             .help(title)
+            .accessibilityLabel(title)
             .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel?() }
             .disabled(!document.context[keyPath: when] || document.context.locked)
     }
