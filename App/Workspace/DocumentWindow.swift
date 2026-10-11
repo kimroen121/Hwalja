@@ -4,7 +4,7 @@ import SwiftUI
 /// One document window, laid out like Hancom Office Web below the macOS menu bar: the
 /// toolbar, then page thumbnails beside the pages and the inspector.
 struct DocumentWindow: View {
-    let document: HwpDocument
+    @ObservedObject var document: HwpDocument
     @StateObject private var viewer = Viewer()
 
     var body: some View {
@@ -29,7 +29,7 @@ struct DocumentWindow: View {
             Sidebar(document: document, viewer: viewer)
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .padding(6)
-                .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
         } detail: {
             // Nothing here has a minimum width: beside an inspector, a detail wider than about
             // 100pt at its least makes SwiftUI work out the split again and again until AppKit
@@ -38,17 +38,23 @@ struct DocumentWindow: View {
                 if viewer.finding { FindBar(viewer: viewer) }
                 Canvas(canvas: viewer.canvas, document: document)
                     .frame(minHeight: 300)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        FloatingFormatBar(document: document, viewer: viewer)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
+                    .overlay(alignment: .bottom) {
+                        if document.context.hasRange && !viewer.showsInspector && !document.context.locked {
+                            FloatingFormatBar(document: document, viewer: viewer)
+                                .padding(16)
+                        }
                     }
+                WorkspaceStatus(document: document, viewer: viewer, position: viewer.position)
             }
             // On the detail column: on the split view, SwiftUI leaves out the toolbar spacers.
             .toolbar { DocumentToolbar(document: document, viewer: viewer) }
         }
         .inspector(isPresented: $viewer.showsInspector) {
-            Group {
+            VStack(spacing: 0) {
+                PaneTabs(values: InspectorPane.allCases, selection: $viewer.inspectorPane, title: { $0.rawValue }) {
+                    Text($0.rawValue).font(.system(size: 12, weight: .medium))
+                }
+                .padding(10)
                 switch viewer.inspectorPane {
                 case .format: Inspector(document: document, viewer: viewer)
                 case .document: DocumentInspector(document: document, viewer: viewer)
@@ -56,7 +62,7 @@ struct DocumentWindow: View {
             }
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
             .padding(6)
-            .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
+            .inspectorColumnWidth(min: 250, ideal: 290, max: 480)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
@@ -145,8 +151,6 @@ private struct FloatingFormatBar: View {
                     ForEach(document.styles) { Text($0.name).tag(UInt32?.some($0.id)) }
                 }
                 .labelsHidden().frame(width: 100)
-                FontPicker(font: document.format?.text.font, language: nil) { editor.format(CharStyle(font: $0)) }
-                    .equatable().frame(width: 140)
                 Picker("글자 크기", selection: Binding(get: { document.format?.text.size ?? 10 }, set: { editor.format(CharStyle(size: $0)) })) {
                     let size = document.format?.text.size ?? 10
                     ForEach(Array(Set(FormatChoices.sizes + [size])).sorted(), id: \.self) { Text(FormatChoices.points($0)).tag($0) }
@@ -201,7 +205,7 @@ private extension View {
 /// second document opens.
 private struct DocumentToolbar: ToolbarContent {
     let document: HwpDocument
-    let viewer: Viewer
+    @ObservedObject var viewer: Viewer
 
     var body: some ToolbarContent {
         ToolbarItemGroup {
@@ -221,9 +225,11 @@ private struct DocumentToolbar: ToolbarContent {
         }
         if #available(macOS 26, *) { ToolbarSpacer(.fixed) }
         // Keynote's 포맷 and 문서: each brings its inspector up, and hides it when it shows.
-        ToolbarItemGroup {
-            InspectorButton(viewer: viewer, pane: .format)
-            InspectorButton(viewer: viewer, pane: .document)
+        ToolbarItem {
+            Toggle(isOn: $viewer.showsInspector) {
+                Label("상세 설정", systemImage: "sidebar.right")
+            }
+            .help("상세 설정 보기 / 가리기")
         }
     }
 }
@@ -251,18 +257,30 @@ extension InsertButton where Panel == EmptyView {
     }
 }
 
-private struct InspectorButton: View {
-    @ObservedObject var viewer: Viewer
-    let pane: InspectorPane
+private struct WorkspaceStatus: View {
+    @ObservedObject var document: HwpDocument
+    let viewer: Viewer
+    @ObservedObject var position: ViewPosition
+
     var body: some View {
-        // The pane showing is on in gray, not in the accent color.
-        Toggle(isOn: Binding(get: { viewer.showsInspector && viewer.inspectorPane == pane },
-                             set: { on in (viewer.inspectorPane, viewer.showsInspector) = (pane, on) })) {
-            Label(pane.rawValue, systemImage: pane.symbol)
+        HStack(spacing: 12) {
+            Button { viewer.goingToPage = true } label: {
+                Text("\(min(position.page + 1, max(1, document.context.pageCount))) / \(max(1, document.context.pageCount))쪽")
+                    .monospacedDigit()
+            }
+            .buttonStyle(.plain).help("쪽으로 이동")
+            Spacer(minLength: 0)
+            Menu {
+                ZoomItems(viewer: viewer, position: position)
+            } label: {
+                Text("\(position.zoomPercent)%").monospacedDigit()
+            }
+            .fixedSize()
         }
-        .toggleStyle(.button)
-        .tint(.gray.opacity(0.4))
-        .help(pane.rawValue)
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 18).padding(.vertical, 8)
+        .background(.bar)
     }
 }
 
@@ -682,7 +700,7 @@ private struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             PaneTabs(values: TaskPane.allCases, selection: $viewer.sidebarPane, title: { $0.rawValue }) {
-                Image(systemName: $0.symbol)
+                Text($0.rawValue).font(.system(size: 11, weight: .medium))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
