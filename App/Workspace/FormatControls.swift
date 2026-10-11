@@ -15,9 +15,6 @@ enum FormatChoices {
         ["I.", "A.", "1.", "i)"], ["i.", "a.", "(i)", "(a)"], ["A.", "1.", "가,", "(a)"],
         ["1.", "1.1.", "1.1.1.", "1.1.1.1."],
     ]
-    static let colors = ["#000000", "#808080", "#ff0000", "#ff8000", "#ffd700", "#008000", "#0000ff", "#000080", "#800080"]
-    /// 형광펜 colors; `none` removes the highlight.
-    static let highlights = ["#ffff00", "#a6ff4d", "#66ffff", "#ff99cc", "#ffc04d"]
     /// No color: white, drawn as the web editor's slashed swatch.
     static let none = "#ffffff"
     /// Installed font families, by the name the user reads.
@@ -38,29 +35,6 @@ enum FormatChoices {
     }
     static func points(_ size: Double) -> String {
         size.rounded() == size ? "\(Int(size)) pt" : String(format: "%.1f pt", size)
-    }
-    /// A square of `hex`; `none` is white with a red slash, as in the web editor.
-    static func swatch(_ hex: String, none: Bool = false) -> NSImage {
-        let value = Int(hex.dropFirst(), radix: 16) ?? 0
-        let color = NSColor(srgbRed: CGFloat(value >> 16 & 255) / 255, green: CGFloat(value >> 8 & 255) / 255,
-                            blue: CGFloat(value & 255) / 255, alpha: 1)
-        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
-            let square = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: 2, yRadius: 2)
-            color.setFill()
-            square.fill()
-            NSColor.separatorColor.setStroke()
-            square.stroke()
-            if none {
-                let slash = NSBezierPath()
-                slash.move(to: NSPoint(x: rect.minX + 2, y: rect.minY + 2))
-                slash.line(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 2))
-                NSColor.systemRed.setStroke()
-                slash.stroke()
-            }
-            return true
-        }
-        image.accessibilityDescription = hex
-        return image
     }
 }
 

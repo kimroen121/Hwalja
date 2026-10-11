@@ -24,26 +24,11 @@ struct MenuItems {
         Button(action: action) { Label(title, systemImage: symbol) }
     }
 
-    /// The 찾기 drop-down of the tool row; the same commands as the 찾기 menu.
-    static func findChoices(_ viewer: Viewer) -> [Choice?] {
-        [
-            Choice(title: "찾기…", symbol: Icon.find, key: "f") { viewer.showFind(replace: false) },
-            Choice(title: "찾아 바꾸기…", symbol: Icon.replace, key: "f", modifiers: [.command, .option]) {
-                viewer.showFind(replace: true)
-            },
-            Choice(title: "찾아가기…", symbol: Icon.goTo, key: "g", modifiers: [.command, .option]) {
-                viewer.goingToPage = true
-            },
-        ]
-    }
     /// 그리기 개체, as in Hancom Office Web's 도형.
     static let shapes: [(title: String, shape: String, symbol: String)] = [
         ("가로 글상자", "textbox", Icon.textbox), ("직사각형", "rectangle", Icon.rectangle),
         ("타원", "ellipse", Icon.ellipse), ("직선", "line", Icon.line), ("호", "arc", Icon.arc),
     ]
-    static func shapeChoices(_ viewer: Viewer) -> [Choice?] {
-        shapes.map { item in Choice(title: item.title, symbol: item.symbol) { viewer.draw(item.shape) } }
-    }
     /// 머리말 or 꼬리말 shapes, as in Hancom Office Web.
     static let headerShapes: [(title: String, placement: Placement?)] = [
         ("(모양 없음)", nil), ("왼쪽 쪽 번호", .left), ("가운데 쪽 번호", .center), ("오른쪽 쪽 번호", .right),

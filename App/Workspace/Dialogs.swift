@@ -312,17 +312,6 @@ extension Viewer {
     func setSection(_ setup: SectionSetup, section: UInt32, whole: Bool) {
         document?.edit(undoManager) { _ in .setSection(section: section, setup, whole: whole) }
     }
-    /// 세로 or 가로 for the section holding the caret.
-    func setOrientation(landscape: Bool) {
-        guard let document else { return }
-        let section = document.selection?.focus.target.section ?? 0
-        Task {
-            guard var page = try? await document.pageSetup(section: section) else { return NSSound.beep() }
-            guard page.landscape != landscape else { return }
-            page.landscape = landscape
-            setPage(page, section: section)
-        }
-    }
     /// 이전 or 다음 머리말/꼬리말 (or 주석) from the one holding the caret.
     func goTo(_ motion: Motion) {
         document?.select { document in
