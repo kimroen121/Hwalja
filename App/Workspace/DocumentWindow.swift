@@ -344,8 +344,10 @@ final class Viewer: ObservableObject {
     @Published var inspectorPane = UserDefaults.standard.string(forKey: "inspectorPane").flatMap(InspectorPane.init) ?? .format {
         didSet { UserDefaults.standard.set(inspectorPane.rawValue, forKey: "inspectorPane") }
     }
-    /// The inspector's tab, kept while it is hidden.
-    var inspectorTab = "텍스트"
+    /// The inspector's tab last chosen for each set of tabs (그림's, 표's …), kept between launches.
+    var inspectorTabs = UserDefaults.standard.dictionary(forKey: "inspectorTabs") as? [String: String] ?? [:] {
+        didSet { UserDefaults.standard.set(inspectorTabs, forKey: "inspectorTabs") }
+    }
     /// 텍스트's 스타일 (0), 레이아웃 (1) or 기타 (2), kept while the inspector is hidden.
     var textLayout = 0
     func shows(_ pane: TaskPane) -> Bool { showsSidebar && sidebarPane == pane }
@@ -767,7 +769,7 @@ private struct FilterField: NSViewRepresentable {
     }
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var text: Binding<String>
         init(text: Binding<String>) { self.text = text }
         @objc func changed(_ field: NSSearchField) { text.wrappedValue = field.stringValue }

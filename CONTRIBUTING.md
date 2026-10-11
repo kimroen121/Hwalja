@@ -45,7 +45,7 @@ make compare-pages \
 | `Preview/` | Finder 훑어보기 확장. `Editing/`은 `App/Editing`을 가리키는 링크라 앱과 같은 엔진과 그리기 코드를 씁니다 |
 | `Engine/` | rhwp를 감싸는 Rust C ABI (`hwp-engine-abi`). `editing/`은 편집 세션(명령, 기록, 보존 검사, 좌표, `ffi`) |
 | `Vendor/` | 체크섬으로 검증하는 rhwp 소스 압축본과 패치 (`Vendor/README.md`) |
-| `Tests/` | Swift 테스트와 생성된 공개 fixture |
+| `Tests/` | Swift 테스트: `EditSessionTests`(엔진 프로토콜), `AppTests/`(저장·입력·서식·개체·표·주석/머리말·보기·인스펙터·빠른 메뉴·렌더링, 기능별 한 파일), `Support.swift`(fixture와 공용 도우미), 생성된 공개 fixture |
 | `docs/` | `ROADMAP.md`(목표와 남은 기능), `FEATURES.md`(기능별 상태), `BUG_HANDOFF.md`(남은 버그, 수동 점검), `brand/`(아이콘, 워드마크) |
 
 ## 기준

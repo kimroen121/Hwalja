@@ -2,10 +2,6 @@ import Testing
 import Foundation
 @testable import HwaljaKit
 
-func fixture(_ ext: String) throws -> Data {
-    try Data(contentsOf: #require(Bundle.module.url(forResource: "generated", withExtension: ext, subdirectory: "Fixtures")))
-}
-
 struct EditSessionTests {
     @Test @MainActor func lockedDocumentsAskForTheirPasswordUntilRightOrCancelled() throws {
         let data = try Data(contentsOf: #require(Bundle.module.url(forResource: "locked", withExtension: "hwp", subdirectory: "Fixtures")))

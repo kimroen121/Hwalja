@@ -702,8 +702,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
     /// when nothing is selected. It lies over the scroll view, so it keeps its size at any zoom.
     func updateQuickMenu() {
         let rects = highlightRects
-        guard let first = rects.first, shown.object == nil, NSEvent.pressedMouseButtons == 0,
-              let container = enclosingScrollView?.superview, let quickMenu else {
+        let container = enclosingScrollView?.superview
+        // Only while some of the selection shows: scrolled away, the bar goes with it.
+        let rect = container.flatMap { container in rects.first.map { container.convert(rects.reduce($0) { $0.union($1) }, from: self) } }
+        guard let rect, let container, container.bounds.intersects(rect), shown.object == nil, NSEvent.pressedMouseButtons == 0,
+              let quickMenu else {
             // Fades out, as it came.
             if let bar = quickBar {
                 NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 0 } completionHandler: { bar.removeFromSuperview() }
@@ -718,11 +721,11 @@ final class PageEditor: NSView, @preconcurrency NSTextInputClient, NSMenuItemVal
             NSAnimationContext.runAnimationGroup { _ in bar.animator().alphaValue = 1 }
         }
         quickBar = bar
-        let rect = container.convert(rects.reduce(first) { $0.union($1) }, from: self)
         let size = bar.fittingSize
-        // Above the selection, or under it when there is no room above.
+        // Above the selection, or under it when there is no room above; inside the window either way.
         let above = rect.maxY + 8
-        let y = above + size.height <= container.bounds.maxY ? above : rect.minY - 8 - size.height
+        let y = min(max(above + size.height <= container.bounds.maxY ? above : rect.minY - 8 - size.height, 8),
+                    container.bounds.maxY - size.height - 8)
         let x = min(max(rect.midX - size.width / 2, 8), container.bounds.maxX - size.width - 8)
         bar.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }

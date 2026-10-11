@@ -1,0 +1,145 @@
+import Testing
+import Foundation
+import AppKit
+import SwiftUI
+@testable import HwaljaKit
+
+/// Tables: made, changed, turned, and their cells.
+@MainActor
+struct TableTests {
+    @Test func structureCommandsRunFromTheViewer() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        #expect(document.context.inBody && !document.context.inTable)
+        viewer.insertTable(rows: 2, columns: 2)
+        await document.settle()
+        #expect(document.context.inTable)
+        viewer.editTable(.insertRowBelow)
+        await document.settle()
+        #expect(document.context.inTable)
+        var corner = try #require(document.selection?.focus)
+        corner.target.cell?.cell = 0
+        var far = corner
+        far.target.cell?.cell = 3
+        document.select { _ in EditSelection(anchor: corner, focus: far) }
+        await document.settle()
+        #expect(document.context.cellBlock && !document.context.hasRange)
+        #expect(document.presentation.highlight.count == 4 && document.presentation.caret != nil)
+        let red = BorderSide(line: 1, width: 5, color: "#ff0000")
+        var cellBorder = CellBorder(fill: PageFill(color: "#ccddee", patternColor: "#000000", pattern: 0))
+        cellBorder.sides[0] = red
+        viewer.setCellBorder(cellBorder, all: false, one: false)
+        await document.settle()
+        let drawn = try await document.cellBorder(corner.target)
+        #expect(drawn.sides[0] == red && drawn.fill == cellBorder.fill && document.context.cellBlock)
+        let sheet = try #require(await viewer.tableSheet())
+        var tableProps = sheet.props
+        tableProps.tableBorder?.fill = PageFill(color: "#eeeeee", patternColor: "#000000", pattern: 0)
+        viewer.setObject(sheet.object, tableProps.changes(from: sheet.props))
+        await document.settle()
+        #expect(try await document.objectProps(sheet.object).tableBorder?.fill == tableProps.tableBorder?.fill)
+        viewer.editCells { .mergeCells($0) }
+        await document.settle()
+        #expect(document.context.inTable && !document.context.cellBlock)
+        document.selection = .caret(EditPosition(target: EditTarget(section: 0, paragraph: 1, cell: nil), scalar: 0))
+        viewer.insertBreak(column: false)
+        await document.settle()
+        #expect(document.reply.pageCount == 2 && document.pages.count == 2)
+        var page = try await document.pageSetup(section: 0)
+        page.landscape.toggle()
+        viewer.setPage(page, section: 0)
+        await document.settle()
+        #expect(try await document.pageSetup(section: 0) == page)
+        #expect(document.pages[0].size.width > document.pages[0].size.height)
+        var border = try await document.pageBorder(section: 0)
+        border.sides = Array(repeating: BorderSide(line: 1, width: 3, color: "#336699"), count: 4)
+        border.fill = PageFill(color: "#ffeecc", patternColor: "#000000", pattern: 0)
+        border.borderPages = .exceptFirst
+        viewer.setPageBorder(border, section: 0, whole: true)
+        await document.settle()
+        #expect(try await document.pageBorder(section: 0) == border)
+        let count = document.styles.count
+        var editor = try #require(viewer.newStyle())
+        editor.spec.name = "큰 제목"
+        editor.spec.text = [CharStyle(size: 20)]
+        viewer.finishStyle(editor, editor.spec)
+        await document.settle()
+        #expect(document.styles.count == count + 1 && document.styles.last?.name == "큰 제목")
+        document.applyStyle(UInt32(count), viewer.undoManager)
+        await document.settle()
+        #expect(document.format?.style == UInt32(count) && document.format?.text.size == 20)
+        // Commands that leave the text alone keep the caret where the user put it.
+        let caret = EditSelection.caret(EditPosition(target: EditTarget(section: 0, paragraph: 0, cell: nil), scalar: 1))
+        document.selection = caret
+        viewer.moveStyle(UInt32(count), up: true)
+        await document.settle()
+        #expect(document.styles[count - 1].name == "큰 제목" && document.selection == caret)
+        viewer.deleteStyle(UInt32(count - 1), replacement: 0)
+        await document.settle()
+        #expect(document.styles.count == count && document.format?.style == 0)
+        var note = try await document.noteShape(section: 0, footnote: false)
+        note.numberFormat = "upperRoman"
+        note.numbering = "restartSection"
+        viewer.setNoteShape(note, footnote: false, section: 0, whole: false)
+        await document.settle()
+        #expect(try await document.noteShape(section: 0, footnote: false) == note)
+        var setup = try await document.sectionSetup(section: 0)
+        setup.pageNum = 3
+        setup.hideEmptyLine.toggle()
+        viewer.setSection(setup, section: 0, whole: false)
+        await document.settle()
+        #expect(try await document.sectionSetup(section: 0) == setup)
+        let revision = document.reply.revision
+        viewer.headerFooter(footer: false, pageNumber: .center)
+        viewer.headerFooter(footer: true, pageNumber: nil)
+        await document.settle()
+        #expect(document.reply.revision == revision + 2)
+    }
+
+    /// 표 뒤집기 turns the table with the caret's cell: 시계 방향 90도 takes A1 of a 2×3 table to B1.
+    @Test func tablesTurn() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        viewer.insertTable(rows: 2, columns: 3)
+        await document.settle()
+        viewer.flipTable(.right, margins: false)
+        await document.settle()
+        let caret = try #require(document.selection?.focus)
+        #expect(try await document.status(at: caret).cell == "B1")
+    }
+
+    /// 한글's table keys: Ctrl+Enter (⌘↩) in a cell adds a row, P on a cell block opens 표/셀 속성.
+    @Test func tableKeysAddRowsAndOpenProperties() async throws {
+        let document = HwpDocument()
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        viewer.insertTable(rows: 2, columns: 2)
+        await document.settle()
+        var cell = try #require(document.selection?.focus)
+        cell.target.cell?.cell = 0
+        func key(_ characters: String, _ flags: NSEvent.ModifierFlags = [], code: UInt16 = 0) async {
+            viewer.canvas.editor.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                                                windowNumber: 0, context: nil, characters: characters,
+                                                                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!)
+            await document.settle()
+        }
+        await key("\r", .command, code: 36)
+        var far = cell
+        far.target.cell?.cell = 5
+        document.select { _ in EditSelection(anchor: cell, focus: far) }
+        await document.settle()
+        #expect(document.context.cellBlock && document.presentation.highlight.count == 6)
+        // P while typing 한글.
+        await key("ㅔ", code: 35)
+        for _ in 0..<100 where viewer.objectSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(viewer.objectSheet?.cell != nil)
+    }
+}

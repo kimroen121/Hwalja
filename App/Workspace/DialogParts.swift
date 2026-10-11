@@ -426,10 +426,12 @@ struct ChoiceField<Value: Hashable>: View {
     let options: [(value: Value, title: String)]
     var images: [NSImage]?
     var minWidth: CGFloat = 0
+    /// As wide as its place.
+    var flexible = false
 
     init(_ selection: Binding<Value>, _ options: [(value: Value, title: String)],
-         images: [NSImage]? = nil, minWidth: CGFloat = 0) {
-        (_selection, self.options, self.images, self.minWidth) = (selection, options, images, minWidth)
+         images: [NSImage]? = nil, minWidth: CGFloat = 0, flexible: Bool = false) {
+        (_selection, self.options, self.images, self.minWidth, self.flexible) = (selection, options, images, minWidth, flexible)
     }
 
     var body: some View {
@@ -442,8 +444,9 @@ struct ChoiceField<Value: Hashable>: View {
             }
         }
         .labelsHidden()
-        .frame(minWidth: minWidth)
-        .fixedSize()
+        .buttonSizing(flexible)
+        .frame(minWidth: minWidth, maxWidth: flexible ? .infinity : nil)
+        .fixedSize(horizontal: !flexible, vertical: true)
     }
 }
 
@@ -479,4 +482,11 @@ func listTool(_ title: String, _ symbol: String, action: @escaping () -> Void) -
 
 #Preview {
     ColorWell(hex: .constant("FF0000")).padding()
+}
+
+private extension View {
+    /// As wide as its place on macOS 26, where pop-ups otherwise fit their title.
+    @ViewBuilder func buttonSizing(_ flexible: Bool) -> some View {
+        if #available(macOS 26, *), flexible { buttonSizing(.flexible) } else { self }
+    }
 }

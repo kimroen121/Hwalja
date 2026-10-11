@@ -6,7 +6,8 @@ import SwiftUI
 struct Inspector: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
-    @State private var chosen: String
+    /// The tab shown; nil for the one last chosen among these tabs.
+    @State private var chosen: String?
     /// The selected object's (or the caret's table's) properties, read again after every edit.
     @State private var props: ObjectProps?
     @AppStorage("keepsRatio") private var keepsRatio = true
@@ -18,7 +19,7 @@ struct Inspector: View {
     @State private var cellSides: [Int] = []
 
     init(document: HwpDocument, viewer: Viewer, tab: String? = nil) {
-        (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab ?? viewer.inspectorTab))
+        (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab))
     }
 
     static let textTabs = ["텍스트"]
@@ -43,7 +44,7 @@ struct Inspector: View {
 
     var body: some View {
         let context = document.context, tabs = Self.tabs(context)
-        let tab = tabs.contains(chosen) ? chosen : tabs[0]
+        let tab = shown(tabs)
         VStack(spacing: 0) {
             // As Pages's: what the inspector is for over it, or the tabs when there are more than one;
             // they stay while the groups under them scroll.
@@ -51,7 +52,10 @@ struct Inspector: View {
                 InspectorScroll(fixed: true) {
                     InspectorSection {
                         // As 문서 and 구역.
-                        Segments(tabs, selection: Binding(get: { tab }, set: { chosen = $0 }), accent: true, capsule: true) { .init(title: $0, help: $0) }
+                        Segments(tabs, selection: Binding(get: { tab }, set: { tab in
+                            chosen = tab
+                            viewer.inspectorTabs[tabs.joined(separator: " ")] = tab
+                        }), accent: true, capsule: true) { .init(title: $0, help: $0) }
                             .controlSize(.large)
                     }
                 }
@@ -66,18 +70,35 @@ struct Inspector: View {
                 InspectorScroll { content(tab, context).disabled(context.locked) }
             }
         }
-        .onChange(of: chosen) { viewer.inspectorTab = chosen }
-        .onChange(of: Self.contextTabs(context)) { old, new in
-            // A selected object, 머리말/꼬리말 or 주석 brings its tab up; a table's do not, so typing in cells keeps the tab.
-            if let first = new.first, !old.contains(first), !first.hasPrefix("표") { chosen = first }
+        .onChange(of: tabs) { old, new in
+            // Other tabs bring up the one last chosen among them; without one, the tab showing
+            // stays when they have it (typing into a table keeps 텍스트), else their first.
+            let showing = shown(old)
+            chosen = viewer.inspectorTabs[new.joined(separator: " ")] == nil && new.contains(showing) ? showing : nil
         }
-        .task(id: "\(document.revision) \(String(describing: document.selection?.focus.target))") {
+        .task(id: Self.readKey(document, viewer)) {
+            var read: (cell: CellProps?, fill: PageFill?)?
             if let target = document.selection?.focus.target, target.cell != nil, document.object == nil {
-                (cell, cellFill) = (try? await document.cellProps(target), (try? await document.cellBorder(target))?.fill)
+                read = (try? await document.cellProps(target), (try? await document.cellBorder(target))?.fill)
             }
-            guard let object = viewer.arrangedObject else { return props = nil }
-            props = try? await document.objectProps(object)
+            let object = viewer.arrangedObject
+            let objectProps = object == nil ? nil : try? await document.objectProps(object!)
+            // A read overtaken by a newer one keeps what that one shows: cancelled, it reads nothing.
+            print("DEBUGREAD", Self.readKey(document, viewer), object as Any, objectProps as Any, Task.isCancelled)
+            guard !Task.isCancelled else { return }
+            if let read { (cell, cellFill) = read }
+            props = objectProps
         }
+    }
+
+    /// The tab chosen here, else the one last chosen among `tabs`, else their first.
+    private func shown(_ tabs: [String]) -> String {
+        [chosen, viewer.inspectorTabs[tabs.joined(separator: " ")]].compactMap { $0 }.first(where: tabs.contains) ?? tabs[0]
+    }
+    /// What the shown properties are read for: a new revision, another object chosen (no
+    /// edit, no caret move), or the caret in another cell.
+    static func readKey(_ document: HwpDocument, _ viewer: Viewer) -> String {
+        "\(document.revision) \(String(describing: viewer.arrangedObject)) \(String(describing: document.selection?.focus.target))"
     }
 
     @ViewBuilder private func content(_ tab: String, _ context: EditingContext) -> some View {
@@ -211,11 +232,13 @@ struct Inspector: View {
             .disabled(inLine)
         }
         InspectorSection("회전") {
+            // 한/글 keeps −360…360; shown as the dial reads it.
+            let angle = props.map { Double((Int($0.rotationAngle ?? 0) % 360 + 360) % 360) }
             HStack(alignment: .top, spacing: 8) {
-                RotationDial(angle: props.map { Double($0.rotationAngle ?? 0) }) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
+                RotationDial(angle: angle) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
                     .frame(width: 32, height: 32)
                 captioned("각도") {
-                    NumberStepper(value: props.map { Double($0.rotationAngle ?? 0) }, unit: "°", range: 0...359, wide: true) {
+                    NumberStepper(value: angle, unit: "°", range: 0...359, wide: true) {
                         viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
                     }
                 }
@@ -1002,17 +1025,16 @@ private struct LineRow: View {
     var body: some View {
         let color = ColorWell(hex: $line.color, flexible: true)
         let width = ChoiceField(Binding { Int(line.width) } set: { line.width = UInt8($0) },
-                                Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages)
-            .flexibleButtons()
+                                Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages, flexible: true)
         if stacked {
-            VStack(alignment: .leading, spacing: 8) { Self.kind($line).flexibleButtons(); color; width }
+            VStack(alignment: .leading, spacing: 8) { Self.kind($line, flexible: true); color; width }
         } else {
             HStack(spacing: 8) { color; width }
         }
     }
-    static func kind(_ line: Binding<BorderSide>) -> some View {
+    static func kind(_ line: Binding<BorderSide>, flexible: Bool = false) -> some View {
         ChoiceField(Binding { Int(line.wrappedValue.line) } set: { line.wrappedValue.line = UInt8($0) },
-                    Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds)
+                    Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds, flexible: flexible)
     }
 }
 
@@ -1034,7 +1056,7 @@ private struct RotationDial: NSViewRepresentable {
         if let angle, dial.doubleValue != angle { dial.doubleValue = angle }
     }
     func makeCoordinator() -> Coordinator { Coordinator(apply: apply) }
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var apply: (Double) -> Void
         init(apply: @escaping (Double) -> Void) { self.apply = apply }
         @objc func changed(_ dial: NSSlider) { apply(dial.doubleValue.rounded().truncatingRemainder(dividingBy: 360)) }
