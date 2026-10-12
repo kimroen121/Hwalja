@@ -425,7 +425,7 @@ struct MenuItems {
             Button("한 수준 감소") { editor?.stepLevel(by: -1) }.keyboardShortcut("[")
         }
         .disabled(!context.canFormat || !context.inList)
-        item("스타일…", Icon.styles) { viewer?.editingStyles = true }
+        item("스타일…", Icon.styles) { viewer?.opensStyles = true; viewer?.reveal(.format, tab: "텍스트") }
             .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!)), modifiers: [])
             .disabled(viewer == nil)
         Divider()

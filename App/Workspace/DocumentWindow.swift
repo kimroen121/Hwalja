@@ -77,9 +77,6 @@ struct DocumentWindow: View {
         .sheet(item: $viewer.chartData) { ChartDataSheet(editing: $0, viewer: viewer) }
         .sheet(item: $viewer.fieldSheet) { FieldSheet(viewer: viewer, editing: $0.existing) }
         .sheet(item: $viewer.hyperlinkSheet) { HyperlinkSheet(viewer: viewer, editing: $0) }
-        .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
-        .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
-        .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
     }
@@ -391,10 +388,8 @@ final class Viewer: ObservableObject {
     @Published var fieldSheet: FieldEditing?
     @Published var hyperlinkSheet: HyperlinkEditing?
     @Published var chartData: ChartEditing?
-    /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.
-    @Published var editingStyles = false
-    @Published var styleEditor: StyleEditor?
-    @Published var replacingStyle: StyleInfo?
+    /// The 텍스트 tab opens its style popover once it shows (스타일…).
+    var opensStyles = false
 
     // Find and replace.
     @Published var finding = false
@@ -819,72 +814,6 @@ struct OutlineNode: Identifiable {
             nodes.append(node)
         }
         return nodes
-    }
-}
-
-/// The 문단 스타일 popover under the inspector's style, as Pages's: the styles, the caret's
-/// checked; a click applies one, + adds one, and a style's quick menu works on that style.
-struct StylePane: View {
-    @ObservedObject var document: HwpDocument
-    let viewer: Viewer
-    /// Called once a style is applied or a dialog opens, to close the popover.
-    var done: () -> Void = {}
-
-    var body: some View {
-        let current = document.styles.first { $0.id == document.format?.style }
-        VStack(spacing: 0) {
-            ZStack {
-                Text("문단 스타일").font(.headline)
-                HStack {
-                    Spacer()
-                    Button { done(); viewer.styleEditor = viewer.newStyle() } label: { Image(systemName: "plus") }
-                        .buttonStyle(.borderless)
-                        .help("스타일 추가")
-                        .accessibilityLabel("스타일 추가")
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            Divider()
-            List(document.styles, id: \.id) { style in
-                Button {
-                    document.applyStyle(style.id, viewer.undoManager)
-                    done()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark").opacity(style.id == current?.id ? 1 : 0)
-                        Text(style.name).font(.title3)
-                        Spacer()
-                    }
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!document.context.canApplyStyle)
-                .contextMenu {
-                    Button("스타일 추가/편집") { edit(style) }
-                    Button("커서 위치의 스타일로 바꾸기") { viewer.restyleFromCaret(style.id) }
-                    Button("스타일 지우기") { delete(style) }.disabled(style.id == 0)
-                    Divider()
-                    Button("스타일 위로") { viewer.moveStyle(style.id, up: true) }.disabled(style.id < 2)
-                    Button("스타일 아래로") { viewer.moveStyle(style.id, up: false) }
-                        .disabled(style.id == 0 || Int(style.id) + 1 >= document.styles.count)
-                }
-                .disabled(document.context.locked)
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-        }
-        .frame(width: 280, height: 420)
-        .task { await document.loadStyles() }
-    }
-    private func edit(_ style: StyleInfo) {
-        done()
-        Task { viewer.styleEditor = await viewer.styleEditor(style) }
-    }
-    private func delete(_ style: StyleInfo) {
-        done()
-        viewer.deleteStyle(style) { viewer.replacingStyle = $0 }
     }
 }
 

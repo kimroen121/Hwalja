@@ -91,6 +91,24 @@ struct FormattingTests {
         #expect(document.format?.style == style.id)
     }
 
+    /// Pages's * and 업데이트: text set apart from its style shows it, and 업데이트 takes it into the style.
+    @Test func updateTakesTheCaretsShapesIntoItsStyle() async throws {
+        let document = try HwpDocument(data: fixture("hwpx"))
+        let viewer = Viewer()
+        viewer.canvas.bind(document)
+        document.select { _ in .caret(EditPosition(target: body, scalar: 0)) }
+        await document.settle()
+        let style = try #require(document.format?.style)
+        #expect(!TextTab.changed(document.format, from: try await document.styleFormat(style)))
+        viewer.canvas.editor.format(ParaStyle(alignment: .center))
+        await document.settle()
+        #expect(TextTab.changed(document.format, from: try await document.styleFormat(style)))
+        viewer.restyleFromCaret(style)
+        await document.settle()
+        #expect(!TextTab.changed(document.format, from: try await document.styleFormat(style)))
+        #expect(try await document.styleFormat(style).paragraph.alignment == .center)
+    }
+
     /// 문단 번호 매기기 and 한 수준 증가 from the editor, as the format row runs them.
     @Test func listsNumberAndStepLevels() async throws {
         let document = try HwpDocument(data: fixture("hwpx"))

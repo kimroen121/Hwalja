@@ -1,35 +1,30 @@
 import AppKit
 import SwiftUI
 
-// 스타일 (F6), 스타일 추가하기/편집하기 and 스타일 지우기's 바꿀 스타일 선택.
-
-/// A style being added (no `style`) or edited, with the shapes it starts from.
-struct StyleEditor: Identifiable {
-    let id = UUID()
-    let style: UInt32?
-    let base: Format
-    var spec: StyleSpec
-}
+// 스타일, as Pages keeps them: in the inspector's style popover, made from the text and
+// brought up to date with it.
 
 extension Viewer {
-    /// 스타일 추가하기 from the caret's shapes.
-    func newStyle() -> StyleEditor? {
-        guard let document, let format = document.format else { return nil }
-        return StyleEditor(style: nil, base: format,
-                           spec: StyleSpec(name: "", englishName: "", paragraphStyle: true, next: UInt32(document.styles.count)))
+    /// A new style from the caret's shapes, as Pages's +: named after the caret's style, and a
+    /// 문단 스타일 applied to the caret's paragraphs. Returns its number.
+    @discardableResult
+    func addStyle(paragraphStyle: Bool) -> UInt32? {
+        guard let document, document.format != nil else { return nil }
+        let id = UInt32(document.styles.count)
+        let base = document.styles.first { $0.id == document.format?.style }?.name ?? "스타일"
+        let name = (1...).lazy.map { "\(base) \($0)" }.first { name in !document.styles.contains { $0.name == name } }!
+        let spec = StyleSpec(name: name, englishName: "", paragraphStyle: paragraphStyle, next: id)
+        document.edit(undoManager) { selection in selection.map { .addStyle($0.focus, spec) } }
+        if paragraphStyle { document.applyStyle(id, undoManager) }
+        return id
     }
-    /// 스타일 편집하기 of `style`.
-    func styleEditor(_ style: StyleInfo) async -> StyleEditor? {
-        guard let format = try? await document?.styleFormat(style.id) else { return nil }
-        return StyleEditor(style: style.id, base: format,
-                           spec: StyleSpec(name: style.name, englishName: style.englishName,
-                                           paragraphStyle: style.paragraphStyle, next: style.next))
-    }
-    func finishStyle(_ editor: StyleEditor, _ spec: StyleSpec) {
-        document?.edit(undoManager) { selection in
-            if let style = editor.style { return .editStyle(style, spec) }
-            return selection.map { .addStyle($0.focus, spec) }
-        }
+    /// The style's names or 다음 문단에 적용할 스타일 changed; its shapes stay.
+    func editStyle(_ style: StyleInfo, _ change: (inout StyleSpec) -> Void) {
+        let old = StyleSpec(name: style.name, englishName: style.englishName, paragraphStyle: style.paragraphStyle, next: style.next)
+        var spec = old
+        change(&spec)
+        guard spec != old else { return }
+        document?.edit(undoManager) { _ in .editStyle(style.id, spec) }
     }
     func deleteStyle(_ style: UInt32, replacement: UInt32) {
         document?.edit(undoManager) { _ in .deleteStyle(style, replacement: replacement) }
@@ -37,244 +32,150 @@ extension Viewer {
     func moveStyle(_ style: UInt32, up: Bool) {
         document?.edit(undoManager) { _ in .moveStyle(style, up: up) }
     }
+    /// The style takes the caret's shapes, and every paragraph in it follows: Pages's 업데이트.
     func restyleFromCaret(_ style: UInt32) {
         document?.edit(undoManager) { selection in selection.map { .restyleFromCaret(style, $0.focus) } }
     }
-    /// 스타일 지우기: a 글자 스타일 goes at once; a 문단 스타일 first asks which takes its place.
-    func deleteStyle(_ style: StyleInfo, ask: (StyleInfo) -> Void) {
-        if style.paragraphStyle { ask(style) } else { deleteStyle(style.id, replacement: 0) }
-    }
 }
 
-/// A style's picture in a list: ¶ for 문단, 가 for 글자.
-struct StyleLabel: View {
-    let style: StyleInfo
-    var body: some View {
-        Label {
-            Text(style.name)
-        } icon: {
-            Image(systemName: style.paragraphStyle ? "paragraphsign" : "textformat")
-        }
-    }
-}
-
-/// [스타일] 대화 상자: 스타일 목록 with its tools, and the chosen style's shapes.
-struct StyleSheet: View {
+/// The style popover under the inspector's style, as Pages's: the styles, the caret's checked;
+/// a click applies one, + makes one from the text, and each style's menu (› or a right click)
+/// names, moves or deletes it.
+struct StylePane: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var selection: UInt32?
-    @State private var format: Format?
-    @State private var editor: StyleEditor?
-    @State private var replacing: StyleInfo?
+    /// Called once a style is applied, to close the popover.
+    var done: () -> Void = {}
+    /// The style whose name (or 영문 이름) is being typed.
+    @State private var renaming: Renaming?
+    @State private var name = ""
+    @State private var hovered: UInt32?
+    @FocusState private var typing: Bool
 
-    init(document: HwpDocument, viewer: Viewer) {
-        self.document = document
-        self.viewer = viewer
-        _selection = State(initialValue: document.format?.style ?? 0)
+    private struct Renaming: Equatable {
+        let style: UInt32
+        let english: Bool
     }
-
-    private var chosen: StyleInfo? { document.styles.first { $0.id == selection } }
 
     var body: some View {
-        DialogFrame("스타일", confirmTitle: "설정", canConfirm: chosen != nil && document.context.canApplyStyle) {
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    GroupTitle("스타일 목록")
-                    List(document.styles, id: \.id, selection: $selection) { StyleLabel(style: $0) }
-                        .frame(width: 230, height: 300)
-                    HStack(spacing: 2) {
-                        listTool("스타일 추가하기", "plus") { editor = viewer.newStyle() }
-                        tool("스타일 편집하기", "pencil", needs: chosen) { style in
-                            Task { editor = await viewer.styleEditor(style) }
-                        }
-                        tool("스타일 지우기", "minus", needs: chosen.flatMap { $0.id == 0 ? nil : $0 }) { style in
-                            viewer.deleteStyle(style) { replacing = $0 }
-                        }
-                        tool("커서 위치의 스타일로 바꾸기", "text.cursor", needs: chosen) { viewer.restyleFromCaret($0.id) }
-                        tool("한 줄 위로 이동하기", "arrow.up", needs: chosen.flatMap { $0.id > 1 ? $0 : nil }) { style in
-                            viewer.moveStyle(style.id, up: true)
-                            selection = style.id - 1
-                        }
-                        tool("한 줄 아래로 이동하기", "arrow.down",
-                             needs: chosen.flatMap { $0.id > 0 && Int($0.id) + 1 < document.styles.count ? $0 : nil }) { style in
-                            viewer.moveStyle(style.id, up: false)
-                            selection = style.id + 1
-                        }
-                    }
-                    .disabled(document.context.locked)
+        let current = document.styles.first { $0.id == document.format?.style }
+        VStack(spacing: 0) {
+            ZStack {
+                Text("스타일").font(.headline)
+                HStack {
+                    Spacer()
+                    Menu {
+                        Button("문단 스타일") { add(paragraphStyle: true) }
+                        Button("글자 스타일") { add(paragraphStyle: false) }
+                    } label: { Image(systemName: "plus") }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("스타일 추가")
+                        .accessibilityLabel("스타일 추가")
+                        .disabled(!document.context.canApplyStyle)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    GroupTitle("문단 모양 정보")
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                        let p = format?.paragraph
-                        info("왼쪽 여백", p?.marginLeft.map { "\($0.formatted()) pt" })
-                        info("오른쪽 여백", p?.marginRight.map { "\($0.formatted()) pt" })
-                        info("줄 간격", p?.lineSpacing.map { "\($0.formatted()) \(p?.lineSpacingKind == .percent ? "%" : "pt")" })
-                        info("첫 줄", p?.indent.map { $0 == 0 ? "보통" : $0 > 0 ? "들여쓰기 \($0.formatted()) pt" : "내어쓰기 \((-$0).formatted()) pt" })
-                        info("정렬 방식", p?.alignment.map { FormatChoices.label($0).title })
-                    }
-                    .padding(.leading, 12)
-                    GroupTitle("글자 모양 정보").padding(.top, 8)
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                        let t = format?.text
-                        info("글꼴", t?.font)
-                        info("크기", t?.size.map { "\($0.formatted()) pt" })
-                        info("장평", t?.ratio.map { "\($0.formatted()) %" })
-                        info("자간", t?.spacing.map { "\($0.formatted()) %" })
-                    }
-                    .padding(.leading, 12)
-                    GroupTitle("현재 커서 위치 스타일").padding(.top, 8)
-                    Text(document.styles.first { $0.id == document.format?.style }?.name ?? "")
-                        .padding(.leading, 12)
-                }
-                .frame(width: 220, alignment: .leading)
             }
-        } confirm: {
-            if let selection { document.applyStyle(selection, viewer.undoManager) }
-            dismiss()
-        }
-        .task(id: [selection.map(Int.init) ?? -1, Int(document.reply.revision)]) {
-            format = nil
-            if let selection { format = try? await document.styleFormat(selection) }
-        }
-        .onChange(of: document.styles) { _, styles in
-            if let selection, Int(selection) >= styles.count { self.selection = UInt32(max(styles.count - 1, 0)) }
-        }
-        .sheet(item: $editor) { editor in
-            StyleEditSheet(editor: editor, styles: document.styles, viewer: viewer)
-        }
-        .sheet(item: $replacing) { style in
-            StyleReplaceSheet(style: style, styles: document.styles, viewer: viewer)
-        }
-    }
-
-    private func tool(_ title: String, _ symbol: String, needs style: StyleInfo?,
-                      action: @escaping (StyleInfo) -> Void) -> some View {
-        listTool(title, symbol) { if let style { action(style) } }.disabled(style == nil)
-    }
-    @ViewBuilder private func info(_ title: String, _ value: String?) -> some View {
-        GridRow {
-            Text(title).foregroundStyle(.secondary)
-            Text(value ?? "")
-        }
-    }
-}
-
-/// [스타일 추가하기] and [스타일 편집하기]: names, 스타일 종류 and 다음 문단에 적용할 스타일,
-/// beside the 글자 모양 and 문단 모양 the style lays over its shapes, in the 텍스트 tab's controls.
-struct StyleEditSheet: View {
-    let editor: StyleEditor
-    let styles: [StyleInfo]
-    let viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var spec: StyleSpec
-    /// 스타일 (0), 레이아웃 (1) or 기타 (2), as the 텍스트 tab's.
-    @State private var layout = 0
-
-    init(editor: StyleEditor, styles: [StyleInfo], viewer: Viewer) {
-        self.editor = editor
-        self.styles = styles
-        self.viewer = viewer
-        var spec = editor.spec
-        if spec.text.isEmpty { spec.text = [CharStyle()] }
-        _spec = State(initialValue: spec)
-    }
-
-    private var adding: Bool { editor.style == nil }
-    /// The styles 다음 문단에 적용할 스타일 offers: the 문단 스타일, and a new one itself.
-    private var nexts: [(UInt32, String)] {
-        let own = adding ? [(UInt32(styles.count), spec.name)] : []
-        return styles.filter(\.paragraphStyle).map { ($0.id, $0.name) } + own
-    }
-    /// The shapes the style gives: its base with the changes made here over it, 대표's then each 언어's.
-    private var shown: Format {
-        var format = editor.base
-        format.text = format.text.merging(spec.text[0])
-        format.languages = format.languages.map { $0.merging(spec.text[0]) }
-        for change in spec.text.dropFirst() {
-            if let language = change.language, format.languages.indices.contains(language) {
-                format.languages[language] = format.languages[language].merging(change)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            Divider()
+            ScrollViewReader { proxy in
+                List(document.styles, id: \.id) { style in
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark").opacity(style.id == current?.id ? 1 : 0)
+                        if renaming?.style == style.id {
+                            TextField("", text: $name)
+                                .font(.title3)
+                                .focused($typing)
+                                .onAppear { typing = true }
+                                .onSubmit { rename(style) }
+                                .onExitCommand { renaming = nil }
+                        } else {
+                            Button {
+                                document.applyStyle(style.id, viewer.undoManager)
+                                done()
+                            } label: {
+                                HStack {
+                                    Text(style.name).font(.title3)
+                                    // 글자 스타일 marked, as the list holds both kinds.
+                                    if !style.paragraphStyle { Image(systemName: "textformat").foregroundStyle(.secondary) }
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!document.context.canApplyStyle)
+                        }
+                        Menu { menu(style) } label: { Image(systemName: "chevron.right") }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .opacity(hovered == style.id ? 1 : 0)
+                            .accessibilityLabel("\(style.name) 스타일 메뉴")
+                    }
+                    .padding(.vertical, 4)
+                    .onHover { hovered = $0 ? style.id : hovered == style.id ? nil : hovered }
+                    .contextMenu { menu(style) }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .disabled(document.context.locked)
+                // The caret's style in sight, and a new one as its name is typed.
+                .onAppear { proxy.scrollTo(current?.id, anchor: .center) }
+                .onChange(of: renaming) { if let renaming { proxy.scrollTo(renaming.style, anchor: .center) } }
             }
         }
-        format.paragraph = format.paragraph.merging(spec.paragraph)
-        return format
+        .frame(width: 280, height: 420)
+        .task { await document.loadStyles() }
+        // Typing a name ends when the field is left.
+        .onChange(of: typing) { if !typing, let renaming, let style = document.styles.first(where: { $0.id == renaming.style }) { rename(style) } }
     }
-    /// A change of 대표 goes into the style's own shape; one of a 언어, into that 언어's.
-    private func formatText(_ change: CharStyle) {
-        if change.language == nil {
-            spec.text[0] = spec.text[0].merging(change)
-        } else if let index = spec.text.indices.dropFirst().first(where: { spec.text[$0].language == change.language }) {
-            spec.text[index] = spec.text[index].merging(change)
+
+    @ViewBuilder private func menu(_ style: StyleInfo) -> some View {
+        Button("스타일 이름 변경") { (renaming, name) = (Renaming(style: style.id, english: false), style.name) }
+        Button("영문 이름 변경") { (renaming, name) = (Renaming(style: style.id, english: true), style.englishName) }
+        if style.paragraphStyle {
+            Picker("다음 문단에 적용할 스타일", selection: Binding { style.next } set: { next in viewer.editStyle(style) { $0.next = next } }) {
+                ForEach(document.styles.filter(\.paragraphStyle)) { Text($0.name).tag($0.id) }
+            }
+        }
+        Button("커서 위치의 스타일로 바꾸기") { viewer.restyleFromCaret(style.id) }
+        Divider()
+        Button("스타일 위로") { viewer.moveStyle(style.id, up: true) }.disabled(style.id < 2)
+        Button("스타일 아래로") { viewer.moveStyle(style.id, up: false) }
+            .disabled(style.id == 0 || Int(style.id) + 1 >= document.styles.count)
+        Divider()
+        // A 문단 스타일's paragraphs take the one chosen in its place.
+        if style.paragraphStyle {
+            Menu("스타일 지우기") {
+                Section("바꿀 스타일") {
+                    ForEach(document.styles.filter { $0.paragraphStyle && $0.id != style.id }) { other in
+                        Button(other.name) { viewer.deleteStyle(style.id, replacement: other.id) }
+                    }
+                }
+            }
+            .disabled(style.id == 0)
         } else {
-            spec.text.append(change)
+            Button("스타일 지우기") { viewer.deleteStyle(style.id, replacement: 0) }
         }
     }
-
-    var body: some View {
-        DialogFrame(adding ? "스타일 추가하기" : "스타일 편집하기", confirmTitle: adding ? "추가" : "설정",
-                    canConfirm: !spec.name.trimmingCharacters(in: .whitespaces).isEmpty) {
-            HStack(alignment: .top, spacing: 16) {
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-                    GridRow {
-                        FieldLabel("스타일 이름")
-                        TextField("", text: $spec.name).frame(width: 200)
-                    }
-                    GridRow {
-                        FieldLabel("영문 이름")
-                        TextField("", text: $spec.englishName).frame(width: 200)
-                    }
-                    GridRow {
-                        FieldLabel("스타일 종류")
-                        Picker("", selection: $spec.paragraphStyle) {
-                            Text("문단").tag(true)
-                            Text("글자").tag(false)
-                        }
-                        .pickerStyle(.radioGroup)
-                        .horizontalRadioGroupLayout()
-                        .labelsHidden()
-                        .disabled(!adding)
-                    }
-                    GridRow {
-                        FieldLabel("다음 문단에 적용할 스타일")
-                        ChoiceField($spec.next, nexts, minWidth: 140)
-                            .disabled(!spec.paragraphStyle)
-                    }
-                }
-                Divider()
-                // A 글자 스타일 keeps the paragraph's shape.
-                TextFormat(format: shown, layout: $layout, paragraphs: spec.paragraphStyle, formatText: formatText,
-                           formatParagraph: { spec.paragraph = spec.paragraph.merging($0) }) {}
-                    .frame(width: 280, height: 480)
-            }
-        } confirm: {
-            viewer.finishStyle(editor, spec)
-            dismiss()
+    /// + as Pages's: the new style shows with its name ready to type.
+    private func add(paragraphStyle: Bool) {
+        guard let id = viewer.addStyle(paragraphStyle: paragraphStyle) else { return }
+        Task {
+            await document.settle()
+            guard let style = document.styles.first(where: { $0.id == id }) else { return }
+            (renaming, name) = (Renaming(style: id, english: false), style.name)
         }
     }
-}
-
-/// [바꿀 스타일 선택]: the 문단 스타일 that takes a deleted one's place.
-struct StyleReplaceSheet: View {
-    let style: StyleInfo
-    let styles: [StyleInfo]
-    let viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var replacement: UInt32? = 0
-
-    var body: some View {
-        DialogFrame("바꿀 스타일 선택", confirmTitle: "설정", canConfirm: replacement != nil) {
-            List(styles.filter { $0.paragraphStyle && $0.id != style.id }, id: \.id, selection: $replacement) {
-                StyleLabel(style: $0)
-            }
-            .frame(width: 240, height: 220)
-        } confirm: {
-            if let replacement { viewer.deleteStyle(style.id, replacement: replacement) }
-            dismiss()
+    private func rename(_ style: StyleInfo) {
+        guard let renaming else { return }
+        self.renaming = nil
+        let typed = name.trimmingCharacters(in: .whitespaces)
+        if renaming.english {
+            viewer.editStyle(style) { $0.englishName = typed }
+        } else if !typed.isEmpty {
+            viewer.editStyle(style) { $0.name = typed }
         }
     }
-}
-
-#Preview {
-    StyleSheet(document: HwpDocument(), viewer: Viewer())
 }

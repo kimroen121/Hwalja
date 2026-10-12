@@ -9,7 +9,14 @@ struct TextTab: View {
     let viewer: Viewer
     /// 스타일 (0), 레이아웃 (1) or 기타 (2).
     @State private var layout: Int
+    /// The 언어 the font and scales show and change; nil for 대표 (all of them).
+    @State private var language: Int?
+    @State private var showsMore = false
     @State private var showsStyles = false
+    /// The caret's style as it is defined, to tell the caret's shapes from it.
+    @State private var defined: (style: UInt32, format: Format)?
+    /// The revision `defined` was read at; an edit (업데이트 among them) reads it again.
+    @State private var shownRevision: UInt64 = 0
 
     /// Shows 텍스트 over the style, when no tabs do.
     let title: Bool
@@ -19,93 +26,80 @@ struct TextTab: View {
     }
 
     private var editor: PageEditor { viewer.canvas.editor }
+    private var text: CharStyle? { document.format?.text }
+    private var paragraph: ParaStyle? { document.format?.paragraph }
 
-    var body: some View {
-        TextFormat(format: document.format, layout: $layout, restarts: document.context.inBody, editable: document.context.canFormat,
-                   formatText: { editor.format($0) }, formatParagraph: { editor.format($0) }) {
-            if title {
-                VStack(spacing: 4) {
-                    Text("텍스트").foregroundStyle(.secondary).frame(maxWidth: .infinity)
-                    Divider()
-                }
-            }
-            // As Pages's: the style's name, its list in a popover under it.
-            Button { showsStyles = true } label: {
-                HStack {
-                    Text(document.styles.first { $0.id == document.format?.style }?.name ?? "")
-                    Spacer()
-                    Image(systemName: "chevron.down").font(.body.weight(.semibold))
-                }
-            }
-            .controlSize(.extraLarge)
-            .popover(isPresented: $showsStyles, arrowEdge: .bottom) {
-                StylePane(document: document, viewer: viewer) { showsStyles = false }
-            }
-            .flexibleButtons()
-            .disabled(!document.context.canApplyStyle)
-            Divider()
-        }
-        .onChange(of: layout) { viewer.textLayout = layout }
-    }
-}
-
-/// 스타일, 레이아웃 and 기타 under their segments, with what goes over them: the 텍스트 tab's
-/// for the selection, 스타일 편집's for a style. Each change goes to `formatText` or
-/// `formatParagraph` at once.
-struct TextFormat<Header: View>: View {
-    let format: Format?
-    @Binding var layout: Int
-    /// 시작 번호 방식 shows: in the body, where numbering can restart.
-    let restarts: Bool
-    let editable: Bool
-    /// 문단 모양 can change: not for a 글자 스타일.
-    let paragraphs: Bool
-    let formatText: (CharStyle) -> Void
-    let formatParagraph: (ParaStyle) -> Void
-    let header: Header
-    /// The 언어 the font and scales show and change; nil for 대표 (all of them).
-    @State private var language: Int?
-    @State private var showsMore = false
-
-    init(format: Format?, layout: Binding<Int>, restarts: Bool = false, editable: Bool = true, paragraphs: Bool = true,
-         formatText: @escaping (CharStyle) -> Void, formatParagraph: @escaping (ParaStyle) -> Void,
-         @ViewBuilder header: () -> Header) {
-        (self.format, _layout, self.restarts, self.editable, self.paragraphs) = (format, layout, restarts, editable, paragraphs)
-        (self.formatText, self.formatParagraph, self.header) = (formatText, formatParagraph, header())
-    }
-
-    private var text: CharStyle? { format?.text }
-    private var paragraph: ParaStyle? { format?.paragraph }
-
-    /// What goes over them, and 스타일/레이아웃/기타, stay; the groups under them scroll.
+    /// The title, the style and 스타일/레이아웃 stay; the groups under them scroll.
     var body: some View {
         VStack(spacing: 0) {
             InspectorScroll(fixed: true) {
                 InspectorSection {
-                    header
+                    if title {
+                        VStack(spacing: 4) {
+                            Text("텍스트").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                            Divider()
+                        }
+                    }
+                    // As Pages's: the style's name, its list in a popover under it; with * and
+                    // 업데이트 while the text's shapes are not the style's.
+                    let style = document.styles.first { $0.id == document.format?.style }
+                    let changed = style.map { Self.changed(document.format, from: defined?.style == $0.id ? defined?.format : nil) } ?? false
+                    let update = Button("업데이트") { style.map { viewer.restyleFromCaret($0.id) } }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .help("스타일을 커서 위치의 모양으로 바꾸기")
+                    Button { showsStyles = true } label: {
+                        HStack {
+                            Text((style?.name ?? "") + (changed ? "*" : ""))
+                            Spacer()
+                            Image(systemName: "chevron.down").font(.body.weight(.semibold))
+                            // Room for 업데이트, which lies over the button.
+                            if changed { update.fixedSize().hidden().frame(height: 0) }
+                        }
+                    }
+                    .controlSize(.extraLarge)
+                    .popover(isPresented: $showsStyles, arrowEdge: .bottom) {
+                        StylePane(document: document, viewer: viewer) { showsStyles = false }
+                    }
+                    .flexibleButtons()
+                    .overlay(alignment: .trailing) { if changed { update.padding(.trailing, 12) } }
+                    .disabled(!document.context.canApplyStyle)
+                    Divider()
                     Segments([0, 1, 2], selection: $layout, accent: true) { let title = ["스타일", "레이아웃", "기타"][$0]; return .init(title: title, help: title) }
                 }
             }
             InspectorScroll {
-                Group {
-                    switch layout {
-                    case 1: layoutPane.disabled(!paragraphs)
-                    case 2: otherPane.disabled(!paragraphs)
-                    default: stylePane
-                    }
-                }
-                .disabled(!editable)
+                Group { switch layout { case 1: layoutPane; case 2: otherPane; default: stylePane } }
+                    .disabled(!document.context.canFormat)
             }
         }
+        .onChange(of: layout) { viewer.textLayout = layout }
+        // The revision is not published: 업데이트 changes the style alone.
+        .onReceive(document.presented) { if document.revision != shownRevision { shownRevision = document.revision } }
+        .task(id: "\(shownRevision) \(document.format?.style ?? 0)") {
+            guard let style = document.format?.style, let format = try? await document.styleFormat(style) else { return }
+            defined = (style, format)
+        }
+        // 스타일… shows the styles.
+        .onAppear {
+            guard viewer.opensStyles else { return }
+            viewer.opensStyles = false
+            Task { showsStyles = true }
+        }
+    }
+    /// The text's shapes are not its style's: Pages's * and 업데이트.
+    static func changed(_ format: Format?, from style: Format?) -> Bool {
+        guard let format, let style else { return false }
+        return format.text != style.text || format.languages != style.languages || format.paragraph != style.paragraph
     }
 
     // MARK: 스타일
 
     @ViewBuilder private var stylePane: some View {
-        let languages = format?.languages ?? []
+        let languages = document.format?.languages ?? []
         let font = language.flatMap { languages.indices.contains($0) ? languages[$0].font : nil } ?? text?.font
         InspectorSection("글꼴") {
-            FontPicker(font: font, language: language) { formatText(CharStyle(language: language, font: $0)) }
+            FontPicker(font: font, language: language) { editor.format(CharStyle(language: language, font: $0)) }
                 .equatable()
                 .flexibleButtons()
             HStack(spacing: 8) {
@@ -116,15 +110,13 @@ struct TextFormat<Header: View>: View {
                 .labelsHidden()
                 .flexibleButtons()
                 .help("언어")
-                NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { formatText(CharStyle(size: $0)) }
+                NumberStepper(value: text?.size, unit: "pt", range: 1...4096) { editor.format(CharStyle(size: $0)) }
                     .help("기준 크기")
             }
             HStack(spacing: 8) {
                 let styles: [(title: String, symbol: String, on: Bool?, toggle: () -> Void)] = [
-                    ("진하게", "bold", text?.bold, { formatText(CharStyle(bold: text?.bold != true)) }),
-                    ("기울임", "italic", text?.italic, { formatText(CharStyle(italic: text?.italic != true)) }),
-                    ("밑줄", "underline", text?.underline, { formatText(CharStyle(underline: text?.underline != true)) }),
-                    ("취소선", "strikethrough", text?.strikethrough, { formatText(CharStyle(strikethrough: text?.strikethrough != true)) }),
+                    ("진하게", "bold", text?.bold, editor.toggleBold), ("기울임", "italic", text?.italic, editor.toggleItalic),
+                    ("밑줄", "underline", text?.underline, editor.toggleUnderline), ("취소선", "strikethrough", text?.strikethrough, editor.toggleStrikethrough),
                 ]
                 Segments(segments: styles.map { .init(symbol: $0.symbol, help: $0.title) }, on: styles.map { $0.on == true }, any: true) {
                     styles[$0].toggle()
@@ -146,7 +138,7 @@ struct TextFormat<Header: View>: View {
         }
         InspectorSection {
             Segments(Alignment.allCases.map(Optional.some),
-                     selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { formatParagraph(ParaStyle(alignment: alignment)) } })) {
+                     selection: Binding(get: { paragraph?.alignment }, set: { if let alignment = $0 { editor.format(ParaStyle(alignment: alignment)) } })) {
                 let label = FormatChoices.label($0!)
                 return .init(symbol: label.symbol, help: label.title)
             }
@@ -155,9 +147,9 @@ struct TextFormat<Header: View>: View {
                      on: [false, false], any: true) { index in
                 let step = index == 0 ? -1 : 1
                 if (paragraph?.head ?? "None") != "None" {
-                    if let level = paragraph?.level { formatParagraph(ParaStyle(level: min(max(level + step, 0), 6))) }
+                    editor.stepLevel(by: step)
                 } else if let margin = paragraph?.marginLeft {
-                    formatParagraph(ParaStyle(marginLeft: max(0, margin + Double(step) * 10)))
+                    editor.format(ParaStyle(marginLeft: max(0, margin + Double(step) * 10)))
                 }
             }
         }
@@ -167,7 +159,7 @@ struct TextFormat<Header: View>: View {
                     LabeledContent("줄 간격") {
                         Picker("줄 간격", selection: Binding(get: { paragraph?.lineSpacingKind ?? .percent }, set: { kind in
                             guard kind != paragraph?.lineSpacingKind else { return }
-                            formatParagraph(ParaStyle(lineSpacing: kind == .percent ? 160 : 12, lineSpacingKind: kind))
+                            editor.format(ParaStyle(lineSpacing: kind == .percent ? 160 : 12, lineSpacingKind: kind))
                         })) {
                             Text("글자에 따라").tag(LineSpacingKind.percent)
                             Text("고정 값").tag(LineSpacingKind.fixed)
@@ -185,7 +177,7 @@ struct TextFormat<Header: View>: View {
                     let percent = (paragraph?.lineSpacingKind ?? .percent) == .percent
                     NumberStepper(value: paragraph?.lineSpacing, unit: percent ? "%" : "pt", range: percent ? 50...500 : 0...1000,
                                   step: percent ? 10 : 1) { value in
-                        formatParagraph(ParaStyle(lineSpacing: value, lineSpacingKind: paragraph?.lineSpacingKind ?? .percent))
+                        editor.format(ParaStyle(lineSpacing: value, lineSpacingKind: paragraph?.lineSpacingKind ?? .percent))
                     }
                 } label: { Text("간격").font(.headline.weight(.semibold)) }
             }
@@ -204,7 +196,7 @@ struct TextFormat<Header: View>: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if head == "Bullet" {
                         Picker("글머리표", selection: Binding(get: { paragraph?.bullet }, set: { bullet in
-                            if let bullet { formatParagraph(ParaStyle(head: "Bullet", bullet: bullet)) }
+                            if let bullet { editor.format(ParaStyle(head: "Bullet", bullet: bullet)) }
                         })) {
                             if paragraph?.bullet.map(FormatChoices.bullets.contains) != true { Text("").tag(String?.none) }
                             ForEach(FormatChoices.bullets, id: \.self) { Text($0).tag(String?.some($0)) }
@@ -213,7 +205,7 @@ struct TextFormat<Header: View>: View {
                         .flexibleButtons()
                     } else if head == "Number" {
                         Picker("문단 번호", selection: Binding(get: { paragraph?.numbering }, set: { kind in
-                            if let kind { formatParagraph(ParaStyle(head: "Number", numbering: kind)) }
+                            if let kind { editor.format(ParaStyle(head: "Number", numbering: kind)) }
                         })) {
                             if paragraph?.numbering == nil { Text("").tag(Int?.none) }
                             ForEach(FormatChoices.numberings.indices, id: \.self) {
@@ -223,7 +215,7 @@ struct TextFormat<Header: View>: View {
                         .labelsHidden()
                         .flexibleButtons()
                     }
-                    if head == "Number", restarts, let numbering = paragraph?.numbering {
+                    if head == "Number", document.context.inBody, let numbering = paragraph?.numbering {
                         restart(numbering)
                     }
                 }
@@ -245,12 +237,12 @@ struct TextFormat<Header: View>: View {
                 guard chosen != way else { return }
                 let join = ParaStyle(head: "Number", numbering: numbering, restart: 1)
                 switch chosen {
-                case 0: formatParagraph(join)
+                case 0: editor.format(join)
                 case 1:
-                    if way != 0 { formatParagraph(join) }
-                    formatParagraph(join)
+                    if way != 0 { editor.format(join) }
+                    editor.format(join)
                 default:
-                    formatParagraph(ParaStyle(head: "Number", numbering: numbering, restart: 2, startNumber: chosen == 2 ? 1 : max(start, 2)))
+                    editor.format(ParaStyle(head: "Number", numbering: numbering, restart: 2, startNumber: chosen == 2 ? 1 : max(start, 2)))
                 }
             })) {
                 Text("직전에서 계속").tag(0)
@@ -262,7 +254,7 @@ struct TextFormat<Header: View>: View {
             .labelsHidden()
             .labeledContentStyle(.automatic)
             NumberStepper(value: Double(start), unit: "", range: 1...65535) { start in
-                formatParagraph(ParaStyle(head: "Number", numbering: numbering, restart: 2, startNumber: Int(start)))
+                editor.format(ParaStyle(head: "Number", numbering: numbering, restart: 2, startNumber: Int(start)))
             }
             .controlSize(.small)
             .disabled(way != 3)
@@ -275,7 +267,7 @@ struct TextFormat<Header: View>: View {
             Picker("글머리표 및 문단 번호", selection: Binding(get: { shown }, set: { kind in
                 // The same kind again keeps the paragraph's shape and numbering.
                 guard kind != shown else { return }
-                formatParagraph(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
+                editor.format(kind == "Bullet" ? ParaStyle(head: kind, bullet: FormatChoices.bullets[0])
                               : kind == "Number" ? ParaStyle(head: kind, numbering: 0) : ParaStyle(head: "None"))
             })) {
                 Text("없음").tag("None")
@@ -297,7 +289,7 @@ struct TextFormat<Header: View>: View {
                 LabeledContent("상대 크기") { lingual(\.relativeSize, range: 10...250) }
                 LabeledContent("글자 위치") { lingual(\.offset, range: -100...100) }
                 Segments([0, 1, 2], selection: Binding(get: { text?.superscript == true ? 1 : text?.`subscript` == true ? 2 : 0 }, set: { place in
-                    formatText(CharStyle(superscript: place == 1, subscript: place == 2))
+                    editor.format(CharStyle(superscript: place == 1, subscript: place == 2))
                 })) { let title = ["보통", "위 첨자", "아래 첨자"][$0]; return .init(title: title, help: title) }
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                     GridRow { Toggle("외곽선", isOn: char(\.outline, false)); Toggle("그림자", isOn: char(\.shadow, false)) }
@@ -307,7 +299,7 @@ struct TextFormat<Header: View>: View {
                 Divider()
                 OpeningRows(title: "밑줄", open: text?.underline == true) {
                     Picker("밑줄", selection: Binding(get: { text?.underline != true ? 0 : text?.underlineTop == true ? 2 : 1 }, set: { place in
-                        formatText(place == 0 ? CharStyle(underline: false) : CharStyle(underline: true, underlineTop: place == 2))
+                        editor.format(place == 0 ? CharStyle(underline: false) : CharStyle(underline: true, underlineTop: place == 2))
                     })) { Text("없음").tag(0); Text("아래").tag(1); Text("위").tag(2) }
                     .labelsHidden()
                     .fixedSize()
@@ -317,7 +309,7 @@ struct TextFormat<Header: View>: View {
                 }
                 OpeningRows(title: "취소선", open: text?.strikethrough == true) {
                     ChoiceField(Binding(get: { text?.strikethrough == true ? (text?.strikeShape ?? 0) + 1 : 0 }, set: { kind in
-                        formatText(kind == 0 ? CharStyle(strikethrough: false) : CharStyle(strikethrough: true, strikeShape: kind - 1))
+                        editor.format(kind == 0 ? CharStyle(strikethrough: false) : CharStyle(strikethrough: true, strikeShape: kind - 1))
                     }), Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds)
                 } rows: {
                     LabeledContent("색") { ColorWell(hex: char(\.strikeColor, "#000000")) }
@@ -352,13 +344,13 @@ struct TextFormat<Header: View>: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 4) {
                         NumberStepper(value: paragraph.map { max($0.indent ?? 0, 0) }, unit: "pt", range: 0...1000) { amount in
-                            if amount > 0 || indent > 0 { formatParagraph(ParaStyle(indent: amount)) }
+                            if amount > 0 || indent > 0 { editor.format(ParaStyle(indent: amount)) }
                         }
                         Text("들여쓰기").font(.caption)
                     }
                     VStack(spacing: 4) {
                         NumberStepper(value: paragraph.map { max(-($0.indent ?? 0), 0) }, unit: "pt", range: 0...1000) { amount in
-                            if amount > 0 || indent < 0 { formatParagraph(ParaStyle(indent: -amount)) }
+                            if amount > 0 || indent < 0 { editor.format(ParaStyle(indent: -amount)) }
                         }
                         Text("내어쓰기").font(.caption)
                     }
@@ -389,7 +381,7 @@ struct TextFormat<Header: View>: View {
 
     private var paragraphBorderFill: Binding<ParaStyle> {
         Binding(get: { paragraph ?? ParaStyle() }, set: { new in
-            if let old = paragraph { formatParagraph(new.changesWithBorderFill(from: old)) }
+            if let old = paragraph { editor.format(new.changesWithBorderFill(from: old)) }
         })
     }
 
@@ -405,7 +397,7 @@ struct TextFormat<Header: View>: View {
         }
     }
     private func send(_ change: CharStyle) {
-        if change != CharStyle() { formatText(change) }
+        if change != CharStyle() { editor.format(change) }
     }
     private func para<T>(_ key: WritableKeyPath<ParaStyle, T?>, _ fallback: T) -> Binding<T> {
         Binding { paragraph?[keyPath: key] ?? fallback } set: { value in
@@ -413,7 +405,7 @@ struct TextFormat<Header: View>: View {
             var new = old
             new[keyPath: key] = value
             let change = new.changes(from: old)
-            if change != ParaStyle() { formatParagraph(change) }
+            if change != ParaStyle() { editor.format(change) }
         }
     }
     /// A length of the paragraph in points.
@@ -421,17 +413,17 @@ struct TextFormat<Header: View>: View {
         NumberStepper(value: paragraph?[keyPath: key], unit: "pt", range: 0...1000) { value in
             var change = ParaStyle()
             change[keyPath: key] = value
-            formatParagraph(change)
+            editor.format(change)
         }
     }
     /// A percentage of the chosen 언어, or of all of them.
     private func lingual(_ key: WritableKeyPath<CharStyle, Double?>, range: ClosedRange<Double>) -> some View {
-        let languages = format?.languages ?? []
+        let languages = document.format?.languages ?? []
         let value = language.flatMap { languages.indices.contains($0) ? languages[$0][keyPath: key] : nil } ?? text?[keyPath: key]
         return NumberStepper(value: value, unit: "%", range: range) { value in
             var change = CharStyle(language: language)
             change[keyPath: key] = value
-            formatText(change)
+            editor.format(change)
         }
     }
 }

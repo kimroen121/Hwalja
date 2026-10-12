@@ -61,16 +61,17 @@ struct TableTests {
         viewer.setPageBorder(border, section: 0, whole: true)
         await document.settle()
         #expect(try await document.pageBorder(section: 0) == border)
+        // A style as Pages's +: from the caret's shapes, applied there, then named.
         let count = document.styles.count
-        var editor = try #require(viewer.newStyle())
-        editor.spec.name = "큰 제목"
-        editor.spec.text = [CharStyle(size: 20)]
-        viewer.finishStyle(editor, editor.spec)
+        viewer.canvas.editor.format(ParaStyle(alignment: .center))
         await document.settle()
-        #expect(document.styles.count == count + 1 && document.styles.last?.name == "큰 제목")
-        document.applyStyle(UInt32(count), viewer.undoManager)
+        #expect(viewer.addStyle(paragraphStyle: true) == UInt32(count))
         await document.settle()
-        #expect(document.format?.style == UInt32(count) && document.format?.text.size == 20)
+        #expect(document.styles.count == count + 1 && document.format?.style == UInt32(count))
+        #expect(try await document.styleFormat(UInt32(count)).paragraph.alignment == .center)
+        viewer.editStyle(try #require(document.styles.last)) { $0.name = "큰 제목" }
+        await document.settle()
+        #expect(document.styles.last?.name == "큰 제목")
         // Commands that leave the text alone keep the caret where the user put it.
         let caret = EditSelection.caret(EditPosition(target: EditTarget(section: 0, paragraph: 0, cell: nil), scalar: 1))
         document.selection = caret
