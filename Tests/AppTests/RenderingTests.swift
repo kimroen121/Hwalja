@@ -244,6 +244,14 @@ struct RenderingTests {
             await document.settle()
             shaped.append((document, viewer))
         }
+        // Every fold open, and a 쪽 테두리 for the rows it brings.
+        let folds = ["자르기", "그림 여백", "안쪽 여백", "바깥 여백", "모든 셀의 안 여백", "안 여백", "여백", "들여쓰기", "간격"].map(Fold<EmptyView>.key)
+        for fold in folds { UserDefaults.standard.set(true, forKey: fold) }
+        defer { for fold in folds { UserDefaults.standard.removeObject(forKey: fold) } }
+        var border = try await document.pageBorder(section: 0)
+        border.sides = Array(repeating: BorderSide(line: 1, width: 1, color: "#000000"), count: 4)
+        viewer.setPageBorder(border, section: 0, whole: false)
+        await document.settle()
         // 문서's 구역 showing.
         let sectionViewer = Viewer()
         sectionViewer.canvas.bind(document)

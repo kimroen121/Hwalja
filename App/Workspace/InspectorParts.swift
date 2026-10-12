@@ -183,11 +183,15 @@ struct Fold<Content: View>: View {
     let title: String
     var headline = true
     @ViewBuilder let content: Content
+    /// Open or closed as last left, as Pages keeps them.
+    @AppStorage private var open: Bool
     init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content) {
         (self.title, self.headline, self.content) = (title, headline, content())
+        _open = AppStorage(wrappedValue: false, Self.key(title))
     }
+    static func key(_ title: String) -> String { "fold." + title }
     var body: some View {
-        DisclosureGroup {
+        DisclosureGroup(isExpanded: $open) {
             VStack(alignment: .leading, spacing: 10) { content }
         } label: { Text(title).font(headline ? .headline.weight(.semibold) : .body) }
     }
