@@ -87,10 +87,13 @@ struct TextTab: View {
             Task { showsStyles = true }
         }
     }
-    /// The text's shapes are not its style's: Pages's * and 업데이트.
+    /// The text's shapes are not its style's: Pages's * and 업데이트. 시작 번호 방식 is the
+    /// paragraph's own, never a style's.
     static func changed(_ format: Format?, from style: Format?) -> Bool {
         guard let format, let style else { return false }
-        return format.text != style.text || format.languages != style.languages || format.paragraph != style.paragraph
+        var paragraph = format.paragraph
+        (paragraph.restart, paragraph.startNumber) = (style.paragraph.restart, style.paragraph.startNumber)
+        return format.text != style.text || format.languages != style.languages || paragraph != style.paragraph
     }
 
     // MARK: 스타일

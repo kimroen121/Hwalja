@@ -107,6 +107,13 @@ struct FormattingTests {
         await document.settle()
         #expect(!TextTab.changed(document.format, from: try await document.styleFormat(style)))
         #expect(try await document.styleFormat(style).paragraph.alignment == .center)
+        // A 글머리표 paragraph has its own 시작 번호 방식, which no style keeps.
+        viewer.canvas.editor.format(ParaStyle(head: "Bullet", bullet: "●"))
+        await document.settle()
+        #expect(TextTab.changed(document.format, from: try await document.styleFormat(style)))
+        viewer.restyleFromCaret(style)
+        await document.settle()
+        #expect(!TextTab.changed(document.format, from: try await document.styleFormat(style)))
     }
 
     /// 문단 번호 매기기 and 한 수준 증가 from the editor, as the format row runs them.
