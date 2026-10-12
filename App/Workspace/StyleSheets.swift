@@ -161,16 +161,16 @@ struct StyleSheet: View {
     }
 }
 
-/// [스타일 추가하기] and [스타일 편집하기]: names, 스타일 종류, 다음 문단에 적용할 스타일, and
-/// the 문단 모양 and 글자 모양 the style lays over its shapes.
+/// [스타일 추가하기] and [스타일 편집하기]: names, 스타일 종류 and 다음 문단에 적용할 스타일,
+/// beside the 글자 모양 and 문단 모양 the style lays over its shapes, in the 텍스트 tab's controls.
 struct StyleEditSheet: View {
     let editor: StyleEditor
     let styles: [StyleInfo]
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var spec: StyleSpec
-    @State private var editingText = false
-    @State private var editingParagraph = false
+    /// 스타일 (0), 레이아웃 (1) or 기타 (2), as the 텍스트 tab's.
+    @State private var layout = 0
 
     init(editor: StyleEditor, styles: [StyleInfo], viewer: Viewer) {
         self.editor = editor
@@ -187,11 +187,34 @@ struct StyleEditSheet: View {
         let own = adding ? [(UInt32(styles.count), spec.name)] : []
         return styles.filter(\.paragraphStyle).map { ($0.id, $0.name) } + own
     }
+    /// The shapes the style gives: its base with the changes made here over it, 대표's then each 언어's.
+    private var shown: Format {
+        var format = editor.base
+        format.text = format.text.merging(spec.text[0])
+        format.languages = format.languages.map { $0.merging(spec.text[0]) }
+        for change in spec.text.dropFirst() {
+            if let language = change.language, format.languages.indices.contains(language) {
+                format.languages[language] = format.languages[language].merging(change)
+            }
+        }
+        format.paragraph = format.paragraph.merging(spec.paragraph)
+        return format
+    }
+    /// A change of 대표 goes into the style's own shape; one of a 언어, into that 언어's.
+    private func formatText(_ change: CharStyle) {
+        if change.language == nil {
+            spec.text[0] = spec.text[0].merging(change)
+        } else if let index = spec.text.indices.dropFirst().first(where: { spec.text[$0].language == change.language }) {
+            spec.text[index] = spec.text[index].merging(change)
+        } else {
+            spec.text.append(change)
+        }
+    }
 
     var body: some View {
         DialogFrame(adding ? "스타일 추가하기" : "스타일 편집하기", confirmTitle: adding ? "추가" : "설정",
                     canConfirm: !spec.name.trimmingCharacters(in: .whitespaces).isEmpty) {
-            VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
                     GridRow {
                         FieldLabel("스타일 이름")
@@ -218,28 +241,15 @@ struct StyleEditSheet: View {
                             .disabled(!spec.paragraphStyle)
                     }
                 }
-                HStack(spacing: 8) {
-                    Button("문단 모양…") { editingParagraph = true }.disabled(!spec.paragraphStyle)
-                    Button("글자 모양…") { editingText = true }
-                }
+                Divider()
+                // A 글자 스타일 keeps the paragraph's shape.
+                TextFormat(format: shown, layout: $layout, paragraphs: spec.paragraphStyle, formatText: formatText,
+                           formatParagraph: { spec.paragraph = spec.paragraph.merging($0) }) {}
+                    .frame(width: 280, height: 480)
             }
         } confirm: {
             viewer.finishStyle(editor, spec)
             dismiss()
-        }
-        .sheet(isPresented: $editingText) {
-            CharShapeSheet(style: editor.base.text.merging(spec.text[0]), languages: editor.base.languages) { change in
-                if change.language == nil {
-                    spec.text[0] = spec.text[0].merging(change)
-                } else {
-                    spec.text.append(change)
-                }
-            }
-        }
-        .sheet(isPresented: $editingParagraph) {
-            ParaShapeSheet(style: editor.base.paragraph.merging(spec.paragraph)) { change in
-                spec.paragraph = spec.paragraph.merging(change)
-            }
         }
     }
 }

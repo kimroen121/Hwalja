@@ -3,6 +3,8 @@ import SwiftUI
 
 /// Formatting choices shared by the toolbar and the Format menu.
 enum FormatChoices {
+    /// 언어별 설정's choices, in the web editor's order.
+    static let languageNames = ["한글", "영문", "한자", "일어", "외국어", "기호", "사용자"]
     static let sizes: [Double] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
     static let lineSpacings: [Double] = [100, 130, 160, 180, 200, 250, 300]
     /// 글머리표 characters, in 글머리표 모양's order.

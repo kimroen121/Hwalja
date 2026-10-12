@@ -781,7 +781,7 @@ struct DocumentInfoSheet: View {
         let list = fontList(language)
         return VStack(alignment: .leading, spacing: 10) {
             LabeledField("언어") {
-                ChoiceField($language, Array(zip(0..., ["대표"] + CharShapeSheet.languageNames)), minWidth: 120)
+                ChoiceField($language, Array(zip(0..., ["대표"] + FormatChoices.languageNames)), minWidth: 120)
             }
             fontList("사용된 글꼴", list.filter(\.installed), $usedFont)
             fontList("대체된 글꼴", list.filter { !$0.installed }, $lostFont)
