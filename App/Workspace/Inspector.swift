@@ -24,6 +24,8 @@ struct Inspector: View {
     /// 표 테두리: the line and the sides it last went on.
     @State private var tableLine = BorderSide(line: 1, width: 1, color: "#000000")
     @State private var tableSides: [Int] = []
+    /// 표 뒤집기's 여백 뒤집기.
+    @State private var flipMargins = false
 
     init(document: HwpDocument, viewer: Viewer, tab: String? = nil) {
         (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab))
@@ -534,6 +536,18 @@ struct Inspector: View {
                             ("칸 지우기", "minus", .deleteColumn)])
             }
         }
+        // 표 뒤집기 as in 한/글: 대칭 or 회전, each applied as it is clicked.
+        InspectorSection("표 뒤집기") {
+            LabeledContent("대칭") {
+                turns([("줄 기준 뒤집기", "arrow.up.and.down.righttriangle.up.righttriangle.down", .rows),
+                       ("칸 기준 뒤집기", "arrow.left.and.right.righttriangle.left.righttriangle.right", .columns),
+                       ("줄/칸 뒤집기", "arrow.up.left.and.arrow.down.right", .diagonal)])
+            }
+            LabeledContent("회전") {
+                turns([("반시계 방향 90도", "rotate.left", .left), ("180도", "arrow.uturn.down", .half), ("시계 방향 90도", "rotate.right", .right)])
+            }
+            Toggle("여백 뒤집기", isOn: $flipMargins).checkbox()
+        }
         Group {
             InspectorSection("표 테두리") {
                 HStack(alignment: .top, spacing: 8) {
@@ -572,7 +586,6 @@ struct Inspector: View {
         }
         InspectorSection {
             Tiles {
-                command("표 뒤집기…", Icon.flipTable) { viewer.flippingTable = true }
                 command("표 나누기", Icon.splitTable) { viewer.editTable(.split) }
                 command("표 붙이기", Icon.attachTable) { viewer.editTable(.attach) }
             }
@@ -580,8 +593,15 @@ struct Inspector: View {
     }
     /// Three steps on a row or a column: add on one side or the other, or delete.
     private func tableSteps(_ steps: [(title: String, symbol: String, change: TableChange)]) -> some View {
-        Segments(segments: steps.map { .init(symbol: $0.symbol, help: $0.title) }, on: steps.map { _ in false }, any: true) {
-            viewer.editTable(steps[$0].change)
+        actions(steps.map { step in (step.title, step.symbol, { viewer.editTable(step.change) }) })
+    }
+    private func turns(_ turns: [(title: String, symbol: String, turn: TableTurn)]) -> some View {
+        actions(turns.map { turn in (turn.title, turn.symbol, { viewer.flipTable(turn.turn, margins: flipMargins) }) })
+    }
+    /// Buttons in one control, each named in its help.
+    private func actions(_ actions: [(title: String, symbol: String, run: () -> Void)]) -> some View {
+        Segments(segments: actions.map { .init(symbol: $0.symbol, help: $0.title) }, on: actions.map { _ in false }, any: true) {
+            actions[$0].run()
         }
         .fixedSize()
     }

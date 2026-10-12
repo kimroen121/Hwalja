@@ -549,7 +549,7 @@ struct MenuItems {
             Button("셀 너비를 같게") { viewer?.editCells { .equalizeCells($0, height: false) } }
         }
         .disabled(!context.cellBlock)
-        item("표 뒤집기…", Icon.flipTable) { viewer?.flippingTable = true }
+        item("표 뒤집기…", Icon.flipTable) { viewer?.reveal(.format, tab: "표") }
             .disabled(!context.inTable || context.locked)
         Group {
             Menu {

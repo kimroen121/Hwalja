@@ -61,7 +61,6 @@ struct DocumentWindow: View {
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.calculating) { CalculationSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.replacingPrivateInfo) { PrivateInfoSheet(viewer: viewer) }
-        .sheet(isPresented: $viewer.flippingTable) { TableFlipSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.startingNumber) { NewNumberSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.bookmarking) { BookmarkSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.insertingSymbols) { SymbolSheet(viewer: viewer) }
@@ -387,7 +386,6 @@ final class Viewer: ObservableObject {
     @Published var splittingCells = false
     @Published var calculating = false
     @Published var replacingPrivateInfo = false
-    @Published var flippingTable = false
     /// 수식 편집기, while open.
     @Published var equation: EquationEdit?
     @Published var fieldSheet: FieldEditing?
@@ -452,7 +450,7 @@ final class Viewer: ObservableObject {
                 case "s": splittingCells = true
                 case "h": editCells { .equalizeCells($0, height: true) }
                 case "w": editCells { .equalizeCells($0, height: false) }
-                case "t": flippingTable = true
+                case "t": reveal(.format, tab: "표")
                 case "p": showObjectProperties()
                 case "l", "c": reveal(.format, tab: "셀")
                 default: return false
