@@ -11,7 +11,7 @@ struct InterfaceTests {
     @Test func quickMenuFollowsTheSelection() {
         let titles = { (context: EditingContext) in MenuItems.quickMenu(Viewer(), context).compactMap { $0?.title } }
         let text = titles(EditingContext(hasSelection: true, hasRange: true))
-        #expect(text.starts(with: ["오려두기", "복사하기", "붙여넣기", "삭제"]) && text.contains("글자 모양…") && text.contains("문자표…"))
+        #expect(text.starts(with: ["오려두기", "복사하기", "붙여넣기", "삭제"]) && text.contains("문자표…") && !text.contains("글자 모양…"))
         #expect(!text.contains("개체 속성…"))
         let picture = titles(EditingContext(hasSelection: true, object: .picture))
         #expect(picture.contains("원본 그림으로") && picture.last == "개체 속성…" && !picture.contains("글자 모양…"))

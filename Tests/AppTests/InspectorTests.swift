@@ -15,7 +15,9 @@ struct InspectorTests {
         #expect(Inspector.contextTabs(EditingContext(inTable: true)) == ["표", "셀", "개체"])
         #expect(Inspector.contextTabs(EditingContext(inTable: true, object: .picture)) == ["스타일", "이미지", "개체"])
         #expect(Inspector.contextTabs(EditingContext(object: .shape)) == ["도형", "개체"])
-        #expect(Inspector.contextTabs(EditingContext(object: .shape, chart: true)) == ["차트", "개체"])
+        // A chart's data is edited from its menu; a table chosen whole has no caret cell.
+        #expect(Inspector.contextTabs(EditingContext(object: .shape, chart: true)) == ["개체"])
+        #expect(Inspector.tabs(EditingContext(object: .table)) == ["표", "개체"])
         #expect(Inspector.contextTabs(EditingContext(object: .equation)) == ["수식", "개체"])
         #expect(Inspector.contextTabs(EditingContext(inHeaderFooter: true)) == ["머리말/꼬리말"])
         #expect(Inspector.contextTabs(EditingContext(inNote: true)) == ["주석"])

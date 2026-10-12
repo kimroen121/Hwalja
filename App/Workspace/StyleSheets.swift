@@ -50,6 +50,8 @@ struct StylePane: View {
     @State private var renaming: Renaming?
     @State private var name = ""
     @State private var hovered: UInt32?
+    /// Each style's 글자 모양, to show its name in it.
+    @State private var looks: [UInt32: CharStyle] = [:]
     @FocusState private var typing: Bool
 
     private struct Renaming: Equatable {
@@ -96,7 +98,7 @@ struct StylePane: View {
                                 done()
                             } label: {
                                 HStack {
-                                    Text(style.name).font(.title3)
+                                    look(style)
                                     // 글자 스타일 marked, as the list holds both kinds.
                                     if !style.paragraphStyle { Image(systemName: "textformat").foregroundStyle(.secondary) }
                                     Spacer()
@@ -126,11 +128,36 @@ struct StylePane: View {
             }
         }
         .frame(width: 280, height: 420)
-        .task { await document.loadStyles() }
+        .task(id: document.styles) {
+            await document.loadStyles()
+            var read: [UInt32: CharStyle] = [:]
+            for style in document.styles {
+                read[style.id] = try? await document.styleFormat(style.id).text
+            }
+            guard !Task.isCancelled else { return }
+            looks = read
+        }
         // Typing a name ends when the field is left.
         .onChange(of: typing) { if !typing, let renaming, let style = document.styles.first(where: { $0.id == renaming.style }) { rename(style) } }
     }
 
+    /// The style's name as its text looks, as Pages's list: its font, weight, slant, lines and
+    /// color, in proportion to its size. Black (and white) take the list's text color.
+    private func look(_ style: StyleInfo) -> some View {
+        let text = looks[style.id]
+        let family = text?.font.map { font in FormatChoices.families.first { $0.name == font || $0.family == font }?.family ?? font }
+        // A 10 pt style at the list's 15 pt, larger ones larger.
+        let size = min(max((text?.size ?? 10) * 1.5, 11), 30)
+        let color = text?.color.flatMap { ["#000000", "#ffffff"].contains($0.lowercased()) ? nil : HexColor.color($0) }
+        return Text(style.name)
+            .font(family.map { .custom($0, size: size) } ?? .system(size: size))
+            .bold(text?.bold == true)
+            .italic(text?.italic == true)
+            .underline(text?.underline == true)
+            .strikethrough(text?.strikethrough == true)
+            .foregroundStyle(color ?? .primary)
+            .lineLimit(1)
+    }
     @ViewBuilder private func menu(_ style: StyleInfo) -> some View {
         Button("스타일 이름 변경") { (renaming, name) = (Renaming(style: style.id, english: false), style.name) }
         Button("영문 이름 변경") { (renaming, name) = (Renaming(style: style.id, english: true), style.englishName) }

@@ -223,19 +223,22 @@ extension Viewer {
     func insertNote(endnote: Bool) {
         document?.edit(undoManager) { $0.map { .insertNote($0.ordered.start, endnote: endnote) } }
     }
+    /// The cell table commands work from: the caret's, or the first of a table chosen whole.
+    func tableCell(_ selection: EditSelection?) -> EditTarget? {
+        if let target = selection?.focus.target, target.cell != nil { return target }
+        guard let table = document?.object?.object, table.kind == .table, table.cell == nil, table.note == nil else { return nil }
+        return EditTarget(section: table.section, paragraph: table.paragraph, cell: CellTarget(control: table.control, cell: 0, paragraph: 0))
+    }
     func editTable(_ change: TableChange) {
-        document?.edit(undoManager) { selection in
-            guard let target = selection?.focus.target, target.cell != nil else { return nil }
-            return .editTable(target, change)
-        }
+        document?.edit(undoManager) { [self] selection in tableCell(selection).map { .editTable($0, change) } }
+    }
+    func setTableSize(rows: Int, columns: Int) {
+        document?.edit(undoManager) { [self] selection in tableCell(selection).map { .setTableSize($0, rows: rows, columns: columns) } }
     }
 
     /// 표 뒤집기 of the table holding the caret.
     func flipTable(_ turn: TableTurn, margins: Bool) {
-        document?.edit(undoManager) { selection in
-            guard let target = selection?.focus.target, target.cell != nil else { return nil }
-            return .flipTable(target, turn, margins: margins)
-        }
+        document?.edit(undoManager) { [self] selection in tableCell(selection).map { .flipTable($0, turn, margins: margins) } }
     }
 
     /// Runs a cell command over the cells the selection covers.
@@ -409,79 +412,6 @@ struct PrivateInfoSheet: View {
     }
 }
 
-/// 표 만들기, as the web editor's: 줄/칸, 크기 지정 and 기타.
-struct TableSheet: View {
-    @ObservedObject var viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var rows = 5.0
-    @State private var columns = 5.0
-    /// 0 단에 맞춤, 1 문단에 맞춤, 2 임의 값.
-    @State private var widthKind = 0
-    /// 0 자동, 1 임의 값.
-    @State private var heightKind = 0
-    @State private var width = 0.0
-    @State private var height = 0.0
-    @State private var asCharacter = false
-    /// The width rhwp gives a new table (the paper less its margins and the table's own),
-    /// and the paragraph's margins, in millimeters.
-    @State private var column = 150.0
-    @State private var paragraphMargins = 0.0
-
-    /// A new row's height as rhwp makes it: one line and the cell's inner margins.
-    private static let rowHeight = 1282
-
-    var body: some View {
-        DialogFrame("표 만들기", confirmTitle: "만들기") {
-            VStack(alignment: .leading, spacing: 14) {
-                GroupTitle("줄/칸")
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow { FieldLabel("줄 개수"); SpinField(value: $rows, unit: "", range: 1...1000) }
-                    GridRow { FieldLabel("칸 개수"); SpinField(value: $columns, unit: "", range: 1...256) }
-                }
-                .padding(.leading, 12)
-                GroupTitle("크기 지정")
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
-                        FieldLabel("너비")
-                        ChoiceField($widthKind, [(0, "단에 맞춤"), (1, "문단에 맞춤"), (2, "임의 값")], minWidth: 100)
-                        SpinField(value: Binding { shownWidth } set: { width = $0 }, unit: "mm", range: 1...1000)
-                            .disabled(widthKind != 2)
-                    }
-                    GridRow {
-                        FieldLabel("높이")
-                        ChoiceField($heightKind, [(0, "자동"), (1, "임의 값")], minWidth: 100)
-                        SpinField(value: Binding { shownHeight } set: { height = $0 }, unit: "mm", range: 1...1000)
-                            .disabled(heightKind != 1)
-                    }
-                }
-                .padding(.leading, 12)
-                GroupTitle("기타")
-                Toggle("글자처럼 취급", isOn: $asCharacter).padding(.leading, 12)
-            }
-        } confirm: {
-            viewer.insertTable(rows: Int(rows), columns: Int(columns),
-                               width: widthKind == 0 ? nil : Units.units(shownWidth),
-                               height: heightKind == 0 ? nil : Units.units(shownHeight), asCharacter: asCharacter)
-            dismiss()
-        }
-        .task {
-            guard let document = viewer.document,
-                  let page = try? await document.pageSetup(section: document.selection?.focus.target.section ?? 0)
-            else { return }
-            column = Units.millimeters(Int(page.width) - Int(page.marginLeft) - Int(page.marginRight) - 566)
-            let paragraph = document.format?.paragraph
-            paragraphMargins = ((paragraph?.marginLeft ?? 0) + (paragraph?.marginRight ?? 0)) * 25.4 / 72
-            width = column
-        }
-        .onChange(of: widthKind) { old, kind in if kind == 2 { width = shownWidth(for: old) } }
-        .onChange(of: heightKind) { _, kind in if kind == 1 { height = Units.millimeters(Int(rows) * Self.rowHeight) } }
-    }
-
-    private var shownWidth: Double { widthKind == 2 ? width : shownWidth(for: widthKind) }
-    private func shownWidth(for kind: Int) -> Double { kind == 1 ? max(1, column - paragraphMargins) : column }
-    private var shownHeight: Double { heightKind == 1 ? height : Units.millimeters(Int(rows) * Self.rowHeight) }
-}
-
 /// 셀 나누기: rows and columns for each covered cell.
 struct SplitCellSheet: View {
     @ObservedObject var viewer: Viewer
@@ -589,6 +519,33 @@ struct SideIcon: View {
         .frame(width: 22, height: 22)
         .padding(3)
     }
+    /// The same picture for a segmented control: a template, in the control's colors.
+    static func image(_ sides: [Int]) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { rect in
+            let box = rect.insetBy(dx: 2.5, dy: 2.5)
+            let dashed = NSBezierPath(rect: box)
+            dashed.setLineDash([2, 2], count: 2, phase: 0)
+            NSColor.black.withAlphaComponent(0.4).setStroke()
+            dashed.stroke()
+            let line = NSBezierPath()
+            line.lineWidth = 2
+            for side in sides {
+                let (from, to): (NSPoint, NSPoint) = switch side {
+                case 0: (NSPoint(x: box.minX, y: box.minY), NSPoint(x: box.minX, y: box.maxY))
+                case 1: (NSPoint(x: box.maxX, y: box.minY), NSPoint(x: box.maxX, y: box.maxY))
+                case 2: (NSPoint(x: box.minX, y: box.minY), NSPoint(x: box.maxX, y: box.minY))
+                default: (NSPoint(x: box.minX, y: box.maxY), NSPoint(x: box.maxX, y: box.maxY))
+                }
+                line.move(to: from)
+                line.line(to: to)
+            }
+            NSColor.black.setStroke()
+            line.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
 }
 
 /// 용지 방향 and 제본 as the web dialog draws them: a page with lines of text, and pages
@@ -610,116 +567,157 @@ enum PagePictogram {
             }
         }
     }
-    static func binding(_ binding: UInt8, on: Bool) -> some View {
-        Canvas { context, size in
-            let ink: Color = on ? .white : .secondary
-            let font = Font.system(size: binding == 1 ? 8 : 13, weight: .medium)
-            let page = CGRect(x: size.width * 0.18, y: size.height * 0.05, width: size.width * 0.64, height: size.height * 0.9)
-            switch binding {
-            case 1:
-                let wide = CGRect(x: size.width * 0.05, y: page.minY, width: size.width * 0.9, height: page.height)
-                context.stroke(Path(wide), with: .color(ink), lineWidth: 1)
-                context.stroke(Path { $0.move(to: CGPoint(x: wide.midX, y: wide.minY)); $0.addLine(to: CGPoint(x: wide.midX, y: wide.maxY)) },
-                               with: .color(ink), style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
-                context.draw(Text("가").font(font).foregroundColor(ink), at: CGPoint(x: wide.minX + wide.width / 4, y: wide.midY))
-                context.draw(Text("나").font(font).foregroundColor(ink), at: CGPoint(x: wide.maxX - wide.width / 4, y: wide.midY))
-            default:
-                context.stroke(Path(page), with: .color(ink), lineWidth: 1)
-                let top = binding == 2
-                let marks = top
-                    ? stride(from: page.minX + 3, to: page.maxX - 1, by: 4).map { CGRect(x: $0, y: page.minY - 1.5, width: 1, height: 3) }
-                    : stride(from: page.minY + 3, to: page.maxY - 1, by: 4).map { CGRect(x: page.minX - 1.5, y: $0, width: 3, height: 1) }
-                for mark in marks { context.fill(Path(mark), with: .color(ink)) }
-                context.draw(Text("가").font(font).foregroundColor(ink), at: CGPoint(x: page.midX, y: page.midY))
-            }
-        }
-    }
 }
 
-/// 문자표, as the web editor's: 문자 영역, 문자 선택, 최근 사용한 문자 and 입력 문자; 넣기 puts
-/// 입력 문자 at the caret.
+/// 문자표, laid out as 수식 편집기: 문자 영역 beside 문자 선택 in one box, the character
+/// pointed at shown large with its 유니코드 (typed, it finds the character), 최근 사용한 문자,
+/// and 입력 문자 by 넣기. A double click (or 선택) adds the chosen character to 입력 문자.
 struct SymbolSheet: View {
     let viewer: Viewer
     @Environment(\.dismiss) private var dismiss
     @State private var area = 0
+    @State private var chosen: String?
+    @State private var hovered: String?
+    @State private var code = ""
     @State private var text = ""
     @AppStorage("recentSymbols") private var recent = ""
 
-    /// 문자 영역 in the web editor's names and order. 일반 문장 부호 is the web editor's set,
-    /// 기호1 and 기호2 are KS X 1001's first two rows.
-    /// ponytail: the others are their Unicode blocks narrowed to KS X 1001 and Windows-1252,
-    /// which gives the web editor's 일반 문장 부호 and 상자 그리기; Hancom's own tables may differ.
+    /// 문자 영역 in the web editor's names and order: 기호1 and 기호2 are KS X 1001's first two
+    /// rows, the others their Unicode blocks (일반 문장 부호, 화살표 …) in full.
     static let areas: [(name: String, characters: [String])] = [
-        ("일반 문장 부호", "–—―‘’‚“”„†‡•‥…‰′″‹›※‧"),
-        ("기호1", "、。·‥…¨〃―∥＼∼‘’“”〔〕〈〉《》「」『』【】±×÷≠≤≥∞∴°′″℃Å￠￡￥♂♀∠⊥⌒∂∇≡≒§※☆★○●◎◇◆□■△▲▽▼→←↑↓↔〓≪≫√∽∝∵∫∬∈∋⊆⊇⊂⊃∪∩∧∨￢"),
-        ("기호2", "⇒⇔∀∃´～ˇ˘˝˚˙¸˛¡¿ː∮∑∏¤℉‰◁◀▷▶♤♠♡♥♧♣⊙◈▣◐◑▒▤▥▨▧▦▩♨☏☎☜☞¶†‡↕↗↙↖↘♭♩♪♬㉿㈜№㏇™㏂㏘℡€®"),
-        ("통화 기호", "€"),
-        ("글자 모양 기호", "℃℉ℓ№℡™ΩÅ"),
-        ("숫자 형식", "⅓⅔⅛⅜⅝⅞ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹ"),
-        ("화살표", "←↑→↓↔↕↖↗↘↙⇒⇔"),
-        ("괄호", "()[]{}〈〉《》「」『』【】〔〕"),
-        ("수학 연산자", "∀∂∃∇∈∋∏∑√∝∞∠∥∧∨∩∪∫∬∮∴∵∼∽≒≠≡≤≥≪≫⊂⊃⊆⊇⊙⊥"),
-        ("그리스어", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"),
-        ("단위기호", "㎀㎁㎂㎃㎄㎈㎉㎊㎋㎌㎍㎎㎏㎐㎑㎒㎓㎔㎕㎖㎗㎘㎙㎚㎛㎜㎝㎞㎟㎠㎡㎢㎣㎤㎥㎦㎧㎨㎩㎪㎫㎬㎭㎮㎯㎰㎱㎲㎳㎴㎵㎶㎷㎸㎹㎺㎻㎼㎽㎾㎿㏀㏁㏂㏃㏄㏅㏆㏇㏈㏉㏊㏏㏐㏓㏖㏘㏛㏜㏝"),
-        ("원문자", "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ㉠㉡㉢㉣㉤㉥㉦㉧㉨㉩㉪㉫㉬㉭㉮㉯㉰㉱㉲㉳㉴㉵㉶㉷㉸㉹㉺㉻㉿"),
-        ("괄호문자", "⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒜⒝⒞⒟⒠⒡⒢⒣⒤⒥⒦⒧⒨⒩⒪⒫⒬⒭⒮⒯⒰⒱⒲⒳⒴⒵㈀㈁㈂㈃㈄㈅㈆㈇㈈㈉㈊㈋㈌㈍㈎㈏㈐㈑㈒㈓㈔㈕㈖㈗㈘㈙㈚㈛㈜"),
-        ("상자 그리기", "─━│┃┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋"),
-        ("도형", "■□▣▤▥▦▧▨▩▲△▶▷▼▽◀◁◆◇◈○◎●◐◑"),
-        ("기타 기호", "★☆☎☏☜☞♀♂♠♡♣♤♥♧♨♩♪♬♭"),
-        ("한중일 기호 및 구두점", "、。〃〈〉《》「」『』【】〓〔〕"),
-        ("호환용 한글 자모", "ㄱㄲㄳㄴㄵㄶㄷㄸㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅃㅄㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣㅥㅦㅧㅨㅩㅪㅫㅬㅭㅮㅯㅰㅱㅲㅳㅴㅵㅶㅷㅸㅹㅺㅻㅼㅽㅾㅿㆀㆁㆂㆃㆄㆅㆆㆇㆈㆉㆊㆋㆌㆍㆎ"),
-    ].map { ($0.0, $0.1.map(String.init)) }
-    private static let columns = Array(repeating: GridItem(.fixed(30), spacing: 0), count: 11)
+        ("일반 문장 부호", blocks(0x2010...0x2027, 0x2030...0x205E)),
+        ("기호1", "、。·‥…¨〃―∥＼∼‘’“”〔〕〈〉《》「」『』【】±×÷≠≤≥∞∴°′″℃Å￠￡￥♂♀∠⊥⌒∂∇≡≒§※☆★○●◎◇◆□■△▲▽▼→←↑↓↔〓≪≫√∽∝∵∫∬∈∋⊆⊇⊂⊃∪∩∧∨￢".map(String.init)),
+        ("기호2", "⇒⇔∀∃´～ˇ˘˝˚˙¸˛¡¿ː∮∑∏¤℉‰◁◀▷▶♤♠♡♥♧♣⊙◈▣◐◑▒▤▥▨▧▦▩♨☏☎☜☞¶†‡↕↗↙↖↘♭♩♪♬㉿㈜№㏇™㏂㏘℡€®".map(String.init)),
+        ("통화 기호", "¢£¤¥".map(String.init) + blocks(0x20A0...0x20C0)),
+        ("글자 모양 기호", blocks(0x2100...0x214F)),
+        ("숫자 형식", blocks(0x2150...0x2189)),
+        ("화살표", blocks(0x2190...0x21FF)),
+        ("괄호", "()[]{}〈〉《》「」『』【】〔〕〖〗〘〙〚〛｛｝［］（）".map(String.init)),
+        ("수학 연산자", blocks(0x2200...0x22FF)),
+        ("그리스어", blocks(0x0391...0x03A9, 0x03B1...0x03C9)),
+        ("단위기호", blocks(0x3380...0x33FF)),
+        ("원문자", blocks(0x2460...0x2473, 0x24B6...0x24E9, 0x3260...0x327B, 0x327F...0x327F)),
+        ("괄호문자", blocks(0x2474...0x2487, 0x249C...0x24B5, 0x3200...0x321E)),
+        ("상자 그리기", blocks(0x2500...0x257F)),
+        ("도형", blocks(0x25A0...0x25FF)),
+        ("기타 기호", blocks(0x2600...0x26FF)),
+        ("한중일 기호 및 구두점", blocks(0x3001...0x303F)),
+        ("호환용 한글 자모", blocks(0x3131...0x318E)),
+    ]
+    /// The assigned, visible characters of `ranges`.
+    private static func blocks(_ ranges: ClosedRange<UInt32>...) -> [String] {
+        ranges.flatMap { $0 }.compactMap(Unicode.Scalar.init).filter {
+            ![.unassigned, .control, .format, .spaceSeparator, .privateUse, .surrogate].contains($0.properties.generalCategory)
+        }.map { String($0) }
+    }
+    private static let cell: CGFloat = 36
+    private static let columns = Array(repeating: GridItem(.fixed(cell), spacing: 0), count: 13)
 
     var body: some View {
-        DialogFrame("문자표", confirmTitle: "넣기", canConfirm: !text.isEmpty) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("문자 영역")
-                        List(Self.areas.indices, id: \.self, selection: Binding { area } set: { area = $0 ?? area }) {
-                            Text(Self.areas[$0].name)
-                        }
-                        .listStyle(.bordered)
-                        .frame(width: 180, height: 372)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("문자 선택")
-                        ScrollView {
-                            cells(Self.areas[area].characters)
-                        }
-                        .frame(width: 346, height: 270, alignment: .topLeading)
-                        .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
-                        GroupTitle("최근 사용한 문자").padding(.top, 8)
-                        cells(recent.map(String.init))
-                            .frame(width: 346, height: 32, alignment: .topLeading)
-                            .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
-                    }
+        VStack(alignment: .leading, spacing: 16) {
+            Text("문자표").font(.headline.weight(.regular))
+            HStack(spacing: 0) {
+                List(Self.areas.indices, id: \.self, selection: Binding { area } set: { area = $0 ?? area }) {
+                    Text(Self.areas[$0].name)
                 }
-                HStack(spacing: 10) {
-                    GroupTitle("입력 문자")
-                    TextField("", text: $text).textFieldStyle(.roundedBorder)
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .frame(width: 172)
+                Divider()
+                VStack(spacing: 0) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVGrid(columns: Self.columns, spacing: 0) {
+                                ForEach(Self.areas[area].characters, id: \.self) { cell($0) }
+                            }
+                        }
+                        .onChange(of: area) { proxy.scrollTo(Self.areas[area].characters.first, anchor: .top) }
+                    }
+                    Divider()
+                    magnified
                 }
             }
-        } confirm: {
-            viewer.document?.type(text, viewer.undoManager)
-            let used = text.reduce(into: [Character]()) { if !$0.contains($1) { $0.append($1) } }
-            recent = String((used + recent.filter { !used.contains($0) }).prefix(11))
-            dismiss()
+            .frame(width: 640, height: 380)
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
+            if !recent.isEmpty { HStack(spacing: 8) {
+                Text("최근 사용한 문자").foregroundStyle(.secondary)
+                HStack(spacing: 2) {
+                    ForEach(recent.map(String.init), id: \.self) { character in
+                        Button(character) { text += character }
+                            .buttonStyle(.borderless)
+                            .font(.system(size: 17))
+                            .frame(width: 28, height: 28)
+                    }
+                }
+            } }
+            HStack(spacing: 8) {
+                Text("입력 문자")
+                TextField("", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 15))
+                Button("취소", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("넣기") { insert() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(text.isEmpty)
+            }
         }
+        .padding(20)
+        .fixedSize()
+        .onChange(of: chosen) { code = chosen.map(Self.code) ?? "" }
     }
 
-    /// Characters in a grid; choosing one adds it to 입력 문자.
-    private func cells(_ characters: [String]) -> some View {
-        LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 0) {
-            ForEach(characters, id: \.self) { character in
-                Button { text += character } label: {
-                    Text(character).font(.system(size: 17)).frame(width: 30, height: 30).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+    /// 선택 문자 확대: the character pointed at, else the one chosen, with its 유니코드.
+    private var magnified: some View {
+        let shown = hovered ?? chosen
+        return HStack(spacing: 14) {
+            Text(shown ?? " ")
+                .font(.system(size: 34))
+                .frame(width: 56, height: 56)
+                .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.5)))
+            LabeledContent("유니코드") {
+                TextField("", text: $code)
+                    .monospaced()
+                    .frame(width: 70)
+                    .onSubmit(find)
             }
+            .fixedSize()
+            Spacer()
+            Button("선택") { chosen.map { text += $0 } }
+                .disabled(chosen == nil)
         }
+        .padding(.horizontal, 12)
+        .frame(height: 76)
+    }
+
+    private func cell(_ character: String) -> some View {
+        Text(character)
+            .font(.system(size: 19))
+            .frame(width: Self.cell, height: Self.cell)
+            .background(character == chosen ? Color.accentColor.opacity(0.25) : character == hovered ? Color.primary.opacity(0.08) : .clear)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 ? character : hovered == character ? nil : hovered }
+            .onTapGesture(count: 2) { text += character }
+            .onTapGesture { chosen = character }
+            .id(character)
+    }
+
+    private static func code(_ character: String) -> String {
+        character.unicodeScalars.first.map { String(format: "%04X", $0.value) } ?? ""
+    }
+    /// The character of the 유니코드 typed, in its 문자 영역 when one holds it.
+    private func find() {
+        guard let value = UInt32(code.trimmingCharacters(in: .whitespaces), radix: 16), let scalar = Unicode.Scalar(value) else { return NSSound.beep() }
+        let character = String(scalar)
+        if let index = Self.areas.firstIndex(where: { $0.characters.contains(character) }) { area = index }
+        chosen = character
+    }
+    private func insert() {
+        viewer.document?.type(text, viewer.undoManager)
+        let used = text.reduce(into: [Character]()) { if !$0.contains($1) { $0.append($1) } }
+        recent = String((used + recent.filter { !used.contains($0) }).prefix(16))
+        dismiss()
     }
 }
 

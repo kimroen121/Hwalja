@@ -14,9 +14,8 @@ struct DocumentInspector: View {
     @State private var notes: [NoteShape]?
     /// The note whose 모양 shows: 0 각주, 1 미주.
     @State private var note = 0
-    /// 쪽 테두리: the line and the sides it last went on.
+    /// 쪽 테두리: the line last chosen.
     @State private var pageLine = BorderSide(line: 1, width: 1, color: "#000000")
-    @State private var pageSides: [Int] = []
     @State private var tab: Int
     /// 사용자 정의 chosen, so 폭 and 길이 show although the size is a listed paper's.
     @State private var custom = false
@@ -34,6 +33,8 @@ struct DocumentInspector: View {
                 InspectorSection {
                     Segments([0, 1], selection: $tab, accent: true, capsule: true) { let title = ["문서", "구역"][$0]; return .init(title: title, help: title) }
                         .controlSize(.large)
+                        // A little wider than the groups under them.
+                        .padding(.horizontal, -6)
                 }
             }
             InspectorScroll {
@@ -69,41 +70,44 @@ struct DocumentInspector: View {
 
     @ViewBuilder private func paperPane(_ section: UInt32) -> some View {
         Group {
-            InspectorSection("용지 종류") {
+            InspectorSection {
                 let paper = paper(section)
-                Picker("용지 종류", selection: paper) {
-                    Text("사용자 정의").tag(String?.none)
-                    ForEach(Self.papers, id: \.name) { Text($0.name).tag(String?.some($0.name)) }
-                }
-                .labelsHidden()
-                .flexibleButtons()
+                LabeledContent {
+                    Picker("용지 종류", selection: paper) {
+                        Text("사용자 정의").tag(String?.none)
+                        ForEach(Self.papers, id: \.name) { Text($0.name).tag(String?.some($0.name)) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                } label: { Text("용지 종류").font(.headline.weight(.semibold)) }
+                orientation(section).padding(.top, 6)
                 if paper.wrappedValue == nil {
                     // 폭 and 길이 of the paper as it lies.
                     let landscape = page?.landscape ?? false
-                    lengths(("폭", landscape ? \.height : \.width), ("길이", landscape ? \.width : \.height), section)
+                    Pair("폭", length(landscape ? \.height : \.width, section), "길이", length(landscape ? \.width : \.height, section))
                 }
             }
-            InspectorSection("용지 방향") {
-                orientation(section)
-            }
-            InspectorSection {
-                lengths(("머리말", \.marginHeader), ("꼬리말", \.marginFooter), section)
-            }
+            // 편집 용지's 용지 여백, 머리말 and 꼬리말 with them, then 제본.
             InspectorSection("용지 여백") {
-                lengths(("위쪽", \.marginTop), ("아래쪽", \.marginBottom), section)
-                lengths(("왼쪽", \.marginLeft), ("오른쪽", \.marginRight), section)
-            }
-            InspectorSection {
-                // 제본's name at the leading edge, as the inspector's rows.
-                // The tiles of 편집 용지's 제본.
-                IconTiles(selection: Binding(get: { page?.binding ?? 0 }, set: { binding in set(section) { $0.binding = binding } }),
-                          options: [(UInt8(0), "한쪽"), (1, "맞쪽"), (2, "위로")], fill: true) { binding, on in
-                    PagePictogram.binding(binding, on: on)
+                Grid(horizontalSpacing: 8, verticalSpacing: 6) {
+                    ForEach([[("위쪽", \PageSetup.marginTop), ("아래쪽", \.marginBottom), ("머리말", \.marginHeader)],
+                             [("왼쪽", \PageSetup.marginLeft), ("오른쪽", \.marginRight), ("꼬리말", \.marginFooter)]], id: \.first!.0) { row in
+                        GridRow {
+                            ForEach(row, id: \.0) { title, key in
+                                VStack(spacing: 3) { length(key, section); Text(title).font(.caption) }
+                            }
+                        }
+                    }
                 }
-                .flexibleButtons()
-                LabeledContent("제본 여백") {
-                    NumberStepper(value: page.map { Units.millimeters($0.marginGutter) }, unit: "mm", range: 0...1000) { mm in
-                        set(section) { $0.marginGutter = Units.units(mm) }
+                .frame(maxWidth: .infinity)
+                LabeledContent("제본") {
+                    HStack(spacing: 8) {
+                        Picker("제본", selection: Binding(get: { page?.binding ?? 0 }, set: { binding in set(section) { $0.binding = binding } })) {
+                            Text("한쪽").tag(UInt8(0)); Text("맞쪽").tag(UInt8(1)); Text("위로").tag(UInt8(2))
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        length(\.marginGutter, section).help("제본 여백")
                     }
                 }
             }
@@ -117,27 +121,27 @@ struct DocumentInspector: View {
         let pages: [(ApplyPages, String)] = [(.all, "모두"), (.exceptFirst, "첫 쪽 제외"), (.firstOnly, "첫 쪽만")]
         Group {
             InspectorSection("쪽 테두리") {
-                HStack(alignment: .top, spacing: 8) {
-                    SideButtons(rows: [[("모두", [0, 1, 2, 3]), ("위쪽", [2]), ("아래쪽", [3])], [("왼쪽", [0]), ("오른쪽", [1])]],
-                                chosen: pageSides) { pageSides = $0; applyPageLine(section) }
-                    LineRow(line: Binding(get: { pageLine }, set: { pageLine = $0; applyPageLine(section) }), stacked: true)
+                BorderSides(sides: border?.sides, line: $pageLine) { changes in
+                    edit(section) { border in for (side, line) in changes { border.sides[side] = line } }
                 }
                 // Where the border goes, and on which pages, while there is one.
                 if border?.sides.contains(where: { $0.line != 0 }) == true {
-                    LabeledContent("위치") {
+                    HStack(spacing: 8) {
                         Picker("위치", selection: Binding { border?.paper ?? true } set: { paper in edit(section) { $0.paper = paper } }) {
                             Text("종이 기준").tag(true); Text("쪽 기준").tag(false)
                         }
                         .labelsHidden()
-                        .fixedSize()
+                        .help("위치")
+                        pagesPicker(pages, Binding { border?.borderPages ?? .all } set: { p in edit(section) { $0.borderPages = p } })
                     }
-                    HStack(spacing: 16) {
-                        Toggle("머리말 포함", isOn: Binding { border?.headerInside == true } set: { on in edit(section) { $0.headerInside = on } })
-                        Toggle("꼬리말 포함", isOn: Binding { border?.footerInside == true } set: { on in edit(section) { $0.footerInside = on } })
+                    .flexibleButtons()
+                    if border?.paper == false {
+                        HStack(spacing: 16) {
+                            Toggle("머리말 포함", isOn: Binding { border?.headerInside == true } set: { on in edit(section) { $0.headerInside = on } })
+                            Toggle("꼬리말 포함", isOn: Binding { border?.footerInside == true } set: { on in edit(section) { $0.footerInside = on } })
+                        }
+                        .checkbox()
                     }
-                    .checkbox()
-                    .disabled(border?.paper != false)
-                    LabeledContent("적용 쪽") { pagesPicker(pages, Binding { border?.borderPages ?? .all } set: { p in edit(section) { $0.borderPages = p } }) }
                     Fold("간격", headline: false) {
                         Sides { side in
                             NumberStepper(value: border.map { Units.millimeters($0.spacing[side]) }, unit: "mm", range: 0...25, wide: true) { mm in
@@ -150,14 +154,15 @@ struct DocumentInspector: View {
             InspectorSection {
                 FillRows(title: "쪽 배경", fill: border?.fill) { fill in edit(section) { $0.fill = fill } }
                 if FillRows.kind(border?.fill) != 0 {
-                    LabeledContent("적용 쪽") { pagesPicker(pages, Binding { border?.fillPages ?? .all } set: { p in edit(section) { $0.fillPages = p } }) }
-                    LabeledContent("채울 영역") {
+                    HStack(spacing: 8) {
+                        pagesPicker(pages, Binding { border?.fillPages ?? .all } set: { p in edit(section) { $0.fillPages = p } })
                         Picker("채울 영역", selection: Binding { border?.fillArea ?? .paper } set: { area in edit(section) { $0.fillArea = area } }) {
                             Text("종이").tag(FillArea.paper); Text("쪽").tag(FillArea.page); Text("테두리").tag(FillArea.border)
                         }
                         .labelsHidden()
-                        .fixedSize()
+                        .help("채울 영역")
                     }
+                    .flexibleButtons()
                 }
             }
         }
@@ -168,12 +173,7 @@ struct DocumentInspector: View {
             ForEach(pages, id: \.0) { Text($0.1).tag($0.0) }
         }
         .labelsHidden()
-        .fixedSize()
-    }
-    /// Puts the 쪽 테두리's line on the sides chosen.
-    private func applyPageLine(_ section: UInt32) {
-        guard !pageSides.isEmpty else { return }
-        edit(section) { border in for side in pageSides { border.sides[side] = pageLine } }
+        .help("적용 쪽")
     }
     private func edit(_ section: UInt32, _ change: (inout PageBorder) -> Void) {
         guard var changed = border else { return }
@@ -219,22 +219,11 @@ struct DocumentInspector: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Two lengths side by side, each with its name under it, as Pages's 문서 여백.
-    private func lengths(_ first: (String, WritableKeyPath<PageSetup, UInt32>), _ second: (String, WritableKeyPath<PageSetup, UInt32>),
-                         _ section: UInt32) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            length(first.0, first.1, section)
-            length(second.0, second.1, section)
+    /// A length of the paper, its unit in the field.
+    private func length(_ key: WritableKeyPath<PageSetup, UInt32>, _ section: UInt32) -> some View {
+        NumberStepper(value: page.map { Units.millimeters($0[keyPath: key]) }, unit: "mm", range: 0...1000, width: 50, unitInside: true) { mm in
+            set(section) { $0[keyPath: key] = Units.units(mm) }
         }
-    }
-    private func length(_ title: String, _ key: WritableKeyPath<PageSetup, UInt32>, _ section: UInt32) -> some View {
-        VStack(spacing: 4) {
-            NumberStepper(value: page.map { Units.millimeters($0[keyPath: key]) }, unit: "mm", range: 0...1000) { mm in
-                set(section) { $0[keyPath: key] = Units.units(mm) }
-            }
-            Text(title).font(.caption)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     /// Changes the section's paper at once, as the 세로 and 가로 commands do.
@@ -260,44 +249,49 @@ struct DocumentInspector: View {
 
     // MARK: 구역
 
+    /// 구역 설정's 시작 쪽 번호 in sight, its 개체 시작 번호 and 기타 folded; then 단 and 주석 모양.
     @ViewBuilder private func sectionPane(_ section: UInt32) -> some View {
         Group {
-            InspectorSection("시작 쪽 번호") {
-                HStack(spacing: 8) {
-                    Picker("시작 쪽 번호", selection: Binding(get: { (setup?.pageNum ?? 0) > 0 ? 3 : Int(setup?.pageNumType ?? 0) }, set: { kind in
-                        change(section) { setup in
-                            if kind == 3 { (setup.pageNum, setup.pageNumType) = (max(setup.pageNum, 1), 0) } else { (setup.pageNum, setup.pageNumType) = (0, UInt8(kind)) }
-                        }
-                    })) { Text("이어서").tag(0); Text("홀수").tag(1); Text("짝수").tag(2); Text("사용자").tag(3) }
-                    .labelsHidden()
-                    .flexibleButtons()
-                    number(\.pageNum, section)
-                }
-            }
-            InspectorSection("개체 시작 번호") {
-                start("그림", \.pictureNum, section)
-                start("표", \.tableNum, section)
-                start("수식", \.equationNum, section)
-            }
             InspectorSection {
-                Group {
-                    Toggle("첫 쪽에만 머리말/꼬리말 감추기", isOn: flag(section, get: { $0.hideHeader && $0.hideFooter }, set: { ($0.hideHeader, $0.hideFooter) = ($1, $1) }))
-                    Toggle("첫 쪽에만 바탕쪽 감추기", isOn: flag(section, get: { $0.hideMasterPage }, set: { $0.hideMasterPage = $1 }))
-                    Toggle("첫 쪽에만 테두리/배경 감추기", isOn: flag(section, get: { $0.hideBorder && $0.hideFill }, set: { ($0.hideBorder, $0.hideFill) = ($1, $1) }))
-                    Toggle("빈 줄 감추기", isOn: flag(section, get: { $0.hideEmptyLine }, set: { $0.hideEmptyLine = $1 }))
-                }
-                .checkbox()
-            }
-            InspectorSection {
-                LabeledContent("단 사이 간격") {
-                    NumberStepper(value: setup.map { Units.millimeters($0.columnSpacing) }, unit: "mm", range: 0...100) { mm in
-                        change(section) { $0.columnSpacing = Units.units(mm) }
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Picker("시작 쪽 번호", selection: Binding(get: { (setup?.pageNum ?? 0) > 0 ? 3 : Int(setup?.pageNumType ?? 0) }, set: { kind in
+                            change(section) { setup in
+                                if kind == 3 { (setup.pageNum, setup.pageNumType) = (max(setup.pageNum, 1), 0) } else { (setup.pageNum, setup.pageNumType) = (0, UInt8(kind)) }
+                            }
+                        })) { Text("이어서").tag(0); Text("홀수").tag(1); Text("짝수").tag(2); Text("사용자").tag(3) }
+                        .labelsHidden()
+                        .fixedSize()
+                        number(\.pageNum, section)
                     }
+                } label: { Text("시작 쪽 번호").font(.headline.weight(.semibold)) }
+            }
+            InspectorSection {
+                Fold("개체 시작 번호") {
+                    start("그림", \.pictureNum, section)
+                    start("표", \.tableNum, section)
+                    start("수식", \.equationNum, section)
                 }
-                LabeledContent("기본 탭 간격") {
-                    // Stored at 200 to the point: 8000 is 한/글's 40pt.
-                    NumberStepper(value: setup.map { Double($0.defaultTabSpacing) / 200 }, unit: "pt", range: 1...141) { pt in
-                        change(section) { $0.defaultTabSpacing = UInt32((pt * 200).rounded()) }
+            }
+            InspectorSection {
+                Fold("기타") {
+                    Group {
+                        Toggle("첫 쪽에만 머리말/꼬리말 감추기", isOn: flag(section, get: { $0.hideHeader && $0.hideFooter }, set: { ($0.hideHeader, $0.hideFooter) = ($1, $1) }))
+                        Toggle("첫 쪽에만 바탕쪽 감추기", isOn: flag(section, get: { $0.hideMasterPage }, set: { $0.hideMasterPage = $1 }))
+                        Toggle("첫 쪽에만 테두리/배경 감추기", isOn: flag(section, get: { $0.hideBorder && $0.hideFill }, set: { ($0.hideBorder, $0.hideFill) = ($1, $1) }))
+                        Toggle("빈 줄 감추기", isOn: flag(section, get: { $0.hideEmptyLine }, set: { $0.hideEmptyLine = $1 }))
+                    }
+                    .checkbox()
+                    LabeledContent("단 사이 간격") {
+                        NumberStepper(value: setup.map { Units.millimeters($0.columnSpacing) }, unit: "mm", range: 0...100) { mm in
+                            change(section) { $0.columnSpacing = Units.units(mm) }
+                        }
+                    }
+                    LabeledContent("기본 탭 간격") {
+                        // Stored at 200 to the point: 8000 is 한/글's 40pt.
+                        NumberStepper(value: setup.map { Double($0.defaultTabSpacing) / 200 }, unit: "pt", range: 1...141) { pt in
+                            change(section) { $0.defaultTabSpacing = UInt32((pt * 200).rounded()) }
+                        }
                     }
                 }
             }
@@ -309,17 +303,18 @@ struct DocumentInspector: View {
 
     /// 단 설정: 자주 쓰이는 모양 and 단 개수, 단 종류, 간격 and 단 너비 동일하게.
     private func columnPane(_ section: UInt32) -> some View {
-        InspectorSection("단") {
+        InspectorSection {
+            LabeledContent {
+                NumberStepper(value: columns.map { Double($0.count) }, unit: "", range: 1...255) { count in
+                    setColumns(section) { $0.count = UInt16(count) }
+                }
+                .help("단 개수")
+            } label: { Text("단").font(.headline.weight(.semibold)) }
             IconTiles(selection: Binding { columns?.count ?? 1 } set: { count in setColumns(section) { $0.count = count } },
                       options: [(UInt16(1), "하나"), (2, "둘"), (3, "셋")], fill: true) { count, on in
                 PagePictogram.columns(Int(count), on: on)
             }
             .flexibleButtons()
-            LabeledContent("단 개수") {
-                NumberStepper(value: columns.map { Double($0.count) }, unit: "", range: 1...255) { count in
-                    setColumns(section) { $0.count = UInt16(count) }
-                }
-            }
             // What only more than one 단 has.
             if (columns?.count ?? 1) > 1 {
                 LabeledContent("단 종류") {
@@ -362,7 +357,7 @@ struct DocumentInspector: View {
     private func notePane(_ section: UInt32) -> some View {
         let shape = notes?[note]
         let name = note == 0 ? "각주" : "미주"
-        return InspectorSection("주석 모양") {
+        return InspectorSection { Fold("주석 모양") {
             Segments([0, 1], selection: $note) { let title = ["각주", "미주"][$0]; return .init(title: title, help: "\(title) 모양") }
             Group {
                 LabeledContent("번호 모양") {
@@ -399,8 +394,7 @@ struct DocumentInspector: View {
                         ColorWell(hex: Binding { shape?.separatorColor ?? "#000000" } set: { color in setNote(section) { $0.separatorColor = color } })
                     }
                     LabeledContent("굵기") {
-                        ChoiceField(Binding { Int(shape?.separatorLineWidth ?? 0) } set: { width in setNote(section) { $0.separatorLineWidth = UInt8(width) } },
-                                    Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages)
+                        LineRow.width(Int(shape?.separatorLineWidth ?? 0)) { width in setNote(section) { $0.separatorLineWidth = UInt8(width) } }
                     }
                     LabeledContent("길이") {
                         // 5 cm and 2 cm are stored as their own values.
@@ -414,7 +408,7 @@ struct DocumentInspector: View {
                 noteMargin("\(name) 사이", \.noteSpacing, section)
             }
             .disabled(shape == nil)
-        }
+        } }
     }
     /// One character, as the 장식 문자 take, named under it.
     private func character(_ title: String, _ key: WritableKeyPath<NoteShape, String>, _ section: UInt32) -> some View {

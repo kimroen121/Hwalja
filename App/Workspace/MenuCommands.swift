@@ -33,37 +33,6 @@ struct MenuItems {
     static let headerShapes: [(title: String, placement: Placement?)] = [
         ("(모양 없음)", nil), ("왼쪽 쪽 번호", .left), ("가운데 쪽 번호", .center), ("오른쪽 쪽 번호", .right),
     ]
-    static func headerChoices(_ viewer: Viewer, footer: Bool) -> [Choice?] {
-        headerShapes.map { shape in
-            Choice(title: shape.title, image: Icon.pageNumber(shape.placement, footer: footer)) {
-                viewer.headerFooter(footer: footer, pageNumber: shape.placement)
-            }
-        }
-    }
-
-    /// 그림 drop-downs: 색조 조정, 밝기 and 대비, as in Hancom Office Web.
-    static func pictureEffects(_ viewer: Viewer) -> [Choice?] {
-        [("효과 없음", "RealPic"), ("회색조", "GrayScale"), ("흑백", "BlackWhite")].map { title, effect in
-            Choice(title: title) { viewer.adjustPicture { $0.effect = effect } }
-        } + [Choice(title: "워터마크") {
-            viewer.adjustPicture { ($0.effect, $0.brightness, $0.contrast) = ("RealPic", 70, -50) }
-        }]
-    }
-    static func brightness(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.brightness, more: "밝게", less: "어둡게", none: "밝기 없음")
-    }
-    static func contrast(_ viewer: Viewer) -> [Choice?] {
-        steps(viewer, \.contrast, more: "선명하게", less: "희미하게", none: "대비 없음")
-    }
-    private static func steps(_ viewer: Viewer, _ key: WritableKeyPath<ObjectProps, Int32?>,
-                              more: String, less: String, none: String) -> [Choice?] {
-        [
-            Choice(title: more) { viewer.adjustPicture { $0[keyPath: key] = min(100, ($0[keyPath: key] ?? 0) + 10) } },
-            Choice(title: less) { viewer.adjustPicture { $0[keyPath: key] = max(-100, ($0[keyPath: key] ?? 0) - 10) } },
-            nil,
-            Choice(title: none) { viewer.adjustPicture { $0[keyPath: key] = 0 } },
-        ]
-    }
     /// 원본 그림으로: no effect, crop or turn, at the size it was put in.
     static func restorePicture(_ viewer: Viewer) {
         viewer.adjustPicture { props in
@@ -85,129 +54,106 @@ struct MenuItems {
     ]
 
     /// 빠른 메뉴 (right click), in 한/글 2024's names, for what the selection is: text, an
-    /// object, or cells. The clipboard commands keep their macOS names.
-    /// `link`: the 하이퍼링크 at the caret.
+    /// object, or cells. As Pages's: what was clicked on first (an object's 순서, a table's
+    /// 줄 and 칸), then the clipboard, then the rest, properties last. The clipboard commands
+    /// keep their macOS names. `link`: the 하이퍼링크 at the caret.
     static func quickMenu(_ viewer: Viewer, _ context: EditingContext, link: Hyperlink? = nil) -> [Choice?] {
         let editor = viewer.canvas.editor
         let selected = context.hasRange || context.object != nil
-        var items: [Choice?] = [
+        let object = viewer.document?.object
+        let table = context.inTable && context.object == nil, block = context.cellBlock
+        var groups: [[Choice]] = []
+        if table {
+            groups += [
+                [Choice(title: "위쪽에 줄 추가하기", symbol: Icon.insertRow) { viewer.editTable(.insertRowAbove) },
+                 Choice(title: "아래쪽에 줄 추가하기") { viewer.editTable(.insertRowBelow) }],
+                [Choice(title: "왼쪽에 칸 추가하기") { viewer.editTable(.insertColumnLeft) },
+                 Choice(title: "오른쪽에 칸 추가하기") { viewer.editTable(.insertColumnRight) }],
+                [Choice(title: "줄 지우기", symbol: Icon.deleteRow) { viewer.editTable(.deleteRow) },
+                 Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) }],
+                [Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block) { viewer.editCells { .mergeCells($0) } },
+                 Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
+                 Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) { viewer.editCells { .equalizeCells($0, height: true) } },
+                 Choice(title: "셀 너비를 같게", key: "w", modifiers: [], enabled: block) { viewer.editCells { .equalizeCells($0, height: false) } }],
+            ]
+        }
+        var clipboard = [
             Choice(title: "오려두기", symbol: Icon.cut, key: "x", enabled: selected && !context.locked) { send(#selector(PageEditor.cut(_:))) },
             Choice(title: "복사하기", symbol: Icon.copy, key: "c", enabled: selected) { send(#selector(PageEditor.copy(_:))) },
             Choice(title: "붙여넣기", symbol: Icon.paste, key: "v", enabled: context.hasSelection && !context.locked) { send(#selector(PageEditor.paste(_:))) },
         ]
         if selected {
-            items.append(Choice(title: "삭제", symbol: Icon.delete, enabled: !context.locked) {
+            clipboard.append(Choice(title: "삭제", symbol: Icon.delete, enabled: !context.locked) {
                 editor.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
             })
         }
-        if context.canFormat, context.object == nil {
-            items += [
-                nil,
-                Choice(title: "문자표…", symbol: Icon.symbols, key: String(Character(UnicodeScalar(NSF10FunctionKey)!))) {
-                    viewer.insertingSymbols = true
-                },
-                nil,
-                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.revealText(layout: 0) },
-                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.revealText(layout: 1) },
-            ]
+        if context.objects > 1 {
+            clipboard.append(Choice(title: "개체 묶기", key: "g", modifiers: [], enabled: !context.locked) { viewer.groupObjects() })
         }
+        if object?.group == true {
+            clipboard.append(Choice(title: "개체 풀기") { viewer.change { .ungroup($0) } })
+        }
+        groups.append(clipboard)
         if let link, context.object == nil {
-            items += [
-                nil,
+            groups.append([
                 Choice(title: "하이퍼링크 고치기…", symbol: Icon.hyperlink, enabled: !context.locked) {
                     viewer.hyperlinkSheet = HyperlinkEditing(existing: link, text: link.text, uri: link.uri)
                 },
                 Choice(title: "하이퍼링크 지우기", enabled: !context.locked) { viewer.removeHyperlink() },
-            ]
+            ])
         }
-        if let shape = viewer.document?.object, shape.object.kind == .shape {
-            items += [nil, Choice(title: "순서", submenu: [
-                Choice(title: "맨 앞으로") { viewer.change { .order($0, .front) } },
-                Choice(title: "앞으로") { viewer.change { .order($0, .forward) } },
-                Choice(title: "맨 뒤로") { viewer.change { .order($0, .back) } },
-                Choice(title: "뒤로") { viewer.change { .order($0, .backward) } },
-            ])]
-            if shape.group {
-                items.append(Choice(title: "개체 풀기") { viewer.change { .ungroup($0) } })
-            }
-            switch shape.textBox {
-            case false?: items.append(Choice(title: "도형 안에 글자 넣기") { viewer.change { .setTextBox($0, attach: true) } })
-            case true?: items.append(Choice(title: "글상자 속성 없애기") { viewer.change { .setTextBox($0, attach: false) } })
-            case nil: break
-            }
+        if context.canFormat, context.object == nil {
+            groups.append([Choice(title: "문자표…", symbol: Icon.symbols, key: String(Character(UnicodeScalar(NSF10FunctionKey)!))) {
+                viewer.insertingSymbols = true
+            }])
+        }
+        if table {
+            groups.append([
+                Choice(title: "블록 계산식", enabled: block, submenu: blockFunctions.map { function in
+                    Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
+                }),
+                Choice(title: "계산식…", symbol: Icon.calculation, enabled: !block) { viewer.calculating = true },
+            ])
+        }
+        if context.canCaption {
+            // Where it goes, as 캡션 넣기's: the inspector shows only its 크기 and 간격.
+            groups.append([
+                Choice(title: "캡션 넣기", symbol: Icon.caption, submenu: Captions.all.filter { $0.value != "None" }.map { caption in
+                    Choice(title: caption.title) { viewer.insertCaption(caption.value) }
+                }),
+                Choice(title: "캡션 지우기") { viewer.insertCaption("None") },
+            ])
+        }
+        if context.object == .picture {
+            groups.append([
+                Choice(title: "원본 그림으로", symbol: Icon.originalPicture, enabled: !context.locked) { restorePicture(viewer) },
+                Choice(title: "그림 바꾸기…", symbol: Icon.replacePicture, enabled: !context.locked) { viewer.replacePicture() },
+                Choice(title: "삽입 그림 저장하기…", symbol: Icon.saveAs) { viewer.savePicture() },
+            ])
+        }
+        if context.chart {
+            groups.append([Choice(title: "데이터 편집…", symbol: Icon.chartData, enabled: !context.locked) { viewer.editChartData() }])
         }
         if viewer.document?.selection?.focus.target.isHeaderFooter == true {
             let document = viewer.document
-            items += [
-                nil,
+            groups.append([
                 Choice(title: "머리말/꼬리말 지우기", enabled: !context.locked) {
                     document?.deleteHeaderFooter(viewer.undoManager)
                 },
                 Choice(title: "다음 머리말/꼬리말") { viewer.goTo(.nextHeaderFooter) },
                 Choice(title: "이전 머리말/꼬리말") { viewer.goTo(.previousHeaderFooter) },
-                Choice(title: "닫기") { document?.closeHeaderFooter() },
-            ]
+            ])
         }
-        if context.inTable, context.object == nil {
-            let block = context.cellBlock
-            items += [
-                nil,
+        if table {
+            groups.append([
                 Choice(title: "표/셀 속성…", symbol: Icon.objectProps, key: "p", modifiers: []) { viewer.showObjectProperties() },
-                Choice(title: "셀 테두리/배경…", symbol: Icon.cellBorder, key: "l", modifiers: [], enabled: !context.locked) {
-                    viewer.reveal(.format, tab: "셀")
-                },
-                Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
-                    viewer.editCells { .equalizeCells($0, height: true) }
-                },
-                Choice(title: "셀 너비를 같게", key: "w", modifiers: [], enabled: block) {
-                    viewer.editCells { .equalizeCells($0, height: false) }
-                },
-                Choice(title: "셀 합치기", symbol: Icon.mergeCells, key: "m", modifiers: [], enabled: block) {
-                    viewer.editCells { .mergeCells($0) }
-                },
-                Choice(title: "블록 계산식", enabled: block, submenu: blockFunctions.map { function in
-                    Choice(title: function.title) { viewer.editCells { .calculateBlock($0, function.function) } }
-                }),
-                Choice(title: "계산식…", symbol: Icon.calculation, enabled: !block) { viewer.calculating = true },
-                Choice(title: "셀 나누기…", symbol: Icon.splitCells, key: "s", modifiers: []) { viewer.splittingCells = true },
-                Choice(title: "줄/칸 추가하기", symbol: Icon.insertRow, submenu: [
-                    Choice(title: "위쪽에 줄 추가하기") { viewer.editTable(.insertRowAbove) },
-                    Choice(title: "아래쪽에 줄 추가하기") { viewer.editTable(.insertRowBelow) },
-                    Choice(title: "왼쪽에 칸 추가하기") { viewer.editTable(.insertColumnLeft) },
-                    Choice(title: "오른쪽에 칸 추가하기") { viewer.editTable(.insertColumnRight) },
-                ]),
-                Choice(title: "줄/칸 지우기", symbol: Icon.deleteRow, submenu: [
-                    Choice(title: "줄 지우기") { viewer.editTable(.deleteRow) },
-                    Choice(title: "칸 지우기") { viewer.editTable(.deleteColumn) },
-                ]),
-            ]
-        }
-        if context.canCaption {
-            items += [
-                nil,
-                Choice(title: "캡션 넣기", symbol: Icon.caption) { viewer.insertCaption("Bottom") },
-                Choice(title: "캡션 지우기") { viewer.insertCaption("None") },
-            ]
-        }
-        if context.object == .picture {
-            items += [
-                nil,
-                Choice(title: "색조 조정", symbol: Icon.pictureEffect, enabled: !context.locked, submenu: pictureEffects(viewer)),
-                Choice(title: "밝기", symbol: Icon.brightness, enabled: !context.locked, submenu: brightness(viewer)),
-                Choice(title: "대비", symbol: Icon.contrast, enabled: !context.locked, submenu: contrast(viewer)),
-                Choice(title: "원본 그림으로", symbol: Icon.originalPicture, enabled: !context.locked) { restorePicture(viewer) },
-            ]
-        }
-        if context.objects > 1 {
-            items += [nil, Choice(title: "개체 묶기", key: "g", modifiers: [], enabled: !context.locked) { viewer.groupObjects() }]
-        }
-        if context.chart {
-            items += [nil, Choice(title: "데이터 편집…", symbol: Icon.chartData, enabled: !context.locked) { viewer.editChartData() }]
+            ])
         }
         if context.object != nil {
-            items += [nil, Choice(title: "개체 속성…", symbol: Icon.objectProps, key: "p", modifiers: [], enabled: !context.locked) { viewer.showObjectProperties() }]
+            groups.append([Choice(title: "개체 속성…", symbol: Icon.objectProps, key: "p", modifiers: [], enabled: !context.locked) { viewer.showObjectProperties() }])
         }
-        return items
+        // A line between the groups.
+        return groups.enumerated().flatMap { index, group in (index == 0 ? [] : [nil]) + group.map(Optional.some) }
     }
 
     /// 파일 items beyond the system's New, Open, Save and Revert.
@@ -320,6 +266,8 @@ struct MenuItems {
 
     @ViewBuilder var insert: some View {
         Menu {
+            item("개체 선택", Icon.selectObjects) { viewer?.draw("select") }
+            Divider()
             ForEach(Self.shapes, id: \.shape) { item in
                 self.item(item.title, item.symbol) { viewer?.draw(item.shape) }
             }
@@ -353,7 +301,10 @@ struct MenuItems {
                     item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
                 }
                 .disabled(!context.inBody)
-                item("각주/미주 모양…", Icon.noteShape) { viewer?.reveal(.document, tab: "구역") }
+                item("각주/미주 모양…", Icon.noteShape) {
+                    UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView>.key("주석 모양"))
+                    viewer?.reveal(.document, tab: "구역")
+                }
                     .disabled(context.locked)
             } label: { Label("주석", systemImage: Icon.footnote) }
                 .disabled(viewer == nil)
@@ -431,6 +382,14 @@ struct MenuItems {
         Divider()
         item("개체 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(context.locked || (context.object == nil && !context.inTable))
+        if let viewer {
+            // As the 도형 탭's 개체 보호.
+            Menu("개체 보호") {
+                ForEach(viewer.protectionChoices.compactMap { $0 }, id: \.title) { choice in
+                    Button(choice.title, action: choice.action).disabled(!choice.enabled || context.locked)
+                }
+            }
+        }
         Divider()
         Group {
             toggle("진하게", text?.bold == true) { editor?.toggleBold() }.keyboardShortcut("b")
@@ -549,7 +508,10 @@ struct MenuItems {
             Button("셀 너비를 같게") { viewer?.editCells { .equalizeCells($0, height: false) } }
         }
         .disabled(!context.cellBlock)
-        item("표 뒤집기…", Icon.flipTable) { viewer?.reveal(.format, tab: "표") }
+        item("표 뒤집기…", Icon.flipTable) {
+            UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView>.key("표 뒤집기"))
+            viewer?.reveal(.format, tab: "표")
+        }
             .disabled(!context.inTable || context.locked)
         Group {
             Menu {

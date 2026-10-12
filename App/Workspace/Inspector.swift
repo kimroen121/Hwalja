@@ -21,9 +21,8 @@ struct Inspector: View {
     @State private var cellSides: [Int] = []
     /// 대각선 over a block as one cell (하나의 셀처럼 적용).
     @State private var diagonalOne = false
-    /// 표 테두리: the line and the sides it last went on.
+    /// 표 테두리: the line last chosen.
     @State private var tableLine = BorderSide(line: 1, width: 1, color: "#000000")
-    @State private var tableSides: [Int] = []
     /// 표 뒤집기's 여백 뒤집기.
     @State private var flipMargins = false
 
@@ -36,9 +35,12 @@ struct Inspector: View {
     static func contextTabs(_ context: EditingContext) -> [String] {
         switch context.object {
         case .picture: ["스타일", "이미지", "개체"]
-        case .shape: context.chart ? ["차트", "개체"] : ["도형", "개체"]
+        // A chart's data is edited from its menu.
+        case .shape: context.chart ? ["개체"] : ["도형", "개체"]
         case .equation: ["수식", "개체"]
-        case .table, nil:
+        // A table chosen whole, by its border.
+        case .table: ["표", "개체"]
+        case nil:
             context.inHeaderFooter ? ["머리말/꼬리말"] : context.inNote ? ["주석"]
                 : context.inTable ? ["표", "셀", "개체"] : []
         }
@@ -47,7 +49,7 @@ struct Inspector: View {
     /// other text has 텍스트 before them.
     static func tabs(_ context: EditingContext) -> [String] {
         let extra = contextTabs(context)
-        if [.picture, .shape, .equation].contains(context.object) { return extra }
+        if context.object != nil { return extra }
         return extra.first == "표" ? ["표", "셀"] + textTabs + ["개체"] : textTabs + extra
     }
 
@@ -66,6 +68,8 @@ struct Inspector: View {
                             viewer.inspectorTabs[tabs.joined(separator: " ")] = tab
                         }), accent: true, capsule: true) { .init(title: $0, help: $0) }
                             .controlSize(.large)
+                            // A little wider than the groups under them.
+                            .padding(.horizontal, -6)
                     }
                 }
             } else if tab != "텍스트" {
@@ -121,7 +125,6 @@ struct Inspector: View {
         case "수식": equation
         case "개체": object(context)
         case "도형": shape
-        case "차트": chart
         case "표": table(context)
         case "셀": cells(context)
         case "머리말/꼬리말": headerFooter(context)
@@ -132,26 +135,22 @@ struct Inspector: View {
 
     // MARK: 개체 탭과 상황 탭
 
-    /// A picture's 테두리, as Pages's 스타일: its kind beside the title, its color and width under it.
+    /// A picture's 테두리: its kind, color and width in one row under the title.
     private var pictureStyle: some View {
-        InspectorSection {
-            let kind = Int(props?.lineType ?? 0)
-            OpeningRows(title: "테두리", open: kind != 0) {
-                ChoiceField(Binding { kind } set: { viewer.arrange(ObjectProps(lineType: UInt32($0))) },
-                            Swatches.lineKinds.indices.prefix(12).map { ($0, "") }, images: Array(Swatches.lineKinds.prefix(12)))
-            } rows: {
-                lineWidth
+        InspectorSection("테두리") {
+            HStack(spacing: 8) {
+                LineKindField(kind: index(\.lineType), count: 12)
+                Group {
+                    ColorWell(hex: color(\.borderColor))
+                    points(\.borderWidth)
+                }
+                .disabled((props?.lineType ?? 0) == 0)
             }
         }
     }
-    /// The picture itself, as Pages's 이미지: replaced, saved or back to its original, then 조절.
+    /// The picture itself, as Pages's 이미지: 조절, 자르기, 그림 여백 and 캡션. Replacing, saving and
+    /// 원본 그림으로 are its menu's.
     @ViewBuilder private var picture: some View {
-        InspectorSection {
-            Button { viewer.replacePicture() } label: { Label("그림 바꾸기…", systemImage: "folder") }
-            Button { viewer.savePicture() } label: { Label("삽입 그림 저장하기…", systemImage: Icon.saveAs) }
-            Button { MenuItems.restorePicture(viewer) } label: { Label("원본 그림으로", systemImage: Icon.originalPicture) }
-        }
-        .flexibleButtons()
         InspectorSection("조절") {
             Segments(["RealPic", "GrayScale", "BlackWhite", "Watermark"], selection: Binding(get: { Self.effect(props) }, set: { effect in
                 viewer.adjustPicture { props in
@@ -270,13 +269,9 @@ struct Inspector: View {
                 .fixedSize()
             } rows: {
                 LabeledContent("색") { ColorWell(hex: color(\.shadowColor, "#b2b2b2")) }
-                HStack(spacing: 8) {
-                    captioned("가로 이동") { length(props?.shadowOffsetX, range: -100...100) { set(\.shadowOffsetX, Units.units($0)) } }
-                    // Up is positive, as 한/글 shows it.
-                    captioned("세로 이동") {
-                        length(props?.shadowOffsetY.map { -$0 }, range: -100...100) { set(\.shadowOffsetY, Units.units(-$0)) }
-                    }
-                }
+                // Up is positive, as 한/글 shows it.
+                Pair("가로 이동", length(props?.shadowOffsetX, range: -100...100, width: 62) { set(\.shadowOffsetX, Units.units($0)) },
+                     "세로 이동", length(props?.shadowOffsetY.map { -$0 }, range: -100...100, width: 62) { set(\.shadowOffsetY, Units.units(-$0)) })
                 LabeledContent("투명도") {
                     NumberStepper(value: props?.shadowAlpha.map { (Double($0) / 2.55).rounded() }, unit: "%", range: 0...100) {
                         set(\.shadowAlpha, UInt32(($0 * 2.55).rounded()))
@@ -324,23 +319,25 @@ struct Inspector: View {
     /// The 선's color and width side by side.
     private var lineWidth: some View {
         HStack(spacing: 8) {
-            ColorWell(hex: color(\.borderColor), flexible: true)
+            ColorWell(hex: color(\.borderColor))
                 .frame(maxWidth: .infinity)
-            NumberStepper(value: props?.borderWidth.map { (Double($0) / Units.perMillimeter * 100).rounded() / 100 }, unit: "mm",
-                          range: 0...20, step: 0.1, wide: true) { set(\.borderWidth, Units.units($0)) }
+            points(\.borderWidth)
                 .frame(maxWidth: .infinity)
         }
+    }
+    /// A line's width in points (100 HWPUNIT each), its unit in the field.
+    private func points(_ key: WritableKeyPath<ObjectProps, Int32?>) -> some View {
+        NumberStepper(value: props?[keyPath: key].map { Double($0) / 100 }, unit: "pt", range: 0...56, step: 0.5,
+                      width: 58, unitInside: true) { set(key, Int32(($0 * 100).rounded())) }
     }
     private func arrow(_ key: WritableKeyPath<ObjectProps, UInt32?>, _ images: [NSImage]) -> some View {
         ChoiceField(index(key), images.indices.map { ($0, "") }, images: images, flexible: true)
     }
-    private var chart: some View {
-        InspectorSection { Tiles { command("데이터 편집…", Icon.chartData) { viewer.editChartData() } } }
-    }
-    /// The same for every object and for a table, as Pages's 정렬: 배치, 순서, 크기, 위치, 회전,
-    /// 보호와 묶기 and 캡션, then 개체 선택 and 개체 속성. What a table cannot do is there but off.
+    /// The same for every object and for a table, as Pages's 정렬: 배치, 순서, 크기, 위치 and 회전.
+    /// What a table cannot do is there but off. Commands of the menus (묶기, 보호, 개체 선택) are
+    /// left to them.
     @ViewBuilder private func object(_ context: EditingContext) -> some View {
-        let inLine = props?.treatAsChar == true, table = context.object == nil
+        let inLine = props?.treatAsChar == true, table = context.object == nil || context.object == .table
         // 본문과의 배치 for an object out of the line, then 글자처럼 취급.
         InspectorSection("본문과의 배치") {
             IconTiles(selection: Binding(get: { inLine ? "" : props?.textWrap ?? "" }, set: { viewer.arrange(ObjectProps(treatAsChar: false, textWrap: $0)) }),
@@ -353,29 +350,33 @@ struct Inspector: View {
             Fold("바깥 여백", headline: false) { sides([\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom]) }
         }
         .disabled(props == nil)
+        // As Pages's: 맨 뒤로 and 맨 앞으로, 뒤로 and 앞으로, each two in one control.
         InspectorSection {
             HStack(spacing: 12) {
-                order([("맨 뒤로", "square.3.layers.3d.bottom.filled", .back), ("맨 앞으로", "square.3.layers.3d.top.filled", .front)])
-                order([("뒤로", "square.2.layers.3d.bottom.filled", .backward), ("앞으로", "square.2.layers.3d.top.filled", .forward)])
+                order(Array(Self.orders.prefix(2)))
+                order(Array(Self.orders.suffix(2)))
             }
             .disabled(table || inLine)
         }
-        InspectorSection("크기") {
-            HStack(spacing: 8) {
-                captioned("너비") { length(props?.width) { resize(width: $0) } }
-                captioned("높이") { length(props?.height) { resize(height: $0) } }
+        InspectorSection {
+            HStack(alignment: .top) {
+                Text("크기").font(.headline.weight(.semibold)).padding(.top, 4)
+                Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
+                     "높이", length(props?.height, width: 62) { resize(height: $0) })
             }
-            HStack(spacing: 16) {
-                Toggle("비율 유지", isOn: $keepsRatio).checkbox()
-                if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect) }
+            HStack(spacing: 12) {
+                Toggle("비율 유지", isOn: $keepsRatio).checkbox().fixedSize()
+                if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect).fixedSize() }
+                Spacer(minLength: 0)
+                if props?.originalWidth != nil {
+                    Button("원래 크기") { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) }
+                        .fixedSize()
+                }
             }
-            Button("원래 크기") { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) }
-                .flexibleButtons()
-                .disabled(props?.originalWidth == nil)
         }
-        // Each offset from where 기준 and its side put the object.
-        InspectorSection("위치") {
-            Group {
+        // X and Y in sight, what they are measured from folded under them.
+        InspectorSection {
+            Fold("위치") {
                 LabeledContent("가로") {
                     HStack(spacing: 4) {
                         choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
@@ -388,66 +389,45 @@ struct Inspector: View {
                         choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
                     }
                 }
-                HStack(spacing: 8) {
-                    captioned("X") { length(props?.horzOffset) { set(\.horzOffset, Units.units($0)) } }
-                    captioned("Y") { length(props?.vertOffset) { set(\.vertOffset, Units.units($0)) } }
-                }
                 flag("쪽 영역 안으로 제한", \.restrictInPage)
                 flag("서로 겹침 허용", \.allowOverlap)
+            } trailing: {
+                Pair("X", length(props?.horzOffset, width: 62) { set(\.horzOffset, Units.units($0)) },
+                     "Y", length(props?.vertOffset, width: 62) { set(\.vertOffset, Units.units($0)) })
             }
             .disabled(inLine || props == nil)
         }
-        InspectorSection("회전") {
+        InspectorSection {
             // 한/글 keeps −360…360; shown as the dial reads it.
             let angle = props.map { Double((Int($0.rotationAngle ?? 0) % 360 + 360) % 360) }
-            HStack(alignment: .top, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("회전").font(.headline.weight(.semibold))
+                Spacer(minLength: 0)
                 RotationDial(angle: angle) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
                     .frame(width: 32, height: 32)
-                captioned("각도") {
-                    NumberStepper(value: angle, unit: "°", range: 0...359, wide: true) {
-                        viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
-                    }
+                NumberStepper(value: angle, unit: "°", range: 0...359, width: 40, unitInside: true) {
+                    viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
                 }
-                captioned("뒤집기") {
-                    Segments(segments: [.init(symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "좌우 대칭"),
-                                        .init(symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", help: "상하 대칭")],
-                             on: [false, false], any: true) { index in viewer.change { .flip($0, vertical: index == 1) } }
-                }
+                .help("각도")
+                Segments(segments: [.init(symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "좌우 대칭"),
+                                    .init(symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", help: "상하 대칭")],
+                         on: [false, false], any: true) { index in viewer.change { .flip($0, vertical: index == 1) } }
+                    .frame(width: 64)
             }
-            .disabled(table || inLine)
+            // 글자처럼 취급 turns too.
+            .disabled(table)
         }
-        InspectorSection {
-            ChoiceButtons(items: viewer.protectionChoices + viewer.groupChoices)
-                .disabled(table)
-        }
-        InspectorSection { Tiles { command("개체 선택", Icon.selectObjects) { viewer.draw("select") } } }
     }
-    /// 캡션 of a picture: where it goes, then its size and gap while there is one.
-    private var captions: some View {
-        InspectorSection("캡션") {
-            captionPicker.flexibleButtons()
-            captionRows
-        }
-        .disabled(!document.context.canCaption)
-    }
-    /// 크기 (of a caption beside the object), 개체와의 간격, and for a picture 여백 부분까지 너비 확대.
-    @ViewBuilder private var captionRows: some View {
+    /// A caption's 크기 and 개체와의 간격 (and for a picture 여백 부분까지 너비 확대) while there is
+    /// one; it is put in, moved and taken away from the object's menu.
+    @ViewBuilder private var captions: some View {
         if (props?.caption ?? "None") != "None" {
-            HStack(spacing: 8) {
-                captioned("크기") { length(props?.captionWidth, range: 0...1000) { set(\.captionWidth, Units.units($0)) } }
-                captioned("개체와의 간격") { length(props?.captionSpacing, range: 0...1000) { set(\.captionSpacing, Units.units($0)) } }
+            InspectorSection("캡션") {
+                Pair("크기", length(props?.captionWidth, range: 0...1000, width: 62) { set(\.captionWidth, Units.units($0)) },
+                     "개체와의 간격", length(props?.captionSpacing, range: 0...1000, width: 62) { set(\.captionSpacing, Units.units($0)) })
+                if props?.captionIncludeMargin != nil { flag("여백 부분까지 너비 확대", \.captionIncludeMargin) }
             }
-            if props?.captionIncludeMargin != nil { flag("여백 부분까지 너비 확대", \.captionIncludeMargin) }
         }
-    }
-    /// 캡션: none, or where it goes.
-    private var captionPicker: some View {
-        Picker("캡션", selection: Binding(get: { props?.caption ?? "None" }, set: { viewer.insertCaption($0) })) {
-            Text("없음").tag("None")
-            Divider()
-            ForEach(Captions.all.filter { $0.value != "None" }, id: \.value) { Text($0.title).tag($0.value) }
-        }
-        .labelsHidden()
     }
     /// Two of 순서 as one control, each named under it.
     private func order(_ steps: [(title: String, symbol: String, order: Order)]) -> some View {
@@ -459,6 +439,10 @@ struct Inspector: View {
                 .font(.caption)
         }
     }
+    private static let orders: [(title: String, symbol: String, order: Order)] = [
+        ("맨 뒤로", "square.3.layers.3d.bottom.filled", .back), ("맨 앞으로", "square.3.layers.3d.top.filled", .front),
+        ("뒤로", "square.2.layers.3d.bottom.filled", .backward), ("앞으로", "square.2.layers.3d.top.filled", .forward),
+    ]
     /// A field with its name under it, as Pages's.
     private func captioned<Field: View>(_ title: String, @ViewBuilder _ field: () -> Field) -> some View {
         VStack(spacing: 3) {
@@ -467,9 +451,11 @@ struct Inspector: View {
         }
         .frame(maxWidth: .infinity)
     }
-    private func length<T: BinaryInteger>(_ units: T?, range: ClosedRange<Double> = -1000...1000,
+    /// As wide as its place; or the field `width` wide, its unit in it.
+    private func length<T: BinaryInteger>(_ units: T?, range: ClosedRange<Double> = -1000...1000, width: CGFloat? = nil,
                                           apply: @escaping (Double) -> Void) -> some View {
-        NumberStepper(value: units.map { Units.millimeters($0) }, unit: "mm", range: range, wide: true, apply: apply)
+        NumberStepper(value: units.map { Units.millimeters($0) }, unit: "mm", range: range, wide: width == nil, width: width ?? 48,
+                      unitInside: width != nil, apply: apply)
     }
     /// Four lengths of the object, keyed 왼쪽, 오른쪽, 위쪽, 아래쪽.
     private func sides(_ keys: [WritableKeyPath<ObjectProps, Int32?>]) -> some View {
@@ -508,52 +494,39 @@ struct Inspector: View {
         viewer.arrange(change)
     }
 
-    /// The table as Pages's 표: its options, rows and columns, 윤곽, and the caret cell's size.
+    /// The table as Pages's 표, the most used first: its rows and columns and the caret cell's
+    /// size, 윤곽 and 배경; then, folded, 여러 쪽 지원, 안 여백 and 뒤집기. What the 표 menu does
+    /// (나누기, 붙이기, 같게) is left to it.
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
-        InspectorSection("표 옵션") {
-            LabeledContent("캡션") { captionPicker }
-                .disabled(!context.canCaption)
-            captionRows
-            Toggle("제목 줄 자동 반복", isOn: Binding(get: { props?.repeatHeader == true }, set: { viewer.arrange(ObjectProps(repeatHeader: $0)) }))
-                .checkbox()
-            LabeledContent("쪽 경계에서") {
-                Picker("쪽 경계에서", selection: Binding(get: { props?.pageBreak ?? 0 }, set: { viewer.arrange(ObjectProps(pageBreak: $0)) })) {
-                    Text("셀 단위로 나눔").tag(UInt8(2))
-                    Text("나눔").tag(UInt8(1))
-                    Text("나누지 않음").tag(UInt8(0))
-                }
-                .labelsHidden()
-                .fixedSize()
-            }
-        }
+        // As Pages's: rows added or removed at the bottom, columns at the right.
         InspectorSection {
-            LabeledContent("줄") {
-                tableSteps([("위쪽에 줄 추가", "arrow.up.to.line", .insertRowAbove), ("아래쪽에 줄 추가", "arrow.down.to.line", .insertRowBelow),
-                            ("줄 지우기", "minus", .deleteRow)])
-            }
-            LabeledContent("칸") {
-                tableSteps([("왼쪽에 칸 추가", "arrow.left.to.line", .insertColumnLeft), ("오른쪽에 칸 추가", "arrow.right.to.line", .insertColumnRight),
-                            ("칸 지우기", "minus", .deleteColumn)])
+            HStack(spacing: 8) {
+                Text("줄")
+                NumberStepper(value: props?.rowCount.map(Double.init), unit: "", range: 1...1000) { rows in
+                    props?.colCount.map { viewer.setTableSize(rows: Int(rows), columns: Int($0)) }
+                }
+                Spacer(minLength: 8)
+                Text("칸")
+                NumberStepper(value: props?.colCount.map(Double.init), unit: "", range: 1...256) { columns in
+                    props?.rowCount.map { viewer.setTableSize(rows: Int($0), columns: Int(columns)) }
+                }
             }
         }
-        // 표 뒤집기 as in 한/글: 대칭 or 회전, each applied as it is clicked.
-        InspectorSection("표 뒤집기") {
-            LabeledContent("대칭") {
-                turns([("줄 기준 뒤집기", "arrow.up.and.down.righttriangle.up.righttriangle.down", .rows),
-                       ("칸 기준 뒤집기", "arrow.left.and.right.righttriangle.left.righttriangle.right", .columns),
-                       ("줄/칸 뒤집기", "arrow.up.left.and.arrow.down.right", .diagonal)])
-            }
-            LabeledContent("회전") {
-                turns([("반시계 방향 90도", "rotate.left", .left), ("180도", "arrow.uturn.down", .half), ("시계 방향 90도", "rotate.right", .right)])
-            }
-            Toggle("여백 뒤집기", isOn: $flipMargins).checkbox()
+        .disabled(props == nil)
+        // The caret cell's row and column; none for a table chosen whole.
+        InspectorSection("줄 및 칸 크기") {
+            Pair("높이", NumberStepper(value: cell?.height.map { Units.millimeters($0) }, unit: "mm", range: 1...1000, width: 62) { setCell(CellProps(height: Units.units($0))) },
+                 "너비", NumberStepper(value: cell?.width.map { Units.millimeters($0) }, unit: "mm", range: 1...1000, width: 62) { setCell(CellProps(width: Units.units($0))) })
         }
+        .disabled(context.object != nil)
         Group {
             InspectorSection("표 테두리") {
-                HStack(alignment: .top, spacing: 8) {
-                    SideButtons(rows: [[("모두", [0, 1, 2, 3]), ("위쪽", [2]), ("아래쪽", [3])], [("왼쪽", [0]), ("오른쪽", [1])]],
-                                chosen: tableSides) { tableSides = $0; applyTableLine() }
-                    LineRow(line: Binding(get: { tableLine }, set: { tableLine = $0; applyTableLine() }), stacked: true)
+                BorderSides(sides: props?.tableBorder.map { border in
+                    (0..<4).map { border.sides[$0] ?? BorderSide(line: 0, width: 0, color: "#000000") }
+                }, line: $tableLine) { changes in
+                    var border = CellBorder()
+                    for (side, line) in changes { border.sides[side] = line }
+                    viewer.arrange(ObjectProps(tableBorder: border))
                 }
                 // Without it the table's own sides do not show.
                 LabeledContent("셀 간격") {
@@ -567,64 +540,56 @@ struct Inspector: View {
                     viewer.arrange(ObjectProps(tableBorder: CellBorder(fill: $0)))
                 }
             }
+        }
+        .disabled(props == nil)
+        captions
+        // Less used, folded.
+        Group {
+            InspectorSection {
+                Fold("여러 쪽 지원") {
+                    LabeledContent("쪽 경계에서") {
+                        Picker("쪽 경계에서", selection: Binding(get: { props?.pageBreak ?? 0 }, set: { viewer.arrange(ObjectProps(pageBreak: $0)) })) {
+                            Text("셀 단위로 나눔").tag(UInt8(2))
+                            Text("나눔").tag(UInt8(1))
+                            Text("나누지 않음").tag(UInt8(0))
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    Toggle("제목 줄 자동 반복", isOn: Binding(get: { props?.repeatHeader == true }, set: { viewer.arrange(ObjectProps(repeatHeader: $0)) }))
+                        .checkbox()
+                }
+            }
             InspectorSection { Fold("모든 셀의 안 여백") { sides([\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom]) } }
         }
         .disabled(props == nil)
-        InspectorSection("줄 및 칸 크기") {
-            LabeledContent("높이") {
-                HStack(spacing: 8) {
-                    NumberStepper(value: cell?.height.map { Units.millimeters($0) }, unit: "mm", range: 1...1000) { setCell(CellProps(height: Units.units($0))) }
-                    Button("같게") { viewer.editCells { .equalizeCells($0, height: true) } }.help("셀 높이를 같게").disabled(!context.cellBlock)
-                }
-            }
-            LabeledContent("너비") {
-                HStack(spacing: 8) {
-                    NumberStepper(value: cell?.width.map { Units.millimeters($0) }, unit: "mm", range: 1...1000) { setCell(CellProps(width: Units.units($0))) }
-                    Button("같게") { viewer.editCells { .equalizeCells($0, height: false) } }.help("셀 너비를 같게").disabled(!context.cellBlock)
-                }
-            }
-        }
+        // 표 뒤집기 as in 한/글: 대칭 or 회전, each applied as it is clicked.
         InspectorSection {
-            Tiles {
-                command("표 나누기", Icon.splitTable) { viewer.editTable(.split) }
-                command("표 붙이기", Icon.attachTable) { viewer.editTable(.attach) }
+            Fold("표 뒤집기") {
+                LabeledContent("대칭") {
+                    turns([("줄 기준 뒤집기", "arrow.up.and.down.righttriangle.up.righttriangle.down", .rows),
+                           ("칸 기준 뒤집기", "arrow.left.and.right.righttriangle.left.righttriangle.right", .columns),
+                           ("줄/칸 뒤집기", "arrow.up.left.and.arrow.down.right", .diagonal)])
+                }
+                LabeledContent("회전") {
+                    turns([("반시계 방향 90도", "rotate.left", .left), ("180도", "arrow.uturn.down", .half), ("시계 방향 90도", "rotate.right", .right)])
+                }
+                Toggle("여백 뒤집기", isOn: $flipMargins).checkbox()
             }
         }
-    }
-    /// Three steps on a row or a column: add on one side or the other, or delete.
-    private func tableSteps(_ steps: [(title: String, symbol: String, change: TableChange)]) -> some View {
-        actions(steps.map { step in (step.title, step.symbol, { viewer.editTable(step.change) }) })
     }
     private func turns(_ turns: [(title: String, symbol: String, turn: TableTurn)]) -> some View {
-        actions(turns.map { turn in (turn.title, turn.symbol, { viewer.flipTable(turn.turn, margins: flipMargins) }) })
-    }
-    /// Buttons in one control, each named in its help.
-    private func actions(_ actions: [(title: String, symbol: String, run: () -> Void)]) -> some View {
-        Segments(segments: actions.map { .init(symbol: $0.symbol, help: $0.title) }, on: actions.map { _ in false }, any: true) {
-            actions[$0].run()
-        }
-        .fixedSize()
-    }
-    /// Puts the 표 테두리's line on the sides chosen.
-    private func applyTableLine() {
-        guard !tableSides.isEmpty else { return }
-        var border = CellBorder()
-        for side in tableSides { border.sides[side] = tableLine }
-        viewer.arrange(ObjectProps(tableBorder: border))
+        ActionButtons(actions: turns.map { turn in (turn.title, turn.symbol, { viewer.flipTable(turn.turn, margins: flipMargins) }) })
     }
     private func setCell(_ change: CellProps) {
         guard let target = document.selection?.focus.target, target.cell != nil else { return }
         viewer.setCell(target, change)
     }
-    /// The cells as Pages's 셀: 채우기, 테두리 by the sides it goes on, then split, merged and 계산식.
+    /// The cells as Pages's 셀, the most used first: 테두리 by the sides it goes on, 채우기 and
+    /// 세로 정렬; then, folded, 대각선 and 안 여백. What the 표 menu does (나누기, 합치기, 계산식) is left to it.
     @ViewBuilder private func cells(_ context: EditingContext) -> some View {
-        InspectorSection {
-            FillRows(title: "채우기", fill: cellBorder?.fill, extended: true) {
-                viewer.setCellBorder(CellBorder(fill: $0), all: false, one: false)
-            }
-        }
         InspectorSection("테두리") {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
                 // The sides a line goes on, as Pages's: 모두, 안쪽, 바깥쪽; 왼쪽, 세로 안쪽, 오른쪽;
                 // 위쪽, 가로 안쪽, 아래쪽.
                 SideButtons(rows: [[("모두", [0, 1, 2, 3, 4, 5]), ("안쪽", [4, 5]), ("바깥쪽", [0, 1, 2, 3])],
@@ -634,8 +599,12 @@ struct Inspector: View {
                 LineRow(line: Binding(get: { cellLine }, set: { cellLine = $0; applyCellLine() }), stacked: true)
             }
         }
-        diagonals(context)
-        InspectorSection("속성") {
+        InspectorSection {
+            FillRows(title: "채우기", fill: cellBorder?.fill, extended: true) {
+                viewer.setCellBorder(CellBorder(fill: $0), all: false, one: false)
+            }
+        }
+        InspectorSection {
             LabeledContent("세로 정렬") {
                 Segments([UInt8(0), 1, 2], selection: Binding { cell?.verticalAlign ?? 0 } set: { cellFlag(\.verticalAlign, $0) }) {
                     let (title, symbol) = [("위", "arrow.up.to.line"), ("가운데", "arrow.up.and.down"), ("아래", "arrow.down.to.line")][Int($0)]
@@ -643,29 +612,19 @@ struct Inspector: View {
                 }
                 .fixedSize()
             }
-            Toggle("제목 셀", isOn: Binding { cell?.isHeader == true } set: { cellFlag(\.isHeader, $0) }).checkbox()
-            Toggle("셀 보호", isOn: Binding { cell?.cellProtect == true } set: { cellFlag(\.cellProtect, $0) }).checkbox()
+            HStack(spacing: 16) {
+                Toggle("제목 셀", isOn: Binding { cell?.isHeader == true } set: { cellFlag(\.isHeader, $0) })
+                Toggle("셀 보호", isOn: Binding { cell?.cellProtect == true } set: { cellFlag(\.cellProtect, $0) })
+            }
+            .checkbox()
         }
+        diagonals(context)
         InspectorSection {
             Fold("안 여백") {
                 Toggle("안 여백 지정", isOn: Binding { cell?.applyInnerMargin == true } set: { cellFlag(\.applyInnerMargin, $0) }).checkbox()
                 Sides { i in cellLength([\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom][i]) }
                     .disabled(cell?.applyInnerMargin != true)
             }
-        }
-        // 셀 너비·높이를 같게 are 표's 줄 및 칸 크기 같게.
-        InspectorSection("셀") {
-            Tiles {
-                command("셀 나누기…", Icon.splitCells) { viewer.splittingCells = true }
-                command("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
-                    .disabled(!context.cellBlock)
-            }
-            TransparentLinesToggle(viewer: viewer)
-        }
-        InspectorSection("계산식") {
-            ChoiceButtons(items: MenuItems.blockFunctions.map { function in
-                Choice(title: function.title, enabled: context.cellBlock) { viewer.editCells { .calculateBlock($0, function.function) } }
-            } + [Choice(title: "계산식…", symbol: Icon.calculation, enabled: !context.cellBlock) { viewer.calculating = true }])
         }
     }
     /// 대각선 as the dialog's: ＼ and ／, or the 중심선 (not in a block taken as one cell), and their line.
@@ -679,40 +638,23 @@ struct Inspector: View {
             ("세로 중심선", [(0.5, 0, 0.5, 1)], diagonal.center & 2 != 0, { $0.center ^= 2; ($0.slash, $0.backSlash) = (false, false) }),
         ]
         let apply = { (new: Diagonal) in viewer.setCellBorder(CellBorder(diagonal: new), all: false, one: one) }
-        return InspectorSection("대각선") {
-            HStack(alignment: .top, spacing: 8) {
-                // Two to a row, as 테두리's sides.
-                Grid(horizontalSpacing: 0, verticalSpacing: 0) {
-                    ForEach([0, 2], id: \.self) { row in
-                        GridRow {
-                            ForEach(row..<row + 2, id: \.self) { i in
-                                Button {
-                                    var new = diagonal
-                                    marks[i].toggle(&new)
-                                    if new.line.line == 0 { new.line.line = 1 }
-                                    apply(new)
-                                } label: { DiagonalIcon(lines: marks[i].lines) }
-                                    .buttonStyle(.borderless)
-                                    .background(marks[i].on ? Color.secondary.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                                    .help(marks[i].title)
-                                    .accessibilityLabel(marks[i].title)
-                                    // rhwp keeps no 중심선 in a cell zone.
-                                    .disabled(i > 1 && one)
-                            }
-                        }
-                    }
-                }
-                .padding(4)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
-                .fixedSize()
-                LineRow(line: Binding(get: { diagonal.line }, set: { line in
-                    var new = diagonal
-                    new.line = line
-                    apply(new)
-                }), stacked: true)
+        // As 표 테두리: the line, then each mark turned on or off; folded, as it is used less.
+        return InspectorSection { Fold("대각선") {
+            LineRow(line: Binding(get: { diagonal.line }, set: { line in
+                var new = diagonal
+                new.line = line
+                apply(new)
+            }))
+            // rhwp keeps no 중심선 in a cell zone.
+            Segments(segments: marks.indices.map { i in .init(image: DiagonalIcon.image(marks[i].lines), help: marks[i].title, enabled: i < 2 || !one) },
+                     on: marks.map(\.on), any: true) { i in
+                var new = diagonal
+                marks[i].toggle(&new)
+                if new.line.line == 0 { new.line.line = 1 }
+                apply(new)
             }
             if context.cellBlock { Toggle("하나의 셀처럼 적용", isOn: $diagonalOne).checkbox() }
-        }
+        } }
     }
     private func cellFlag<T>(_ key: WritableKeyPath<CellProps, T?>, _ value: T) {
         var change = CellProps()
@@ -730,43 +672,28 @@ struct Inspector: View {
         viewer.setCellBorder(border, all: false, one: false)
     }
 
+    /// 상용구 for the 머리말 or 꼬리말 being written, and 닫기. Its shapes, the ones before and after
+    /// and 지우기 are the 쪽 menu's and its own menu's.
     @ViewBuilder private func headerFooter(_ context: EditingContext) -> some View {
-        InspectorSection("머리말") { ChoiceButtons(items: MenuItems.headerChoices(viewer, footer: false)) }
-        InspectorSection("꼬리말") { ChoiceButtons(items: MenuItems.headerChoices(viewer, footer: true)) }
         InspectorSection("상용구") {
             ChoiceButtons(items: [("전체 쪽수", PageCode.total), ("현재 쪽 번호", .page), ("현재 쪽/전체 쪽수", .pageOfTotal)]
                 .map { title, code in Choice(title: title) { viewer.insertPageCode(code) } })
-        }
-        InspectorSection {
-            Tiles {
-                command("이전 머리말/꼬리말", Icon.previous) { viewer.goTo(.previousHeaderFooter) }
-                command("다음 머리말/꼬리말", Icon.next) { viewer.goTo(.nextHeaderFooter) }
-                command("편집 용지", Icon.pageSetup) { viewer.reveal(.document) }
-                command("지우기", Icon.eraseCodes) { document.deleteHeaderFooter(viewer.undoManager) }
-            }
         } footer: {
             DialogButtons { Button("닫기") { document.closeHeaderFooter() } }
         }
     }
+    /// The note being written: the ones before and after it, 지우기 and 닫기. Its 모양 is the 구역's.
     @ViewBuilder private func annotations(_ context: EditingContext) -> some View {
         InspectorSection {
-            Tiles {
-                command("각주/미주 모양", Icon.noteShape) { viewer.reveal(.document, tab: "구역") }
-                command("주석 지우기", Icon.eraseCodes) { document.deleteNote(viewer.undoManager) }
-                command("이전 주석으로", Icon.previous) { viewer.goTo(.previousNote) }
-                command("다음 주석으로", Icon.next) { viewer.goTo(.nextNote) }
-            }
+            ChoiceButtons(items: [Choice(title: "이전 주석으로", symbol: Icon.previous) { viewer.goTo(.previousNote) },
+                                  Choice(title: "다음 주석으로", symbol: Icon.next) { viewer.goTo(.nextNote) },
+                                  Choice(title: "주석 지우기", symbol: Icon.eraseCodes) { document.deleteNote(viewer.undoManager) }])
         } footer: {
             DialogButtons { Button("닫기") { document.closeNote() } }
         }
     }
 
     // MARK: Rows
-
-    /// A command as a tile: its icon over its name.
-    private func command(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { TileLabel(title: title, symbol: symbol) }
-    }
 
     /// 색조 as the picker reads it; 워터마크 is no effect at its brightness and contrast.
     private static func effect(_ props: ObjectProps?) -> String {

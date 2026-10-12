@@ -108,14 +108,6 @@ extension Viewer {
         let objects = document.others.map(\.object) + [object.object]
         document.edit(undoManager) { _ in .group(objects) }
     }
-    /// 그룹: 개체 묶기 and 개체 풀기, as on the 도형 and 그림 탭.
-    var groupChoices: [Choice?] {
-        let context = document?.context ?? EditingContext()
-        return [Choice(title: "개체 묶기", key: "g", modifiers: [], enabled: context.objects > 1 && !context.locked) { self.groupObjects() },
-                Choice(title: "개체 풀기", key: "u", modifiers: [], enabled: document?.object?.group == true && !context.locked) {
-                    self.change { .ungroup($0) }
-                }]
-    }
 }
 
 /// Small drawings for the picture choices: text as gray lines and the object as a box,

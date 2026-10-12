@@ -281,7 +281,9 @@ pub(super) fn check(
         EditCommand::EditTable { cell, change } => {
             return check_table(before, after, cell, Some(*change))
         }
-        EditCommand::FlipTable { cell, .. } => return check_table(before, after, cell, None),
+        EditCommand::FlipTable { cell, .. } | EditCommand::SetTableSize { cell, .. } => {
+            return check_table(before, after, cell, None)
+        }
         EditCommand::Calculate { position, .. } => {
             return check_table(before, after, &position.target, None)
         }

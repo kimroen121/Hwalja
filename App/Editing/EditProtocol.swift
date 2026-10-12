@@ -153,6 +153,8 @@ enum EditCommand: Encodable, Sendable {
     case resizeTable(ObjectRef, row: Bool, line: UInt16, size: UInt32)
     /// Adds or removes a row or column of the table holding the cell `target`.
     case editTable(EditTarget, TableChange)
+    /// The table holding the cell `target` made `rows` by `columns`, at its bottom and right.
+    case setTableSize(EditTarget, rows: Int, columns: Int)
     /// 표 뒤집기; with `margins` the cells' 안 여백 turn too.
     case flipTable(EditTarget, TableTurn, margins: Bool)
     /// 셀 합치기, 셀 나누기, and 셀 높이를 같게 or 셀 너비를 같게, over the cells the
@@ -265,6 +267,11 @@ enum EditCommand: Encodable, Sendable {
             try c.encode("editTable", forKey: .kind)
             try c.encode(cell, forKey: .cell)
             try c.encode(change, forKey: .change)
+        case let .setTableSize(cell, rows, columns):
+            try c.encode("setTableSize", forKey: .kind)
+            try c.encode(cell, forKey: .cell)
+            try c.encode(rows, forKey: .rows)
+            try c.encode(columns, forKey: .columns)
         case let .flipTable(cell, turn, margins):
             try c.encode("flipTable", forKey: .kind)
             try c.encode(cell, forKey: .cell)
@@ -630,6 +637,9 @@ struct ObjectProps: PartialFormat {
     var pageBreak: UInt8?
     var repeatHeader: Bool?
     var cellSpacing: Int32?
+    /// Tables, read only.
+    var rowCount: UInt16?
+    var colCount: UInt16?
     /// Tables: 표 테두리/배경, its four sides and 배경.
     var tableBorder: CellBorder?
     /// Drawing objects' 그림자: 종류 (0 none, 1 왼쪽 위, 2 오른쪽 위, 3 왼쪽 아래, 4 오른쪽 아래,

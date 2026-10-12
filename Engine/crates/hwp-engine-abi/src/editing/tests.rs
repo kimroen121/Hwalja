@@ -2466,6 +2466,39 @@ fn edits_table_rows_and_columns() {
     .is_err());
 }
 #[test]
+fn resizes_tables_at_their_bottom_and_right() {
+    let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
+    let cell = |index| EditTarget {
+        section: 0,
+        paragraph: 2,
+        cell: Some(CellTarget {
+            control: 0,
+            cell: index,
+            paragraph: 0,
+        }),
+        note: None,
+        header_footer: None,
+    };
+    let resize = |s: &mut EditSession, at, rows, columns| {
+        run(
+            s,
+            EditCommand::SetTableSize {
+                cell: cell(at),
+                rows,
+                columns,
+            },
+        )
+    };
+    resize(&mut s, 0, 4, 3).unwrap();
+    assert_eq!(table_shape(&s, 2), (4, 3, 12));
+    // The caret's cell goes; the caret stays in the nearest one left.
+    let reply = resize(&mut s, 11, 1, 1).unwrap();
+    assert_eq!(table_shape(&s, 2), (1, 1, 1));
+    assert_eq!(reply.selection.unwrap().focus.target.cell.unwrap().cell, 0);
+    assert!(resize(&mut s, 0, 0, 1).is_err());
+    s.export(SaveFormat::Hwpx).unwrap();
+}
+#[test]
 fn splits_and_attaches_tables() {
     let mut s = EditSession::open(&plain_document("hwpx", true)).unwrap();
     let cell = |paragraph, index| EditTarget {
@@ -6130,10 +6163,52 @@ fn table_borders_and_backgrounds_are_set() {
                 ..Default::default()
             },
         };
+        let first = EditTarget {
+            section: table.section,
+            paragraph: table.paragraph,
+            cell: Some(CellTarget {
+                control: table.control,
+                cell: 0,
+                paragraph: 0,
+            }),
+            note: None,
+            header_footer: None,
+        };
+        let inner = s.cell_border(&first).unwrap().sides[1].clone();
         run(&mut s, set).unwrap();
         let now = s.object_props(&table).unwrap();
         assert_eq!(now.table_border.as_ref(), Some(&border), "{format}");
         assert_eq!(now.cell_spacing, Some(283), "{format}");
+        // The first cell's outer edges take it; its inner one stays.
+        let cell = s.cell_border(&first).unwrap();
+        assert_eq!(
+            (cell.sides[0].as_ref(), cell.sides[2].as_ref()),
+            (Some(&thick), Some(&thick)),
+            "{format}"
+        );
+        assert_eq!(cell.sides[1], inner, "{format}");
+        // No line takes the edge's line away.
+        let mut none = border.clone();
+        none.sides[2] = Some(BorderSide {
+            line: 0,
+            ..thick.clone()
+        });
+        let clear = EditCommand::SetObject {
+            object: table.clone(),
+            props: ObjectProps {
+                table_border: Some(none),
+                ..Default::default()
+            },
+        };
+        run(&mut s, clear).unwrap();
+        assert_eq!(
+            s.cell_border(&first).unwrap().sides[2]
+                .as_ref()
+                .map(|s| s.line),
+            Some(0),
+            "{format}"
+        );
+        run(&mut s, EditCommand::Undo).unwrap();
         let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
         assert_eq!(
             reopened.object_props(&table).unwrap().table_border,
@@ -6344,6 +6419,31 @@ fn cell_and_table_backgrounds_take_gradients_and_pictures() {
                 .render_page_svg_native(0)
                 .unwrap()
                 .contains("Gradient"),
+            "{format}"
+        );
+        // More colors than two, spread evenly, come back from the file whole.
+        let mut three = gradient.clone();
+        three
+            .gradient
+            .as_mut()
+            .unwrap()
+            .colors
+            .insert(1, "#ff0000".into());
+        let set = EditCommand::SetCellBorder {
+            selection: EditSelection::caret(point(cell.clone(), 0)),
+            all: false,
+            one: false,
+            border: CellBorder {
+                fill: Some(three.clone()),
+                ..Default::default()
+            },
+        };
+        run(&mut s, set).unwrap();
+        let reopened = EditSession::open(&s.export(save).unwrap()).unwrap();
+        run(&mut s, EditCommand::Undo).unwrap();
+        assert_eq!(
+            reopened.cell_border(&cell).unwrap().fill,
+            Some(three),
             "{format}"
         );
         let table = ObjectRef {
@@ -6901,4 +7001,61 @@ fn documents_are_saved_as_text_and_web_pages() {
         s.core.page_count() as usize
     );
     assert!(html.contains("표") && html.contains("내"));
+}
+#[test]
+fn table_sides_reach_every_outer_cell() {
+    // rhwp takes a cell's sides only with its 왼쪽: a 위쪽 alone must still reach each cell.
+    let mut s = EditSession::open(&plain_document("hwpx", false)).unwrap();
+    let insert = EditCommand::InsertTable {
+        position: point(body(), 0),
+        rows: 3,
+        columns: 3,
+        width: None,
+        height: None,
+        treat_as_char: false,
+    };
+    let t = run(&mut s, insert).unwrap().selection.unwrap().focus.target;
+    let table = ObjectRef {
+        kind: ObjectKind::Table,
+        section: t.section,
+        paragraph: t.paragraph,
+        control: t.cell.as_ref().unwrap().control,
+        cell: None,
+        note: None,
+    };
+    let mut border = CellBorder {
+        sides: Default::default(),
+        fill: None,
+        diagonal: None,
+    };
+    border.sides[2] = Some(BorderSide {
+        line: 0,
+        width: 1,
+        color: "#000000".into(),
+    });
+    let props = ObjectProps {
+        table_border: Some(border),
+        ..Default::default()
+    };
+    run(
+        &mut s,
+        EditCommand::SetObject {
+            object: table,
+            props,
+        },
+    )
+    .unwrap();
+    let line = |s: &EditSession, cell: u32, side: usize| {
+        let mut c = t.clone();
+        c.cell.as_mut().unwrap().cell = cell;
+        s.cell_border(&c).unwrap().sides[side]
+            .as_ref()
+            .unwrap()
+            .line
+    };
+    for cell in 0..3 {
+        assert_eq!(line(&s, cell, 2), 0, "cell {cell}");
+    }
+    // The next row keeps its 위쪽.
+    assert_eq!(line(&s, 3, 2), 1);
 }

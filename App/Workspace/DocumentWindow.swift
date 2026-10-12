@@ -1,4 +1,5 @@
 import PDFKit
+import Combine
 import SwiftUI
 
 /// One document window, laid out like Hancom Office Web below the macOS menu bar: the
@@ -54,10 +55,9 @@ struct DocumentWindow: View {
                 }
             }
             .id(viewer.reveals)
-            .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
+            .inspectorColumnWidth(280)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
-        .sheet(isPresented: $viewer.insertingTable) { TableSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.calculating) { CalculationSheet(viewer: viewer) }
         .sheet(isPresented: $viewer.replacingPrivateInfo) { PrivateInfoSheet(viewer: viewer) }
@@ -97,7 +97,8 @@ private struct DocumentToolbar: ToolbarContent {
         }
         // The things put in, in the middle of the window.
         ToolbarItemGroup(placement: .principal) {
-            InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) })
+            InsertButton(document: document, title: "표", symbol: Icon.table, when: \.inBody, panel: { TableGrid(viewer: viewer) },
+                         opens: viewer.$insertingTable.filter { $0 }.map { _ in viewer.insertingTable = false }.eraseToAnyPublisher())
             InsertButton(document: document, title: "그림", symbol: Icon.picture, when: \.canPicture, action: { viewer.insertPicture() })
             InsertButton(document: document, title: "도형", symbol: Icon.shape, when: \.inBody, panel: { ShapeTiles(viewer: viewer) })
             InsertButton(document: document, title: "글상자", symbol: Icon.textbox, when: \.inBody, action: { viewer.draw("textbox") })
@@ -116,12 +117,13 @@ private struct DocumentToolbar: ToolbarContent {
 }
 
 /// A toolbar button that puts something in, on while `when` holds; `panel` opens a popover
-/// instead of running `action`.
+/// instead of running `action`, and each time `opens` sends (as from a menu).
 private struct InsertButton<Panel: View>: View {
     @ObservedObject var document: HwpDocument
     let title: String, symbol: String
     let when: KeyPath<EditingContext, Bool>
     var panel: (() -> Panel)?
+    var opens: AnyPublisher<Void, Never>?
     var action: () -> Void = {}
     @State private var showsPanel = false
 
@@ -129,12 +131,13 @@ private struct InsertButton<Panel: View>: View {
         Button { if panel != nil { showsPanel = true } else { action() } } label: { Label(title, systemImage: symbol) }
             .help(title)
             .popover(isPresented: $showsPanel, arrowEdge: .bottom) { panel?() }
+            .onReceive(opens ?? Empty().eraseToAnyPublisher()) { if !document.context.locked { showsPanel = true } }
             .disabled(!document.context[keyPath: when] || document.context.locked)
     }
 }
 extension InsertButton where Panel == EmptyView {
     init(document: HwpDocument, title: String, symbol: String, when: KeyPath<EditingContext, Bool>, action: @escaping () -> Void) {
-        self.init(document: document, title: title, symbol: symbol, when: when, panel: nil, action: action)
+        self.init(document: document, title: title, symbol: symbol, when: when, panel: nil, opens: nil, action: action)
     }
 }
 
@@ -379,6 +382,7 @@ final class Viewer: ObservableObject {
     @Published var documentInfo: DocumentInfo?
     /// 문서 암호 설정 (false) or 문서 암호 변경/해제 (true) shown.
     @Published var passwordSheet: Bool?
+    /// The toolbar's 표 grid shown, as 표 만들기 opens it.
     @Published var insertingTable = false
     @Published var splittingCells = false
     @Published var calculating = false

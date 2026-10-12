@@ -224,6 +224,11 @@ struct RenderingTests {
         await tabled.settle()
         tabledViewer.insertTable(rows: 3, columns: 3)
         await tabled.settle()
+        // A 그러데이션 in the caret's cell, for 셀's 채우기.
+        tabledViewer.setCellBorder(CellBorder(fill: PageFill(color: "none", patternColor: "#000000", pattern: 0,
+                                                             gradient: Gradient(colors: ["#9fd0e8", "#8cc7e0", "#1f4e66"], angle: 270))),
+                                   all: false, one: false)
+        await tabled.settle()
         let equated = try HwpDocument(data: fixture("hwpx"))
         let equatedViewer = Viewer()
         equatedViewer.canvas.bind(equated)
@@ -245,8 +250,11 @@ struct RenderingTests {
             shaped.append((document, viewer))
         }
         // Every fold open, and a 쪽 테두리 for the rows it brings.
-        let folds = ["자르기", "그림 여백", "안쪽 여백", "바깥 여백", "모든 셀의 안 여백", "안 여백", "여백", "들여쓰기", "간격"].map(Fold<EmptyView>.key)
-        for fold in folds { UserDefaults.standard.set(true, forKey: fold) }
+        // HWP_SNAPSHOT_FOLDED: as a first opening shows them, every fold closed.
+        let folded = ProcessInfo.processInfo.environment["HWP_SNAPSHOT_FOLDED"] != nil
+        let folds = ["자르기", "그림 여백", "안쪽 여백", "바깥 여백", "모든 셀의 안 여백", "안 여백", "여백", "들여쓰기", "간격",
+                     "위치", "표 뒤집기", "대각선", "개체 시작 번호", "기타", "주석 모양", "용지 여백"].map(Fold<EmptyView, EmptyView>.key)
+        for fold in folds { UserDefaults.standard.set(!folded, forKey: fold) }
         defer { for fold in folds { UserDefaults.standard.removeObject(forKey: fold) } }
         var border = try await document.pageBorder(section: 0)
         border.sides = Array(repeating: BorderSide(line: 1, width: 1, color: "#000000"), count: 4)
@@ -269,15 +277,15 @@ struct RenderingTests {
             ("equationTab", inspector(equated, equatedViewer, "수식")),
             ("textBoxShape", inspector(shaped[0].0, shaped[0].1, "도형")),
             ("lineShape", inspector(shaped[1].0, shaped[1].1, "도형")),
-            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 900))),
-            ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 270, height: 900))),
-            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),
-            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 270, height: 1400))),
-            ("sectionInspector", AnyView(DocumentInspector(document: document, viewer: sectionViewer).frame(width: 270, height: 1400))),
+            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 280, height: 900))),
+            ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 280, height: 900))),
+            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 280, height: 400))),
+            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 280, height: 1400))),
+            ("sectionInspector", AnyView(DocumentInspector(document: document, viewer: sectionViewer).frame(width: 280, height: 1400))),
             ("shapes", AnyView(ShapeTiles(viewer: viewer))),
-            ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),
+            ("symbols", AnyView(SymbolSheet(viewer: viewer))),
             ("privateInfo", AnyView(PrivateInfoSheet(viewer: viewer))),
             ("styles", AnyView(StylePane(document: document, viewer: viewer))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",

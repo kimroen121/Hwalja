@@ -9,8 +9,8 @@ enum Icon {
     static let charShape = "textformat", paraShape = "text.alignleft"
     static let header = "rectangle.topthird.inset.filled", footer = "rectangle.bottomthird.inset.filled"
     static let footnote = "note.text", endnote = "doc.plaintext"
-    static let objectProps = "slider.horizontal.3", pictureEffect = "camera.filters"
-    static let brightness = "sun.max", contrast = "circle.lefthalf.filled", originalPicture = "arrow.uturn.backward",
+    static let objectProps = "slider.horizontal.3"
+    static let originalPicture = "arrow.uturn.backward",
                       selectObjects = "cursorarrow.and.square.on.square.dashed"
     static let pageSetup = "doc.text", print = "printer", pdf = "arrow.up.document"
     static let pageBorder = "square.dashed.inset.filled", section = "rectangle.split.1x2", noteShape = "text.append", styles = "textformat.alt"
@@ -113,7 +113,7 @@ enum DropDown {
     }
 }
 
-/// 표 drop-down: pick the size on a grid, or open 표 만들기.
+/// 표 drop-down: pick the size on a grid.
 struct TableGrid: View {
     let viewer: Viewer
     @State private var rows = 0
@@ -144,12 +144,6 @@ struct TableGrid: View {
                     }
                 }
             }
-            Divider()
-            Button("표 만들기…") {
-                dismiss()
-                viewer.insertingTable = true
-            }
-            .buttonStyle(.borderless)
         }
         .padding(10)
     }
@@ -186,7 +180,10 @@ struct Segments: NSViewRepresentable {
     struct Segment {
         var title: String?
         var symbol: String?
+        /// A picture of its own, in place of a symbol.
+        var image: NSImage?
         var help: String
+        var enabled = true
         /// Choices the segment holds, shown by its menu arrow.
         var menu: [Choice?] = []
     }
@@ -224,14 +221,15 @@ struct Segments: NSViewRepresentable {
         set(\.segmentCount, segments.count)
         for (index, segment) in segments.enumerated() {
             if control.label(forSegment: index) ?? "" != segment.title ?? "" { control.setLabel(segment.title ?? "", forSegment: index) }
-            if (control.image(forSegment: index) == nil) != (segment.symbol == nil) || control.toolTip(forSegment: index) != segment.help {
-                control.setImage(segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
+            if (control.image(forSegment: index) == nil) != (segment.symbol == nil && segment.image == nil) || control.toolTip(forSegment: index) != segment.help {
+                control.setImage(segment.image ?? segment.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: segment.help) }, forSegment: index)
                 control.setToolTip(segment.help, forSegment: index)
             }
             if !segment.menu.isEmpty || control.menu(forSegment: index) != nil {
                 control.setMenu(segment.menu.isEmpty ? nil : DropDown.menu(segment.menu), forSegment: index)
                 control.setShowsMenuIndicator(!segment.menu.isEmpty, forSegment: index)
             }
+            if control.isEnabled(forSegment: index) != segment.enabled { control.setEnabled(segment.enabled, forSegment: index) }
             let on = on.indices.contains(index) && on[index]
             if control.isSelected(forSegment: index) != on { control.setSelected(on, forSegment: index) }
         }

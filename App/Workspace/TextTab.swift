@@ -146,15 +146,15 @@ struct TextTab: View {
                 return .init(symbol: label.symbol, help: label.title)
             }
             // A list paragraph a 수준 up or down; another, its 왼쪽 여백 by 10 pt.
-            Segments(segments: [.init(symbol: "decrease.indent", help: "왼쪽 여백 줄이기"), .init(symbol: "increase.indent", help: "왼쪽 여백 키우기")],
-                     on: [false, false], any: true) { index in
-                let step = index == 0 ? -1 : 1
+            let indent = { (step: Int) in
                 if (paragraph?.head ?? "None") != "None" {
                     editor.stepLevel(by: step)
                 } else if let margin = paragraph?.marginLeft {
                     editor.format(ParaStyle(marginLeft: max(0, margin + Double(step) * 10)))
                 }
             }
+            Segments(segments: [.init(symbol: "decrease.indent", help: "왼쪽 여백 줄이기"), .init(symbol: "increase.indent", help: "왼쪽 여백 키우기")],
+                     on: [false, false], any: true) { indent($0 == 0 ? -1 : 1) }
         }
         InspectorSection {
             DisclosureGroup {
@@ -332,33 +332,18 @@ struct TextTab: View {
 
     @ViewBuilder private var layoutPane: some View {
         InspectorSection {
-            Fold("여백") {
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(spacing: 4) { length(\.marginLeft); Text("왼쪽").font(.caption) }
-                    VStack(spacing: 4) { length(\.marginRight); Text("오른쪽").font(.caption) }
-                }
-                .frame(maxWidth: .infinity)
-            }
+            Fold("여백") { Pair("왼쪽", length(\.marginLeft), "오른쪽", length(\.marginRight)) }
         }
         // 들여쓰기 (positive) and 내어쓰기 (negative) are one value of the paragraph.
         InspectorSection {
             Fold("들여쓰기") {
                 let indent = paragraph?.indent ?? 0
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(spacing: 4) {
-                        NumberStepper(value: paragraph.map { max($0.indent ?? 0, 0) }, unit: "pt", range: 0...1000) { amount in
-                            if amount > 0 || indent > 0 { editor.format(ParaStyle(indent: amount)) }
-                        }
-                        Text("들여쓰기").font(.caption)
-                    }
-                    VStack(spacing: 4) {
-                        NumberStepper(value: paragraph.map { max(-($0.indent ?? 0), 0) }, unit: "pt", range: 0...1000) { amount in
-                            if amount > 0 || indent < 0 { editor.format(ParaStyle(indent: -amount)) }
-                        }
-                        Text("내어쓰기").font(.caption)
-                    }
-                }
-                .frame(maxWidth: .infinity)
+                Pair("들여쓰기", NumberStepper(value: paragraph.map { max($0.indent ?? 0, 0) }, unit: "pt", range: 0...1000) { amount in
+                         if amount > 0 || indent > 0 { editor.format(ParaStyle(indent: amount)) }
+                     },
+                     "내어쓰기", NumberStepper(value: paragraph.map { max(-($0.indent ?? 0), 0) }, unit: "pt", range: 0...1000) { amount in
+                         if amount > 0 || indent < 0 { editor.format(ParaStyle(indent: -amount)) }
+                     })
             }
         }
         InspectorSection {
@@ -440,28 +425,20 @@ private struct BorderFillRows<Style: BorderFillStyle>: View {
         if border && fill { Divider() }
         if fill { fillRows }
     }
-    /// The line's kind beside 테두리, its color and width under it.
+    /// 테두리, then its kind, color and width in one row.
     private var borderRows: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LabeledContent("테두리") { ChoiceField(int(\.borderLine), Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds) }
+        let on = (style.borderLine ?? 0) != 0
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("테두리").fontWeight(on ? .semibold : .regular)
             HStack(spacing: 8) {
-                ColorWell(hex: text(\.borderColor, "#000000"), flexible: true)
-                    .frame(maxWidth: .infinity)
-                NumberStepper(value: Swatches.widths[min(style.borderWidth ?? 0, Swatches.widths.count - 1)], unit: "mm",
-                              range: Swatches.widths.first!...Swatches.widths.last!, step: Self.widthStep, wide: true) { width($0) }
-                    .frame(maxWidth: .infinity)
+                LineKindField(kind: int(\.borderLine))
+                Group {
+                    ColorWell(hex: text(\.borderColor, "#000000"))
+                    LineRow.width(style.borderWidth ?? 0) { style.borderWidth = $0 }
+                }
+                .disabled(!on)
             }
-            .disabled((style.borderLine ?? 0) == 0)
         }
-    }
-    /// HWP's widths are a list: a step moves along it, a typed width takes the nearest.
-    private static var widthStep: Double { 0.001 }
-    private func width(_ value: Double) {
-        let widths = Swatches.widths, now = min(style.borderWidth ?? 0, widths.count - 1)
-        let index = abs(value - (widths[now] + Self.widthStep)) < 1e-9 ? min(now + 1, widths.count - 1)
-            : abs(value - (widths[now] - Self.widthStep)) < 1e-9 ? max(now - 1, 0)
-            : widths.indices.min { abs(widths[$0] - value) < abs(widths[$1] - value) }!
-        style.borderWidth = index
     }
     @ViewBuilder private var fillRows: some View {
         LabeledContent("배경") { ColorWell(hex: text(\.fillColor, "none"), none: "none") }

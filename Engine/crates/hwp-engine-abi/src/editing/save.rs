@@ -52,6 +52,10 @@ impl EditSession {
         if self.locked {
             return Err(EditError::Locked);
         }
+        // A file opened with such 그러데이션 (HWPX keeps no 위치) saves as HWP whole.
+        if format == SaveFormat::Hwp {
+            self.space_gradients();
+        }
         let bytes = match format {
             SaveFormat::Pdf => {
                 // Marks shown on screen stay off paper.

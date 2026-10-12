@@ -88,7 +88,7 @@ pub(super) fn valid_border(border: &CellBorder) -> bool {
             && f.pattern_color.len() == 7
             && f.gradient.as_ref().is_none_or(|g| {
                 (1..=4).contains(&g.kind)
-                    && g.colors.len() == 2
+                    && (2..=64).contains(&g.colors.len())
                     && g.colors.iter().all(color)
                     && (0..=100).contains(&g.center_x)
                     && (0..=100).contains(&g.center_y)
@@ -111,6 +111,27 @@ pub(super) fn valid_border(border: &CellBorder) -> bool {
 }
 
 impl EditSession {
+    /// 그러데이션 of more than two colors with no 위치 for them get them evenly, as they are
+    /// drawn: HWP keeps one for each such color, and reads them back whether written or not.
+    pub(super) fn space_gradients(&mut self) {
+        let info = &mut self.core.document_mut().doc_info;
+        let mut changed = false;
+        for bf in &mut info.border_fills {
+            if let Some(g) = bf
+                .fill
+                .gradient
+                .as_mut()
+                .filter(|g| g.colors.len() > 2 && g.positions.len() != g.colors.len())
+            {
+                let last = (g.colors.len() - 1) as i32;
+                g.positions = (0..=last).map(|i| (i * 100 + last / 2) / last).collect();
+                changed = true;
+            }
+        }
+        if changed {
+            info.raw_stream_dirty = true;
+        }
+    }
     /// `border` with a new 그림 배경 put into the document, so it names it by its id.
     pub(super) fn stored_fill(&mut self, border: &CellBorder) -> Result<CellBorder, EditError> {
         use base64::Engine;
@@ -278,24 +299,34 @@ impl EditSession {
             let json = props(base, [sides[0], sides[1], sides[2], sides[3]], border);
             self.core
                 .set_cell_zone_properties_native(s, p, control, r0, c0, r1, c1, &json)?;
+            self.space_gradients();
             return Ok(());
         }
         for (i, row, col, last_row, last_col, base) in cells {
             let edge =
                 |outer: bool, at: usize, inner: usize| if outer { sides[at] } else { sides[inner] };
-            let json = props(
-                base,
-                [
-                    edge(col == c0, 0, 5),
-                    edge(last_col == c1, 1, 5),
-                    edge(row == r0, 2, 4),
-                    edge(last_row == r1, 3, 4),
-                ],
-                border,
-            );
+            let edges = [
+                edge(col == c0, 0, 5),
+                edge(last_col == c1, 1, 5),
+                edge(row == r0, 2, 4),
+                edge(last_row == r1, 3, 4),
+            ];
+            let mut json = props(base, edges, border);
+            // rhwp takes a cell's sides only along with its 왼쪽: without one, the cell's own
+            // goes with the others.
+            if edges[0].is_none() && edges[1..].iter().any(Option::is_some) {
+                let now: Value =
+                    serde_json::from_str(&self.core.get_cell_properties_native(s, p, control, i)?)
+                        .map_err(|_| EditError::RenderFailed)?;
+                let mut map: serde_json::Map<String, Value> =
+                    serde_json::from_str(&json).map_err(|_| EditError::RenderFailed)?;
+                map.insert("borderLeft".into(), now["borderLeft"].clone());
+                json = Value::Object(map).to_string();
+            }
             self.core
                 .set_cell_properties_native(s, p, control, i, &json)?;
         }
+        self.space_gradients();
         Ok(())
     }
 }

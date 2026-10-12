@@ -349,6 +349,13 @@ pub enum EditCommand {
         cell: EditTarget,
         change: TableChange,
     },
+    /// The table holding `cell` made `rows` by `columns`, rows added or removed at its
+    /// bottom and columns at its right.
+    SetTableSize {
+        cell: EditTarget,
+        rows: u16,
+        columns: u16,
+    },
     /// 표 뒤집기 of the table holding `cell`; with `margins` the cells' 안 여백 turn too.
     FlipTable {
         cell: EditTarget,
@@ -805,6 +812,9 @@ pub struct ObjectProps {
     pub page_break: Option<u8>,
     pub repeat_header: Option<bool>,
     pub cell_spacing: Option<i32>,
+    /// Tables, read only: how many rows and columns.
+    pub row_count: Option<u16>,
+    pub col_count: Option<u16>,
     /// Tables: 표 테두리/배경, its four sides and 배경.
     pub table_border: Option<CellBorder>,
     /// Drawing objects' 그림자: 종류 (0 none, 1 왼쪽 위, 2 오른쪽 위, 3 왼쪽 아래, 4 오른쪽

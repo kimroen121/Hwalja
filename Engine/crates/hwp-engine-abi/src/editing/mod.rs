@@ -485,6 +485,7 @@ impl EditCommand {
                 Some(commands::ordered(selection).0.clone())
             }
             EditCommand::EditTable { cell, .. }
+            | EditCommand::SetTableSize { cell, .. }
             | EditCommand::FlipTable { cell, .. }
             | EditCommand::SetCellBorder {
                 selection:

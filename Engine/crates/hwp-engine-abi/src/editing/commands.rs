@@ -568,6 +568,21 @@ impl EditSession {
                     _ => Ok(()),
                 }
             }
+            EditCommand::SetTableSize {
+                cell,
+                rows,
+                columns,
+            } => {
+                let doc = self.core.document();
+                paragraphs(doc, cell)?;
+                table(doc, cell).ok_or(EditError::UnsupportedTarget)?;
+                // As 표 만들기 allows.
+                if (1..=1000).contains(rows) && (1..=256).contains(columns) {
+                    Ok(())
+                } else {
+                    Err(EditError::InvalidInput)
+                }
+            }
             EditCommand::SetPage { section, page, .. } => {
                 self.section_exists(*section)?;
                 validate_page(page)
@@ -947,6 +962,43 @@ impl EditSession {
             TableChange::Attach => {
                 self.core.merge_table_with_next_native(s, host, control)?;
             }
+        }
+        self.caret_in_cell(target, row, col)
+    }
+    /// Rows added or removed at the bottom and columns at the right until the table is
+    /// `rows` by `columns`; the caret stays in its cell, or the nearest one left.
+    fn set_table_size(
+        &mut self,
+        target: &EditTarget,
+        rows: u16,
+        columns: u16,
+    ) -> Result<EditSelection, EditError> {
+        let c = target.cell.as_ref().ok_or(EditError::UnsupportedTarget)?;
+        let (s, host, control) = (
+            target.section as usize,
+            target.paragraph as usize,
+            c.control as usize,
+        );
+        let t = table(self.core.document(), target).ok_or(EditError::InvalidInput)?;
+        let cell = t
+            .cells
+            .get(c.cell as usize)
+            .ok_or(EditError::InvalidInput)?;
+        let (row, col) = (cell.row.min(rows - 1), cell.col.min(columns - 1));
+        let (now_rows, now_cols) = (t.row_count, t.col_count);
+        for r in (rows..now_rows).rev() {
+            self.core.delete_table_row_native(s, host, control, r)?;
+        }
+        for r in now_rows..rows {
+            self.core
+                .insert_table_row_native(s, host, control, r - 1, true)?;
+        }
+        for c in (columns..now_cols).rev() {
+            self.core.delete_table_column_native(s, host, control, c)?;
+        }
+        for c in now_cols..columns {
+            self.core
+                .insert_table_column_native(s, host, control, c - 1, true)?;
         }
         self.caret_in_cell(target, row, col)
     }
@@ -1729,6 +1781,11 @@ impl EditSession {
                 }))
             }
             EditCommand::EditTable { cell, change } => self.edit_table(cell, *change),
+            EditCommand::SetTableSize {
+                cell,
+                rows,
+                columns,
+            } => self.set_table_size(cell, *rows, *columns),
             EditCommand::FlipTable {
                 cell,
                 turn,

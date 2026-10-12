@@ -17,8 +17,9 @@ enum LineShapes {
                         "얇고 굵은 이중선", "굵고 얇은 이중선", "얇고 굵고 얇은 삼중선", "물결선", "이중 물결선"]
 
     /// A sample of each shape, as the web editor's menus show them.
-    static let images: [NSImage] = names.indices.map { shape in
-        let image = NSImage(size: NSSize(width: 64, height: 10), flipped: true) { rect in
+    static let images = images(width: 64)
+    static func images(width: CGFloat) -> [NSImage] { names.indices.map { shape in
+        let image = NSImage(size: NSSize(width: width, height: 10), flipped: true) { rect in
             NSColor.labelColor.set()
             func line(_ y: CGFloat, _ width: CGFloat, dash: [CGFloat] = [], round: Bool = false) {
                 let path = NSBezierPath()
@@ -58,7 +59,7 @@ enum LineShapes {
         }
         image.isTemplate = true
         return image
-    }
+    } }
 }
 
 /// Formats with 테두리 and 배경, which the engine takes all together.

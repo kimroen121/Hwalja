@@ -576,6 +576,9 @@ impl EditSession {
         let mut props: ObjectProps = serde_json::from_value(Value::Object(rename(map, false)))
             .map_err(|_| EditError::RenderFailed)?;
         props.table_border = border;
+        if let Control::Table(t) = self.control(o)? {
+            (props.row_count, props.col_count) = (Some(t.row_count), Some(t.col_count));
+        }
         if o.cell.is_none() && o.note.is_none() {
             props.protect = Some(protected(self.control(o)?));
         }
@@ -858,6 +861,33 @@ impl EditSession {
                 &Value::Object(rename(json, true)).to_string(),
             ),
         }?;
+        // 표 테두리 goes on the outer edges of the cells too, which are what is drawn there
+        // (the table's own sides show only apart from them, with 셀 간격).
+        let sides = table_border.map(|b| b.sides).unwrap_or_default();
+        if o.kind == ObjectKind::Table && o.cell.is_none() && sides[..4].iter().any(Option::is_some)
+        {
+            let target = EditTarget {
+                cell: Some(CellTarget {
+                    control: o.control,
+                    cell: 0,
+                    paragraph: 0,
+                }),
+                ..Self::host(o)
+            };
+            let [left, right, top, bottom, ..] = sides;
+            let outer = CellBorder {
+                sides: [left, right, top, bottom, None, None],
+                fill: None,
+                diagonal: None,
+            };
+            let at = EditSelection::caret(EditPosition {
+                target,
+                scalar: 0,
+                upstream: false,
+            });
+            self.set_cell_border(&at, true, false, &outer)?;
+        }
+        self.space_gradients();
         Ok(())
     }
     pub(super) fn set_cell(&mut self, t: &EditTarget, props: &CellProps) -> Result<(), EditError> {
