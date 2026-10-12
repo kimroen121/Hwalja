@@ -53,6 +53,7 @@ struct DocumentWindow: View {
                 case .document: DocumentInspector(document: document, viewer: viewer)
                 }
             }
+            .id(viewer.reveals)
             .inspectorColumnWidth(min: 240, ideal: 270, max: 480)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
@@ -74,42 +75,12 @@ struct DocumentWindow: View {
         .task { await document.loadPassword() }
         .sheet(item: $viewer.documentInfo) { DocumentInfoSheet(info: $0, document: document, viewer: viewer) }
         .sheet(item: $viewer.equation) { EquationEditor(edit: $0, viewer: viewer, document: document) }
-        .sheet(item: $viewer.objectSheet) { ObjectSheet(state: $0, viewer: viewer) }
-        .sheet(isPresented: $viewer.editingCharShape) {
-            CharShapeSheet(style: document.format?.text ?? CharStyle(), languages: document.format?.languages ?? [], viewer: viewer)
-        }
-        .sheet(isPresented: $viewer.editingParaShape) {
-            ParaShapeSheet(style: document.format?.paragraph ?? ParaStyle(), viewer: viewer)
-        }
-        .sheet(isPresented: Binding(get: { viewer.editingList != nil }, set: { if !$0 { viewer.editingList = nil } })) {
-            if let tab = viewer.editingList {
-                ListSheet(style: document.format?.paragraph ?? ParaStyle(), body: document.context.inBody, tab: tab, viewer: viewer)
-            }
-        }
-        .sheet(isPresented: Binding(get: { viewer.pageSetup != nil }, set: { if !$0 { viewer.pageSetup = nil } })) {
-            if let setup = viewer.pageSetup { PageSetupSheet(section: setup.section, page: setup.page, viewer: viewer) }
-        }
-        .sheet(isPresented: Binding(get: { viewer.pageBorder != nil }, set: { if !$0 { viewer.pageBorder = nil } })) {
-            if let setup = viewer.pageBorder { PageBorderSheet(section: setup.section, border: setup.border, viewer: viewer) }
-        }
-        .sheet(item: $viewer.cellBorder) { CellBorderSheet(editing: $0, viewer: viewer) }
         .sheet(item: $viewer.chartData) { ChartDataSheet(editing: $0, viewer: viewer) }
         .sheet(item: $viewer.fieldSheet) { FieldSheet(viewer: viewer, editing: $0.existing) }
         .sheet(item: $viewer.hyperlinkSheet) { HyperlinkSheet(viewer: viewer, editing: $0) }
         .sheet(isPresented: $viewer.editingStyles) { StyleSheet(document: document, viewer: viewer) }
         .sheet(item: $viewer.styleEditor) { StyleEditSheet(editor: $0, styles: document.styles, viewer: viewer) }
         .sheet(item: $viewer.replacingStyle) { StyleReplaceSheet(style: $0, styles: document.styles, viewer: viewer) }
-        .sheet(isPresented: Binding(get: { viewer.noteShapes != nil }, set: { if !$0 { viewer.noteShapes = nil } })) {
-            if let shapes = viewer.noteShapes {
-                NoteShapeSheet(section: shapes.section, footnote: shapes.footnote, endnote: shapes.endnote, viewer: viewer)
-            }
-        }
-        .sheet(isPresented: Binding(get: { viewer.sectionSetup != nil }, set: { if !$0 { viewer.sectionSetup = nil } })) {
-            if let setup = viewer.sectionSetup { SectionSheet(section: setup.section, setup: setup.setup, viewer: viewer) }
-        }
-        .sheet(isPresented: Binding(get: { viewer.columnSetup != nil }, set: { if !$0 { viewer.columnSetup = nil } })) {
-            if let setup = viewer.columnSetup { ColumnSheet(section: setup.section, setup: setup.setup, viewer: viewer) }
-        }
         .focusedSceneObject(document)
         .focusedSceneObject(viewer)
     }
@@ -347,6 +318,21 @@ final class Viewer: ObservableObject {
     }
     /// 텍스트's 스타일 (0), 레이아웃 (1) or 기타 (2), kept while the inspector is hidden.
     var textLayout = 0
+    /// 문서 (0) or 구역 (1).
+    var documentTab = 0
+    /// Counts `reveal`s: the inspector is made anew for each, showing the tab revealed.
+    @Published private(set) var reveals = 0
+    /// Shows the inspector at `pane`, at `tab` when the selection has it (문서's 구역 for "구역").
+    func reveal(_ pane: InspectorPane, tab: String? = nil) {
+        if pane == .document {
+            documentTab = tab == "구역" ? 1 : 0
+        } else if let tab, let context = document?.context {
+            let tabs = Inspector.tabs(context)
+            if tabs.contains(tab) { inspectorTabs[tabs.joined(separator: " ")] = tab }
+        }
+        (inspectorPane, showsInspector) = (pane, true)
+        reveals += 1
+    }
     func shows(_ pane: TaskPane) -> Bool { showsSidebar && sidebarPane == pane }
     /// Shows `pane`, or hides it when it shows.
     func toggle(_ pane: TaskPane) {
@@ -402,23 +388,11 @@ final class Viewer: ObservableObject {
     @Published var calculating = false
     @Published var replacingPrivateInfo = false
     @Published var flippingTable = false
-    /// 수식 편집기, and 개체 속성 (or 표/셀 속성), while open.
+    /// 수식 편집기, while open.
     @Published var equation: EquationEdit?
-    @Published var objectSheet: ObjectSheetState?
-    @Published var editingCharShape = false
-    @Published var editingParaShape = false
-    /// 글머리표 및 문단 번호, open at its 글머리표 or 문단 번호 tab.
-    @Published var editingList: String?
-    /// The section and paper 편집 용지 is showing.
-    @Published var pageSetup: (section: UInt32, page: PageSetup)?
-    @Published var pageBorder: (section: UInt32, border: PageBorder)?
-    @Published var cellBorder: CellBorderEditing?
     @Published var fieldSheet: FieldEditing?
     @Published var hyperlinkSheet: HyperlinkEditing?
     @Published var chartData: ChartEditing?
-    @Published var sectionSetup: (section: UInt32, setup: SectionSetup)?
-    @Published var columnSetup: (section: UInt32, setup: ColumnSetup)?
-    @Published var noteShapes: (section: UInt32, footnote: NoteShape, endnote: NoteShape)?
     /// [스타일] 대화 상자, and from the 작업 창 스타일 추가하기/편집하기 and 바꿀 스타일 선택.
     @Published var editingStyles = false
     @Published var styleEditor: StyleEditor?
@@ -480,8 +454,7 @@ final class Viewer: ObservableObject {
                 case "w": editCells { .equalizeCells($0, height: false) }
                 case "t": flippingTable = true
                 case "p": showObjectProperties()
-                case "l": showCellBorder(one: false)
-                case "c": showCellBorder(one: false, tab: "배경")
+                case "l", "c": reveal(.format, tab: "셀")
                 default: return false
                 }
             } else if context.object != nil, !context.locked {

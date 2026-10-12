@@ -232,8 +232,24 @@ struct RenderingTests {
         await equated.settle()
         choose(try await placedObject(equated, .equation), in: equated)
         await equated.settle()
+        // A 글상자 and a 직선 chosen, for 도형.
+        var shaped: [(HwpDocument, Viewer)] = []
+        for shape in ["textbox", "line"] {
+            let document = try HwpDocument(data: fixture("hwpx"))
+            let viewer = Viewer()
+            viewer.canvas.bind(document)
+            document.insertShape(shape, page: 0, from: CGPoint(x: 160, y: 320), to: CGPoint(x: 360, y: 390), nil)
+            await document.settle()
+            choose(try await placedObject(document, .shape), in: document)
+            await document.settle()
+            shaped.append((document, viewer))
+        }
+        // 문서's 구역 showing.
+        let sectionViewer = Viewer()
+        sectionViewer.canvas.bind(document)
+        sectionViewer.documentTab = 1
         let inspector = { (document: HwpDocument, viewer: Viewer, tab: String) in
-            AnyView(Inspector(document: document, viewer: viewer, tab: tab).frame(width: 280, height: 1100))
+            AnyView(Inspector(document: document, viewer: viewer, tab: tab).frame(width: 280, height: 1600))
         }
         let views: [(String, AnyView)] = [
             ("quickMenu", AnyView(QuickMenu(document: document, viewer: viewer).padding(20))),
@@ -243,39 +259,26 @@ struct RenderingTests {
             ("tableTable", inspector(tabled, tabledViewer, "표")),
             ("tableCell", inspector(tabled, tabledViewer, "셀")),
             ("equationTab", inspector(equated, equatedViewer, "수식")),
+            ("textBoxShape", inspector(shaped[0].0, shaped[0].1, "도형")),
+            ("lineShape", inspector(shaped[1].0, shaped[1].1, "도형")),
             ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 270, height: 900))),
             ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 270, height: 900))),
             ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 270, height: 400))),
-            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 270, height: 640))),
+            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 270, height: 1400))),
+            ("sectionInspector", AnyView(DocumentInspector(document: document, viewer: sectionViewer).frame(width: 270, height: 1400))),
             ("shapes", AnyView(ShapeTiles(viewer: viewer))),
             ("table", AnyView(TableSheet(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),
             ("privateInfo", AnyView(PrivateInfoSheet(viewer: viewer))),
-            ("columns", AnyView(ColumnSheet(section: 0, setup: try await document.columns(section: 0), viewer: viewer))),
-            ("char", AnyView(CharShapeSheet(style: format.text, languages: format.languages, viewer: viewer))),
-            ("para", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer))),
-            ("charExtended", AnyView(CharShapeSheet(style: format.text, languages: format.languages, viewer: viewer, tab: "확장"))),
-            ("list", AnyView(ListSheet(style: format.paragraph, body: true, tab: "문단 번호", viewer: viewer))),
-            ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, viewer: viewer, tab: "테두리/배경"))),
-            ("page", AnyView(PageSetupSheet(section: 0, page: try await document.pageSetup(section: 0), viewer: viewer))),
-            ("pageBorder", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer))),
+            ("char", AnyView(CharShapeSheet(style: format.text, languages: format.languages) { _ in })),
+            ("para", AnyView(ParaShapeSheet(style: format.paragraph) { _ in })),
+            ("charExtended", AnyView(CharShapeSheet(style: format.text, languages: format.languages, tab: "확장") { _ in })),
+            ("paraBorder", AnyView(ParaShapeSheet(style: format.paragraph, tab: "테두리/배경") { _ in })),
             ("styles", AnyView(StyleSheet(document: document, viewer: viewer))),
             ("styleEdit", AnyView(StyleEditSheet(editor: try #require(viewer.newStyle()), styles: document.styles, viewer: viewer))),
-            ("notes", AnyView(NoteShapeSheet(section: 0, footnote: try await document.noteShape(section: 0, footnote: true),
-                                             endnote: try await document.noteShape(section: 0, footnote: false), viewer: viewer))),
-            ("section", AnyView(SectionSheet(section: 0, setup: try await document.sectionSetup(section: 0), viewer: viewer))),
-            ("pageBackground", AnyView(PageBorderSheet(section: 0, border: try await document.pageBorder(section: 0), viewer: viewer,
-                                                       tab: "배경"))),
             ("equation", AnyView(EquationEditor(edit: EquationEdit(script: "x = {-b PLUSMINUS sqrt {b^2 - 4ac}} over {2a}",
                                                                    fontSize: 10, color: 0), viewer: viewer, document: document))),
-            ("objectSheet", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
-                                                                   props: ObjectProps(width: 14_000, height: 9_000, treatAsChar: false,
-                                                                                      textWrap: "Square", caption: "None")),
-                                           viewer: viewer))),
-            ("margins", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .picture, section: 0, paragraph: 0, control: 0),
-                                                                    props: ObjectProps(caption: "Bottom")),
-                                            viewer: viewer, tab: "여백/캡션"))),
             ("newNumber", AnyView(NewNumberSheet(viewer: viewer))),
             ("pageHide", AnyView(PageHideSheet(viewer: viewer, hide: PageHide(header: true)))),
             ("bookmark", AnyView(BookmarkSheet(viewer: viewer))),
@@ -288,37 +291,6 @@ struct RenderingTests {
                                                    document: document, viewer: viewer, tab: "글꼴 정보"))),
             ("pictureInfo", AnyView(DocumentInfoSheet(info: DocumentInfo(url: nil, statistics: try await document.statistics()),
                                                       document: document, viewer: viewer, tab: "그림 정보"))),
-            ("cellBorder", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
-                sides: [BorderSide(line: 1, width: 1, color: "#000000"), nil, nil, nil, nil, nil],
-                fill: PageFill(color: "#ccddee", patternColor: "#000000", pattern: 0),
-                diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: false, backSlash: true, center: 0)),
-                tab: "테두리"), viewer: viewer))),
-            ("cellGradient", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
-                fill: PageFill(color: "none", patternColor: "#000000", pattern: 0, gradient: Gradient(kind: 2, colors: ["#ffffff", "#3366cc"]))),
-                tab: "배경"), viewer: viewer))),
-            ("cellPicture", AnyView(CellBorderSheet(editing: CellBorderEditing(one: false, block: true, border: CellBorder(
-                fill: PageFill(color: "none", patternColor: "#000000", pattern: 0, image: ImageBrush(binId: 1, mode: 5))),
-                tab: "배경"), viewer: viewer))),
-            ("cellDiagonal", AnyView(CellBorderSheet(editing: CellBorderEditing(one: true, block: true, border: CellBorder(
-                diagonal: Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: true, backSlash: false, center: 0)),
-                tab: "대각선"), viewer: viewer))),
-            ("tableTab", AnyView(ObjectSheet(state: ObjectSheetState(object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
-                                                                     props: ObjectProps(pageBreak: 2, repeatHeader: true)),
-                                             viewer: viewer, tab: "표"))),
-            ("shapeShadow", AnyView(ObjectSheet(state: ObjectSheetState(
-                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(shadowType: 4, shadowColor: 0xb2b2b2, shadowOffsetX: 567, shadowOffsetY: 567, shadowAlpha: 0,
-                                   tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141,
-                                   tbVerticalAlign: "Center", roundRate: 20),
-                textBox: true), viewer: viewer, tab: "그림자"))),
-            ("shapeTextBox", AnyView(ObjectSheet(state: ObjectSheetState(
-                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(tbMarginLeft: 283, tbMarginRight: 283, tbMarginTop: 141, tbMarginBottom: 141, tbVerticalAlign: "Center",
-                                   tbTextDirection: 1),
-                textBox: true), viewer: viewer, tab: "글상자"))),
-            ("shapeLine", AnyView(ObjectSheet(state: ObjectSheetState(
-                object: ObjectRef(kind: .shape, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(roundRate: 20, borderColor: 0, borderWidth: 33, lineType: 1)), viewer: viewer, tab: "선"))),
             ("goTo", AnyView(GoToSheet(viewer: viewer, pageCount: 7))),
             ("hyperlink", AnyView(HyperlinkSheet(viewer: viewer, editing: HyperlinkEditing(
                 existing: nil, text: "한컴 홈페이지", uri: "https://www.hancom.com")))),
@@ -326,11 +298,6 @@ struct RenderingTests {
                 labels: ["항목 1", "항목 2", "항목 3"],
                 series: [ChartSeries(name: "계열 1", values: ["4.3", "2.5", "3.5"]), ChartSeries(name: "계열 2", values: ["2.4", "4.4", "1.8"])])),
                 viewer: viewer))),
-            ("tableBorder", AnyView(TableBorderSheet(state: ObjectSheetState(
-                object: ObjectRef(kind: .table, section: 0, paragraph: 0, control: 0),
-                props: ObjectProps(cellSpacing: 283, tableBorder: CellBorder(
-                    sides: Array(repeating: BorderSide(line: 1, width: 3, color: "#336699"), count: 4) + [nil, nil],
-                    fill: PageFill(color: "#ffeecc", patternColor: "#000000", pattern: 0)))), viewer: viewer))),
         ]
         for (name, view) in views {
             let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))

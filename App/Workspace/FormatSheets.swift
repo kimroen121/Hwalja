@@ -4,13 +4,10 @@ import SwiftUI
 // 글자 모양 and 문단 모양.
 
 extension Viewer {
-    func applyCharShape(_ change: CharStyle) {
-        guard change != CharStyle() else { return }
-        canvas.editor.model?.formatText(change, canvas.editor.undoManager)
-    }
-    func applyParaShape(_ change: ParaStyle) {
-        guard change != ParaStyle() else { return }
-        canvas.editor.model?.formatParagraphs(change, canvas.editor.undoManager)
+    /// 글자 모양 (0) or 문단 모양 (1): the inspector's 텍스트 at 스타일 or 레이아웃, where all of them are.
+    func revealText(layout: Int) {
+        textLayout = layout
+        reveal(.format, tab: "텍스트")
     }
 }
 
@@ -154,9 +151,8 @@ struct CharShapeSheet: View {
     let original: CharStyle
     /// Each 언어's own font and scales, as they were.
     let languages: [CharStyle]
-    let viewer: Viewer
-    /// Where the changes go: the selection, or a style being edited.
-    var apply: ((CharStyle) -> Void)?
+    /// Where the changes go: the style being edited.
+    let apply: (CharStyle) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var style: CharStyle
     @State private var edited: [CharStyle]
@@ -167,13 +163,12 @@ struct CharShapeSheet: View {
     /// 언어별 설정's choices, in the web editor's order.
     static let languageNames = ["한글", "영문", "한자", "일어", "외국어", "기호", "사용자"]
 
-    init(style: CharStyle, languages: [CharStyle], viewer: Viewer, tab: String = "기본",
-         apply: ((CharStyle) -> Void)? = nil) {
+    init(style: CharStyle, languages: [CharStyle], tab: String = "기본",
+         apply: @escaping (CharStyle) -> Void) {
         original = style
         self.apply = apply
         self.languages = languages
         _tab = State(initialValue: tab)
-        self.viewer = viewer
         _style = State(initialValue: style)
         _edited = State(initialValue: languages)
     }
@@ -185,14 +180,13 @@ struct CharShapeSheet: View {
             }
             .frame(width: 520, height: 330)
         } confirm: {
-            let send = apply ?? viewer.applyCharShape
-            send(style.changesWithBorderFill(from: original))
+            apply(style.changesWithBorderFill(from: original))
             // Then each 언어 set apart from 대표.
             for (index, (now, was)) in zip(edited, languages).enumerated() {
                 var change = now.changes(from: was)
                 guard change != CharStyle() else { continue }
                 change.language = index
-                send(change)
+                apply(change)
             }
             dismiss()
         }
@@ -352,18 +346,16 @@ struct CharShapeSheet: View {
 /// spacing, line breaking) and 테두리/배경. Only changed attributes apply.
 struct ParaShapeSheet: View {
     let original: ParaStyle
-    let viewer: Viewer
-    /// Where the change goes: the selection, or a style being edited.
-    var apply: ((ParaStyle) -> Void)?
+    /// Where the change goes: the style being edited.
+    let apply: (ParaStyle) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var style: ParaStyle
     @State private var tab: String
 
-    init(style: ParaStyle, viewer: Viewer, tab: String = "기본", apply: ((ParaStyle) -> Void)? = nil) {
+    init(style: ParaStyle, tab: String = "기본", apply: @escaping (ParaStyle) -> Void) {
         original = style
         self.apply = apply
         _tab = State(initialValue: tab)
-        self.viewer = viewer
         _style = State(initialValue: style)
     }
 
@@ -390,7 +382,7 @@ struct ParaShapeSheet: View {
             if change.lineSpacing != nil || change.lineSpacingKind != nil {
                 (change.lineSpacing, change.lineSpacingKind) = (style.lineSpacing, style.lineSpacingKind)
             }
-            (apply ?? viewer.applyParaShape)(change)
+            apply(change)
             dismiss()
         }
     }
@@ -490,164 +482,6 @@ struct ParaShapeSheet: View {
     }
 }
 
-/// 글머리표 및 문단 번호: a 글머리표 or 문단 번호 kind for the selected paragraphs, and for
-/// 문단 번호 in the body the 시작 번호 방식.
-struct ListSheet: View {
-    let original: ParaStyle
-    /// The caret is in the body, where numbering can restart.
-    let inBody: Bool
-    let viewer: Viewer
-    @Environment(\.dismiss) private var dismiss
-    @State private var tab: String
-    @State private var bullet: String?
-    @State private var numbering: Int?
-    @State private var restart: Int
-    @State private var start: Double
-
-    init(style: ParaStyle, body: Bool, tab: String, viewer: Viewer) {
-        original = style
-        inBody = body
-        self.viewer = viewer
-        _tab = State(initialValue: tab)
-        _bullet = State(initialValue: style.head == "Bullet" ? style.bullet : nil)
-        _numbering = State(initialValue: style.head == "Number" ? style.numbering : nil)
-        _restart = State(initialValue: style.restart ?? 0)
-        _start = State(initialValue: Double(style.startNumber ?? 1))
-    }
-
-    var body: some View {
-        DialogFrame("글머리표 및 문단 번호", confirmTitle: "설정") {
-            DialogTabs(selection: $tab, titles: ["글머리표", "문단 번호"]) { tab in
-                if tab == "글머리표" {
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("글머리표 모양")
-                        Samples(count: FormatChoices.bullets.count, selected: FormatChoices.bullets.firstIndex { $0 == bullet }) {
-                            bullet = $0.map { FormatChoices.bullets[$0] }
-                        } sample: { BulletSample(bullet: FormatChoices.bullets[$0]) }
-                    }
-                    .padding(16)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        GroupTitle("문단 번호 모양")
-                        Samples(count: FormatChoices.numberings.count, selected: numbering) { numbering = $0 } sample: {
-                            NumberingSample(levels: FormatChoices.numberings[$0])
-                        }
-                        GroupTitle("시작 번호 방식").padding(.top, 8)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Picker("", selection: $restart) {
-                                Text("앞 번호 목록에 이어").tag(0)
-                                Text("이전 번호 목록에 이어").tag(1)
-                                Text("새 번호 목록 시작").tag(2)
-                            }
-                            .pickerStyle(.radioGroup)
-                            .labelsHidden()
-                            LabeledField("1수준 시작 번호") { SpinField(value: $start, unit: "", range: 1...65535) }
-                                .padding(.leading, 20)
-                                .disabled(restart != 2)
-                        }
-                        .padding(.leading, 12)
-                        .disabled(!inBody || numbering == nil)
-                    }
-                    .padding(16)
-                }
-            }
-            .frame(width: 420, height: 470)
-        } confirm: {
-            var change = ParaStyle()
-            switch (tab, bullet, numbering) {
-            case ("글머리표", let bullet?, _):
-                (change.head, change.bullet) = ("Bullet", bullet)
-            case ("문단 번호", _, let numbering?):
-                (change.head, change.numbering) = ("Number", numbering)
-                if inBody, restart != (original.restart ?? 0) || (restart == 2 && Int(start) != original.startNumber) {
-                    change.restart = restart
-                    change.startNumber = restart == 2 ? Int(start) : nil
-                }
-            default:
-                if original.head == "Bullet" || original.head == "Number" { change.head = "None" }
-            }
-            let same = change.head == original.head && change.bullet == (change.head == "Bullet" ? original.bullet : nil)
-                && change.numbering == (change.head == "Number" ? original.numbering : nil) && change.restart == nil
-            if !same { viewer.applyParaShape(change) }
-            dismiss()
-        }
-    }
-}
-
-/// The kinds to pick from in a grid of four, after the box for none.
-private struct Samples<Sample: View>: View {
-    let count: Int
-    let selected: Int?
-    let pick: (Int?) -> Void
-    @ViewBuilder let sample: (Int) -> Sample
-
-    var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(84), spacing: 4), count: 4), alignment: .leading, spacing: 4) {
-            cell(nil) {
-                ZStack {
-                    Rectangle().strokeBorder(Color.primary.opacity(0.7), lineWidth: 1)
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: 40))
-                        path.addLine(to: CGPoint(x: 40, y: 0))
-                    }
-                    .stroke(Color.red.opacity(0.8), lineWidth: 1)
-                }
-                .frame(width: 40, height: 40)
-            }
-            ForEach(0..<count, id: \.self) { index in cell(index) { sample(index) } }
-        }
-        .padding(8)
-        .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
-    }
-
-    private func cell(_ index: Int?, @ViewBuilder content: () -> some View) -> some View {
-        Button { pick(index) } label: {
-            content().frame(width: 84, height: 66)
-                .background(selected == index ? Color(nsColor: .unemphasizedSelectedContentBackgroundColor) : .clear)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Two lines headed by a 글머리표.
-private struct BulletSample: View {
-    let bullet: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(0..<2, id: \.self) { _ in
-                HStack(spacing: 6) { Text(bullet).font(.system(size: 11)).frame(width: 14); SampleLines(count: 2) }
-            }
-        }
-    }
-}
-
-/// Four levels of a 문단 번호 kind.
-private struct NumberingSample: View {
-    let levels: [String]
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(levels, id: \.self) { level in
-                HStack(spacing: 4) {
-                    Text(level).font(.system(size: 9)).lineLimit(1).fixedSize()
-                    Rectangle().fill(Color.primary.opacity(0.6)).frame(height: 1)
-                }
-            }
-        }
-        .frame(width: 68)
-    }
-}
-
-/// Text lines, drawn as rules.
-private struct SampleLines: View {
-    let count: Int
-    var body: some View {
-        VStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { _ in Rectangle().fill(Color.primary.opacity(0.6)).frame(width: 36, height: 1) }
-        }
-    }
-}
-
 #Preview {
-    CharShapeSheet(style: CharStyle(), languages: [], viewer: Viewer())
+    CharShapeSheet(style: CharStyle(), languages: []) { _ in }
 }

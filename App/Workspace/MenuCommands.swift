@@ -107,8 +107,8 @@ struct MenuItems {
                     viewer.insertingSymbols = true
                 },
                 nil,
-                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.editingCharShape = true },
-                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.editingParaShape = true },
+                Choice(title: "글자 모양…", symbol: Icon.charShape, key: "l", modifiers: [.command, .option]) { viewer.revealText(layout: 0) },
+                Choice(title: "문단 모양…", symbol: Icon.paraShape, key: "t", modifiers: [.command, .option]) { viewer.revealText(layout: 1) },
             ]
         }
         if let link, context.object == nil {
@@ -153,10 +153,9 @@ struct MenuItems {
             items += [
                 nil,
                 Choice(title: "표/셀 속성…", symbol: Icon.objectProps, key: "p", modifiers: []) { viewer.showObjectProperties() },
-                Choice(title: "셀 테두리/배경", symbol: Icon.cellBorder, enabled: !context.locked, submenu: [
-                    Choice(title: "각 셀마다 적용…", key: "l", modifiers: []) { viewer.showCellBorder(one: false) },
-                    Choice(title: "하나의 셀처럼 적용…") { viewer.showCellBorder(one: true) },
-                ]),
+                Choice(title: "셀 테두리/배경…", symbol: Icon.cellBorder, key: "l", modifiers: [], enabled: !context.locked) {
+                    viewer.reveal(.format, tab: "셀")
+                },
                 Choice(title: "셀 높이를 같게", key: "h", modifiers: [], enabled: block) {
                     viewer.editCells { .equalizeCells($0, height: true) }
                 },
@@ -240,7 +239,7 @@ struct MenuItems {
         .disabled(viewer == nil || context.locked)
     }
     @ViewBuilder var print: some View {
-        item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
+        item("편집 용지…", Icon.pageSetup) { viewer?.reveal(.document) }
             .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!)), modifiers: [])
             .disabled(viewer == nil || context.locked)
         item("프린트…", Icon.print) { send(#selector(DocumentCanvas.printDocument(_:))) }
@@ -354,7 +353,7 @@ struct MenuItems {
                     item("미주", Icon.endnote) { viewer?.insertNote(endnote: true) }
                 }
                 .disabled(!context.inBody)
-                item("각주/미주 모양…", Icon.noteShape) { viewer?.showNoteShapes() }
+                item("각주/미주 모양…", Icon.noteShape) { viewer?.reveal(.document, tab: "구역") }
                     .disabled(context.locked)
             } label: { Label("주석", systemImage: Icon.footnote) }
                 .disabled(viewer == nil)
@@ -410,10 +409,10 @@ struct MenuItems {
     @ViewBuilder var format: some View {
         let text = document?.format?.text
         Group {
-            item("글자 모양…", Icon.charShape) { viewer?.editingCharShape = true }.keyboardShortcut("l", modifiers: [.command, .option])
-            item("문단 모양…", Icon.paraShape) { viewer?.editingParaShape = true }.keyboardShortcut("t", modifiers: [.command, .option])
+            item("글자 모양…", Icon.charShape) { viewer?.revealText(layout: 0) }.keyboardShortcut("l", modifiers: [.command, .option])
+            item("문단 모양…", Icon.paraShape) { viewer?.revealText(layout: 1) }.keyboardShortcut("t", modifiers: [.command, .option])
             Divider()
-            item("문단 번호 모양…", "list.number") { viewer?.editingList = "문단 번호" }
+            item("문단 번호 모양…", "list.number") { viewer?.revealText(layout: 0) }
             if let editor {
                 let head = document?.format?.paragraph.head
                 toggle("문단 번호 적용/해제", head == "Number") { Self.toggleList(editor, head: head, bullet: false) }
@@ -474,8 +473,8 @@ struct MenuItems {
 
     @ViewBuilder var page: some View {
         Group {
-            item("편집 용지…", Icon.pageSetup) { viewer?.showPageSetup() }
-            item("쪽 테두리/배경…", Icon.pageBorder) { viewer?.showPageBorder() }
+            item("편집 용지…", Icon.pageSetup) { viewer?.reveal(.document) }
+            item("쪽 테두리/배경…", Icon.pageBorder) { viewer?.reveal(.document) }
         }
         .disabled(viewer == nil || context.locked)
         Divider()
@@ -502,10 +501,10 @@ struct MenuItems {
                 Button(title) { viewer?.setColumns(UInt16(index + 1)) }
             }
             Divider()
-            Button("단 설정…") { viewer?.showColumns() }
+            Button("단 설정…") { viewer?.reveal(.document, tab: "구역") }
         } label: { Label("단", systemImage: Icon.columns) }
         .disabled(viewer == nil || context.locked)
-        item("구역 설정…", Icon.section) { viewer?.showSectionSetup() }
+        item("구역 설정…", Icon.section) { viewer?.reveal(.document, tab: "구역") }
             .disabled(viewer == nil || context.locked)
     }
     private func headerItems(footer: Bool) -> some View {
@@ -521,11 +520,8 @@ struct MenuItems {
             .disabled(!context.inBody)
         item("표/셀 속성…", Icon.objectProps) { viewer?.showObjectProperties() }
             .disabled(!context.inTable)
-        Menu {
-            Button("각 셀마다 적용…") { viewer?.showCellBorder(one: false) }
-            Button("하나의 셀처럼 적용…") { viewer?.showCellBorder(one: true) }
-        } label: { Label("셀 테두리/배경", systemImage: Icon.cellBorder) }
-        .disabled(!context.inTable || context.locked)
+        item("셀 테두리/배경…", Icon.cellBorder) { viewer?.reveal(.format, tab: "셀") }
+            .disabled(!context.inTable || context.locked)
         Divider()
         Group {
             item("표 나누기", Icon.splitTable) { viewer?.editTable(.split) }

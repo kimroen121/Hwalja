@@ -35,12 +35,12 @@ struct TableTests {
         await document.settle()
         let drawn = try await document.cellBorder(corner.target)
         #expect(drawn.sides[0] == red && drawn.fill == cellBorder.fill && document.context.cellBlock)
-        let sheet = try #require(await viewer.tableSheet())
-        var tableProps = sheet.props
-        tableProps.tableBorder?.fill = PageFill(color: "#eeeeee", patternColor: "#000000", pattern: 0)
-        viewer.setObject(sheet.object, tableProps.changes(from: sheet.props))
+        // 표 배경 as the inspector's 표 sets it: the fill alone.
+        let table = try #require(viewer.arrangedObject)
+        let gray = PageFill(color: "#eeeeee", patternColor: "#000000", pattern: 0)
+        viewer.arrange(ObjectProps(tableBorder: CellBorder(fill: gray)))
         await document.settle()
-        #expect(try await document.objectProps(sheet.object).tableBorder?.fill == tableProps.tableBorder?.fill)
+        #expect(try await document.objectProps(table).tableBorder?.fill == gray)
         viewer.editCells { .mergeCells($0) }
         await document.settle()
         #expect(document.context.inTable && !document.context.cellBlock)
@@ -139,7 +139,7 @@ struct TableTests {
         #expect(document.context.cellBlock && document.presentation.highlight.count == 6)
         // P while typing 한글.
         await key("ㅔ", code: 35)
-        for _ in 0..<100 where viewer.objectSheet == nil { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(viewer.objectSheet?.cell != nil)
+        #expect(viewer.showsInspector && viewer.inspectorPane == .format
+                 && viewer.inspectorTabs[Inspector.tabs(document.context).joined(separator: " ")] == "표")
     }
 }

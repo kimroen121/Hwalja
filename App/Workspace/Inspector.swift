@@ -13,12 +13,17 @@ struct Inspector: View {
     /// The selected object's (or the caret's table's) properties, read again after every edit.
     @State private var props: ObjectProps?
     @AppStorage("keepsRatio") private var keepsRatio = true
-    /// The caret cell's size and 배경, read with `props`.
+    /// The caret cell's properties and its 테두리/배경, read with `props`.
     @State private var cell: CellProps?
-    @State private var cellFill: PageFill?
+    @State private var cellBorder: CellBorder?
     /// 셀's 테두리: the line and the sides it last went on.
     @State private var cellLine = BorderSide(line: 1, width: 1, color: "#000000")
     @State private var cellSides: [Int] = []
+    /// 대각선 over a block as one cell (하나의 셀처럼 적용).
+    @State private var diagonalOne = false
+    /// 표 테두리: the line and the sides it last went on.
+    @State private var tableLine = BorderSide(line: 1, width: 1, color: "#000000")
+    @State private var tableSides: [Int] = []
 
     init(document: HwpDocument, viewer: Viewer, tab: String? = nil) {
         (self.document, self.viewer, _chosen) = (document, viewer, State(initialValue: tab))
@@ -84,15 +89,15 @@ struct Inspector: View {
             if viewer.arrangedObject != nil, document.revision != shownRevision { shownRevision = document.revision }
         }
         .task(id: "\(shownRevision) " + Self.readKey(document, viewer)) {
-            var read: (cell: CellProps?, fill: PageFill?)?
+            var read: (cell: CellProps?, border: CellBorder?)?
             if let target = document.selection?.focus.target, target.cell != nil, document.object == nil {
-                read = (try? await document.cellProps(target), (try? await document.cellBorder(target))?.fill)
+                read = (try? await document.cellProps(target), try? await document.cellBorder(target))
             }
             let object = viewer.arrangedObject
             let objectProps = object == nil ? nil : try? await document.objectProps(object!)
             // A read overtaken by a newer one keeps what that one shows: cancelled, it reads nothing.
             guard !Task.isCancelled else { return }
-            if let read { (cell, cellFill) = read }
+            if let read { (cell, cellBorder) = read }
             props = objectProps
         }
     }
@@ -133,14 +138,7 @@ struct Inspector: View {
                 ChoiceField(Binding { kind } set: { viewer.arrange(ObjectProps(lineType: UInt32($0))) },
                             Swatches.lineKinds.indices.prefix(12).map { ($0, "") }, images: Array(Swatches.lineKinds.prefix(12)))
             } rows: {
-                HStack(spacing: 8) {
-                    ColorWell(hex: Binding { HexColor.hex(bgr: props?.borderColor ?? 0) } set: { viewer.arrange(ObjectProps(borderColor: HexColor.bgr($0))) },
-                              flexible: true)
-                        .frame(maxWidth: .infinity)
-                    NumberStepper(value: props?.borderWidth.map { (Double($0) / Units.perMillimeter * 100).rounded() / 100 }, unit: "mm",
-                                  range: 0...20, step: 0.1, wide: true) { viewer.arrange(ObjectProps(borderWidth: Units.units($0))) }
-                        .frame(maxWidth: .infinity)
-                }
+                lineWidth
             }
         }
     }
@@ -164,6 +162,8 @@ struct Inspector: View {
                 .flexibleButtons()
                 .disabled(Self.effect(props) == "RealPic" && (props?.brightness ?? 0) == 0 && (props?.contrast ?? 0) == 0)
         }
+        InspectorSection { Fold("자르기") { sides([\.cropLeft, \.cropRight, \.cropTop, \.cropBottom]) } }
+        InspectorSection { Fold("그림 여백") { sides([\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom]) } }
         captions
     }
     /// 글자 크기 and 글자 색 of the selected equation; its script in 수식 편집기.
@@ -187,14 +187,150 @@ struct Inspector: View {
         change(&new)
         viewer.setObject(object, new)
     }
-    /// 글자 넣기 of a shape that can hold text.
-    private var shape: some View {
+    /// A drawing object as Pages's 스타일: 채우기, 선 (with 화살표 for a 직선, 호 테두리 and 모서리
+    /// 곡률 where they apply), 그림자, then 글상자.
+    @ViewBuilder private var shape: some View {
+        InspectorSection {
+            OpeningRows(title: "채우기", open: props?.fillType == "solid") {
+                Picker("채우기", selection: Binding { props?.fillType == "solid" ? "solid" : "none" } set: { kind in
+                    var change = ObjectProps(fillType: kind)
+                    if kind == "solid", props?.fillBgColor == nil { change.fillBgColor = 0xffffff }
+                    viewer.arrange(change)
+                }) { Text("없음").tag("none"); Text("색").tag("solid") }
+                .labelsHidden()
+                .fixedSize()
+            } rows: {
+                LabeledContent("면 색") { ColorWell(hex: color(\.fillBgColor, "#ffffff")) }
+                LabeledContent("무늬") {
+                    HStack(spacing: 8) {
+                        ChoiceField(Binding { max(0, Int(props?.fillPatType ?? 0)) } set: { set(\.fillPatType, Int32($0)) },
+                                    Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns)
+                        ColorWell(hex: color(\.fillPatColor))
+                    }
+                }
+                LabeledContent("투명도") {
+                    NumberStepper(value: props?.fillAlpha.map { (Double($0) * 100 / 255).rounded() }, unit: "%", range: 0...100) {
+                        set(\.fillAlpha, UInt32(($0 * 255 / 100).rounded()))
+                    }
+                }
+            }
+        }
+        InspectorSection {
+            OpeningRows(title: "선", open: (props?.lineType ?? 0) != 0) {
+                ChoiceField(index(\.lineType), Swatches.lineKinds.indices.prefix(12).map { ($0, "") }, images: Array(Swatches.lineKinds.prefix(12)))
+            } rows: {
+                lineWidth
+                LabeledContent("끝 모양") { ChoiceField(index(\.lineEndShape), Swatches.lineEnds.indices.map { ($0, "") }, images: Swatches.lineEnds) }
+                if document.object?.ends != nil {
+                    // 화살표 over its 크기 at each end, as Pages's 끝점.
+                    HStack(alignment: .top, spacing: 8) {
+                        captioned("시작") {
+                            VStack(spacing: 8) {
+                                arrow(\.arrowStart, Swatches.arrowStarts).help("시작 화살표")
+                                arrow(\.arrowStartSize, Swatches.arrowStartSizes).help("시작 크기")
+                            }
+                        }
+                        captioned("끝") {
+                            VStack(spacing: 8) {
+                                arrow(\.arrowEnd, Swatches.arrowEnds).help("끝 화살표")
+                                arrow(\.arrowEndSize, Swatches.arrowEndSizes).help("끝 크기")
+                            }
+                        }
+                    }
+                }
+            }
+            if props?.arcType != nil {
+                LabeledContent("호 테두리") {
+                    Picker("호 테두리", selection: Binding { props?.arcType ?? 0 } set: { set(\.arcType, $0) }) {
+                        Text("호").tag(UInt8(0)); Text("부채꼴").tag(UInt8(1)); Text("활 모양").tag(UInt8(2))
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
+            if props?.roundRate != nil {
+                LabeledContent("모서리 곡률") {
+                    NumberStepper(value: props?.roundRate.map(Double.init), unit: "%", range: 0...50, step: 5) { set(\.roundRate, UInt32($0)) }
+                }
+            }
+        }
+        InspectorSection {
+            OpeningRows(title: "그림자", open: (props?.shadowType ?? 0) != 0) {
+                Picker("그림자", selection: Binding { props?.shadowType ?? 0 } set: { type in
+                    let kind = Self.shadows.first { $0.type == type }!
+                    var change = ObjectProps(shadowType: type, shadowOffsetX: kind.x * 567, shadowOffsetY: kind.y * 567)
+                    if type != 0, props?.shadowColor == nil { change.shadowColor = 0xb2b2b2 }
+                    viewer.arrange(change)
+                }) {
+                    ForEach(Self.shadows, id: \.type) { Text($0.title).tag($0.type) }
+                }
+                .labelsHidden()
+                .fixedSize()
+            } rows: {
+                LabeledContent("색") { ColorWell(hex: color(\.shadowColor, "#b2b2b2")) }
+                HStack(spacing: 8) {
+                    captioned("가로 이동") { length(props?.shadowOffsetX, range: -100...100) { set(\.shadowOffsetX, Units.units($0)) } }
+                    // Up is positive, as 한/글 shows it.
+                    captioned("세로 이동") {
+                        length(props?.shadowOffsetY.map { -$0 }, range: -100...100) { set(\.shadowOffsetY, Units.units(-$0)) }
+                    }
+                }
+                LabeledContent("투명도") {
+                    NumberStepper(value: props?.shadowAlpha.map { (Double($0) / 2.55).rounded() }, unit: "%", range: 0...100) {
+                        set(\.shadowAlpha, UInt32(($0 * 2.55).rounded()))
+                    }
+                }
+            }
+        }
+        textBox
+    }
+    /// 글자 넣기, and the 글상자's 세로 정렬, 글자 방향 and 안쪽 여백.
+    private var textBox: some View {
         InspectorSection {
             let textBox = document.object?.textBox
             Toggle("글자 넣기", isOn: Binding(get: { textBox == true }, set: { attach in viewer.change { .setTextBox($0, attach: attach) } }))
                 .checkbox()
                 .disabled(textBox == nil)
+            if textBox == true {
+                LabeledContent("세로 정렬") {
+                    Segments(["Top", "Center", "Bottom"], selection: Binding { props?.tbVerticalAlign ?? "Top" } set: { set(\.tbVerticalAlign, $0) }) {
+                        let (title, symbol) = ["Top": ("위", "arrow.up.to.line"), "Center": ("가운데", "arrow.up.and.down"),
+                                               "Bottom": ("아래", "arrow.down.to.line")][$0]!
+                        return .init(symbol: symbol, help: title)
+                    }
+                    .fixedSize()
+                }
+                if props?.tbTextDirection != nil {
+                    LabeledContent("글자 방향") {
+                        Picker("글자 방향", selection: Binding { props?.tbTextDirection ?? 0 } set: { set(\.tbTextDirection, $0) }) {
+                            Text("가로").tag(UInt8(0)); Text("영문 눕힘").tag(UInt8(1)); Text("영문 세움").tag(UInt8(2))
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                Fold("안쪽 여백", headline: false) { sides([\.tbMarginLeft, \.tbMarginRight, \.tbMarginTop, \.tbMarginBottom]) }
+            }
         }
+    }
+    /// 그림자 종류 in 한/글's order, with where each puts the shadow (in 2 mm steps).
+    private static let shadows: [(type: UInt32, title: String, x: Int32, y: Int32)] = [
+        (0, "없음", 0, 0), (9, "작게", -1, -1), (10, "크게", -1, -1),
+        (1, "왼쪽 위", -1, -1), (3, "왼쪽 아래", -1, 1), (2, "오른쪽 위", 1, -1), (4, "오른쪽 아래", 1, 1),
+        (5, "왼쪽 뒤", -1, 1), (7, "왼쪽 앞", -1, 1), (6, "오른쪽 뒤", 1, 1), (8, "오른쪽 앞", 1, 1),
+    ]
+    /// The 선's color and width side by side.
+    private var lineWidth: some View {
+        HStack(spacing: 8) {
+            ColorWell(hex: color(\.borderColor), flexible: true)
+                .frame(maxWidth: .infinity)
+            NumberStepper(value: props?.borderWidth.map { (Double($0) / Units.perMillimeter * 100).rounded() / 100 }, unit: "mm",
+                          range: 0...20, step: 0.1, wide: true) { set(\.borderWidth, Units.units($0)) }
+                .frame(maxWidth: .infinity)
+        }
+    }
+    private func arrow(_ key: WritableKeyPath<ObjectProps, UInt32?>, _ images: [NSImage]) -> some View {
+        ChoiceField(index(key), images.indices.map { ($0, "") }, images: images, flexible: true)
     }
     private var chart: some View {
         InspectorSection { Tiles { command("데이터 편집…", Icon.chartData) { viewer.editChartData() } } }
@@ -211,6 +347,8 @@ struct Inspector: View {
                 .flexibleButtons()
                 .disabled(inLine)
             Toggle("글자처럼 취급", isOn: Binding(get: { inLine }, set: { viewer.arrange(ObjectProps(treatAsChar: $0)) })).checkbox()
+            // How far the text keeps off, as Pages's 텍스트 감싸기 간격.
+            Fold("바깥 여백", headline: false) { sides([\.outerMarginLeft, \.outerMarginRight, \.outerMarginTop, \.outerMarginBottom]) }
         }
         .disabled(props == nil)
         InspectorSection {
@@ -225,17 +363,37 @@ struct Inspector: View {
                 captioned("너비") { length(props?.width) { resize(width: $0) } }
                 captioned("높이") { length(props?.height) { resize(height: $0) } }
             }
-            Toggle("비율 유지", isOn: $keepsRatio).checkbox()
+            HStack(spacing: 16) {
+                Toggle("비율 유지", isOn: $keepsRatio).checkbox()
+                if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect) }
+            }
             Button("원래 크기") { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) }
                 .flexibleButtons()
                 .disabled(props?.originalWidth == nil)
         }
+        // Each offset from where 기준 and its side put the object.
         InspectorSection("위치") {
-            HStack(spacing: 8) {
-                captioned("X") { length(props?.horzOffset) { viewer.arrange(ObjectProps(horzOffset: Units.units($0))) } }
-                captioned("Y") { length(props?.vertOffset) { viewer.arrange(ObjectProps(vertOffset: Units.units($0))) } }
+            Group {
+                LabeledContent("가로") {
+                    HStack(spacing: 4) {
+                        choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
+                        choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
+                    }
+                }
+                LabeledContent("세로") {
+                    HStack(spacing: 4) {
+                        choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
+                        choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
+                    }
+                }
+                HStack(spacing: 8) {
+                    captioned("X") { length(props?.horzOffset) { set(\.horzOffset, Units.units($0)) } }
+                    captioned("Y") { length(props?.vertOffset) { set(\.vertOffset, Units.units($0)) } }
+                }
+                flag("쪽 영역 안으로 제한", \.restrictInPage)
+                flag("서로 겹침 허용", \.allowOverlap)
             }
-            .disabled(inLine)
+            .disabled(inLine || props == nil)
         }
         InspectorSection("회전") {
             // 한/글 keeps −360…360; shown as the dial reads it.
@@ -261,12 +419,24 @@ struct Inspector: View {
                 .disabled(table)
         }
         InspectorSection { Tiles { command("개체 선택", Icon.selectObjects) { viewer.draw("select") } } }
-        properties("개체 속성…")
     }
-    /// 캡션 of a picture.
+    /// 캡션 of a picture: where it goes, then its size and gap while there is one.
     private var captions: some View {
-        InspectorSection("캡션") { captionPicker.flexibleButtons() }
-            .disabled(!document.context.canCaption)
+        InspectorSection("캡션") {
+            captionPicker.flexibleButtons()
+            captionRows
+        }
+        .disabled(!document.context.canCaption)
+    }
+    /// 크기 (of a caption beside the object), 개체와의 간격, and for a picture 여백 부분까지 너비 확대.
+    @ViewBuilder private var captionRows: some View {
+        if (props?.caption ?? "None") != "None" {
+            HStack(spacing: 8) {
+                captioned("크기") { length(props?.captionWidth, range: 0...1000) { set(\.captionWidth, Units.units($0)) } }
+                captioned("개체와의 간격") { length(props?.captionSpacing, range: 0...1000) { set(\.captionSpacing, Units.units($0)) } }
+            }
+            if props?.captionIncludeMargin != nil { flag("여백 부분까지 너비 확대", \.captionIncludeMargin) }
+        }
     }
     /// 캡션: none, or where it goes.
     private var captionPicker: some View {
@@ -295,8 +465,32 @@ struct Inspector: View {
         }
         .frame(maxWidth: .infinity)
     }
-    private func length<T: BinaryInteger>(_ units: T?, apply: @escaping (Double) -> Void) -> some View {
-        NumberStepper(value: units.map { Units.millimeters($0) }, unit: "mm", range: -1000...1000, wide: true, apply: apply)
+    private func length<T: BinaryInteger>(_ units: T?, range: ClosedRange<Double> = -1000...1000,
+                                          apply: @escaping (Double) -> Void) -> some View {
+        NumberStepper(value: units.map { Units.millimeters($0) }, unit: "mm", range: range, wide: true, apply: apply)
+    }
+    /// Four lengths of the object, keyed 왼쪽, 오른쪽, 위쪽, 아래쪽.
+    private func sides(_ keys: [WritableKeyPath<ObjectProps, Int32?>]) -> some View {
+        Sides { i in length(props?[keyPath: keys[i]], range: 0...1000) { set(keys[i], Units.units($0)) } }
+    }
+    /// One property of the selected object, or the table holding the caret, changed.
+    private func set<T>(_ key: WritableKeyPath<ObjectProps, T?>, _ value: T) {
+        var change = ObjectProps()
+        change[keyPath: key] = value
+        viewer.arrange(change)
+    }
+    private func flag(_ title: String, _ key: WritableKeyPath<ObjectProps, Bool?>) -> some View {
+        Toggle(title, isOn: Binding { props?[keyPath: key] == true } set: { set(key, $0) }).checkbox()
+    }
+    private func index(_ key: WritableKeyPath<ObjectProps, UInt32?>) -> Binding<Int> {
+        Binding { Int(props?[keyPath: key] ?? 0) } set: { set(key, UInt32($0)) }
+    }
+    private func color(_ key: WritableKeyPath<ObjectProps, UInt32?>, _ fallback: String = "#000000") -> Binding<String> {
+        Binding { props?[keyPath: key].map { HexColor.hex(bgr: $0) } ?? fallback } set: { set(key, HexColor.bgr($0)) }
+    }
+    private func choice(_ key: WritableKeyPath<ObjectProps, String?>, _ fallback: String,
+                        _ options: [(value: String, title: String)]) -> some View {
+        ChoiceField(Binding { props?[keyPath: key] ?? fallback } set: { set(key, $0) }, options)
     }
     /// A new width or height, the other kept in proportion while 비율 유지 is on.
     private func resize(width: Double? = nil, height: Double? = nil) {
@@ -311,16 +505,13 @@ struct Inspector: View {
         }
         viewer.arrange(change)
     }
-    /// The object's own dialog, under the last group.
-    private func properties(_ title: String) -> some View {
-        DialogButtons { Button(title) { viewer.showObjectProperties() } }.padding(16)
-    }
 
     /// The table as Pages's 표: its options, rows and columns, 윤곽, and the caret cell's size.
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
         InspectorSection("표 옵션") {
             LabeledContent("캡션") { captionPicker }
                 .disabled(!context.canCaption)
+            captionRows
             Toggle("제목 줄 자동 반복", isOn: Binding(get: { props?.repeatHeader == true }, set: { viewer.arrange(ObjectProps(repeatHeader: $0)) }))
                 .checkbox()
             LabeledContent("쪽 경계에서") {
@@ -343,27 +534,39 @@ struct Inspector: View {
                             ("칸 지우기", "minus", .deleteColumn)])
             }
         }
-        InspectorSection {
-            let side = (props?.tableBorder?.sides.first ?? nil) ?? BorderSide(line: 0, width: 1, color: "#000000")
-            let line = Binding(get: { side }, set: { new in
-                viewer.arrange(ObjectProps(tableBorder: CellBorder(sides: [new, new, new, new, nil, nil])))
-            })
-            // The kind beside the title, its color and width under it.
-            LabeledContent { LineRow.kind(line) } label: { Text("표 윤곽").font(.headline.weight(.semibold)) }
-            LineRow(line: line)
+        Group {
+            InspectorSection("표 테두리") {
+                HStack(alignment: .top, spacing: 8) {
+                    SideButtons(rows: [[("모두", [0, 1, 2, 3]), ("위쪽", [2]), ("아래쪽", [3])], [("왼쪽", [0]), ("오른쪽", [1])]],
+                                chosen: tableSides) { tableSides = $0; applyTableLine() }
+                    LineRow(line: Binding(get: { tableLine }, set: { tableLine = $0; applyTableLine() }), stacked: true)
+                }
+                // Without it the table's own sides do not show.
+                LabeledContent("셀 간격") {
+                    NumberStepper(value: props?.cellSpacing.map { Units.millimeters($0) }, unit: "mm", range: 0...100) {
+                        set(\.cellSpacing, Units.units($0))
+                    }
+                }
+            }
+            InspectorSection {
+                FillRows(title: "표 배경", fill: props?.tableBorder?.fill, extended: true) {
+                    viewer.arrange(ObjectProps(tableBorder: CellBorder(fill: $0)))
+                }
+            }
+            InspectorSection { Fold("모든 셀의 안 여백") { sides([\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom]) } }
         }
         .disabled(props == nil)
         InspectorSection("줄 및 칸 크기") {
             LabeledContent("높이") {
                 HStack(spacing: 8) {
                     NumberStepper(value: cell?.height.map { Units.millimeters($0) }, unit: "mm", range: 1...1000) { setCell(CellProps(height: Units.units($0))) }
-                    Button("같게") { viewer.editCells { .equalizeCells($0, height: true) } }.disabled(!context.cellBlock)
+                    Button("같게") { viewer.editCells { .equalizeCells($0, height: true) } }.help("셀 높이를 같게").disabled(!context.cellBlock)
                 }
             }
             LabeledContent("너비") {
                 HStack(spacing: 8) {
                     NumberStepper(value: cell?.width.map { Units.millimeters($0) }, unit: "mm", range: 1...1000) { setCell(CellProps(width: Units.units($0))) }
-                    Button("같게") { viewer.editCells { .equalizeCells($0, height: false) } }.disabled(!context.cellBlock)
+                    Button("같게") { viewer.editCells { .equalizeCells($0, height: false) } }.help("셀 너비를 같게").disabled(!context.cellBlock)
                 }
             }
         }
@@ -382,6 +585,13 @@ struct Inspector: View {
         }
         .fixedSize()
     }
+    /// Puts the 표 테두리's line on the sides chosen.
+    private func applyTableLine() {
+        guard !tableSides.isEmpty else { return }
+        var border = CellBorder()
+        for side in tableSides { border.sides[side] = tableLine }
+        viewer.arrange(ObjectProps(tableBorder: border))
+    }
     private func setCell(_ change: CellProps) {
         guard let target = document.selection?.focus.target, target.cell != nil else { return }
         viewer.setCell(target, change)
@@ -389,48 +599,46 @@ struct Inspector: View {
     /// The cells as Pages's 셀: 채우기, 테두리 by the sides it goes on, then split, merged and 계산식.
     @ViewBuilder private func cells(_ context: EditingContext) -> some View {
         InspectorSection {
-            LabeledContent("채우기") {
-                ColorWell(hex: Binding(get: { cellFill?.color ?? "none" }, set: { color in
-                    let fill = PageFill(color: color, patternColor: cellFill?.patternColor ?? "#000000", pattern: cellFill?.pattern ?? 0)
-                    viewer.setCellBorder(CellBorder(fill: fill), all: false, one: false)
-                }), none: "none")
+            FillRows(title: "채우기", fill: cellBorder?.fill, extended: true) {
+                viewer.setCellBorder(CellBorder(fill: $0), all: false, one: false)
             }
         }
         InspectorSection("테두리") {
             HStack(alignment: .top, spacing: 8) {
                 // The sides a line goes on, as Pages's: 모두, 안쪽, 바깥쪽; 왼쪽, 세로 안쪽, 오른쪽;
                 // 위쪽, 가로 안쪽, 아래쪽.
-                Grid(horizontalSpacing: 0, verticalSpacing: 0) {
-                    ForEach([[("모두", [0, 1, 2, 3, 4, 5]), ("안쪽", [4, 5]), ("바깥쪽", [0, 1, 2, 3])],
-                             [("왼쪽", [0]), ("세로 안쪽", [5]), ("오른쪽", [1])],
-                             [("위쪽", [2]), ("가로 안쪽", [4]), ("아래쪽", [3])]], id: \.first!.0) { row in
-                        GridRow {
-                            ForEach(row, id: \.0) { title, sides in
-                                Button { cellSides = sides; applyCellLine() } label: { SideIcon(sides: sides) }
-                                    .buttonStyle(.borderless)
-                                    .background(cellSides == sides ? Color.secondary.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                                    .help(title)
-                                    .accessibilityLabel(title)
-                            }
-                        }
-                    }
-                }
-                // In one box, as Pages's.
-                .padding(4)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
-                .fixedSize()
+                SideButtons(rows: [[("모두", [0, 1, 2, 3, 4, 5]), ("안쪽", [4, 5]), ("바깥쪽", [0, 1, 2, 3])],
+                                   [("왼쪽", [0]), ("세로 안쪽", [5]), ("오른쪽", [1])],
+                                   [("위쪽", [2]), ("가로 안쪽", [4]), ("아래쪽", [3])]],
+                            chosen: cellSides) { cellSides = $0; applyCellLine() }
                 LineRow(line: Binding(get: { cellLine }, set: { cellLine = $0; applyCellLine() }), stacked: true)
             }
         }
+        diagonals(context)
+        InspectorSection("속성") {
+            LabeledContent("세로 정렬") {
+                Segments([UInt8(0), 1, 2], selection: Binding { cell?.verticalAlign ?? 0 } set: { cellFlag(\.verticalAlign, $0) }) {
+                    let (title, symbol) = [("위", "arrow.up.to.line"), ("가운데", "arrow.up.and.down"), ("아래", "arrow.down.to.line")][Int($0)]
+                    return .init(symbol: symbol, help: title)
+                }
+                .fixedSize()
+            }
+            Toggle("제목 셀", isOn: Binding { cell?.isHeader == true } set: { cellFlag(\.isHeader, $0) }).checkbox()
+            Toggle("셀 보호", isOn: Binding { cell?.cellProtect == true } set: { cellFlag(\.cellProtect, $0) }).checkbox()
+        }
+        InspectorSection {
+            Fold("안 여백") {
+                Toggle("안 여백 지정", isOn: Binding { cell?.applyInnerMargin == true } set: { cellFlag(\.applyInnerMargin, $0) }).checkbox()
+                Sides { i in cellLength([\.paddingLeft, \.paddingRight, \.paddingTop, \.paddingBottom][i]) }
+                    .disabled(cell?.applyInnerMargin != true)
+            }
+        }
+        // 셀 너비·높이를 같게 are 표's 줄 및 칸 크기 같게.
         InspectorSection("셀") {
             Tiles {
                 command("셀 나누기…", Icon.splitCells) { viewer.splittingCells = true }
-                Group {
-                    command("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
-                    command("셀 너비를 같게", Icon.equalWidth) { viewer.editCells { .equalizeCells($0, height: false) } }
-                    command("셀 높이를 같게", Icon.equalHeight) { viewer.editCells { .equalizeCells($0, height: true) } }
-                }
-                .disabled(!context.cellBlock)
+                command("셀 합치기", Icon.mergeCells) { viewer.editCells { .mergeCells($0) } }
+                    .disabled(!context.cellBlock)
             }
             TransparentLinesToggle(viewer: viewer)
         }
@@ -439,7 +647,60 @@ struct Inspector: View {
                 Choice(title: function.title, enabled: context.cellBlock) { viewer.editCells { .calculateBlock($0, function.function) } }
             } + [Choice(title: "계산식…", symbol: Icon.calculation, enabled: !context.cellBlock) { viewer.calculating = true }])
         }
-        DialogButtons { Button("셀 테두리/배경…") { viewer.showCellBorder(one: false) } }.padding(16)
+    }
+    /// 대각선 as the dialog's: ＼ and ／, or the 중심선 (not in a block taken as one cell), and their line.
+    private func diagonals(_ context: EditingContext) -> some View {
+        let diagonal = cellBorder?.diagonal ?? Diagonal(line: BorderSide(line: 1, width: 0, color: "#000000"), slash: false, backSlash: false, center: 0)
+        let one = diagonalOne && context.cellBlock
+        let marks: [(title: String, lines: [(CGFloat, CGFloat, CGFloat, CGFloat)], on: Bool, toggle: (inout Diagonal) -> Void)] = [
+            ("＼ 대각선", [(0, 0, 1, 1)], diagonal.backSlash, { $0.backSlash.toggle(); $0.center = 0 }),
+            ("／ 대각선", [(0, 1, 1, 0)], diagonal.slash, { $0.slash.toggle(); $0.center = 0 }),
+            ("가로 중심선", [(0, 0.5, 1, 0.5)], diagonal.center & 1 != 0, { $0.center ^= 1; ($0.slash, $0.backSlash) = (false, false) }),
+            ("세로 중심선", [(0.5, 0, 0.5, 1)], diagonal.center & 2 != 0, { $0.center ^= 2; ($0.slash, $0.backSlash) = (false, false) }),
+        ]
+        let apply = { (new: Diagonal) in viewer.setCellBorder(CellBorder(diagonal: new), all: false, one: one) }
+        return InspectorSection("대각선") {
+            HStack(alignment: .top, spacing: 8) {
+                // Two to a row, as 테두리's sides.
+                Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+                    ForEach([0, 2], id: \.self) { row in
+                        GridRow {
+                            ForEach(row..<row + 2, id: \.self) { i in
+                                Button {
+                                    var new = diagonal
+                                    marks[i].toggle(&new)
+                                    if new.line.line == 0 { new.line.line = 1 }
+                                    apply(new)
+                                } label: { DiagonalIcon(lines: marks[i].lines) }
+                                    .buttonStyle(.borderless)
+                                    .background(marks[i].on ? Color.secondary.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                                    .help(marks[i].title)
+                                    .accessibilityLabel(marks[i].title)
+                                    // rhwp keeps no 중심선 in a cell zone.
+                                    .disabled(i > 1 && one)
+                            }
+                        }
+                    }
+                }
+                .padding(4)
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+                .fixedSize()
+                LineRow(line: Binding(get: { diagonal.line }, set: { line in
+                    var new = diagonal
+                    new.line = line
+                    apply(new)
+                }), stacked: true)
+            }
+            if context.cellBlock { Toggle("하나의 셀처럼 적용", isOn: $diagonalOne).checkbox() }
+        }
+    }
+    private func cellFlag<T>(_ key: WritableKeyPath<CellProps, T?>, _ value: T) {
+        var change = CellProps()
+        change[keyPath: key] = value
+        setCell(change)
+    }
+    private func cellLength(_ key: WritableKeyPath<CellProps, Int32?>) -> some View {
+        length(cell?[keyPath: key], range: 0...1000) { cellFlag(key, Units.units($0)) }
     }
     /// Puts the 테두리's line on the sides chosen, in the selected cells.
     private func applyCellLine() {
@@ -460,7 +721,7 @@ struct Inspector: View {
             Tiles {
                 command("이전 머리말/꼬리말", Icon.previous) { viewer.goTo(.previousHeaderFooter) }
                 command("다음 머리말/꼬리말", Icon.next) { viewer.goTo(.nextHeaderFooter) }
-                command("편집 용지…", Icon.pageSetup) { viewer.showPageSetup() }
+                command("편집 용지", Icon.pageSetup) { viewer.reveal(.document) }
                 command("지우기", Icon.eraseCodes) { document.deleteHeaderFooter(viewer.undoManager) }
             }
         } footer: {
@@ -470,7 +731,7 @@ struct Inspector: View {
     @ViewBuilder private func annotations(_ context: EditingContext) -> some View {
         InspectorSection {
             Tiles {
-                command("각주/미주 모양…", Icon.noteShape) { viewer.showNoteShapes() }
+                command("각주/미주 모양", Icon.noteShape) { viewer.reveal(.document, tab: "구역") }
                 command("주석 지우기", Icon.eraseCodes) { document.deleteNote(viewer.undoManager) }
                 command("이전 주석으로", Icon.previous) { viewer.goTo(.previousNote) }
                 command("다음 주석으로", Icon.next) { viewer.goTo(.nextNote) }
@@ -802,17 +1063,17 @@ private struct TextTab: View {
 
     @ViewBuilder private var layoutPane: some View {
         InspectorSection {
-            DisclosureGroup {
+            Fold("여백") {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 4) { length(\.marginLeft); Text("왼쪽").font(.caption) }
                     VStack(spacing: 4) { length(\.marginRight); Text("오른쪽").font(.caption) }
                 }
                 .frame(maxWidth: .infinity)
-            } label: { Text("여백").font(.headline.weight(.semibold)) }
+            }
         }
         // 들여쓰기 (positive) and 내어쓰기 (negative) are one value of the paragraph.
         InspectorSection {
-            DisclosureGroup {
+            Fold("들여쓰기") {
                 let indent = paragraph?.indent ?? 0
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 4) {
@@ -829,7 +1090,7 @@ private struct TextTab: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-            } label: { Text("들여쓰기").font(.headline.weight(.semibold)) }
+            }
         }
         InspectorSection {
             BorderFillRows(style: paragraphBorderFill, fill: false)
@@ -967,6 +1228,43 @@ private struct OpeningRows<Choice: View, Rows: View>: View {
     }
 }
 
+/// Rows used less, folded under their name as Pages's 여백 and 들여쓰기: a group's title, or a
+/// row's name within a group.
+private struct Fold<Content: View>: View {
+    let title: String
+    var headline = true
+    @ViewBuilder let content: Content
+    init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content) {
+        (self.title, self.headline, self.content) = (title, headline, content())
+    }
+    var body: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) { content }
+        } label: { Text(title).font(headline ? .headline.weight(.semibold) : .body) }
+    }
+}
+
+/// Four lengths as 용지 여백's: 위쪽 and 아래쪽 over 왼쪽 and 오른쪽, each named under it.
+/// `field` takes them in HWP's order: 왼쪽, 오른쪽, 위쪽, 아래쪽.
+private struct Sides<Field: View>: View {
+    @ViewBuilder let field: (Int) -> Field
+    var body: some View {
+        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach([2, 0], id: \.self) { row in
+                GridRow {
+                    ForEach(row..<row + 2, id: \.self) { i in
+                        VStack(spacing: 3) {
+                            field(i)
+                            Text(["왼쪽", "오른쪽", "위쪽", "아래쪽"][i]).font(.caption)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// A number typed or stepped, with its unit; it applies on Return or a step.
 private struct NumberStepper: View {
     let value: Double?
@@ -1044,6 +1342,210 @@ private struct LineRow: View {
     }
 }
 
+/// The sides a line goes on, as Pages's: buttons in one box, the ones last chosen marked.
+private struct SideButtons: View {
+    let rows: [[(title: String, sides: [Int])]]
+    let chosen: [Int]
+    let pick: ([Int]) -> Void
+    var body: some View {
+        Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+            ForEach(rows.indices, id: \.self) { row in
+                GridRow {
+                    ForEach(rows[row], id: \.title) { title, sides in
+                        Button { pick(sides) } label: { SideIcon(sides: sides) }
+                            .buttonStyle(.borderless)
+                            .background(chosen == sides ? Color.secondary.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                            .help(title)
+                            .accessibilityLabel(title)
+                    }
+                }
+            }
+        }
+        // In one box, as Pages's.
+        .padding(4)
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+        .fixedSize()
+    }
+}
+
+/// A 대각선 or 중심선 button's picture: its lines across a cell.
+private struct DiagonalIcon: View {
+    let lines: [(CGFloat, CGFloat, CGFloat, CGFloat)]
+    var body: some View {
+        Canvas { context, size in
+            let box = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+            context.stroke(Path(box), with: .color(.secondary.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            for (x1, y1, x2, y2) in lines {
+                context.stroke(Path {
+                    $0.move(to: CGPoint(x: box.minX + x1 * box.width, y: box.minY + y1 * box.height))
+                    $0.addLine(to: CGPoint(x: box.minX + x2 * box.width, y: box.minY + y2 * box.height))
+                }, with: .color(.primary), lineWidth: 2)
+            }
+        }
+        .frame(width: 22, height: 22)
+        .padding(3)
+    }
+}
+
+/// 채우기 as Pages's: its kind beside the title, the kind's rows under it: 색 with 무늬, and for
+/// 셀·표 배경 a 그러데이션 or a 그림. A fill shown as none of them (a page's 그러데이션) stays
+/// until a kind is chosen.
+private struct FillRows: View {
+    let title: String
+    let fill: PageFill?
+    var extended = false
+    let apply: (PageFill) -> Void
+
+    /// 그림 채우기 유형, in the engine's order.
+    private static let modes = ["바둑판식으로-모두", "바둑판식으로-가로/위", "바둑판식으로-가로/아래", "바둑판식으로-세로/왼쪽",
+                                "바둑판식으로-세로/오른쪽", "크기에 맞추어", "가운데로", "가운데 위로", "가운데 아래로",
+                                "왼쪽 가운데로", "왼쪽 위로", "왼쪽 아래로", "오른쪽 가운데로", "오른쪽 위로", "오른쪽 아래로"]
+    /// 0 없음, 1 색, 2 그러데이션, 3 그림; -1 for none of them.
+    private var kind: Int { Self.kind(fill) }
+    static func kind(_ fill: PageFill?) -> Int {
+        guard let fill else { return -1 }
+        if fill.gradient != nil { return 2 }
+        if fill.image != nil { return 3 }
+        return fill.color == "none" && fill.pattern == 0 ? 0 : 1
+    }
+    private var base: PageFill { fill ?? PageFill(color: "none", patternColor: "#000000", pattern: 0) }
+
+    var body: some View {
+        OpeningRows(title: title, open: kind > 0) {
+            Picker(title, selection: Binding { kind } set: { choose($0) }) {
+                if kind < 0 { Text("").tag(-1) }
+                Text("없음").tag(0)
+                Text("색").tag(1)
+                if extended {
+                    Text("그러데이션").tag(2)
+                    Text("그림").tag(3)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+        } rows: {
+            switch kind {
+            case 1: colorRows
+            case 2: gradientRows
+            case 3: imageRows
+            default: EmptyView()
+            }
+        }
+    }
+    private func choose(_ kind: Int) {
+        var new = base
+        (new.gradient, new.image) = (nil, nil)
+        switch kind {
+        case 0: (new.color, new.pattern) = ("none", 0)
+        case 2: new.gradient = Gradient()
+        case 3: return pickImage()
+        default: if new.color == "none" { new.color = "#ffffff" }
+        }
+        apply(new)
+    }
+    private func change(_ edit: (inout PageFill) -> Void) {
+        var new = base
+        edit(&new)
+        if new != fill { apply(new) }
+    }
+    @ViewBuilder private var colorRows: some View {
+        LabeledContent("면 색") {
+            ColorWell(hex: Binding { base.color == "none" ? "#ffffff" : base.color } set: { color in change { $0.color = color } })
+        }
+        LabeledContent("무늬") {
+            HStack(spacing: 8) {
+                ChoiceField(Binding { Int(base.pattern) } set: { pattern in change { $0.pattern = UInt8(pattern) } },
+                            Swatches.patterns.indices.map { ($0, "") }, images: Swatches.patterns)
+                ColorWell(hex: Binding { base.patternColor } set: { color in change { $0.patternColor = color } })
+            }
+        }
+    }
+    @ViewBuilder private var gradientRows: some View {
+        let g = base.gradient ?? Gradient()
+        let set = { (edit: (inout Gradient) -> Void) in change { fill in
+            var new = g
+            edit(&new)
+            fill.gradient = new
+        } }
+        LabeledContent("모양") {
+            Picker("모양", selection: Binding { g.kind } set: { kind in set { $0.kind = kind } }) {
+                Text("줄무늬").tag(UInt8(1)); Text("원형").tag(UInt8(2)); Text("원뿔형").tag(UInt8(3)); Text("사각형").tag(UInt8(4))
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        HStack(spacing: 8) {
+            ForEach(0..<2) { i in
+                VStack(spacing: 3) {
+                    ColorWell(hex: Binding { g.colors[i] } set: { color in set { $0.colors[i] = color } }, flexible: true)
+                    Text(i == 0 ? "시작 색" : "끝 색").font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        LabeledContent("기울임") {
+            NumberStepper(value: Double(g.angle), unit: "°", range: 0...359) { angle in set { $0.angle = Int16(angle) } }
+        }
+        LabeledContent("가로 중심") {
+            NumberStepper(value: Double(g.centerX), unit: "%", range: 0...100) { x in set { $0.centerX = Int16(x) } }
+        }
+        LabeledContent("세로 중심") {
+            NumberStepper(value: Double(g.centerY), unit: "%", range: 0...100) { y in set { $0.centerY = Int16(y) } }
+        }
+        LabeledContent("번짐 정도") {
+            NumberStepper(value: Double(g.blur), unit: "", range: 0...255) { blur in set { $0.blur = UInt8(blur) } }
+        }
+        LabeledContent("번짐 중심") {
+            NumberStepper(value: Double(g.stepCenter), unit: "", range: 0...100) { center in set { $0.stepCenter = UInt8(center) } }
+        }
+    }
+    @ViewBuilder private var imageRows: some View {
+        let i = base.image ?? ImageBrush()
+        let set = { (edit: (inout ImageBrush) -> Void) in change { fill in
+            var new = i
+            edit(&new)
+            fill.image = new
+        } }
+        Button("그림 선택…") { pickImage() }.flexibleButtons()
+        LabeledContent("채우기 유형") {
+            Picker("채우기 유형", selection: Binding { Int(i.mode) } set: { mode in set { $0.mode = UInt8(mode) } }) {
+                ForEach(Self.modes.indices, id: \.self) { Text(Self.modes[$0]).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        LabeledContent("그림 효과") {
+            Picker("그림 효과", selection: Binding { i.effect } set: { effect in set { $0.effect = effect } }) {
+                Text("원래 그림").tag(UInt8(0)); Text("회색조").tag(UInt8(1)); Text("흑백").tag(UInt8(2))
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        LabeledContent("밝기") {
+            NumberStepper(value: Double(i.brightness), unit: "%", range: -100...100) { value in set { $0.brightness = Int8(value) } }
+        }
+        LabeledContent("대비") {
+            NumberStepper(value: Double(i.contrast), unit: "%", range: -100...100) { value in set { $0.contrast = Int8(value) } }
+        }
+        Toggle("워터마크 효과", isOn: Binding { i.brightness == 70 && i.contrast == -50 } set: { on in
+            set { ($0.brightness, $0.contrast) = on ? (70, -50) : (0, 0) }
+        })
+        .checkbox()
+    }
+    /// 그림 선택: an image file for the 배경, kept in the document.
+    private func pickImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) else { return }
+        var new = base
+        new.gradient = nil
+        var image = new.image ?? ImageBrush()
+        (image.data, image.extension, image.binId) = (data, url.pathExtension.lowercased(), 0)
+        new.image = image
+        apply(new)
+    }
+}
+
 /// 회전 as Pages's: a round slider, its knob at the angle.
 private struct RotationDial: NSViewRepresentable {
     let angle: Double?
@@ -1077,18 +1579,31 @@ private struct TransparentLinesToggle: View {
     }
 }
 
-/// 문서 and 구역, as Pages's 문서 and 섹션: the paper of the section holding the caret, and that
-/// section's 구역 설정, each change applied at once.
+/// 문서 and 구역, as Pages's 문서 and 섹션: the paper of the section holding the caret with its
+/// 쪽 테두리/배경, and that section's 구역 설정, 단 and 주석 모양, each change applied at once.
 struct DocumentInspector: View {
     @ObservedObject var document: HwpDocument
     let viewer: Viewer
     @State private var page: PageSetup?
+    @State private var border: PageBorder?
     @State private var setup: SectionSetup?
-    @State private var tab = 0
+    @State private var columns: ColumnSetup?
+    /// 각주 모양 then 미주 모양.
+    @State private var notes: [NoteShape]?
+    /// The note whose 모양 shows: 0 각주, 1 미주.
+    @State private var note = 0
+    /// 쪽 테두리: the line and the sides it last went on.
+    @State private var pageLine = BorderSide(line: 1, width: 1, color: "#000000")
+    @State private var pageSides: [Int] = []
+    @State private var tab: Int
     /// 사용자 정의 chosen, so 폭 and 길이 show although the size is a listed paper's.
     @State private var custom = false
     /// Changes made here: a read sent before one of them answers with what came before it.
     @State private var changes = 0
+
+    init(document: HwpDocument, viewer: Viewer) {
+        (self.document, self.viewer, _tab) = (document, viewer, State(initialValue: viewer.documentTab))
+    }
 
     var body: some View {
         let section = document.selection?.focus.target.section ?? 0
@@ -1104,16 +1619,31 @@ struct DocumentInspector: View {
             }
             .disabled(document.context.locked)
         }
+        .onChange(of: tab) { viewer.documentTab = tab }
         .task(id: "\(document.revision) \(section)") {
             let before = changes
-            let read = (try? await document.pageSetup(section: section), try? await document.sectionSetup(section: section))
+            let read = (try? await document.pageSetup(section: section), try? await document.pageBorder(section: section),
+                        try? await document.sectionSetup(section: section), try? await document.columns(section: section))
+            let shapes = [try? await document.noteShape(section: section, footnote: true),
+                          try? await document.noteShape(section: section, footnote: false)]
             // A change made while reading is newer than what was read; its own edit reads again.
             guard before == changes else { return }
-            (page, setup) = read
+            (page, border, setup, columns) = read
+            notes = shapes.contains(nil) ? nil : shapes.compactMap { $0 }
         }
     }
 
     // MARK: 문서
+
+    /// 용지 종류, in Hancom's names and order.
+    static let papers: [(name: String, width: Double, height: Double)] = [
+        ("프린트 132", 335.3, 279.4), ("레터", 215.9, 279.4), ("B5(46배판)", 182, 257), ("B4(타블로이드판)", 257, 364),
+        ("A4(국배판)", 210, 297), ("A3(국배배판)", 297, 420), ("리갈", 215.9, 355.6), ("A6(문고판)", 105, 148),
+        ("A5(국판)", 148, 210), ("신국판", 148, 225), ("크라운판", 176, 248), ("Executive", 184.1, 266.7),
+        ("Executive(JIS)", 216, 329.9), ("Envelope DL", 110, 220), ("Envelope C5", 162, 229),
+        ("Envelope B5", 176, 250), ("Envelope Monarch", 98.4, 190.5), ("점자출력용지", 230, 279.4),
+        ("16절지(국판)", 159, 234),
+    ]
 
     @ViewBuilder private func paperPane(_ section: UInt32) -> some View {
         Group {
@@ -1121,7 +1651,7 @@ struct DocumentInspector: View {
                 let paper = paper(section)
                 Picker("용지 종류", selection: paper) {
                     Text("사용자 정의").tag(String?.none)
-                    ForEach(PageSetupSheet.papers, id: \.name) { Text($0.name).tag(String?.some($0.name)) }
+                    ForEach(Self.papers, id: \.name) { Text($0.name).tag(String?.some($0.name)) }
                 }
                 .labelsHidden()
                 .flexibleButtons()
@@ -1154,11 +1684,82 @@ struct DocumentInspector: View {
                         set(section) { $0.marginGutter = Units.units(mm) }
                     }
                 }
-            } footer: {
-                DialogButtons { Button("쪽 테두리/배경…") { viewer.showPageBorder() } }
             }
         }
         .disabled(page == nil)
+        pageBorder(section)
+    }
+
+    /// 쪽 테두리 and 쪽 배경 of the section's pages, as 쪽 테두리/배경 sets them for 현재 구역.
+    @ViewBuilder private func pageBorder(_ section: UInt32) -> some View {
+        let pages: [(ApplyPages, String)] = [(.all, "모두"), (.exceptFirst, "첫 쪽 제외"), (.firstOnly, "첫 쪽만")]
+        Group {
+            InspectorSection("쪽 테두리") {
+                HStack(alignment: .top, spacing: 8) {
+                    SideButtons(rows: [[("모두", [0, 1, 2, 3]), ("위쪽", [2]), ("아래쪽", [3])], [("왼쪽", [0]), ("오른쪽", [1])]],
+                                chosen: pageSides) { pageSides = $0; applyPageLine(section) }
+                    LineRow(line: Binding(get: { pageLine }, set: { pageLine = $0; applyPageLine(section) }), stacked: true)
+                }
+                // Where the border goes, and on which pages, while there is one.
+                if border?.sides.contains(where: { $0.line != 0 }) == true {
+                    LabeledContent("위치") {
+                        Picker("위치", selection: Binding { border?.paper ?? true } set: { paper in edit(section) { $0.paper = paper } }) {
+                            Text("종이 기준").tag(true); Text("쪽 기준").tag(false)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    HStack(spacing: 16) {
+                        Toggle("머리말 포함", isOn: Binding { border?.headerInside == true } set: { on in edit(section) { $0.headerInside = on } })
+                        Toggle("꼬리말 포함", isOn: Binding { border?.footerInside == true } set: { on in edit(section) { $0.footerInside = on } })
+                    }
+                    .checkbox()
+                    .disabled(border?.paper != false)
+                    LabeledContent("적용 쪽") { pagesPicker(pages, Binding { border?.borderPages ?? .all } set: { p in edit(section) { $0.borderPages = p } }) }
+                    Fold("간격", headline: false) {
+                        Sides { side in
+                            NumberStepper(value: border.map { Units.millimeters($0.spacing[side]) }, unit: "mm", range: 0...25, wide: true) { mm in
+                                edit(section) { $0.spacing[side] = Units.units(mm) }
+                            }
+                        }
+                    }
+                }
+            }
+            InspectorSection {
+                FillRows(title: "쪽 배경", fill: border?.fill) { fill in edit(section) { $0.fill = fill } }
+                if FillRows.kind(border?.fill) != 0 {
+                    LabeledContent("적용 쪽") { pagesPicker(pages, Binding { border?.fillPages ?? .all } set: { p in edit(section) { $0.fillPages = p } }) }
+                    LabeledContent("채울 영역") {
+                        Picker("채울 영역", selection: Binding { border?.fillArea ?? .paper } set: { area in edit(section) { $0.fillArea = area } }) {
+                            Text("종이").tag(FillArea.paper); Text("쪽").tag(FillArea.page); Text("테두리").tag(FillArea.border)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+            }
+        }
+        .disabled(border == nil)
+    }
+    private func pagesPicker(_ pages: [(ApplyPages, String)], _ selection: Binding<ApplyPages>) -> some View {
+        Picker("적용 쪽", selection: selection) {
+            ForEach(pages, id: \.0) { Text($0.1).tag($0.0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+    }
+    /// Puts the 쪽 테두리's line on the sides chosen.
+    private func applyPageLine(_ section: UInt32) {
+        guard !pageSides.isEmpty else { return }
+        edit(section) { border in for side in pageSides { border.sides[side] = pageLine } }
+    }
+    private func edit(_ section: UInt32, _ change: (inout PageBorder) -> Void) {
+        guard var changed = border else { return }
+        change(&changed)
+        guard changed != border else { return }
+        border = changed
+        changes += 1
+        viewer.setPageBorder(changed, section: section, whole: false)
     }
 
     /// 용지 방향 as Pages's: the paper upright and lying, the chosen one checked, its size under them.
@@ -1227,10 +1828,10 @@ struct DocumentInspector: View {
         Binding {
             guard let page, !custom else { return nil }
             let size = (Units.millimeters(page.width), Units.millimeters(page.height))
-            return PageSetupSheet.papers.first { abs($0.width - size.0) < 0.5 && abs($0.height - size.1) < 0.5 }?.name
+            return Self.papers.first { abs($0.width - size.0) < 0.5 && abs($0.height - size.1) < 0.5 }?.name
         } set: { name in
             custom = name == nil
-            guard let paper = PageSetupSheet.papers.first(where: { $0.name == name }) else { return }
+            guard let paper = Self.papers.first(where: { $0.name == name }) else { return }
             set(section) { ($0.width, $0.height) = (Units.units(paper.width), Units.units(paper.height)) }
         }
     }
@@ -1280,6 +1881,143 @@ struct DocumentInspector: View {
             }
         }
         .disabled(setup == nil)
+        columnPane(section)
+        notePane(section)
+    }
+
+    /// 단 설정: 자주 쓰이는 모양 and 단 개수, 단 종류, 간격 and 단 너비 동일하게.
+    private func columnPane(_ section: UInt32) -> some View {
+        InspectorSection("단") {
+            IconTiles(selection: Binding { columns?.count ?? 1 } set: { count in setColumns(section) { $0.count = count } },
+                      options: [(UInt16(1), "하나"), (2, "둘"), (3, "셋")], fill: true) { count, on in
+                PagePictogram.columns(Int(count), on: on)
+            }
+            .flexibleButtons()
+            LabeledContent("단 개수") {
+                NumberStepper(value: columns.map { Double($0.count) }, unit: "", range: 1...255) { count in
+                    setColumns(section) { $0.count = UInt16(count) }
+                }
+            }
+            // What only more than one 단 has.
+            if (columns?.count ?? 1) > 1 {
+                LabeledContent("단 종류") {
+                    Picker("단 종류", selection: Binding { columns?.columnType ?? 0 } set: { type in setColumns(section) { $0.columnType = type } }) {
+                        Text("일반 단").tag(UInt8(0)); Text("배분 단").tag(UInt8(1)); Text("평행 단").tag(UInt8(2))
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                LabeledContent("간격") {
+                    NumberStepper(value: columns.map { Units.millimeters(UInt32(max($0.spacing, 0))) }, unit: "mm", range: 0...100) { mm in
+                        setColumns(section) { $0.spacing = Int16(clamping: Units.units(mm) as Int) }
+                    }
+                }
+                Toggle("단 너비 동일하게", isOn: Binding { columns?.sameWidth == true } set: { same in setColumns(section) { $0.sameWidth = same } })
+                    .checkbox()
+            }
+        }
+        .disabled(columns == nil)
+    }
+    private func setColumns(_ section: UInt32, _ change: (inout ColumnSetup) -> Void) {
+        guard var changed = columns else { return }
+        change(&changed)
+        guard changed != columns else { return }
+        columns = changed
+        changes += 1
+        viewer.setColumns(changed, section: section)
+    }
+
+    /// 번호 모양 of the notes, in 한/글's order; 미주 takes all but the last.
+    private static let noteFormats: [(String, String)] = [
+        ("digit", "1,2,3"), ("circledDigit", "①,②,③"), ("upperRoman", "I,II,III"), ("lowerRoman", "i,ii,iii"),
+        ("upperAlpha", "A,B,C"), ("lowerAlpha", "a,b,c"), ("circledUpperAlpha", "Ⓐ,Ⓑ,Ⓒ"), ("circledLowerAlpha", "ⓐ,ⓑ,ⓒ"),
+        ("hangulSyllable", "가,나,다"), ("circledHangulSyllable", "㉮,㉯,㉰"), ("hangulJamo", "ㄱ,ㄴ,ㄷ"),
+        ("circledHangulJamo", "㉠,㉡,㉢"), ("hangulDigit", "일,이,삼"), ("hanjaDigit", "一,二,三"),
+        ("circledHanjaDigit", "㊀,㊁,㊂"), ("hanjaGapEul", "갑,을,병"), ("hanjaGapEulHanja", "甲,乙,丙"),
+        ("fourSymbol", "*,†,‡,§"),
+    ]
+    /// 주석 모양: 각주 or 미주, its 번호 서식, 구분선, 여백 and 번호 매기기.
+    private func notePane(_ section: UInt32) -> some View {
+        let shape = notes?[note]
+        let name = note == 0 ? "각주" : "미주"
+        return InspectorSection("주석 모양") {
+            Segments([0, 1], selection: $note) { let title = ["각주", "미주"][$0]; return .init(title: title, help: "\(title) 모양") }
+            Group {
+                LabeledContent("번호 모양") {
+                    Picker("번호 모양", selection: Binding { shape?.numberFormat ?? "digit" } set: { format in setNote(section) { $0.numberFormat = format } }) {
+                        ForEach(Self.noteFormats.prefix(note == 0 ? 18 : 17), id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                HStack(spacing: 8) {
+                    character("앞 장식 문자", \.prefixChar, section)
+                    character("뒤 장식 문자", \.suffixChar, section)
+                }
+                // 번호 매기기.
+                Picker("번호 매기기", selection: Binding { shape?.numbering ?? "continue" } set: { way in setNote(section) { $0.numbering = way } }) {
+                    Text("앞 구역에 이어서").tag("continue"); Text("현재 구역부터 새로 시작").tag("restartSection")
+                }
+                .labelsHidden()
+                .flexibleButtons()
+                Divider()
+                // The line's kind beside 구분선, none for no line.
+                OpeningRows(title: "구분선", open: shape?.separatorEnabled == true) {
+                    ChoiceField(Binding { shape?.separatorEnabled == true ? Int(shape?.separatorLineType ?? 0) : 0 } set: { kind in
+                        setNote(section) { shape in
+                            shape.separatorEnabled = kind != 0
+                            if kind != 0 {
+                                shape.separatorLineType = UInt8(kind)
+                                if shape.separatorLength == 0 { shape.separatorLength = -1 }
+                            }
+                        }
+                    }, Swatches.lineKinds.indices.map { ($0, "") }, images: Swatches.lineKinds)
+                } rows: {
+                    LabeledContent("색") {
+                        ColorWell(hex: Binding { shape?.separatorColor ?? "#000000" } set: { color in setNote(section) { $0.separatorColor = color } })
+                    }
+                    LabeledContent("굵기") {
+                        ChoiceField(Binding { Int(shape?.separatorLineWidth ?? 0) } set: { width in setNote(section) { $0.separatorLineWidth = UInt8(width) } },
+                                    Swatches.widths.indices.map { ($0, "") }, images: Swatches.widthImages)
+                    }
+                    LabeledContent("길이") {
+                        // 5 cm and 2 cm are stored as their own values.
+                        NumberStepper(value: shape.map { $0.separatorLength == -1 ? 50 : $0.separatorLength == -2 ? 20 : Units.millimeters(max($0.separatorLength, 0)) },
+                                      unit: "mm", range: 0...100) { mm in setNote(section) { $0.separatorLength = Units.units(mm) } }
+                    }
+                }
+                Divider()
+                noteMargin("구분선 위", \.separatorMarginTop, section)
+                noteMargin("구분선 아래", \.separatorMarginBottom, section)
+                noteMargin("\(name) 사이", \.noteSpacing, section)
+            }
+            .disabled(shape == nil)
+        }
+    }
+    /// One character, as the 장식 문자 take, named under it.
+    private func character(_ title: String, _ key: WritableKeyPath<NoteShape, String>, _ section: UInt32) -> some View {
+        VStack(spacing: 3) {
+            TextField("", text: Binding { notes?[note][keyPath: key] ?? "" } set: { text in setNote(section) { $0[keyPath: key] = String(text.suffix(1)) } })
+                .multilineTextAlignment(.center)
+            Text(title).font(.caption)
+        }
+        .frame(maxWidth: .infinity)
+    }
+    private func noteMargin(_ title: String, _ key: WritableKeyPath<NoteShape, Int32>, _ section: UInt32) -> some View {
+        LabeledContent(title) {
+            NumberStepper(value: notes.map { Units.millimeters($0[note][keyPath: key]) }, unit: "mm", range: 0...25) { mm in
+                setNote(section) { $0[keyPath: key] = Units.units(mm) }
+            }
+        }
+    }
+    /// Changes the shown note's 모양 for the section holding the caret.
+    private func setNote(_ section: UInt32, _ change: (inout NoteShape) -> Void) {
+        guard var all = notes else { return }
+        change(&all[note])
+        guard all != notes else { return }
+        notes = all
+        changes += 1
+        viewer.setNoteShape(all[note], footnote: note == 0, section: section, whole: false)
     }
 
     /// 이어서 or 사용자 and its number.

@@ -228,7 +228,7 @@ struct StyleEditSheet: View {
             dismiss()
         }
         .sheet(isPresented: $editingText) {
-            CharShapeSheet(style: editor.base.text.merging(spec.text[0]), languages: editor.base.languages, viewer: viewer) { change in
+            CharShapeSheet(style: editor.base.text.merging(spec.text[0]), languages: editor.base.languages) { change in
                 if change.language == nil {
                     spec.text[0] = spec.text[0].merging(change)
                 } else {
@@ -237,7 +237,7 @@ struct StyleEditSheet: View {
             }
         }
         .sheet(isPresented: $editingParagraph) {
-            ParaShapeSheet(style: editor.base.paragraph.merging(spec.paragraph), viewer: viewer) { change in
+            ParaShapeSheet(style: editor.base.paragraph.merging(spec.paragraph)) { change in
                 spec.paragraph = spec.paragraph.merging(change)
             }
         }

@@ -29,7 +29,6 @@ enum Icon {
     static let flipTable = "arrow.trianglehead.2.clockwise.rotate.90"
     static let splitTable = "arrow.up.and.line.horizontal.and.arrow.down", attachTable = "arrow.down.and.line.horizontal.and.arrow.up"
     static let undo = "arrow.uturn.backward", redo = "arrow.uturn.forward", delete = "delete.left"
-    static let equalHeight = "arrow.up.and.down.square", equalWidth = "arrow.left.and.right.square"
     static let calculation = "function"
     static let rotate = "rotate.right"
     static let protect = "lock"
