@@ -78,8 +78,9 @@ struct Inspector: View {
             }
             if !context.hasSelection && context.object == nil {
                 // As Pages's, with nothing to format.
-                ContentUnavailableView("선택한 항목이 없습니다.", systemImage: "paintbrush",
-                                       description: Text("포맷을 지정하려는 대상체나 텍스트를 선택합니다."))
+                ContentUnavailableView("선택한 항목이 없습니다.", systemImage: "paintbrush")
+                    // Level with the window's middle, not the inspector's below the toolbar.
+                    .padding(.bottom, 52)
             } else if tab == "텍스트" {
                 TextTab(document: document, viewer: viewer, title: tabs.count == 1)
                     .disabled(context.locked)
@@ -504,13 +505,12 @@ struct Inspector: View {
     @ViewBuilder private func table(_ context: EditingContext) -> some View {
         // As Pages's: rows added or removed at the bottom, columns at the right.
         InspectorSection {
-            HStack(spacing: 8) {
-                Text("줄")
+            LabeledContent("줄") {
                 NumberStepper(value: props?.rowCount.map(Double.init), unit: "", range: 1...1000) { rows in
                     props?.colCount.map { viewer.setTableSize(rows: Int(rows), columns: Int($0)) }
                 }
-                Spacer(minLength: 8)
-                Text("칸")
+            }
+            LabeledContent("칸") {
                 NumberStepper(value: props?.colCount.map(Double.init), unit: "", range: 1...256) { columns in
                     props?.rowCount.map { viewer.setTableSize(rows: Int($0), columns: Int(columns)) }
                 }
