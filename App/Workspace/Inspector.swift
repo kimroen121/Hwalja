@@ -76,7 +76,11 @@ struct Inspector: View {
                 Text(tab).foregroundStyle(.secondary).padding(.top, 12).padding(.bottom, 8)
                 Divider().padding(.horizontal, 16)
             }
-            if tab == "텍스트" {
+            if !context.hasSelection && context.object == nil {
+                // As Pages's, with nothing to format.
+                ContentUnavailableView("선택한 항목이 없습니다.", systemImage: "paintbrush",
+                                       description: Text("포맷을 지정하려는 대상체나 텍스트를 선택합니다."))
+            } else if tab == "텍스트" {
                 TextTab(document: document, viewer: viewer, title: tabs.count == 1)
                     .disabled(context.locked)
             } else {
