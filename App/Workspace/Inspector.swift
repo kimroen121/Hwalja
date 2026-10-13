@@ -162,6 +162,8 @@ struct Inspector: View {
                     if effect == "Watermark" { (props.effect, props.brightness, props.contrast) = ("RealPic", 70, -50) } else { props.effect = effect }
                 }
             })) { let title = ["RealPic": "효과 없음", "GrayScale": "회색조", "BlackWhite": "흑백", "Watermark": "워터마크"][$0]!; return .init(title: title, help: title) }
+                // Four names fit the inspector only small.
+                .controlSize(.small)
             PictureSlider(title: "밝기", value: props?.brightness) { value in viewer.adjustPicture { $0.brightness = value } }
             PictureSlider(title: "대비", value: props?.contrast) { value in viewer.adjustPicture { $0.contrast = value } }
             Button("재설정") { viewer.adjustPicture { ($0.effect, $0.brightness, $0.contrast) = ("RealPic", 0, 0) } }
@@ -357,64 +359,68 @@ struct Inspector: View {
         .disabled(props == nil)
         // As Pages's: 맨 뒤로 and 맨 앞으로, 뒤로 and 앞으로, each two in one control.
         InspectorSection {
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 order(Array(Self.orders.prefix(2)))
                 order(Array(Self.orders.suffix(2)))
             }
             .disabled(table || inLine)
         }
-        // As Pages's: each group's name over its fields.
+        // As Pages's: each group's name over its fields, which line up under one another.
         InspectorSection("크기") {
-            Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
-                 "높이", length(props?.height, width: 62) { resize(height: $0) })
-            HStack(spacing: 12) {
-                Toggle("비율 유지", isOn: $keepsRatio).checkbox().fixedSize()
-                if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect).fixedSize() }
+            VStack(alignment: .leading, spacing: 10) {
+                Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
+                     "높이", length(props?.height, width: 62) { resize(height: $0) })
+                HStack(spacing: 16) {
+                    Toggle("비율 유지", isOn: $keepsRatio).checkbox()
+                    if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect) }
+                }
+                if props?.originalWidth != nil {
+                    Button { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) } label: {
+                        Text("원래 크기").frame(maxWidth: .infinity)
+                    }
+                }
             }
+            .fixedSize()
             .frame(maxWidth: .infinity, alignment: .trailing)
-            if props?.originalWidth != nil {
-                Button { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) } label: {
-                    Text("원래 크기").frame(maxWidth: .infinity)
-                }
-            }
         }
-        InspectorSection("위치") {
-            Pair("X", length(props?.horzOffset, width: 62) { set(\.horzOffset, Units.units($0)) },
-                 "Y", length(props?.vertOffset, width: 62) { set(\.vertOffset, Units.units($0)) })
-            LabeledContent("가로") {
-                HStack(spacing: 4) {
-                    choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
-                    choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
+        // X and Y in sight, what they are measured from folded under them.
+        InspectorSection {
+            Fold("위치") {
+                LabeledContent("가로") {
+                    HStack(spacing: 4) {
+                        choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
+                        choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
+                    }
                 }
-            }
-            LabeledContent("세로") {
-                HStack(spacing: 4) {
-                    choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
-                    choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
+                LabeledContent("세로") {
+                    HStack(spacing: 4) {
+                        choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
+                        choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
+                    }
                 }
+                flag("쪽 영역 안으로 제한", \.restrictInPage)
+                flag("서로 겹침 허용", \.allowOverlap)
+            } shown: {
+                Pair("X", length(props?.horzOffset, width: 62) { set(\.horzOffset, Units.units($0)) },
+                     "Y", length(props?.vertOffset, width: 62) { set(\.vertOffset, Units.units($0)) })
             }
-            flag("쪽 영역 안으로 제한", \.restrictInPage)
-            flag("서로 겹침 허용", \.allowOverlap)
+            .disabled(inLine || props == nil)
         }
-        .disabled(inLine || props == nil)
         InspectorSection("회전") {
             // 한/글 keeps −360…360; shown as the dial reads it.
             let angle = props.map { Double((Int($0.rotationAngle ?? 0) % 360 + 360) % 360) }
             HStack(alignment: .top, spacing: 8) {
                 RotationDial(angle: angle) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
                     .frame(width: 32, height: 32)
-                Spacer(minLength: 0)
                 VStack(spacing: 3) {
-                    NumberStepper(value: angle, unit: "°", range: 0...359, width: 48, unitInside: true) {
+                    NumberStepper(value: angle, unit: "°", range: 0...359, wide: true, unitInside: true) {
                         viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
                     }
                     Text("각도").font(.caption)
                 }
                 VStack(spacing: 3) {
-                    Segments(segments: [.init(symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "좌우 대칭"),
-                                        .init(symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", help: "상하 대칭")],
-                             on: [false, false], any: true) { index in viewer.change { .flip($0, vertical: index == 1) } }
-                        .frame(width: 80)
+                    ActionButtons(actions: [("좌우 대칭", "arrow.left.and.right.righttriangle.left.righttriangle.right", { viewer.change { .flip($0, vertical: false) } }),
+                                            ("상하 대칭", "arrow.up.and.down.righttriangle.up.righttriangle.down", { viewer.change { .flip($0, vertical: true) } })])
                     Text("대칭").font(.caption)
                 }
             }

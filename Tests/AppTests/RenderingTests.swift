@@ -253,7 +253,7 @@ struct RenderingTests {
         // HWP_SNAPSHOT_FOLDED: as a first opening shows them, every fold closed.
         let folded = ProcessInfo.processInfo.environment["HWP_SNAPSHOT_FOLDED"] != nil
         let folds = ["자르기", "그림 여백", "안쪽 여백", "바깥 여백", "모든 셀의 안 여백", "안 여백", "여백", "들여쓰기", "간격",
-                     "위치", "표 뒤집기", "대각선", "개체 시작 번호", "기타", "주석 모양", "용지 여백"].map(Fold<EmptyView, EmptyView>.key)
+                     "위치", "표 뒤집기", "대각선", "개체 시작 번호", "기타", "주석 모양", "용지 여백"].map(Fold<EmptyView, EmptyView, EmptyView>.key)
         for fold in folds { UserDefaults.standard.set(!folded, forKey: fold) }
         defer { for fold in folds { UserDefaults.standard.removeObject(forKey: fold) } }
         var border = try await document.pageBorder(section: 0)
@@ -265,7 +265,7 @@ struct RenderingTests {
         sectionViewer.canvas.bind(document)
         sectionViewer.documentTab = 1
         let inspector = { (document: HwpDocument, viewer: Viewer, tab: String) in
-            AnyView(Inspector(document: document, viewer: viewer, tab: tab).frame(width: 280, height: 1600))
+            AnyView(Inspector(document: document, viewer: viewer, tab: tab).frame(width: 268, height: 1600))
         }
         let views: [(String, AnyView)] = [
             ("quickMenu", AnyView(QuickMenu(document: document, viewer: viewer).padding(20))),
@@ -277,11 +277,11 @@ struct RenderingTests {
             ("equationTab", inspector(equated, equatedViewer, "수식")),
             ("textBoxShape", inspector(shaped[0].0, shaped[0].1, "도형")),
             ("lineShape", inspector(shaped[1].0, shaped[1].1, "도형")),
-            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 280, height: 900))),
-            ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 280, height: 900))),
-            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 280, height: 400))),
-            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 280, height: 1400))),
-            ("sectionInspector", AnyView(DocumentInspector(document: document, viewer: sectionViewer).frame(width: 280, height: 1400))),
+            ("inspector", AnyView(Inspector(document: document, viewer: viewer).frame(width: 268, height: 900))),
+            ("textLayout", AnyView(Inspector(document: document, viewer: layoutViewer).frame(width: 268, height: 900))),
+            ("annotations", AnyView(Inspector(document: noted, viewer: notedViewer, tab: "주석").frame(width: 268, height: 400))),
+            ("documentInspector", AnyView(DocumentInspector(document: document, viewer: viewer).frame(width: 268, height: 1400))),
+            ("sectionInspector", AnyView(DocumentInspector(document: document, viewer: sectionViewer).frame(width: 268, height: 1400))),
             ("shapes", AnyView(ShapeTiles(viewer: viewer))),
             ("split", AnyView(SplitCellSheet(viewer: viewer))),
             ("calculation", AnyView(CalculationSheet(viewer: viewer))),

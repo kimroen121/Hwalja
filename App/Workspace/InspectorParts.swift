@@ -156,34 +156,48 @@ struct OpeningRows<Choice: View, Rows: View>: View {
 
 /// Rows used less, folded under their name as Pages's 여백 and 들여쓰기: a group's title, or a
 /// row's name within a group; `trailing` beside the name stays in sight while folded, as the
-/// 텍스트 탭's 간격 keeps its value.
-struct Fold<Content: View, Trailing: View>: View {
+/// 텍스트 탭's 간격 keeps its value, and `shown` under it, as 위치's X and Y.
+struct Fold<Content: View, Trailing: View, Shown: View>: View {
     let title: String
     var headline = true
     @ViewBuilder let content: Content
     @ViewBuilder let trailing: Trailing
+    @ViewBuilder let shown: Shown
     /// Open or closed as last left, as Pages keeps them.
     @AppStorage private var open: Bool
-    init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content, @ViewBuilder trailing: () -> Trailing) {
-        (self.title, self.headline, self.content, self.trailing) = (title, headline, content(), trailing())
-        _open = AppStorage(wrappedValue: false, Fold<EmptyView, EmptyView>.key(title))
+    init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content,
+         @ViewBuilder trailing: () -> Trailing, @ViewBuilder shown: () -> Shown) {
+        (self.title, self.headline, self.content, self.trailing, self.shown) = (title, headline, content(), trailing(), shown())
+        _open = AppStorage(wrappedValue: false, Self.key(title))
     }
     static func key(_ title: String) -> String { "fold." + title }
     var body: some View {
-        DisclosureGroup(isExpanded: $open) {
-            VStack(alignment: .leading, spacing: 10) { content }
-        } label: {
-            HStack {
-                Text(title).font(headline ? .headline.weight(.medium) : .body)
-                Spacer(minLength: 8)
-                trailing
+        VStack(alignment: .leading, spacing: 10) {
+            DisclosureGroup(isExpanded: $open) {} label: {
+                HStack {
+                    Text(title).font(headline ? .headline.weight(.medium) : .body)
+                    Spacer(minLength: 8)
+                    trailing
+                }
             }
+            shown
+            if open { content }
         }
     }
 }
-extension Fold where Trailing == EmptyView {
+extension Fold where Shown == EmptyView {
+    init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content, @ViewBuilder trailing: () -> Trailing) {
+        self.init(title, headline: headline, content: content, trailing: trailing) { EmptyView() }
+    }
+}
+extension Fold where Trailing == EmptyView, Shown == EmptyView {
     init(_ title: String, headline: Bool = true, @ViewBuilder content: () -> Content) {
-        self.init(title, headline: headline, content: content) { EmptyView() }
+        self.init(title, headline: headline, content: content) { EmptyView() } shown: { EmptyView() }
+    }
+}
+extension Fold where Trailing == EmptyView {
+    init(_ title: String, @ViewBuilder content: () -> Content, @ViewBuilder shown: () -> Shown) {
+        self.init(title, content: content) { EmptyView() } shown: { shown() }
     }
 }
 
@@ -250,6 +264,30 @@ struct NumberStepper: View {
 }
 
 /// 밝기 or 대비 of a picture, applied when the slider is let go.
+/// macOS's own slider, small as Pages's, its track reaching both ends (SwiftUI's insets it).
+struct EdgeSlider: NSViewRepresentable {
+    @Binding var value: Double
+    let ended: () -> Void
+    func makeNSView(context: Context) -> NSSlider {
+        let slider = NSSlider(value: value, minValue: -100, maxValue: 100, target: context.coordinator, action: #selector(Coordinator.moved))
+        slider.controlSize = .small
+        return slider
+    }
+    func updateNSView(_ slider: NSSlider, context: Context) {
+        context.coordinator.parent = self
+        if slider.doubleValue != value { slider.doubleValue = value }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+    final class Coordinator: NSObject {
+        var parent: EdgeSlider
+        init(parent: EdgeSlider) { self.parent = parent }
+        @objc func moved(_ slider: NSSlider) {
+            parent.value = slider.doubleValue
+            if NSApp.currentEvent?.type != .leftMouseDragged { parent.ended() }
+        }
+    }
+}
+
 struct PictureSlider: View {
     let title: String
     let value: Int32?
@@ -260,10 +298,11 @@ struct PictureSlider: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
             HStack(spacing: 8) {
-                // No step: a stepped slider draws tick marks; the value lands on 5s when let go.
-                Slider(value: $shown, in: -100...100) { editing in
+                EdgeSlider(value: $shown) {
+                    // No step: a stepped slider draws tick marks; the value lands on 5s when let go.
                     let landed = Int32((shown / 5).rounded() * 5)
-                    if !editing { shown = Double(landed); if landed != value { apply(landed) } }
+                    shown = Double(landed)
+                    if landed != value { apply(landed) }
                 }
                 NumberStepper(value: value.map(Double.init), unit: "%", range: -100...100, step: 5, width: 48, unitInside: true) { apply(Int32($0)) }
             }

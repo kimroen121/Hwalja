@@ -55,7 +55,7 @@ struct DocumentWindow: View {
                 }
             }
             .id(viewer.reveals)
-            .inspectorColumnWidth(280)
+            .inspectorColumnWidth(min: 268, ideal: 268, max: 268)
         }
         .sheet(isPresented: $viewer.goingToPage) { GoToSheet(viewer: viewer, pageCount: document.context.pageCount) }
         .sheet(isPresented: $viewer.splittingCells) { SplitCellSheet(viewer: viewer) }

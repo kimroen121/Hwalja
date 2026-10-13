@@ -302,7 +302,7 @@ struct MenuItems {
                 }
                 .disabled(!context.inBody)
                 item("각주/미주 모양…", Icon.noteShape) {
-                    UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView>.key("주석 모양"))
+                    UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView, EmptyView>.key("주석 모양"))
                     viewer?.reveal(.document, tab: "구역")
                 }
                     .disabled(context.locked)
@@ -509,7 +509,7 @@ struct MenuItems {
         }
         .disabled(!context.cellBlock)
         item("표 뒤집기…", Icon.flipTable) {
-            UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView>.key("표 뒤집기"))
+            UserDefaults.standard.set(true, forKey: Fold<EmptyView, EmptyView, EmptyView>.key("표 뒤집기"))
             viewer?.reveal(.format, tab: "표")
         }
             .disabled(!context.inTable || context.locked)
