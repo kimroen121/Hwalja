@@ -31,14 +31,18 @@ struct DocumentInspector: View {
         VStack(spacing: 0) {
             InspectorScroll(fixed: true) {
                 InspectorSection {
-                    Segments([0, 1], selection: $tab, accent: true, capsule: true) { let title = ["문서", "구역"][$0]; return .init(title: title, help: title) }
+                    Segments([0, 1, 2], selection: $tab, accent: true, capsule: true) { let title = ["문서", "구역", "기타"][$0]; return .init(title: title, help: title) }
                         .controlSize(.large)
                         // A little wider than the groups under them.
                         .padding(.horizontal, -6)
                 }
             }
             InspectorScroll {
-                if tab == 0 { paperPane(section) } else { sectionPane(section) }
+                switch tab {
+                case 0: paperPane(section)
+                case 1: sectionPane(section)
+                default: otherPane(section)
+                }
             }
             .disabled(document.context.locked)
         }
@@ -144,7 +148,7 @@ struct DocumentInspector: View {
                     }
                     Fold("간격", headline: false) {
                         Sides { side in
-                            NumberStepper(value: border.map { Units.millimeters($0.spacing[side]) }, unit: "mm", range: 0...25, wide: true) { mm in
+                            NumberStepper(value: border.map { Units.millimeters($0.spacing[side]) }, unit: "mm", range: 0...25, width: 62, unitInside: true) { mm in
                                 edit(section) { $0.spacing[side] = Units.units(mm) }
                             }
                         }
@@ -249,7 +253,7 @@ struct DocumentInspector: View {
 
     // MARK: 구역
 
-    /// 구역 설정's 시작 쪽 번호 in sight, its 개체 시작 번호 and 기타 folded; then 단 and 주석 모양.
+    /// 구역 설정's 시작 쪽 번호 in sight, its 개체 시작 번호 folded; then 단 and 주석 모양.
     @ViewBuilder private func sectionPane(_ section: UInt32) -> some View {
         Group {
             InspectorSection {
@@ -273,32 +277,37 @@ struct DocumentInspector: View {
                     start("수식", \.equationNum, section)
                 }
             }
-            InspectorSection {
-                Fold("기타") {
-                    Group {
-                        Toggle("첫 쪽에만 머리말/꼬리말 감추기", isOn: flag(section, get: { $0.hideHeader && $0.hideFooter }, set: { ($0.hideHeader, $0.hideFooter) = ($1, $1) }))
-                        Toggle("첫 쪽에만 바탕쪽 감추기", isOn: flag(section, get: { $0.hideMasterPage }, set: { $0.hideMasterPage = $1 }))
-                        Toggle("첫 쪽에만 테두리/배경 감추기", isOn: flag(section, get: { $0.hideBorder && $0.hideFill }, set: { ($0.hideBorder, $0.hideFill) = ($1, $1) }))
-                        Toggle("빈 줄 감추기", isOn: flag(section, get: { $0.hideEmptyLine }, set: { $0.hideEmptyLine = $1 }))
-                    }
-                    .checkbox()
-                    LabeledContent("단 사이 간격") {
-                        NumberStepper(value: setup.map { Units.millimeters($0.columnSpacing) }, unit: "mm", range: 0...100) { mm in
-                            change(section) { $0.columnSpacing = Units.units(mm) }
-                        }
-                    }
-                    LabeledContent("기본 탭 간격") {
-                        // Stored at 200 to the point: 8000 is 한/글's 40pt.
-                        NumberStepper(value: setup.map { Double($0.defaultTabSpacing) / 200 }, unit: "pt", range: 1...141) { pt in
-                            change(section) { $0.defaultTabSpacing = UInt32((pt * 200).rounded()) }
-                        }
-                    }
-                }
-            }
         }
         .disabled(setup == nil)
         columnPane(section)
         notePane(section)
+    }
+
+    // MARK: 기타
+
+    /// 구역 설정's 기타, unfolded.
+    private func otherPane(_ section: UInt32) -> some View {
+        InspectorSection {
+            Group {
+                Toggle("첫 쪽에만 머리말/꼬리말 감추기", isOn: flag(section, get: { $0.hideHeader && $0.hideFooter }, set: { ($0.hideHeader, $0.hideFooter) = ($1, $1) }))
+                Toggle("첫 쪽에만 바탕쪽 감추기", isOn: flag(section, get: { $0.hideMasterPage }, set: { $0.hideMasterPage = $1 }))
+                Toggle("첫 쪽에만 테두리/배경 감추기", isOn: flag(section, get: { $0.hideBorder && $0.hideFill }, set: { ($0.hideBorder, $0.hideFill) = ($1, $1) }))
+                Toggle("빈 줄 감추기", isOn: flag(section, get: { $0.hideEmptyLine }, set: { $0.hideEmptyLine = $1 }))
+            }
+            .checkbox()
+            LabeledContent("단 사이 간격") {
+                NumberStepper(value: setup.map { Units.millimeters($0.columnSpacing) }, unit: "mm", range: 0...100) { mm in
+                    change(section) { $0.columnSpacing = Units.units(mm) }
+                }
+            }
+            LabeledContent("기본 탭 간격") {
+                // Stored at 200 to the point: 8000 is 한/글's 40pt.
+                NumberStepper(value: setup.map { Double($0.defaultTabSpacing) / 200 }, unit: "pt", range: 1...141) { pt in
+                    change(section) { $0.defaultTabSpacing = UInt32((pt * 200).rounded()) }
+                }
+            }
+        }
+        .disabled(setup == nil)
     }
 
     /// 단 설정: 자주 쓰이는 모양 and 단 개수, 단 종류, 간격 and 단 너비 동일하게.

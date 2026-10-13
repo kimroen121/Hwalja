@@ -156,7 +156,7 @@ struct OpeningRows<Choice: View, Rows: View>: View {
 
 /// Rows used less, folded under their name as Pages's 여백 and 들여쓰기: a group's title, or a
 /// row's name within a group; `trailing` beside the name stays in sight while folded, as the
-/// 텍스트 탭's 간격 keeps its value, and `shown` under it, as 위치's X and Y.
+/// 텍스트 탭's 간격 keeps its value; `shown` beside it while folded and under it while open, as 위치's X and Y.
 struct Fold<Content: View, Trailing: View, Shown: View>: View {
     let title: String
     var headline = true
@@ -178,10 +178,10 @@ struct Fold<Content: View, Trailing: View, Shown: View>: View {
                     Text(title).font(headline ? .headline.weight(.medium) : .body)
                     Spacer(minLength: 8)
                     trailing
+                    if !open { shown }
                 }
             }
-            shown
-            if open { content }
+            if open { shown; content }
         }
     }
 }
@@ -201,23 +201,14 @@ extension Fold where Trailing == EmptyView {
     }
 }
 
-/// Four lengths as 용지 여백's: 위쪽 and 아래쪽 over 왼쪽 and 오른쪽, each named under it.
-/// `field` takes them in HWP's order: 왼쪽, 오른쪽, 위쪽, 아래쪽.
+/// Four lengths as 용지 여백's: 위쪽 and 아래쪽 over 왼쪽 and 오른쪽, each named under it, at the
+/// trailing edge as a `Pair`. `field` takes them in HWP's order: 왼쪽, 오른쪽, 위쪽, 아래쪽.
 struct Sides<Field: View>: View {
     @ViewBuilder let field: (Int) -> Field
     var body: some View {
-        Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-            ForEach([2, 0], id: \.self) { row in
-                GridRow {
-                    ForEach(row..<row + 2, id: \.self) { i in
-                        VStack(spacing: 3) {
-                            field(i)
-                            Text(["왼쪽", "오른쪽", "위쪽", "아래쪽"][i]).font(.caption)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-            }
+        VStack(spacing: 8) {
+            Pair("위쪽", field(2), "아래쪽", field(3))
+            Pair("왼쪽", field(0), "오른쪽", field(1))
         }
     }
 }

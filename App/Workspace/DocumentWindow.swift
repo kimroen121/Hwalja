@@ -317,14 +317,14 @@ final class Viewer: ObservableObject {
     }
     /// 텍스트's 스타일 (0), 레이아웃 (1) or 기타 (2), kept while the inspector is hidden.
     var textLayout = 0
-    /// 문서 (0) or 구역 (1).
+    /// 문서 (0), 구역 (1) or 기타 (2).
     var documentTab = 0
     /// Counts `reveal`s: the inspector is made anew for each, showing the tab revealed.
     @Published private(set) var reveals = 0
     /// Shows the inspector at `pane`, at `tab` when the selection has it (문서's 구역 for "구역").
     func reveal(_ pane: InspectorPane, tab: String? = nil) {
         if pane == .document {
-            documentTab = tab == "구역" ? 1 : 0
+            documentTab = ["구역": 1, "기타": 2][tab ?? ""] ?? 0
         } else if let tab, let context = document?.context {
             let tabs = Inspector.tabs(context)
             if tabs.contains(tab) { inspectorTabs[tabs.joined(separator: " ")] = tab }

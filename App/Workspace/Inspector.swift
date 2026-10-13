@@ -469,7 +469,7 @@ struct Inspector: View {
     }
     /// Four lengths of the object, keyed 왼쪽, 오른쪽, 위쪽, 아래쪽.
     private func sides(_ keys: [WritableKeyPath<ObjectProps, Int32?>]) -> some View {
-        Sides { i in length(props?[keyPath: keys[i]], range: 0...1000) { set(keys[i], Units.units($0)) } }
+        Sides { i in length(props?[keyPath: keys[i]], range: 0...1000, width: 62) { set(keys[i], Units.units($0)) } }
     }
     /// One property of the selected object, or the table holding the caret, changed.
     private func set<T>(_ key: WritableKeyPath<ObjectProps, T?>, _ value: T) {
@@ -671,7 +671,7 @@ struct Inspector: View {
         setCell(change)
     }
     private func cellLength(_ key: WritableKeyPath<CellProps, Int32?>) -> some View {
-        length(cell?[keyPath: key], range: 0...1000) { cellFlag(key, Units.units($0)) }
+        length(cell?[keyPath: key], range: 0...1000, width: 62) { cellFlag(key, Units.units($0)) }
     }
     /// Puts the 테두리's line on the sides chosen, in the selected cells.
     private func applyCellLine() {
