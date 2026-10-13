@@ -377,7 +377,7 @@ struct DocumentInspector: View {
                             ForEach(Self.noteFormats.prefix(note == 0 ? 18 : 17), id: \.0) { Text($0.1).tag($0.0) }
                         }
                         .labelsHidden()
-                        .fixedSize()
+                        .frame(width: 92)
                         character("뒤 장식 문자", \.suffixChar, section)
                     }
                 }
@@ -422,10 +422,11 @@ struct DocumentInspector: View {
     }
     /// One character, as the 장식 문자 take, named in its help.
     private func character(_ title: String, _ key: WritableKeyPath<NoteShape, String>, _ section: UInt32) -> some View {
-        TextField("", text: Binding { notes?[note][keyPath: key] ?? "" } set: { text in setNote(section) { $0[keyPath: key] = String(text.suffix(1)) } })
+        TextField("", text: Binding { notes?[note][keyPath: key] ?? "" } set: { text in setNote(section) { $0[keyPath: key] = String(text.suffix(1)) } },
+                  prompt: Text(String(title.prefix(1))))
             .multilineTextAlignment(.center)
             .accessibilityLabel(title)
-            .frame(width: 28)
+            .frame(width: 36)
             .help(title)
     }
     private func noteMargin(_ title: String, _ key: WritableKeyPath<NoteShape, Int32>, _ section: UInt32) -> some View {
