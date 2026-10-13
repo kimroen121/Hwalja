@@ -371,13 +371,13 @@ struct DocumentInspector: View {
             Group {
                 // The 장식 문자 either side of the number, as they read.
                 LabeledContent("번호 모양") {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         character("앞 장식 문자", \.prefixChar, section)
                         Picker("번호 모양", selection: Binding { shape?.numberFormat ?? "digit" } set: { format in setNote(section) { $0.numberFormat = format } }) {
                             ForEach(Self.noteFormats.prefix(note == 0 ? 18 : 17), id: \.0) { Text($0.1).tag($0.0) }
                         }
                         .labelsHidden()
-                        .frame(width: 92)
+                        .frame(width: 80)
                         character("뒤 장식 문자", \.suffixChar, section)
                     }
                 }
