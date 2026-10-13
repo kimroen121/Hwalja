@@ -369,16 +369,17 @@ struct DocumentInspector: View {
         return InspectorSection { Fold("주석 모양") {
             Segments([0, 1], selection: $note) { let title = ["각주", "미주"][$0]; return .init(title: title, help: "\(title) 모양") }
             Group {
+                // The 장식 문자 either side of the number, as they read.
                 LabeledContent("번호 모양") {
-                    Picker("번호 모양", selection: Binding { shape?.numberFormat ?? "digit" } set: { format in setNote(section) { $0.numberFormat = format } }) {
-                        ForEach(Self.noteFormats.prefix(note == 0 ? 18 : 17), id: \.0) { Text($0.1).tag($0.0) }
+                    HStack(spacing: 4) {
+                        character("앞 장식 문자", \.prefixChar, section)
+                        Picker("번호 모양", selection: Binding { shape?.numberFormat ?? "digit" } set: { format in setNote(section) { $0.numberFormat = format } }) {
+                            ForEach(Self.noteFormats.prefix(note == 0 ? 18 : 17), id: \.0) { Text($0.1).tag($0.0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        character("뒤 장식 문자", \.suffixChar, section)
                     }
-                    .labelsHidden()
-                    .fixedSize()
-                }
-                HStack(spacing: 8) {
-                    character("앞 장식 문자", \.prefixChar, section)
-                    character("뒤 장식 문자", \.suffixChar, section)
                 }
                 // 번호 매기기.
                 Picker("번호 매기기", selection: Binding { shape?.numbering ?? "continue" } set: { way in setNote(section) { $0.numbering = way } }) {
@@ -419,14 +420,13 @@ struct DocumentInspector: View {
             .disabled(shape == nil)
         } }
     }
-    /// One character, as the 장식 문자 take, named under it.
+    /// One character, as the 장식 문자 take, named in its help.
     private func character(_ title: String, _ key: WritableKeyPath<NoteShape, String>, _ section: UInt32) -> some View {
-        VStack(spacing: 3) {
-            TextField("", text: Binding { notes?[note][keyPath: key] ?? "" } set: { text in setNote(section) { $0[keyPath: key] = String(text.suffix(1)) } })
-                .multilineTextAlignment(.center)
-            Text(title).font(.caption)
-        }
-        .frame(maxWidth: .infinity)
+        TextField("", text: Binding { notes?[note][keyPath: key] ?? "" } set: { text in setNote(section) { $0[keyPath: key] = String(text.suffix(1)) } })
+            .multilineTextAlignment(.center)
+            .accessibilityLabel(title)
+            .frame(width: 28)
+            .help(title)
     }
     private func noteMargin(_ title: String, _ key: WritableKeyPath<NoteShape, Int32>, _ section: UInt32) -> some View {
         LabeledContent(title) {
