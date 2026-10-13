@@ -182,7 +182,7 @@ struct TextTab: View {
                                   step: percent ? 10 : 1) { value in
                         editor.format(ParaStyle(lineSpacing: value, lineSpacingKind: paragraph?.lineSpacingKind ?? .percent))
                     }
-                } label: { Text("간격").font(.headline.weight(.semibold)) }
+                } label: { Text("간격").font(.headline.weight(.medium)) }
             }
         }
         InspectorSection { lists }
@@ -279,14 +279,14 @@ struct TextTab: View {
             }
             .labelsHidden()
             .fixedSize()
-        } label: { Text("글머리표 및 문단 번호").font(.headline.weight(.semibold)) }
+        } label: { Text("글머리표 및 문단 번호").font(.headline.weight(.medium)) }
     }
 
     /// The rest of 글자 모양: scales of the 언어, 첨자, the attributes, 밑줄, 취소선, 테두리 and 배경.
     private var more: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("추가 텍스트 옵션").font(.headline.weight(.semibold)).frame(maxWidth: .infinity)
+                Text("추가 텍스트 옵션").font(.headline.weight(.medium)).frame(maxWidth: .infinity)
                 LabeledContent("장평") { lingual(\.ratio, range: 50...200) }
                 LabeledContent("자간") { lingual(\.spacing, range: -50...50) }
                 LabeledContent("상대 크기") { lingual(\.relativeSize, range: 10...250) }
@@ -429,7 +429,7 @@ private struct BorderFillRows<Style: BorderFillStyle>: View {
     private var borderRows: some View {
         let on = (style.borderLine ?? 0) != 0
         return VStack(alignment: .leading, spacing: 10) {
-            Text("테두리").fontWeight(on ? .semibold : .regular)
+            Text("테두리").fontWeight(on ? .medium : .regular)
             HStack(spacing: 8) {
                 LineKindField(kind: int(\.borderLine))
                 Group {

@@ -365,7 +365,7 @@ struct Inspector: View {
         }
         InspectorSection {
             HStack(alignment: .top) {
-                Text("크기").font(.headline.weight(.semibold)).padding(.top, 4)
+                Text("크기").font(.headline.weight(.medium)).padding(.top, 4)
                 Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
                      "높이", length(props?.height, width: 62) { resize(height: $0) })
             }
@@ -406,7 +406,7 @@ struct Inspector: View {
             // 한/글 keeps −360…360; shown as the dial reads it.
             let angle = props.map { Double((Int($0.rotationAngle ?? 0) % 360 + 360) % 360) }
             HStack(spacing: 8) {
-                Text("회전").font(.headline.weight(.semibold))
+                Text("회전").font(.headline.weight(.medium))
                 Spacer(minLength: 0)
                 RotationDial(angle: angle) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
                     .frame(width: 32, height: 32)

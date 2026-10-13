@@ -323,7 +323,7 @@ struct PrivateInfoSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("개인 정보 바꾸기").font(.headline)
+            Text("개인 정보 바꾸기").font(.headline.weight(.medium))
             HStack(alignment: .top, spacing: 28) {
                 VStack(alignment: .leading, spacing: 8) {
                     GroupTitle("개인 정보 선택 사항")

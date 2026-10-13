@@ -63,7 +63,7 @@ struct StylePane: View {
         let current = document.styles.first { $0.id == document.format?.style }
         VStack(spacing: 0) {
             ZStack {
-                Text("스타일").font(.headline)
+                Text("스타일").font(.headline.weight(.medium))
                 HStack {
                     Spacer()
                     Menu {

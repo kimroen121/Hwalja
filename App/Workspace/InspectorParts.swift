@@ -30,7 +30,7 @@ struct InspectorSection<Header: View, Content: View, Footer: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header.font(.headline.weight(.semibold))
+            header.font(.headline.weight(.medium))
             content
             footer
         }
@@ -69,7 +69,7 @@ struct GroupDisclosure: DisclosureGroupStyle {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
                 configuration.label
@@ -147,7 +147,7 @@ struct OpeningRows<Choice: View, Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            LabeledContent { choice } label: { Text(title).fontWeight(open ? .semibold : .regular) }
+            LabeledContent { choice } label: { Text(title).fontWeight(open ? .medium : .regular) }
             if open { rows }
         }
         .padding(.vertical, open ? 6 : 0)
@@ -174,7 +174,7 @@ struct Fold<Content: View, Trailing: View>: View {
             VStack(alignment: .leading, spacing: 10) { content }
         } label: {
             HStack {
-                Text(title).font(headline ? .headline.weight(.semibold) : .body)
+                Text(title).font(headline ? .headline.weight(.medium) : .body)
                 Spacer(minLength: 8)
                 trailing
             }

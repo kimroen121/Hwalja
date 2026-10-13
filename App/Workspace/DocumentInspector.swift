@@ -79,7 +79,7 @@ struct DocumentInspector: View {
                     }
                     .labelsHidden()
                     .fixedSize()
-                } label: { Text("용지 종류").font(.headline.weight(.semibold)) }
+                } label: { Text("용지 종류").font(.headline.weight(.medium)) }
                 orientation(section).padding(.top, 6)
                 if paper.wrappedValue == nil {
                     // 폭 and 길이 of the paper as it lies.
@@ -264,7 +264,7 @@ struct DocumentInspector: View {
                         .fixedSize()
                         number(\.pageNum, section)
                     }
-                } label: { Text("시작 쪽 번호").font(.headline.weight(.semibold)) }
+                } label: { Text("시작 쪽 번호").font(.headline.weight(.medium)) }
             }
             InspectorSection {
                 Fold("개체 시작 번호") {
@@ -309,7 +309,7 @@ struct DocumentInspector: View {
                     setColumns(section) { $0.count = UInt16(count) }
                 }
                 .help("단 개수")
-            } label: { Text("단").font(.headline.weight(.semibold)) }
+            } label: { Text("단").font(.headline.weight(.medium)) }
             IconTiles(selection: Binding { columns?.count ?? 1 } set: { count in setColumns(section) { $0.count = count } },
                       options: [(UInt16(1), "하나"), (2, "둘"), (3, "셋")], fill: true) { count, on in
                 PagePictogram.columns(Int(count), on: on)

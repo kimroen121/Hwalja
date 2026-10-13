@@ -222,7 +222,7 @@ struct ChartDataSheet: View {
         return TextField("", text: text)
             .textFieldStyle(.plain)
             .focused($focused, equals: key)
-            .fontWeight(header ? .semibold : .regular)
+            .fontWeight(header ? .medium : .regular)
             .monospacedDigit()
             .multilineTextAlignment(header ? .leading : .trailing)
             .foregroundStyle(header || Self.number(text.wrappedValue) ? Color.primary : Color.red)
