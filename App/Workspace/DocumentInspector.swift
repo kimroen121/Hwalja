@@ -256,19 +256,19 @@ struct DocumentInspector: View {
     /// 구역 설정's 시작 쪽 번호 in sight, its 개체 시작 번호 folded; then 단 and 주석 모양.
     @ViewBuilder private func sectionPane(_ section: UInt32) -> some View {
         Group {
-            InspectorSection {
-                LabeledContent {
-                    HStack(spacing: 8) {
-                        Picker("시작 쪽 번호", selection: Binding(get: { (setup?.pageNum ?? 0) > 0 ? 3 : Int(setup?.pageNumType ?? 0) }, set: { kind in
-                            change(section) { setup in
-                                if kind == 3 { (setup.pageNum, setup.pageNumType) = (max(setup.pageNum, 1), 0) } else { (setup.pageNum, setup.pageNumType) = (0, UInt8(kind)) }
-                            }
-                        })) { Text("이어서").tag(0); Text("홀수").tag(1); Text("짝수").tag(2); Text("사용자").tag(3) }
-                        .labelsHidden()
-                        .fixedSize()
-                        number(\.pageNum, section)
-                    }
-                } label: { Text("시작 쪽 번호").font(.headline.weight(.medium)) }
+            // Its name over it, as 크기 and 위치: beside it, the name would wrap.
+            InspectorSection("시작 쪽 번호") {
+                HStack(spacing: 8) {
+                    Picker("시작 쪽 번호", selection: Binding(get: { (setup?.pageNum ?? 0) > 0 ? 3 : Int(setup?.pageNumType ?? 0) }, set: { kind in
+                        change(section) { setup in
+                            if kind == 3 { (setup.pageNum, setup.pageNumType) = (max(setup.pageNum, 1), 0) } else { (setup.pageNum, setup.pageNumType) = (0, UInt8(kind)) }
+                        }
+                    })) { Text("이어서").tag(0); Text("홀수").tag(1); Text("짝수").tag(2); Text("사용자").tag(3) }
+                    .labelsHidden()
+                    .fixedSize()
+                    number(\.pageNum, section)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             InspectorSection {
                 Fold("개체 시작 번호") {

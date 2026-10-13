@@ -176,7 +176,8 @@ struct Inspector: View {
     }
     /// 글자 크기 and 글자 색 of the selected equation; its script in 수식 편집기.
     @ViewBuilder private var equation: some View {
-        InspectorSection("수식") {
+        // The tab names it.
+        InspectorSection {
             LabeledContent("글자 크기") {
                 NumberStepper(value: props?.fontSize.map { Double($0) / 100 }, unit: "pt", range: 1...127) { size in
                     setEquation { $0.fontSize = UInt32((size * 100).rounded()) }
@@ -230,17 +231,18 @@ struct Inspector: View {
                 lineWidth
                 LabeledContent("끝 모양") { ChoiceField(index(\.lineEndShape), Swatches.lineEnds.indices.map { ($0, "") }, images: Swatches.lineEnds) }
                 if document.object?.ends != nil {
-                    // 화살표 over its 크기 at each end, as Pages's 끝점.
+                    // 화살표: 모양 over 크기 at each end, as Pages's 끝점.
+                    Text("화살표")
                     HStack(alignment: .top, spacing: 8) {
                         captioned("시작") {
                             VStack(spacing: 8) {
-                                arrow(\.arrowStart, Swatches.arrowStarts).help("시작 화살표")
+                                arrow(\.arrowStart, Swatches.arrowStarts).help("시작 모양")
                                 arrow(\.arrowStartSize, Swatches.arrowStartSizes).help("시작 크기")
                             }
                         }
                         captioned("끝") {
                             VStack(spacing: 8) {
-                                arrow(\.arrowEnd, Swatches.arrowEnds).help("끝 화살표")
+                                arrow(\.arrowEnd, Swatches.arrowEnds).help("끝 모양")
                                 arrow(\.arrowEndSize, Swatches.arrowEndSizes).help("끝 크기")
                             }
                         }
@@ -324,13 +326,10 @@ struct Inspector: View {
         (5, "왼쪽 뒤", -1, 1), (7, "왼쪽 앞", -1, 1), (6, "오른쪽 뒤", 1, 1), (8, "오른쪽 앞", 1, 1),
     ]
     /// The 선's color and width side by side.
-    private var lineWidth: some View {
-        HStack(spacing: 8) {
-            ColorWell(hex: color(\.borderColor))
-                .frame(maxWidth: .infinity)
-            points(\.borderWidth)
-                .frame(maxWidth: .infinity)
-        }
+    /// 색 and 굵기 named, as 주석 모양's 구분선.
+    @ViewBuilder private var lineWidth: some View {
+        LabeledContent("색") { ColorWell(hex: color(\.borderColor)) }
+        LabeledContent("굵기") { points(\.borderWidth) }
     }
     /// A line's width in points (100 HWPUNIT each), its unit in the field.
     private func points(_ key: WritableKeyPath<ObjectProps, Int32?>) -> some View {
