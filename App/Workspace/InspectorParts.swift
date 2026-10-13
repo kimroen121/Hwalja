@@ -260,10 +260,12 @@ struct PictureSlider: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
             HStack(spacing: 8) {
-                Slider(value: $shown, in: -100...100, step: 5) { editing in
-                    if !editing, Int32(shown) != value { apply(Int32(shown)) }
+                // No step: a stepped slider draws tick marks; the value lands on 5s when let go.
+                Slider(value: $shown, in: -100...100) { editing in
+                    let landed = Int32((shown / 5).rounded() * 5)
+                    if !editing { shown = Double(landed); if landed != value { apply(landed) } }
                 }
-                NumberStepper(value: value.map(Double.init), unit: "%", range: -100...100, step: 5) { apply(Int32($0)) }
+                NumberStepper(value: value.map(Double.init), unit: "%", range: -100...100, step: 5, width: 48, unitInside: true) { apply(Int32($0)) }
             }
         }
         .onAppear { shown = Double(value ?? 0) }

@@ -363,65 +363,64 @@ struct Inspector: View {
             }
             .disabled(table || inLine)
         }
-        InspectorSection {
-            HStack(alignment: .top) {
-                Text("크기").font(.headline.weight(.medium)).padding(.top, 4)
-                Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
-                     "높이", length(props?.height, width: 62) { resize(height: $0) })
-            }
+        // As Pages's: each group's name over its fields.
+        InspectorSection("크기") {
+            Pair("너비", length(props?.width, width: 62) { resize(width: $0) },
+                 "높이", length(props?.height, width: 62) { resize(height: $0) })
             HStack(spacing: 12) {
                 Toggle("비율 유지", isOn: $keepsRatio).checkbox().fixedSize()
                 if props?.sizeProtect != nil { flag("크기 고정", \.sizeProtect).fixedSize() }
-                Spacer(minLength: 0)
-                if props?.originalWidth != nil {
-                    Button("원래 크기") { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) }
-                        .fixedSize()
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            if props?.originalWidth != nil {
+                Button { viewer.arrange(ObjectProps(width: props?.originalWidth, height: props?.originalHeight)) } label: {
+                    Text("원래 크기").frame(maxWidth: .infinity)
                 }
             }
         }
-        // X and Y in sight, what they are measured from folded under them.
-        InspectorSection {
-            Fold("위치") {
-                LabeledContent("가로") {
-                    HStack(spacing: 4) {
-                        choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
-                        choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
-                    }
+        InspectorSection("위치") {
+            Pair("X", length(props?.horzOffset, width: 62) { set(\.horzOffset, Units.units($0)) },
+                 "Y", length(props?.vertOffset, width: 62) { set(\.vertOffset, Units.units($0)) })
+            LabeledContent("가로") {
+                HStack(spacing: 4) {
+                    choice(\.horzRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Column", "단"), ("Para", "문단")])
+                    choice(\.horzAlign, "Left", [("Left", "왼쪽"), ("Center", "가운데"), ("Right", "오른쪽")])
                 }
-                LabeledContent("세로") {
-                    HStack(spacing: 4) {
-                        choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
-                        choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
-                    }
-                }
-                flag("쪽 영역 안으로 제한", \.restrictInPage)
-                flag("서로 겹침 허용", \.allowOverlap)
-            } trailing: {
-                Pair("X", length(props?.horzOffset, width: 62) { set(\.horzOffset, Units.units($0)) },
-                     "Y", length(props?.vertOffset, width: 62) { set(\.vertOffset, Units.units($0)) })
             }
-            .disabled(inLine || props == nil)
+            LabeledContent("세로") {
+                HStack(spacing: 4) {
+                    choice(\.vertRelTo, "Para", [("Paper", "종이"), ("Page", "쪽"), ("Para", "문단")])
+                    choice(\.vertAlign, "Top", [("Top", "위쪽"), ("Center", "가운데"), ("Bottom", "아래쪽")])
+                }
+            }
+            flag("쪽 영역 안으로 제한", \.restrictInPage)
+            flag("서로 겹침 허용", \.allowOverlap)
         }
-        InspectorSection {
+        .disabled(inLine || props == nil)
+        InspectorSection("회전") {
             // 한/글 keeps −360…360; shown as the dial reads it.
             let angle = props.map { Double((Int($0.rotationAngle ?? 0) % 360 + 360) % 360) }
-            HStack(spacing: 8) {
-                Text("회전").font(.headline.weight(.medium))
-                Spacer(minLength: 0)
+            HStack(alignment: .top, spacing: 8) {
                 RotationDial(angle: angle) { viewer.arrange(ObjectProps(rotationAngle: Int32($0))) }
                     .frame(width: 32, height: 32)
-                NumberStepper(value: angle, unit: "°", range: 0...359, width: 40, unitInside: true) {
-                    viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
+                Spacer(minLength: 0)
+                VStack(spacing: 3) {
+                    NumberStepper(value: angle, unit: "°", range: 0...359, width: 48, unitInside: true) {
+                        viewer.arrange(ObjectProps(rotationAngle: Int32($0)))
+                    }
+                    Text("각도").font(.caption)
                 }
-                .help("각도")
-                Segments(segments: [.init(symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "좌우 대칭"),
-                                    .init(symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", help: "상하 대칭")],
-                         on: [false, false], any: true) { index in viewer.change { .flip($0, vertical: index == 1) } }
-                    .frame(width: 64)
+                VStack(spacing: 3) {
+                    Segments(segments: [.init(symbol: "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "좌우 대칭"),
+                                        .init(symbol: "arrow.up.and.down.righttriangle.up.righttriangle.down", help: "상하 대칭")],
+                             on: [false, false], any: true) { index in viewer.change { .flip($0, vertical: index == 1) } }
+                        .frame(width: 80)
+                    Text("대칭").font(.caption)
+                }
             }
-            // 글자처럼 취급 turns too.
-            .disabled(table)
         }
+        // 글자처럼 취급 turns too.
+        .disabled(table)
     }
     /// A caption's 크기 and 개체와의 간격 (and for a picture 여백 부분까지 너비 확대) while there is
     /// one; it is put in, moved and taken away from the object's menu.
