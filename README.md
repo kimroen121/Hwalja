@@ -6,7 +6,7 @@
 
 <p align="center">Mac에서 한글 문서를 바로 열고 수정하는 네이티브 편집기.</p>
 
-![Hwalja](docs/images/screenshot.png)
+![Hwalja](docs/images/screenshot_dark.png)
 
 ## 설치
 
